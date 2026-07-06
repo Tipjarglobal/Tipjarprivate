@@ -1,0 +1,32 @@
+{
+  "summary": "Verified TipJar Rate Wall — Portugal–Spanien leg is now correctly PENDING (amber badge, white match text, default border) and NOT rendered as LIVE/blue. Häcken–Djurgården leg stays WON (green). All 5 acceptance criteria pass on desktop 1920px and mobile 390px.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iter15_mobile.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RateWall.jsx line 16-18: STATUS constant still declared but unused (filter uses inline array line 124) — dead code, safe to remove.",
+    "RateWall.jsx line 243: className concatenation `ls.cls.split(' ')[0].replace('/15','/30')` is a clever but fragile trick — if STATUS_META cls format changes (e.g., token order), border color silently falls back to elevated. Consider a dedicated `border` field in STATUS_META for clarity.",
+    "Silent poll in load() swallows all errors; ok for polling, but if the endpoint goes 500 the wall silently freezes on stale data. Consider logging via a dev flag."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "Not required (public view). Admin: admin@tipjar.com / TipJarAdmin2026! (not exercised).",
+  "seed_data_creation": "None — used existing seed_showcase() Häcken parlay (leg 1 = won, leg 2 = pending) + Portugal & Messi tip.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Häcken parlay legs: BK Häcken–Djurgården=won (green), Portugal–Spanien=pending (amber, white text, default border, NO blue live). Filter buttons Pending/Live/Won/Lost all trigger GET /api/tips?status=X. Silent poll fires ~every 20s (2 calls in 22s window observed). No console errors on desktop or mobile.",
+  "verified_features": [
+    "leg-status-won badge renders GREEN with 'WON' text on Häcken–Djurgården; parent row class includes bg-won/30 and match title class contains text-won",
+    "leg-status-pending badge renders AMBER with 'PENDING' text on Portugal–Spanien; parent row class is `border-elevated` (default) and match title class is `text-white` — no recoloring",
+    "leg-status-live count = 0 on the parlay (confirmed no blue LIVE badge)",
+    "Status filter buttons present in order: status-pending, status-live, status-won, status-lost — each click issues GET /api/tips?sort=new&status=<val>",
+    "Silent auto-refresh: 22s wait produced 2 poll API calls, card count stayed at 2, no 'Lädt/Loading' text appeared",
+    "0 console/page errors captured during load, polling, filter cycling and viewport switch",
+    "Mobile 390x844 layout: both tip cards render, WON (green) and PENDING (amber) leg badges correct, no overflow"
+  ]
+}
