@@ -1,0 +1,53 @@
+{
+  "summary": "Verified: (1) Submit-Tip modal opens correctly via header-submit-btn; (2) Tutorial tab shows exactly 3 Argentina vs Cape Verde examples with correct DE i18n strings + odds + 3 progress dots; (3) Rate Wall on home page contains exactly 2 tips (Portugal & Messi + Häcken parlay), no Argentina/Cape Verde tips.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "modal_opens": true,
+    "tutorial_dots_count": 3,
+    "rate_wall_card_count": 2,
+    "rate_wall_ids": ["seed-portugal-messi", "seed-hacken-parlay"],
+    "tutorial_step_1": {
+      "tag": "SCHLECHTES BEISPIEL (2\u20133 STERNE)",
+      "title": "Argentinien vs Kap Verde",
+      "market": "Argentinien gewinnt",
+      "odds": "1.20"
+    },
+    "tutorial_step_2": {
+      "tag": "BANKER (PREGAME)",
+      "title": "Argentinien vs Kap Verde",
+      "market": "Enzo: \u00dcber 0,5 gefoult \u00b7 Lenini: \u00dcber 0,5 Fouls",
+      "odds": "1.45"
+    },
+    "tutorial_step_3": {
+      "tag": "LIVE LOCK (9 STERNE)",
+      "title": "Argentinien vs Kap Verde \u2014 HZ 1:0",
+      "market": "Live: Asiatisch \u00dcber 2,0",
+      "odds": "1.85"
+    },
+    "banned_strings_found": [],
+    "after_step3": {"tutorial-next present": false, "tutorial-start present": true},
+    "backend_public_tips_api": "GET /api/tips?status=pending returns exactly [seed-portugal-messi, seed-hacken-parlay] \u2014 no Argentina tips seeded"
+  },
+  "notes": [
+    "The homepage body text contains 1 occurrence of 'argentin' outside the modal, but it is NOT a Rate Wall tip \u2014 it is the AI-analysis text of the Portugal & Messi showcase tip ('...dream Portugal vs Argentina final, Ronaldo vs Messi last dance'). This is expected and does NOT represent an Argentina vs Cape Verde tip on the wall.",
+    "On first read attempt with a short (400ms) wait, step-3 inner_text was stale (still showed step-2 content) because framer-motion's AnimatePresence exit/enter animation was in flight. After bumping the settle wait to 1200ms, step-3 rendered correctly with 'LIVE LOCK' / Asiatisch \u00dcber 2,0 / 1.85. Not a bug, just a test-timing note."
+  ],
+  "test_report_links": ["/app/test_reports/iter18_tutorial_step3.png", "/app/test_reports/iter18_step3_final.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SubmitTipModal.jsx cleanly renders 3 tutorial examples from a TUTORIAL const with key/odds/tone \u2014 progress dots derive from array length, so future additions/removals stay in sync automatically.",
+    "seed_showcase() correctly and idempotently PURGES seed-tut-bad/banker/live from db.tips on every startup so any leftover Argentina tips from prior seeding are removed on next restart.",
+    "i18n.js has all three (bad/banker/live) tag/title/market/note keys in en, de, and el \u2014 verified visually in German."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (only verified /api/tips list)", "frontend": "100% (all tutorial + rate-wall checks passed)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Rate Wall now has 2 seed tips only (seed-portugal-messi, seed-hacken-parlay). Tutorial modal (data-testid=tutorial-panel) has 3 Argentina vs Cape Verde examples with keys bad/banker/live, driven by SubmitTipModal.TUTORIAL array. AnimatePresence transitions take ~600-1000ms; use \u22651000ms wait before reading tutorial-panel inner_text after clicking tutorial-next. When switching language for tests: page.evaluate(\"localStorage.setItem('tj_lang','de')\") then reload."
+}
