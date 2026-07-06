@@ -113,6 +113,16 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   (seed-portugal-messi-notax.jpg) to bust any CDN/browser cache.
 - Confirmed served image no longer contains the 'Tax 5,3%' row (byte-verified + visual).
 
+## Star-threshold alerts + promo banner (2026-07-06, iteration 11)
+- NotificationBell: 1–10 threshold slider (localStorage tj_bell_min, default 8). Polls
+  /tips every 15s; fires push (serviceWorker.showNotification) for NEW tips where
+  max(ai_rating, avg_rating) >= threshold. Enable/disable + threshold badge on bell.
+- PromoBanner at very top: "only community with adjustable alerts" marketing + CTA that
+  opens the alert settings (window 'tj-open-alerts' event). i18n EN/DE/EL.
+- Verified: iteration-11 frontend 100% (slider persists, toggle, promo CTA wiring, no errors).
+- LIMITATION: push works while the web tab / PWA is open or backgrounded-alive (polling +
+  SW showNotification). True closed-app push would need server-side web-push (VAPID) — not built.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
