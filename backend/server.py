@@ -1145,8 +1145,8 @@ async def seed_showcase():
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Purge the tutorial-seed tips (they belong in the How-to-post tutorial only, not the wall)
-    for old_id in ["seed-tut-bad", "seed-tut-banker", "seed-tut-live"]:
+    # Purge the tutorial-seed tips + the Häcken parlay (removed per user request) in every env
+    for old_id in ["seed-tut-bad", "seed-tut-banker", "seed-tut-live", "seed-hacken-parlay"]:
         await db.tips.delete_one({"id": old_id})
         await db.tip_ratings.delete_many({"tip_id": old_id})
 
@@ -1183,28 +1183,6 @@ async def seed_showcase():
         upsert=True,
     )
     logger.info("Seeded/updated showcase tip: Portugal & Messi")
-
-    await db.tips.update_one(
-        {"id": "seed-hacken-parlay"},
-        {"$set": {
-            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
-            "home_team": "BK Häcken – Djurgården", "away_team": "Portugal – Spanien",
-            "match_time": "06/07/2026 19:00 & 21:00", "country": "Sweden / International",
-            "league": "Allsvenskan / Länderspiel",
-            "market": "Häcken–Djurgården: Total Über 1,5 · Djurgården Team Über 0,5  |  Portugal–Spanien: Total Über 1,5 · Fouls Über 21,5",
-            "odds": "2.47", "ai_rating": 7.0,
-            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
-            "legs": [
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "pending", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
-            ],
-            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
-        },
-         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
-                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
-        upsert=True,
-    )
-    logger.info("Seeded/updated showcase tip: Häcken parlay")
 
 
 @app.on_event("startup")
