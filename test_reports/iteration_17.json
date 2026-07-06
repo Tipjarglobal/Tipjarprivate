@@ -1,0 +1,45 @@
+{
+  "summary": "Re-tested ONLY the mobile NotificationBell settings-panel centering fix and desktop regression per iteration_17 request. Both viewports PASS — panel is fully inside the viewport, correctly centered on mobile, and right-aligned near the bell on desktop.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "mobile_390x844": {
+      "panel_rect": {"x": 35, "y": 213, "width": 320, "height": 137.625, "right": 355, "bottom": 350.625},
+      "center_x": 195.0,
+      "checks": {
+        "x >= 8": true,
+        "right <= 382": true,
+        "center within +/- 25 of 195": true,
+        "within viewport horizontally": true
+      },
+      "result": "PASS"
+    },
+    "desktop_1440x900": {
+      "bell_rect": {"x": 788, "y": 59, "width": 145, "right": 933},
+      "panel_rect": {"x": 645, "y": 107, "width": 288, "height": 152.75, "right": 933, "bottom": 259.75},
+      "checks": {
+        "within viewport horizontally": true,
+        "within viewport vertically": true,
+        "right-aligned near bell (panel.right == bell.right = 933)": true,
+        "width matches w-72 (288px)": true
+      },
+      "result": "PASS"
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix at /app/frontend/src/components/NotificationBell.jsx line 162 is correct: replacing transform-based centering (which framer-motion was clobbering) with left-4 right-4 mx-auto positional centering on mobile is a robust approach. The sm: overrides cleanly switch to right-aligned dropdown on desktop."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100% (2/2 viewport checks passed)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iteration_17 confirmed NotificationBell settings panel centering fix works on both mobile (390px, panel centered at x=195, x=35, right=355, fully within viewport) and desktop (1440px, right-aligned to bell at right=933, width=288). No further action needed on this fix. Backend delete/promo dismiss/admin delete were validated in iteration_16 and were NOT re-tested per main agent instruction.",
+  "rca of the issue": "N/A — validation of prior fix. The prior overflow (x=195, width=320, right=515 on 390px viewport) was caused by framer-motion applying its own transform, which overrode the tailwind '-translate-x-1/2' used for centering. The new implementation uses positional centering (fixed left-4 right-4 max-w-xs mx-auto) that framer-motion does not touch, so the panel now sits at x=35 with width=320 → right=355, fully within the 390px viewport."
+}
