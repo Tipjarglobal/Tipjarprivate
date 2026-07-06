@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock } from "lucide-react";
 import StarRating from "./StarRating";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
@@ -27,17 +27,21 @@ export default function RateWall({ refreshKey, requireLogin }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent) => {
+    if (!silent) setLoading(true);
     try {
       const params = { sort };
       if (status) params.status = status;
       const { data } = await api.get("/tips", { params });
       setTips(data);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
   }, [sort, status]);
 
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => {
+    load();
+    const iv = setInterval(() => load(true), 20000);
+    return () => clearInterval(iv);
+  }, [load, refreshKey]);
 
   const rate = async (tip, stars) => {
     if (!user) { requireLogin(); return; }
@@ -117,7 +121,7 @@ export default function RateWall({ refreshKey, requireLogin }) {
           </button>
         ))}
         <span className="w-px bg-elevated mx-1" />
-        {[["pending", "wall.filter.pending"], ["won", "wall.filter.won"], ["lost", "wall.filter.lost"]].map(([v, lbl]) => (
+        {[["pending", "wall.filter.pending"], ["live", "wall.filter.live"], ["won", "wall.filter.won"], ["lost", "wall.filter.lost"]].map(([v, lbl]) => (
           <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
             {t(lbl)}
@@ -143,14 +147,21 @@ export default function RateWall({ refreshKey, requireLogin }) {
   );
 }
 
+const STATUS_META = {
+  won: { cls: "bg-won/15 text-won", text: "text-won", Icon: CheckCircle2, key: "wall.won" },
+  lost: { cls: "bg-lost/15 text-lost", text: "text-lost", Icon: XCircle, key: "wall.lost" },
+  live: { cls: "bg-live/15 text-live", text: "text-live", Icon: Radio, key: "wall.live" },
+  pending: { cls: "bg-amber-500/15 text-amber-400", text: "text-amber-400", Icon: Clock, key: "wall.pending" },
+};
+
 function StatusBadge({ status, t }) {
-  const map = {
-    pending: { cls: "bg-zinc-700/40 text-zinc-300", label: t("wall.pending") },
-    won: { cls: "bg-won/15 text-won", label: t("wall.won") },
-    lost: { cls: "bg-lost/15 text-lost", label: t("wall.lost") },
-  };
-  const s = map[status] || map.pending;
-  return <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${s.cls}`}>{s.label}</span>;
+  const s = STATUS_META[status] || STATUS_META.pending;
+  const { Icon } = s;
+  return (
+    <span data-testid={`status-badge-${status || "pending"}`} className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${s.cls}`}>
+      <Icon size={11} className={status === "live" ? "animate-pulse" : ""} /> {t(s.key)}
+    </span>
+  );
 }
 
 const NATION_FLAGS = {
@@ -225,11 +236,20 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
               Parlay · {tip.legs.length} {tip.legs.length > 1 ? "Spiele" : "Spiel"}
             </span>
           )}
-          {tip.legs.map((leg, li) => (
-            <div key={li} className="rounded-lg bg-void border border-elevated px-3 py-2.5">
+          {tip.legs.map((leg, li) => {
+            const ls = STATUS_META[leg.status];
+            return (
+            <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${ls ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-white font-heading font-bold text-sm leading-tight">{leg.match || "—"}</span>
-                {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{leg.kickoff}</span>}
+                <span className={`font-heading font-bold text-sm leading-tight ${ls ? ls.text : "text-white"}`}>{leg.match || "—"}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {ls && (
+                    <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
+                      <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
+                    </span>
+                  )}
+                  {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
+                </div>
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -238,7 +258,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
                 ))}
               </div>
             </div>
-          ))}
+          );})}
           {(tip.odds || tip.stake || tip.potential_return) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-1 px-1">
               {tip.odds && <span className="text-zinc-500">Quote <span className="font-mono font-bold text-volt">{tip.odds}</span></span>}

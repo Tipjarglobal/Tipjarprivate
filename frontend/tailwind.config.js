@@ -17,6 +17,7 @@ module.exports = {
         "volt-hover": "#CCEE00",
         bell: "#FF1E56",
         won: "#00FF94",
+        live: "#3B82F6",
         lost: "#FF1E56",
         border: "#27272A",
         background: "hsl(var(--background))",

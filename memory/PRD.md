@@ -123,6 +123,20 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - LIMITATION: push works while the web tab / PWA is open or backgrounded-alive (polling +
   SW showNotification). True closed-app push would need server-side web-push (VAPID) — not built.
 
+## Mobile hero overflow fix (2026-07-06, iteration 13)
+- Root cause: AnimatedJar crest had fixed 440px width -> forced single-column hero grid track
+  wider than mobile viewport -> H1 + subtitle clipped on the right (overflow-x-hidden).
+- Fix: AnimatedJar responsive (w-full max-w-[440px] aspect-square); hero column min-w-0;
+  H1 -> text-4xl sm:text-5xl lg:text-6xl + break-words; root overflow-x-hidden.
+- Verified iteration-13: 100% frontend, no horizontal overflow at 360/390px, EN/DE/EL, desktop OK.
+- Also fixed earlier (iter 12): H1 leading-[0.95] -> leading-[1.08] (German 'Posten' p-descender clip).
+
+## Legal / compliance (open, user asked 2026-07-06)
+- User asked about AGB/penalties. Advised: not legal advice; real-money payout is the sensitive
+  part (possible gambling/gaming classification), needs Impressum + Datenschutz + AGB + 18+ gate
+  before live monetization; Google Play real-money gambling policy. Offered to build legal pages.
+- TODO if user agrees: Impressum, Datenschutzerklärung, AGB, Responsible-Gambling/18+ pages + age gate.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

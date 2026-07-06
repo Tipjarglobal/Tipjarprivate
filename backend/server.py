@@ -1168,8 +1168,8 @@ async def seed_showcase():
             "odds": "2.47", "ai_rating": 7.0,
             "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
             "legs": [
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
+                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "live", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
             ],
             "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
         },
