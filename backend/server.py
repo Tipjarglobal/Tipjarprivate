@@ -652,6 +652,14 @@ async def unsubscribe(inp: SubscribeInput):
     return {"subscribed": False, "subscriber_count": count}
 
 
+@api_router.get("/stats")
+async def community_stats():
+    members = await db.users.count_documents({"role": {"$ne": "admin"}})
+    subs = await db.subscribers.count_documents({})
+    tips = await db.tips.count_documents({})
+    return {"members": members, "goal": 1000, "subscribers": subs, "total_tips": tips}
+
+
 @api_router.get("/notifications/stats")
 async def notif_stats():
     count = await db.subscribers.count_documents({})

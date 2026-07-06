@@ -17,6 +17,7 @@ import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
+import InviteSection from "./components/InviteSection";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -88,6 +89,7 @@ function Home() {
       </section>
 
       <RateWall refreshKey={refreshKey} requireLogin={requireLogin} />
+      <InviteSection />
       <Leaderboard refreshKey={refreshKey} />
 
       <footer className="border-t border-elevated py-10 text-center">

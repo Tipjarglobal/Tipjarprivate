@@ -38,6 +38,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <a href="#ratewall" className="hover:text-volt transition-colors" data-testid="nav-ratewall">{t("nav.ratewall")}</a>
           <a href="#leaderboard" className="hover:text-volt transition-colors" data-testid="nav-leaderboard">{t("nav.leaderboard")}</a>
           <a href="#how" className="hover:text-volt transition-colors" data-testid="nav-how">{t("nav.how")}</a>
+          <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
