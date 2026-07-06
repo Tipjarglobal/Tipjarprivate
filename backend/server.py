@@ -6,6 +6,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 import os
 import uuid
+import re
 import json
 import base64
 import logging
@@ -350,7 +351,7 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
             "market": str(data.get("market", "") or "") or text.strip()[:60],
             "odds": str(data.get("odds", "") or ""),
             "stake": str(data.get("stake", "") or ""),
-            "potential_return": str(data.get("potential_return", "") or ""),
+            "potential_return": compute_return(data.get("stake"), data.get("odds"), str(data.get("potential_return", "") or "")),
             "legs": _sanitize_legs(data.get("legs")),
             "is_parlay": bool(data.get("is_parlay", False)),
             "rating": round(rating, 1),
@@ -522,6 +523,37 @@ async def analyze(file: Optional[UploadFile] = File(default=None), text: str = F
     return detected
 
 
+def _parse_num(s):
+    if s is None:
+        return None
+    s = re.sub(r"[^0-9.,]", "", str(s))
+    if not s:
+        return None
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".") if len(s.split(",")[-1]) <= 2 else s.replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _fmt_eur(v):
+    return f"{v:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def compute_return(stake, odds, fallback=""):
+    """Winnings = stake x odds (taxes never applied). Falls back if not parseable."""
+    s, o = _parse_num(stake), _parse_num(odds)
+    if s and o and s > 0 and o > 0:
+        return _fmt_eur(s * o)
+    return fallback
+
+
 @api_router.post("/tips")
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     if not (inp.match_time or "").strip():
@@ -544,7 +576,7 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "legs": _sanitize_legs(inp.legs),
         "is_parlay": inp.is_parlay or (inp.legs is not None and len(inp.legs) > 1),
         "stake": inp.stake,
-        "potential_return": inp.potential_return,
+        "potential_return": compute_return(inp.stake, inp.odds, inp.potential_return),
         "status": "pending",
         "sum_stars": 0,
         "ratings_count": 0,
@@ -1134,7 +1166,7 @@ async def seed_showcase():
                 {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
                 {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
             ],
-            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,75 €",
+            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "created_at": now,
         })

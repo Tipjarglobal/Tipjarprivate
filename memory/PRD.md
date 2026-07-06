@@ -98,6 +98,14 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Häcken 4-leg parlay showcase RE-ADDED to seed (user changed mind); startup delete_many removed.
 - Both showcase tips now seed idempotently: seed-portugal-messi (image, no tax) + seed-hacken-parlay.
 
+## Winnings recalculation rule (2026-07-06, iteration 10b)
+- Added compute_return(stake, odds): winnings = stake x odds, taxes NEVER applied. Robust
+  locale-aware number parsing (_parse_num) + German € formatting (_fmt_eur). Added `import re`.
+- Applied server-side in create_tip (overrides any tax-adjusted value on publish) and in
+  analyze_tip preview. Häcken seed recalced to 131,48 € (53,23 x 2.47).
+- Rule "accept bet only with date+time" already enforced (create_tip 400 if match_time empty).
+- Verified via curl: input "66,20 € (after tax)" with stake 20 x odds 3.5 -> stored "70,00 €".
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
