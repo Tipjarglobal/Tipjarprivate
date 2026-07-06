@@ -1171,11 +1171,11 @@ async def seed_showcase():
 
     # Tutorial showcase — banker pregame (full analysis, 10 stars)
     banker_analysis = (
-        "1. ENZO FERNÁNDEZ: 1+ FOULS GEWONNEN (Alternative Player To Be Fouled) — "
+        "1. ENZO FERNÁNDEZ: ÜBER 0,5 GEFOULT (Alternative Player To Be Fouled) — "
         "Enzo hat in 28 seiner letzten 30 Spiele für Argentinien ein Foul herausgeholt. "
         "Er spielt gegen Kevin Lenini, der im Mittelfeld regelmäßig Fouls begeht. Es wird "
         "erwartet, dass Enzo aktiv ins Spielgeschehen eingreift und mindestens ein Foul herausholt. "
-        "2. KEVIN LENINI: 1+ FOULS BEGANGEN (Alternative Player Fouls Committed) — "
+        "2. KEVIN LENINI: ÜBER 0,5 FOULS (Alternative Player Fouls Committed) — "
         "Lenini ist der Hauptmittelfeldspieler von Kap Verde und begeht häufig Fouls. Er spielt "
         "aggressiv und verursacht dadurch oft billige Fouls. Es wird erwartet, dass er in diesem "
         "Spiel mindestens ein Foul begeht."
@@ -1187,13 +1187,13 @@ async def seed_showcase():
             "home_team": "Argentinien", "away_team": "Kap Verde",
             "match_time": "12/07/2026 21:00", "country": "International",
             "league": "Weltmeisterschaft",
-            "market": "Enzo Fernández: 1+ Fouls gewonnen  |  Kevin Lenini: 1+ Fouls begangen",
+            "market": "Enzo Fernández: Über 0,5 gefoult  |  Kevin Lenini: Über 0,5 Fouls",
             "odds": "1.45", "ai_rating": 10.0,
             "ai_analysis": banker_analysis,
             "legs": [
                 {"match": "Argentinien – Kap Verde", "league": "Weltmeisterschaft",
                  "kickoff": "12/07 21:00", "status": "pending",
-                 "selections": ["Enzo Fernández: 1+ Fouls gewonnen", "Kevin Lenini: 1+ Fouls begangen"]},
+                 "selections": ["Enzo Fernández: Über 0,5 gefoult", "Kevin Lenini: Über 0,5 Fouls"]},
             ],
             "is_parlay": True, "stake": "", "potential_return": "",
         },
