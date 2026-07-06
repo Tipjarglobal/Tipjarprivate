@@ -1,4 +1,4 @@
-const CACHE = "tipjar-shell-v1";
+const CACHE = "tipjar-shell-v2";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -23,24 +23,15 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   // Never cache API calls
   if (url.pathname.startsWith("/api/")) return;
-  // Network-first for page navigations, fall back to cached shell offline
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req).catch(() => caches.match("/index.html"))
-    );
-    return;
-  }
-  // Cache-first for same-origin static assets
-  if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(req).then((cached) =>
-        cached ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        }).catch(() => cached)
-      )
-    );
-  }
+  if (url.origin !== self.location.origin) return;
+  // Network-first everywhere (fresh code when online, cached shell when offline)
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(req).then((cached) => cached || caches.match("/index.html")))
+  );
 });
