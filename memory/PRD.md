@@ -93,6 +93,11 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   so it's gone in every env after deploy). Only seed-portugal-messi remains.
 - Verified: iteration-9 backend 8/8, frontend 5/5.
 
+## Showcase restored (2026-07-06, iteration 10)
+- Tax row pixel-erased from Messi slip image (only that row); analysis & Gewinn 875 € kept.
+- Häcken 4-leg parlay showcase RE-ADDED to seed (user changed mind); startup delete_many removed.
+- Both showcase tips now seed idempotently: seed-portugal-messi (image, no tax) + seed-hacken-parlay.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

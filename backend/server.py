@@ -1120,6 +1120,26 @@ async def seed_showcase():
         })
         logger.info("Seeded showcase tip: Portugal & Messi")
 
+    if not await db.tips.find_one({"id": "seed-hacken-parlay"}):
+        await db.tips.insert_one({
+            "id": "seed-hacken-parlay", "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": "BK Häcken – Djurgården", "away_team": "Portugal – Spanien",
+            "match_time": "06/07/2026 19:00 & 21:00", "country": "Sweden / International",
+            "league": "Allsvenskan / Länderspiel",
+            "market": "Häcken–Djurgården: Total Über 1,5 · Djurgården Team Über 0,5  |  Portugal–Spanien: Total Über 1,5 · Fouls Über 21,5",
+            "odds": "2.47", "ai_rating": 7.0,
+            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
+            "legs": [
+                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
+            ],
+            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,75 €",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "created_at": now,
+        })
+        logger.info("Seeded showcase tip: Häcken parlay")
+
 
 @app.on_event("startup")
 async def startup():
@@ -1135,7 +1155,6 @@ async def startup():
     await db.tips.create_index([("avg_rating", -1), ("ratings_count", -1)])
     await db.tips.create_index([("ai_rating", -1)])
     await purge_demo_tips()
-    await db.tips.delete_many({"id": "seed-hacken-parlay"})
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
