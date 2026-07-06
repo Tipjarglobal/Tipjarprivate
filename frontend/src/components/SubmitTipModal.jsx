@@ -68,6 +68,8 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
         match_time: detected.match_time, country: detected.country,
         league: detected.league, market: detected.market, odds: detected.odds,
         ai_rating: detected.rating, ai_analysis: detected.analysis,
+        legs: detected.legs, is_parlay: detected.is_parlay,
+        stake: detected.stake, potential_return: detected.potential_return,
       });
       toast.success(t("submit.published"));
       onPublished && onPublished(data);
@@ -210,6 +212,23 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                   <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("submit.market")}</p>
                   <p className="text-white font-semibold">{detected.market || "—"}</p>
                 </div>
+                {detected.legs && detected.legs.length > 0 && (
+                  <div className="space-y-2">
+                    {detected.legs.map((leg, li) => (
+                      <div key={li} className="rounded-lg bg-surface px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white font-semibold text-sm">{leg.match}</span>
+                          {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {(leg.selections || []).map((s, si) => (
+                            <span key={si} className="text-[11px] text-zinc-200 bg-elevated rounded px-2 py-0.5">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {detected.analysis && (
                   <div className="rounded-lg bg-surface px-3 py-2 text-sm text-zinc-300 border-l-2 border-volt">{detected.analysis}</div>
                 )}

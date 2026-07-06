@@ -176,19 +176,51 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
         <img src={fileUrl(tip.image_path)} alt="slip" className="w-full h-36 object-cover rounded-lg mb-3 border border-elevated" loading="lazy" />
       )}
 
-      <h4 className="font-heading font-bold text-white text-lg leading-tight">
-        {tip.home_team || "—"} <span className="text-zinc-600 text-sm">vs</span> {tip.away_team || "—"}
-      </h4>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mt-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mb-2">
         {tip.league && <span>{tip.league}</span>}
         {tip.country && <span>· {tip.country}</span>}
-        {tip.match_time && <span>· {tip.match_time}</span>}
+        {tip.match_time && !(tip.legs && tip.legs.length) && <span>· {tip.match_time}</span>}
       </div>
 
-      <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
-        <span className="text-white font-semibold text-sm truncate">{tip.market || "—"}</span>
-        {tip.odds && <span className="font-mono font-bold text-volt shrink-0 ml-2">{tip.odds}</span>}
-      </div>
+      {tip.legs && tip.legs.length ? (
+        <div className="space-y-2">
+          {tip.is_parlay && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
+              Parlay · {tip.legs.length} {tip.legs.length > 1 ? "Spiele" : "Spiel"}
+            </span>
+          )}
+          {tip.legs.map((leg, li) => (
+            <div key={li} className="rounded-lg bg-void border border-elevated px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-white font-heading font-bold text-sm leading-tight">{leg.match || "—"}</span>
+                {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{leg.kickoff}</span>}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {(leg.selections || []).map((s, si) => (
+                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">{s}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(tip.odds || tip.stake || tip.potential_return) && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-1 px-1">
+              {tip.odds && <span className="text-zinc-500">Quote <span className="font-mono font-bold text-volt">{tip.odds}</span></span>}
+              {tip.stake && <span className="text-zinc-500">Einsatz <span className="text-white font-medium">{tip.stake}</span></span>}
+              {tip.potential_return && <span className="text-zinc-500">Gewinn <span className="text-won font-medium">{tip.potential_return}</span></span>}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <h4 className="font-heading font-bold text-white text-lg leading-tight">
+            {tip.home_team || "—"} <span className="text-zinc-600 text-sm">vs</span> {tip.away_team || "—"}
+          </h4>
+          <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
+            <span className="text-white font-semibold text-sm truncate">{tip.market || "—"}</span>
+            {tip.odds && <span className="font-mono font-bold text-volt shrink-0 ml-2">{tip.odds}</span>}
+          </div>
+        </>
+      )}
 
       {tip.ai_analysis && (
         <p className="text-xs text-zinc-400 mt-2 border-l-2 border-volt pl-2 leading-snug">

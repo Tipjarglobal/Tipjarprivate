@@ -236,6 +236,10 @@ class TipSaveInput(BaseModel):
     odds: str = ""
     ai_rating: float = 0
     ai_analysis: str = ""
+    legs: Optional[List[dict]] = None
+    is_parlay: bool = False
+    stake: str = ""
+    potential_return: str = ""
 
 
 class RateInput(BaseModel):
@@ -263,14 +267,34 @@ class StatusInput(BaseModel):
 # ------------------------------------------------------------------ AI
 AI_SYSTEM = (
     "You are TipJar's expert football (soccer) betting analyst. You receive a screenshot of a "
-    "bet slip and/or the user's written tip. Identify the match and evaluate the bet. "
-    "Return ONLY strict JSON, no markdown, with keys: home_team, away_team, match_time, "
-    "country, league, market, odds, rating, analysis. "
-    "'match_time' is a human readable kickoff (e.g. 'Sat 21:00' or 'Live 63''). "
-    "'rating' is a number from 1 to 10 (10 = strongest, well-reasoned value bet). "
-    "'analysis' is one short punchy sentence (max 160 chars). "
-    "If something is unknown use an empty string. Never invent scores/results."
+    "bet slip — it may be a single bet, a bet-builder (one match, several selections), or a "
+    "multi-match parlay/accumulator (several matches) — and/or the user's written tip. "
+    "Read it precisely and return ONLY strict JSON, no markdown, with keys: "
+    "is_parlay (true if more than one match OR more than one selection), "
+    "legs (array with ONE object per MATCH, each: {\"match\": \"Home - Away\", "
+    "\"kickoff\": \"HH:MM or ''\", \"selections\": [\"exact market lines, e.g. 'Total Over 1.5', "
+    "'Djurgarden Total Over 0.5', 'Fouls Over 21.5'\"]}), "
+    "home_team, away_team, match_time, country, league, "
+    "market (a short human summary of all selections), odds (total/combined odds as a string), "
+    "stake (string, '' if unknown), potential_return (string, '' if unknown), "
+    "rating (1-10, quality/value of the bet), analysis (one short punchy sentence, max 160 chars). "
+    "Copy each selection line EXACTLY as it appears on the slip. If a field is unknown use an empty "
+    "string. Never invent scores or results."
 )
+
+
+def _sanitize_legs(legs) -> list:
+    out = []
+    if isinstance(legs, list):
+        for lg in legs:
+            if isinstance(lg, dict):
+                sels = lg.get("selections") or []
+                out.append({
+                    "match": str(lg.get("match", "") or ""),
+                    "kickoff": str(lg.get("kickoff", "") or ""),
+                    "selections": [str(s) for s in sels if s][:10],
+                })
+    return out[:12]
 
 
 async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
@@ -278,6 +302,7 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
         "home_team": "", "away_team": "", "match_time": "", "country": "",
         "league": "", "market": text.strip()[:60], "odds": "",
         "rating": 5.0, "analysis": "Auto-rating unavailable, rated neutral.",
+        "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
     }
     if not EMERGENT_LLM_KEY:
         return fallback
@@ -505,6 +530,10 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "odds": inp.odds,
         "ai_rating": inp.ai_rating,
         "ai_analysis": inp.ai_analysis,
+        "legs": _sanitize_legs(inp.legs),
+        "is_parlay": inp.is_parlay or (inp.legs is not None and len(inp.legs) > 1),
+        "stake": inp.stake,
+        "potential_return": inp.potential_return,
         "status": "pending",
         "sum_stars": 0,
         "ratings_count": 0,
