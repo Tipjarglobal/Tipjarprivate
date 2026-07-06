@@ -15,6 +15,13 @@ Share → "Add to Home Screen"). To publish it on the **Google Play Store**, wra
 You still need (create in a graphics tool): a **1024×500 Feature Graphic** and **2–8 phone
 screenshots** for the store listing.
 
+## Generated store graphics (ready to upload) — in /app/frontend/public/store
+After you redeploy, these are reachable at your domain:
+- Feature graphic (1024×500): `https://ai-credit-saver.emergent.host/store/feature-graphic.png`
+- Screenshot 1 (AI rates every tip): `https://ai-credit-saver.emergent.host/store/screenshot-1.png`
+- Screenshot 2 (Turn credits into real money): `https://ai-credit-saver.emergent.host/store/screenshot-2.png`
+- App icon 512: `https://ai-credit-saver.emergent.host/icon-512.png`
+
 ## Prerequisites (your side)
 1. **Google Play Developer account** — one-time $25 at https://play.google.com/console
 2. Node.js + JDK 17 + Android SDK on your machine (Android Studio installs these).
