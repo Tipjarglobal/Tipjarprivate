@@ -557,8 +557,14 @@ async def list_tips(status: Optional[str] = None, sort: str = "new", limit: int 
     q = {}
     if status:
         q["status"] = status
-    cursor = db.tips.find(q, {"_id": 0})
-    tips = await cursor.to_list(500)
+    limit = max(1, min(limit, 100))
+    if sort == "top":
+        cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(limit)
+    elif sort == "hype":
+        cursor = db.tips.find(q, {"_id": 0}).sort("ai_rating", -1).limit(limit)
+    else:
+        cursor = db.tips.find(q, {"_id": 0}).sort("created_at", -1).limit(limit)
+    tips = await cursor.to_list(limit)
     if sort == "top":
         tips.sort(key=lambda t: (t.get("avg_rating", 0), t.get("ratings_count", 0)), reverse=True)
     elif sort == "hype":
@@ -570,8 +576,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new", limit: int 
 
 @api_router.get("/tips/mine")
 async def my_tips(user: dict = Depends(get_current_user)):
-    tips = await db.tips.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
-    tips.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    tips = await db.tips.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
     return tips
 
 
@@ -782,8 +787,8 @@ async def redeem(user: dict = Depends(get_current_user)):
 @api_router.get("/credits/transactions")
 async def credit_txns(user: dict = Depends(get_current_user)):
     txns = await db.credit_transactions.find(
-        {"$or": [{"from_user": user["id"]}, {"to_user": user["id"]}]}, {"_id": 0}).to_list(100)
-    txns.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+        {"$or": [{"from_user": user["id"]}, {"to_user": user["id"]}]}, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
     return txns
 
 
@@ -1014,6 +1019,10 @@ async def startup():
     await db.tips.create_index("status")
     await db.tip_ratings.create_index([("tip_id", 1), ("user_id", 1)])
     await db.users.create_index("referral_code")
+    await db.tips.create_index([("user_id", 1), ("created_at", -1)])
+    await db.tips.create_index([("status", 1), ("created_at", -1)])
+    await db.credit_transactions.create_index([("from_user", 1), ("created_at", -1)])
+    await db.credit_transactions.create_index([("to_user", 1), ("created_at", -1)])
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})

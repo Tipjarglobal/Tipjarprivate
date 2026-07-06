@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration-3 deployment-readiness validation: verified toast import fix (VerifyBanner resend button no longer throws JS runtime error) and DB-level query optimizations (GET /api/tips limit+cap100, /api/tips/mine limit100 sorted desc, /api/credits/transactions limit50 sorted desc). Added 8 new pytest cases (classes TestListingLimitsAndSort, TestMyTips, TestCreditTransactions). All 47 backend tests pass. Frontend E2E confirms signup + verify banner + resend flow work end-to-end with 2 sonner toasts and zero ReferenceError.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still ~1054 lines (past 700-line threshold). Recommend splitting into routers (auth/tips/credits/notifications/admin) — carried over from iteration-2 and now more warranted after adding indexes and query-optimization branches.",
+    "list_tips: after DB-side sort+limit, the code STILL re-sorts the returned list in Python (lines 568-573). This double-sort is redundant since MongoDB already returned sorted results. It's a minor perf/DRY smell — safe to remove the in-memory sort step now that the query is authoritative.",
+    "list_tips uses `find(q, {\"_id\": 0}).sort(...).limit(limit).to_list(limit)` which is correct, but note that for sort=top the compound sort ((avg_rating,-1),(ratings_count,-1)) is not backed by an index — startup adds only status/user_id/created_at indexes. Consider adding `db.tips.create_index([('avg_rating', -1), ('ratings_count', -1)])` and `db.tips.create_index('ai_rating', -1)` for hot sort paths at production scale.",
+    "GET /api/tips has no server-side pagination cursor (only a hard cap of 100). If the corpus grows beyond a few hundred pending tips, users cannot page beyond the first 100 newest. Consider adding `?before=<created_at>` or `?skip` for pagination.",
+    "credit_transactions has NO parameterized limit — hard-coded 50. Fine for now, but same lack-of-pagination caveat as list_tips.",
+    "Frontend: resend-verification button still lacks a rate-limit UX guard beyond `disabled={sending}`. If the request completes quickly, users can spam the button and create many verify tokens; consider a 30s cooldown timer or backend rate-limiting.",
+    "Frontend: two toasts stack on top of each other after signup->resend (signup success toast + dev verify link toast). Consider dismissing the signup toast when the resend toast fires, or lowering duration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestListingLimitsAndSort with 5 tests: limit=2, limit=99999 capped at 100, sort=new/top/hype desc-ordering; TestMyTips with 2 tests: auth required, only-current-user + sorted + <=100; TestCreditTransactions with 2 tests: auth required, sorted-desc + <=50)"
+  ],
+  "success_rate": {"backend": "100% (47/47 pytest tests pass)", "frontend": "100% for the critical toast-fix regression flow — signup + verify-banner + resend triggers 2 sonner toasts with ZERO 'toast is not defined' errors. Header shows 100 welcome credits, Submit-Tip modal opens correctly."},
+  "test_credentials": "Admin admin@tipjar.com / TipJarAdmin2026! verified. E2E test users created dynamically with TEST_ prefix.",
+  "seed_data_creation": "Backend tests continue to seed disposable TEST_-prefixed users A and B (session-scoped) plus additional users inside TestReferralAndVerify and iteration-3 TestListingLimitsAndSort (creates 3 tips) / TestMyTips (creates 1 tip).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Deployment-readiness fixes fully verified. Backend suite must be run with `-n 0` (serial) because TestRating/TestAdmin depend on module-level pytest.tipjar_tip_id set by TestTips — xdist loadscope splits classes across workers and breaks this cross-class state. Command: `cd /app && python -m pytest /app/backend/tests/backend_test.py -v -n 0 --junitxml=/app/test_reports/pytest/pytest_results.xml`. New iteration-3 tests are in classes TestListingLimitsAndSort, TestMyTips, TestCreditTransactions. Toast-import fix confirmed: sonner emits 2 toasts on resend click; no ReferenceError. Frontend selectors used: [data-testid='signup-btn'], [data-testid='auth-username'], [data-testid='auth-email'], [data-testid='auth-password'], [data-testid='auth-submit'], [data-testid='verify-banner'], [data-testid='resend-verification'], [data-testid='header-submit-btn'], [data-testid='tip-text'], [data-testid='upload-input']. AI auto-rating still returns fallback (rating 5) because EMERGENT_LLM_KEY is out of balance — not a bug per problem statement.",
+  "rca of the issue": "No new bugs found. All requested deployment blockers are fixed: (1) VerifyBanner resend() now correctly imports `toast` from 'sonner' at App.js line 5, and clicking the resend button fires toast.success/toast.message without any ReferenceError — verified end-to-end via Playwright. (2) list_tips caps limit=min(limit,100), sorts at DB level by created_at desc / avg_rating desc / ai_rating desc as expected — all 5 new assertions pass. (3) my_tips returns only user's tips sorted newest-first with limit(100) — 2 new tests pass including auth-required and cross-user isolation. (4) credit_txns returns user's transactions sorted newest-first with limit(50) — 2 new tests pass. (5) Compound indexes at startup ((user_id,created_at desc), (status,created_at desc), (credit_transactions.from_user/to_user + created_at)) applied correctly."
+}

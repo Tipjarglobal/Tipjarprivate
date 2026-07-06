@@ -504,3 +504,124 @@ class TestSettleIdle:
         d = r.json()
         assert d.get("ok") is False
         assert "API_FOOTBALL_KEY" in d.get("reason", "")
+
+
+# ================================================================ Iteration-3: DB query optimizations
+class TestListingLimitsAndSort:
+    """GET /api/tips must sort at DB level, cap limit at 100, and support sort=new/top/hype."""
+
+    def test_tips_limit_respected(self, user_a):
+        # create a couple of tips so we have >=2 to test limit
+        for i in range(3):
+            payload = {
+                "raw_text": f"limit test {i}",
+                "home_team": "TeamA", "away_team": "TeamB",
+                "match_time": "Sat 21:00", "country": "International",
+                "league": "Friendly", "market": "1X2 - Home",
+                "odds": "1.50", "ai_rating": 5.0, "ai_analysis": "test",
+            }
+            r = requests.post(f"{API}/tips", json=payload, headers=_auth(user_a["token"]), timeout=TIMEOUT)
+            assert r.status_code == 200
+        r = requests.get(f"{API}/tips?limit=2&sort=new", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        assert isinstance(tips, list)
+        assert len(tips) <= 2
+
+    def test_tips_limit_capped_at_100(self):
+        r = requests.get(f"{API}/tips?limit=99999&sort=new", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        assert isinstance(tips, list)
+        assert len(tips) <= 100
+
+    def test_tips_sort_new_desc(self):
+        r = requests.get(f"{API}/tips?sort=new&limit=50", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        assert isinstance(tips, list)
+        if len(tips) >= 2:
+            for i in range(len(tips) - 1):
+                a = tips[i].get("created_at", "")
+                b = tips[i + 1].get("created_at", "")
+                assert a >= b, f"tips not sorted desc by created_at: {a} < {b}"
+
+    def test_tips_sort_top_desc(self):
+        r = requests.get(f"{API}/tips?sort=top&limit=50", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        if len(tips) >= 2:
+            for i in range(len(tips) - 1):
+                assert tips[i].get("avg_rating", 0) >= tips[i + 1].get("avg_rating", 0)
+
+    def test_tips_sort_hype_desc(self):
+        r = requests.get(f"{API}/tips?sort=hype&limit=50", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        if len(tips) >= 2:
+            for i in range(len(tips) - 1):
+                assert tips[i].get("ai_rating", 0) >= tips[i + 1].get("ai_rating", 0)
+
+
+class TestMyTips:
+    """GET /api/tips/mine returns only current user's tips, newest first, capped 100."""
+
+    def test_requires_auth(self):
+        r = requests.get(f"{API}/tips/mine", timeout=TIMEOUT)
+        assert r.status_code == 401
+
+    def test_returns_only_current_user_tips_sorted(self, user_a, user_b):
+        # ensure user_a has at least one tip; create a fresh unique one and grab id
+        payload = {
+            "raw_text": "my tips test unique",
+            "home_team": "OnlyA", "away_team": "OnlyB",
+            "match_time": "Sun 20:00", "country": "International",
+            "league": "Friendly", "market": "1X2 - Home",
+            "odds": "1.80", "ai_rating": 5.0, "ai_analysis": "n/a",
+        }
+        r = requests.post(f"{API}/tips", json=payload, headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        new_id = r.json()["id"]
+
+        r = requests.get(f"{API}/tips/mine", headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        mine = r.json()
+        assert isinstance(mine, list)
+        assert any(t["id"] == new_id for t in mine)
+        # all tips belong to user_a
+        assert all(t["user_id"] == user_a["user"]["id"] for t in mine)
+        # sorted newest first
+        if len(mine) >= 2:
+            for i in range(len(mine) - 1):
+                assert mine[i].get("created_at", "") >= mine[i + 1].get("created_at", "")
+        # cap 100
+        assert len(mine) <= 100
+
+        # user_b shouldn't see user_a's tip
+        r2 = requests.get(f"{API}/tips/mine", headers=_auth(user_b["token"]), timeout=TIMEOUT)
+        assert r2.status_code == 200
+        b_tips = r2.json()
+        assert all(t["user_id"] == user_b["user"]["id"] for t in b_tips)
+        assert not any(t["id"] == new_id for t in b_tips)
+
+
+class TestCreditTransactions:
+    """GET /api/credits/transactions sorted newest-first, capped at 50."""
+
+    def test_requires_auth(self):
+        r = requests.get(f"{API}/credits/transactions", timeout=TIMEOUT)
+        assert r.status_code == 401
+
+    def test_returns_user_transactions_sorted_capped(self, user_a):
+        r = requests.get(f"{API}/credits/transactions", headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        txns = r.json()
+        assert isinstance(txns, list)
+        assert len(txns) <= 50
+        # each txn involves user_a
+        for t in txns:
+            assert user_a["user"]["id"] in (t.get("from_user"), t.get("to_user"))
+        # sorted desc by created_at
+        if len(txns) >= 2:
+            for i in range(len(txns) - 1):
+                assert txns[i].get("created_at", "") >= txns[i + 1].get("created_at", "")

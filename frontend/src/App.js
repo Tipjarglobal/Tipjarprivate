@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import { Sparkles, Star, Loader2, CheckCircle2, MailWarning } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
