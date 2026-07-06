@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration-5 verified the client-side image compression fix in SubmitTipModal.jsx that prevents proxy 413 'Request Entity Too Large' errors on large screenshot uploads. Three scenarios were executed end-to-end via Playwright against the live preview URL, logged in as admin (admin@tipjar.com). ALL PASSED with no error toasts. (1) LARGE upload: a 13.58 MB PNG (2600x1900, generated with random noise so PNG can't compress it) was set on upload-input, compressImage() ran on-screen (preview appeared ~1s later), scan-button POSTed to /api/tips/analyze which returned 200, detected-panel rendered (Argentina vs Brazil - Over 2.5 @ 1.85, AI-rating 7), publish-button POSTed to /api/tips 200 and the success toast 'Your tip is live on the Rate Wall! 🔥' appeared. Before the fix this exact source size would have been rejected by the ingress with 413. (2) SMALL upload: 3.5 KB PNG (400x300) — compressImage passes it through unchanged (below 900KB & <=maxDim path), analyze 200, publish 200. (3) TEXT-ONLY: no file at all — analyze 200 (Real Madrid vs Barcelona detected), publish 200. AI ratings are LIVE (Gemini via EMERGENT_LLM_KEY) — real 7/10 apex scores and multilingual analysis text seen on Rate Wall.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "compressImage() in SubmitTipModal.jsx line 26 uses `file.size < 900000` as an early-exit condition together with `longest <= maxDim`; this is fine, but the OR/AND boundary means a 1500x1500 file that is 5MB (unusual but possible for lossless PNG screenshots) will still be recompressed — which is the desired safer behavior. No fix needed but worth documenting the threshold.",
+    "compressImage does not preserve any EXIF/orientation. For screenshots taken on iOS/Android that carry orientation metadata, the rotated variants may render sideways after compression. Non-blocking for slip-screenshots which are usually captured from desktop, but consider adding an orientation fix (e.g. drawImage with rotation from EXIF) if mobile users report rotated previews.",
+    "canvas.toBlob returns null in Safari when the source is a large tainted canvas; the code correctly falls back to the original File via `if (!blob) return file;`, but that means large uploads would silently regress to the 413 path on Safari desktop for very large images. Consider surfacing a soft toast informing the user their image could not be compressed.",
+    "server.py POST /api/tips/analyze (line 492) has no explicit size guard — it relies purely on the ingress proxy limit. Given the client fix, consider adding an explicit size check on the server (e.g. reject > 10MB with a friendly 400 message) so that any client without JS-compression (curl, mobile bots) gets a graceful error instead of a raw 413.",
+    "Carry-over from iteration-4: server.py is now ~1108 lines — should be split into routers (auth/tips/credits/notifications/admin).",
+    "Playwright can't measure the outbound multipart body size via post_data_buffer (it returns 0 for binary File FormData). Compression effectiveness was proven indirectly: (a) the raw 13.58MB PNG previously produced a 413 per bug report, (b) after the fix POST /api/tips/analyze returned 200 with no error toast. If the team wants a hard byte-level assertion in future E2E, use Playwright request interception via `page.route` and read `request.headers['content-length']`, or CDP `Network.getRequestPostData`."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested this iteration (frontend-only per review request)",
+    "frontend": "100% — 3/3 scenarios passed: LARGE upload analyze+publish, SMALL upload analyze+publish, TEXT-ONLY analyze+publish. Zero error toasts across all runs."
+  },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (verified working). Admin-authored tips are NOT purged by the @t.com purge rule.",
+  "seed_data_creation": "Three admin-authored tips were published as part of this test run (Argentina vs Brazil Over 2.5, PSG vs Marseille Over 1.5, Real Madrid vs Barcelona ML). They persist on the Rate Wall — admin can settle/purge if desired. Also created /tmp/big_slip.png (13.58MB, 2600x1900, random-noise PNG) and /tmp/small_slip.png (3.5KB, 400x300) as test fixtures.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For image-upload E2E, use Python + Pillow + numpy to generate a genuinely large PNG (random noise defeats PNG compression). >2000px on the longest side + file size >900KB triggers the compressImage() downscale path (max 1600px, JPEG 0.85). Verified selectors: [data-testid='header-submit-btn'] (post-login), [data-testid='hero-submit-btn'] (also visible when logged in), [data-testid='submit-modal'], [data-testid='submit-tab-upload'], [data-testid='upload-input'] (hidden file input — set_input_files works fine), [data-testid='upload-dropzone'], [data-testid='tip-text'], [data-testid='scan-button'], [data-testid='detected-panel'], [data-testid='publish-button']. Sonner toasts live under [data-sonner-toast] and error variant under [data-sonner-toast][data-type='error']. AI Gemini is now returning REAL ratings (7/10 apex, contextual analysis in EN/DE mix) — the earlier fallback-5 note in test_credentials.md is out of date, update it.",
+  "rca of the issue": "Root cause (pre-fix): the Kubernetes ingress proxy in front of the FastAPI backend caps request body at ~1MB (nginx default `client_max_body_size`); a raw >2MB PNG upload from mobile / high-DPR screenshots was rejected by the proxy with 413 before ever hitting the FastAPI /api/tips/analyze handler, surfacing as an error toast in the SubmitTipModal. Fix (this iteration is validation-only, code was already applied by main agent): added `compressImage(file, maxDim=1600, quality=0.85)` helper at top of SubmitTipModal.jsx which (a) reads the file via FileReader, (b) decodes it into an HTMLImageElement, (c) if longest side > 1600px OR size >= 900KB, downscales via canvas.drawImage and re-encodes via canvas.toBlob('image/jpeg', 0.85), (d) returns a new File wrapping the compressed blob. `pick(f)` was made async and now awaits `compressImage` before calling `setFile(optimized)` and setting the preview. File input `accept` was broadened from image/png,image/jpeg to `image/*`. Reproduction (post-fix, confirmed working): create random-noise PNG >2000px & >2MB → set on upload-input → scan → 200 → publish → 200. No 413 encountered."
+}

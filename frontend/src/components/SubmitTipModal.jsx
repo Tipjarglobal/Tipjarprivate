@@ -7,6 +7,39 @@ import { useI18n } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
+async function compressImage(file, maxDim = 1600, quality = 0.85) {
+  if (!file || !file.type?.startsWith("image/")) return file;
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = dataUrl;
+    });
+    const longest = Math.max(img.width, img.height);
+    if (longest <= maxDim && file.size < 900000) return file;
+    const scale = Math.min(1, maxDim / longest);
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+    if (!blob) return file;
+    const name = (file.name || "slip").replace(/\.[^.]+$/, "") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 const TUTORIAL = [
   { tag: "World Football", title: "Argentina vs Cape Verde", market: "Argentina to win & Over 1.5", odds: "1.42", note: "A clean favourite line — explain WHY (form, missing defenders). Context wins ratings.", tone: "#00FF94" },
   { tag: "A bad tip", title: "Random 12-fold accumulator", market: "12 legs @ 850.00", odds: "850.00", note: "No reasoning, insane odds, pure hope. The crowd (and the AI) will rate this low.", tone: "#FF1E56" },
@@ -33,10 +66,11 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   };
   const close = () => { reset(); onClose(); };
 
-  const pick = (f) => {
+  const pick = async (f) => {
     if (!f) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    const optimized = await compressImage(f);
+    setFile(optimized);
+    setPreview(URL.createObjectURL(optimized));
     setDetected(null);
   };
 
@@ -170,7 +204,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                     <p className="text-xs text-zinc-500 mt-1">{t("submit.dropHint")}</p>
                   </div>
                 )}
-                <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => pick(e.target.files?.[0])} data-testid="upload-input" />
+                <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} data-testid="upload-input" />
               </div>
 
               <Field label={t("submit.text")}>
