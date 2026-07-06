@@ -1145,44 +1145,63 @@ async def seed_showcase():
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
-    messi_image = None
-    try:
-        img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
-        with open(img_file, "rb") as f:
-            data = f.read()
-        path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi-notax.jpg"
-        messi_image = put_object(path, data, "image/jpeg")["path"]
-        await db.files.update_one(
-            {"storage_path": messi_image},
-            {"$set": {"owner": hq["id"], "content_type": "image/jpeg", "is_deleted": False},
-             "$setOnInsert": {"id": str(uuid.uuid4()), "original_filename": "portugal_messi.jpg", "created_at": now}},
-            upsert=True,
-        )
-    except Exception as e:
-        logger.error(f"seed image upload failed: {e}")
+    # Old showcase tips removed per user request — purge in every env on startup
+    for old_id in ["seed-portugal-messi", "seed-hacken-parlay"]:
+        await db.tips.delete_one({"id": old_id})
+        await db.tip_ratings.delete_many({"tip_id": old_id})
+    logger.info("Purged old showcase tips (Portugal & Messi, Häcken parlay)")
 
+    # Tutorial showcase — bad example (low stars, no analysis)
     await db.tips.update_one(
-        {"id": "seed-portugal-messi"},
+        {"id": "seed-tut-bad"},
         {"$set": {
-            "user_id": hq["id"], "username": "TipJarHQ", "image_path": messi_image,
-            "home_team": "Portugal & Lionel Messi", "away_team": "",
-            "match_time": "19/07/2026 21:00", "country": "International",
-            "league": "World Cup – Player Specials", "market": "Winner & Top Scorer",
-            "odds": "35.00", "ai_rating": 2.0,
-            "ai_analysis": "Pure fan-favourite gamble: Messi banging in goals against easy opponents, chasing the Golden Boot — and the football gods teasing a dream Portugal vs Argentina final, Ronaldo vs Messi last dance. Unrealistic? Sure. Irresistible? Absolutely.",
-            "legs": [], "is_parlay": False, "stake": "25,00 €", "potential_return": "875,00 €",
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
+            "home_team": "Argentinien", "away_team": "Kap Verde",
+            "match_time": "12/07/2026 21:00", "country": "International",
+            "league": "Weltmeisterschaft", "market": "Argentinien gewinnt",
+            "odds": "1.20", "ai_rating": 3.0,
+            "ai_analysis": "",
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
         },
          "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
                           "ratings_count": 0, "avg_rating": 0, "created_at": now}},
         upsert=True,
     )
-    logger.info("Seeded/updated showcase tip: Portugal & Messi")
+    logger.info("Seeded/updated showcase tip: Argentinien–Kap Verde (bad example)")
 
-    # Häcken parlay showcase removed per user request — purge it in every env (startup)
-    await db.tips.delete_one({"id": "seed-hacken-parlay"})
-    await db.tip_ratings.delete_many({"tip_id": "seed-hacken-parlay"})
-    logger.info("Removed showcase tip: Häcken parlay")
+    # Tutorial showcase — banker pregame (full analysis, 10 stars)
+    banker_analysis = (
+        "1. ENZO FERNÁNDEZ: 1+ FOULS GEWONNEN (Alternative Player To Be Fouled) — "
+        "Enzo hat in 28 seiner letzten 30 Spiele für Argentinien ein Foul herausgeholt. "
+        "Er spielt gegen Kevin Lenini, der im Mittelfeld regelmäßig Fouls begeht. Es wird "
+        "erwartet, dass Enzo aktiv ins Spielgeschehen eingreift und mindestens ein Foul herausholt. "
+        "2. KEVIN LENINI: 1+ FOULS BEGANGEN (Alternative Player Fouls Committed) — "
+        "Lenini ist der Hauptmittelfeldspieler von Kap Verde und begeht häufig Fouls. Er spielt "
+        "aggressiv und verursacht dadurch oft billige Fouls. Es wird erwartet, dass er in diesem "
+        "Spiel mindestens ein Foul begeht."
+    )
+    await db.tips.update_one(
+        {"id": "seed-tut-banker"},
+        {"$set": {
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
+            "home_team": "Argentinien", "away_team": "Kap Verde",
+            "match_time": "12/07/2026 21:00", "country": "International",
+            "league": "Weltmeisterschaft",
+            "market": "Enzo Fernández: 1+ Fouls gewonnen  |  Kevin Lenini: 1+ Fouls begangen",
+            "odds": "1.45", "ai_rating": 10.0,
+            "ai_analysis": banker_analysis,
+            "legs": [
+                {"match": "Argentinien – Kap Verde", "league": "Weltmeisterschaft",
+                 "kickoff": "12/07 21:00", "status": "pending",
+                 "selections": ["Enzo Fernández: 1+ Fouls gewonnen", "Kevin Lenini: 1+ Fouls begangen"]},
+            ],
+            "is_parlay": True, "stake": "", "potential_return": "",
+        },
+         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
+        upsert=True,
+    )
+    logger.info("Seeded/updated showcase tip: Enzo/Lenini banker (10 stars)")
 
 
 @app.on_event("startup")
