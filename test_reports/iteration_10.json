@@ -1,0 +1,16 @@
+{
+  "summary": "Verified Portugal & Messi showcase tip is restored with slip image (tax-row removed). Backend GET /api/tips returns exactly one tip (seed-portugal-messi) with image_path set; GET /api/files/... returns HTTP 200 image/jpeg (87752 bytes, 1080x656). Frontend Rate Wall shows a single TipCard with the slip image loaded, 🇵🇹 flag (data-testid=tip-flags), Einsatz 25,00 € / Gewinn 875,00 €, and the AI analysis 'fan-favourite gamble ... Ronaldo vs Messi last dance'. No Häcken parlay present. No console/page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/test_reports/iter10_ratewall.png"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! ; hq@tipjar.com / TipJarHQ2026! (not needed for this test; Rate Wall is public)",
+  "seed_data_creation": "None. Seed data auto-created by backend on startup (seed-portugal-messi).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints verified: GET /api/tips returns 1 tip; GET /api/files/tipjar/tips/<user_id>/seed-portugal-messi.jpg returns 200 image/jpeg. Frontend Rate Wall renders single TipCard with slip image, tip-flags=🇵🇹, Einsatz/Gewinn row (25,00 € / 875,00 €), AI analysis text intact. The mismatch between the image's printed 'Potential winnings 828,63 €' and the card's Gewinn 875,00 € is BY DESIGN per user request — do NOT flag.",
+  "rca of the issue": "N/A - all bug-fix acceptance criteria met."
+}

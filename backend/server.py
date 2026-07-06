@@ -1092,9 +1092,23 @@ async def seed_showcase():
     now = datetime.now(timezone.utc).isoformat()
 
     if not await db.tips.find_one({"id": "seed-portugal-messi"}):
+        image_path = None
+        try:
+            img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
+            with open(img_file, "rb") as f:
+                data = f.read()
+            path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi.jpg"
+            image_path = put_object(path, data, "image/jpeg")["path"]
+            await db.files.insert_one({
+                "id": str(uuid.uuid4()), "storage_path": image_path,
+                "original_filename": "portugal_messi.jpg", "content_type": "image/jpeg",
+                "owner": hq["id"], "is_deleted": False, "created_at": now,
+            })
+        except Exception as e:
+            logger.error(f"seed image upload failed: {e}")
         await db.tips.insert_one({
             "id": "seed-portugal-messi", "user_id": hq["id"], "username": "TipJarHQ",
-            "raw_text": "", "image_path": None,
+            "raw_text": "", "image_path": image_path,
             "home_team": "Portugal & Lionel Messi", "away_team": "",
             "match_time": "19/07/2026 21:00", "country": "International",
             "league": "World Cup – Player Specials", "market": "Winner & Top Scorer",
