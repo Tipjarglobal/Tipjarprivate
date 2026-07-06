@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Modal, { Field, inputCls, btnPrimary } from "./Modal";
-import { CreditCard, Gift, Banknote, Check } from "lucide-react";
+import { CreditCard, Gift, Banknote, Check, AlertTriangle } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useI18n } from "../i18n";
 import { useAuth } from "../auth";
@@ -88,15 +88,20 @@ export default function WalletModal({ open, onClose }) {
       {tab === "buy" && (
         <div className="space-y-3" data-testid="buy-panel">
           {Object.entries(packages).map(([id, p]) => (
-            <button key={id} data-testid={`buy-${id}`} onClick={() => buy(id)} disabled={busy}
-              className="w-full flex items-center justify-between rounded-xl border border-elevated bg-void p-4 hover:border-volt hover:-translate-y-0.5 transition-all group">
+            <button key={id} data-testid={`buy-${id}`} onClick={() => buy(id)} disabled
+              className="w-full flex items-center justify-between rounded-xl border border-elevated bg-void p-4 opacity-60 cursor-not-allowed transition-all">
               <div className="text-left">
                 <p className="font-heading font-bold text-white text-lg">{p.label}</p>
                 <p className="font-mono text-volt font-bold">{p.credits} {t("wallet.credits")}</p>
               </div>
-              <span className="font-mono font-black text-xl text-white group-hover:text-volt transition-colors">€{p.price.toFixed(2)}</span>
+              <span className="font-mono font-black text-xl text-white">€{p.price.toFixed(2)}</span>
             </button>
           ))}
+          <div data-testid="buy-disabled-notice"
+            className="flex items-start gap-2.5 rounded-xl border border-lost/50 bg-lost/10 p-4 text-lost">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <p className="text-sm font-semibold leading-snug">{t("wallet.buyDisabled")}</p>
+          </div>
         </div>
       )}
 
