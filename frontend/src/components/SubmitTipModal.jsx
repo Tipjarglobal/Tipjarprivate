@@ -41,10 +41,9 @@ async function compressImage(file, maxDim = 1600, quality = 0.85) {
 }
 
 const TUTORIAL = [
-  { tag: "World Football", title: "Argentina vs Cape Verde", market: "Argentina to win & Over 1.5", odds: "1.42", note: "A clean favourite line — explain WHY (form, missing defenders). Context wins ratings.", tone: "#00FF94" },
-  { tag: "A bad tip", title: "Random 12-fold accumulator", market: "12 legs @ 850.00", odds: "850.00", note: "No reasoning, insane odds, pure hope. The crowd (and the AI) will rate this low.", tone: "#FF1E56" },
-  { tag: "A banker (pregame)", title: "Man City vs Luton", market: "Man City -1.5 handicap", odds: "1.65", note: "High-confidence pregame pick with a solid rationale. Bankers earn big Apex scores.", tone: "#E1FF00" },
-  { tag: "A lock (live)", title: "Bayern vs Freiburg — 63'", market: "Live: Over 3.5 (2-1)", odds: "1.90", note: "In-play read: momentum + xG. Timely live locks are community favourites.", tone: "#E1FF00" },
+  { key: "bad", odds: "1.20", tone: "#FF1E56" },
+  { key: "banker", odds: "1.45", tone: "#00FF94" },
+  { key: "live", odds: "1.85", tone: "#E1FF00" },
 ];
 
 export default function SubmitTipModal({ open, onClose, onPublished, requireLogin }) {
@@ -146,13 +145,13 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="rounded-xl border border-elevated bg-void p-5"
             >
-              <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: ex.tone }}>{ex.tag}</span>
-              <h4 className="font-heading text-2xl font-black text-white mt-2">{ex.title}</h4>
+              <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: ex.tone }}>{t(`submit.tut.${ex.key}.tag`)}</span>
+              <h4 className="font-heading text-2xl font-black text-white mt-2">{t(`submit.tut.${ex.key}.title`)}</h4>
               <div className="flex items-center justify-between mt-3 rounded-lg bg-surface px-4 py-3">
-                <span className="text-white font-semibold">{ex.market}</span>
+                <span className="text-white font-semibold">{t(`submit.tut.${ex.key}.market`)}</span>
                 <span className="font-mono font-bold text-lg text-volt">{ex.odds}</span>
               </div>
-              <p className="text-sm text-zinc-400 mt-3 leading-relaxed">{ex.note}</p>
+              <p className="text-sm text-zinc-400 mt-3 leading-relaxed">{t(`submit.tut.${ex.key}.note`)}</p>
             </motion.div>
           </AnimatePresence>
           <div className="flex items-center justify-between mt-4">
