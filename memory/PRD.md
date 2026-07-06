@@ -35,11 +35,27 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Admin settle Won/Lost.
 - Verified by testing agent: backend 28/28, frontend 7/7 critical flows.
 
+## Implemented (2026-07-06, iteration 2)
+- Auto-results engine: API-Football + AI market judging + 15-min background job + admin "Sync now".
+  Idle until API_FOOTBALL_KEY set. Settled tips store final_home/final_away/settled_by/settled_at.
+- Referral rewards: each user has a stable referral_code; invite link `?ref=CODE`. Referrer earns
+  100 credits ONLY after the invitee signs up AND verifies email. referral_rewarded guards double-pay.
+- Email verification via Resend (send_verification_email). DEV mode (no key) returns verify_link in
+  register/resend responses. /verify page + verify-email banner + resend button.
+- EUR economics: buy 1000/€10, 5000/€50, 10000/€100 (€0.01/credit); withdraw 10,000 earned => €50
+  (€5/1000, half price); must EARN 10,000 received credits to withdraw. Stripe currency=eur.
+- "Road to 1,000 members" centered Invite section with copy-link + WhatsApp/Telegram/X share. GET /api/stats.
+- Verified: backend 38/38 pytest, all frontend flows; fixed 6 missing i18n keys (en/el).
+
+## Deferred by user
+- PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
+
 ## Backlog / Next
-- P0: Real auto-results engine — DONE (API-Football + AI market judging + 15-min background job
-      + admin "Sync now" button). ACTIVATES once API_FOOTBALL_KEY is set in backend/.env.
-      Team ids cached in db.team_cache; settled tips store final_home/final_away/settled_by/settled_at.
-- P1: PayPal payout execution for redemptions (currently records a redemption request).
+- Set RESEND_API_KEY (+ verified sender domain) to send real verification emails (currently DEV link).
+- Set API_FOOTBALL_KEY to activate live auto-settlement.
+- Redeem two-phase (requested->paid/rejected) restoring balance on rejection.
+- Debounce/rate-limit resend-verification; whitelist origin_url on checkout/verify.
+- P1: PayPal payout execution; disable star-rating on already-settled tips.
 - P1: Disable star rating on already-settled tips; optionally block rating own tip.
 - P1: Push notifications (web-push/VAPID) for true off-site tip alerts.
 - P2: My Tips / profile track record page; audit log for admin settlements; DB-side pagination.
