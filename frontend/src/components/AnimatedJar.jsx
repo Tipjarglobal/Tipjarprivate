@@ -5,8 +5,7 @@ import { motion } from "framer-motion";
 export default function AnimatedJar() {
   return (
     <div
-      className="relative mx-auto flex items-center justify-center"
-      style={{ width: 440, height: 440 }}
+      className="relative mx-auto flex items-center justify-center w-full max-w-[440px] aspect-square"
       data-testid="animated-jar"
     >
       <div
@@ -17,7 +16,7 @@ export default function AnimatedJar() {
         src="/tipjar-crest.png?v=5"
         alt="TipJar"
         draggable="false"
-        className="relative z-10 w-[420px] h-[420px] object-contain"
+        className="relative z-10 w-full h-full object-contain"
         style={{ filter: "drop-shadow(0 0 34px rgba(225,255,0,0.4))" }}
         animate={{ y: [0, -14, 0] }}
         transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}

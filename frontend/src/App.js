@@ -44,7 +44,7 @@ function Home() {
   const onPublished = () => setRefreshKey((k) => k + 1);
 
   return (
-    <div className="App grain min-h-screen" id="top">
+    <div className="App grain min-h-screen overflow-x-hidden" id="top">
       <PromoBanner />
       <Header
         onSubmit={() => setSubmitOpen(true)}
@@ -62,11 +62,11 @@ function Home() {
           <div className="absolute inset-0 bg-gradient-to-b from-void/70 via-void/85 to-void" />
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-20 grid lg:grid-cols-2 gap-10 items-center">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="min-w-0">
             <span className="inline-flex items-center gap-2 rounded-full border border-volt/30 bg-volt/5 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-volt">
               <Sparkles size={13} /> {t("hero.badge")}
             </span>
-            <h1 className="font-heading text-5xl md:text-7xl font-black tracking-tighter leading-[1.08] text-white mt-5 pb-1">
+            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter leading-[1.08] text-white mt-5 pb-1 break-words">
               {t("hero.title")}
             </h1>
             <p className="text-lg text-zinc-400 mt-5 max-w-xl leading-relaxed">{t("hero.subtitle")}</p>
