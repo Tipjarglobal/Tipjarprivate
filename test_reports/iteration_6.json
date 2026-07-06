@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration-6 validated the two new German-market rules and the analyze_tip() regression fix. (A) NEW GUARD: POST /api/tips returns HTTP 400 with detail 'Tip needs a match date & time — add the kickoff to publish.' when match_time is empty or whitespace-only. Frontend surfaces the exact same message via a sonner error toast, and NO tip is written to the DB (verified via /api/tips/mine count = 0 after the rejected publish). (B) STAKE x ODDS RULE: A live AI analyze of a German bet slip 'Stake 25 EUR, Gesamtquote 35.00, Steuer 5%, Möglicher Gewinn nach Steuer 828.63 EUR' returned potential_return='875.00 EUR' (25 x 35.00) — correctly IGNORING the 828.63 tax-adjusted figure printed on the slip. (C) ANALYZE SHAPE FIX: POST /api/tips/analyze now returns stake, potential_return, legs, is_parlay in every response (previously dropped). Frontend published tip round-trips these: e.g. Bayern vs Dortmund 20/07/2026 20:30 Over 2.5 @ 1.90 stake 10 -> potential_return 19.00, legs=1, is_parlay=false. (D) REGRESSION: text-only + single-tip upload+analyze+publish still work end to end.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_new_rules.py",
+    "/app/test_reports/pytest/iter6_new_rules.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:527-528 correctly rejects empty/whitespace match_time (uses .strip()). No fix needed.",
+    "AI_SYSTEM prompt (server.py lines 268-287) explicitly instructs 'stake MULTIPLIED BY odds' + 'IGNORE any tax, fees or deductions' + 'match_time MUST contain the match DATE and kickoff TIME'. Live Gemini honored all three during E2E test.",
+    "analyze_tip() return dict (lines 344-358) now explicitly forwards stake, potential_return, legs, is_parlay — fixing the earlier regression where the frontend received undefined for these fields.",
+    "Frontend SubmitTipModal.publish() correctly passes stake/potential_return/legs/is_parlay to POST /api/tips (line 106). apiErr() surfaces backend 400 detail as-is in the error toast — good UX.",
+    "Carry-over: server.py is ~1116 lines — still should be split into per-domain routers (auth/tips/credits/notifications/admin) for maintainability. Non-blocking.",
+    "TipSaveInput has default match_time=\"\" (line 232). The 400 guard catches this at runtime, but consider tightening to a required Pydantic field (Field(min_length=1)) so the OpenAPI schema also documents it as required. Not a blocker."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_rules.py"],
+  "success_rate": {
+    "backend": "100% — 9/9 targeted tests pass (test_new_rules.py). Live AI analyze verified 875 = stake(25) * odds(35.00), ignoring 828.63 tax figure.",
+    "frontend": "100% — 2/2 E2E scenarios pass: (1) no-date tip rejected with exact toast 'Tip needs a match date & time — add the kickoff to publish.', mine_count=0; (2) with-date tip publishes, success toast 'Your tip is live on the Rate Wall! 🔥' visible, mine_count=1 with legs+stake+potential_return persisted."
+  },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (unused this iteration). Fresh @t.com user TEST_15f08e@t.com created for E2E — auto-purged on next restart.",
+  "seed_data_creation": "One admin-safe test tip was published under a @t.com user (TEST_15f08e): Bayern vs Dortmund 20/07/2026 20:30 Over 2.5 @ 1.90. It will be purged automatically on the next backend restart by purge_demo_tips(). Multiple @t.com user accounts and additional test tips (Argentina/Cape Verde, PSG/Marseille, PurgeHome/PurgeAway, NormalHome/NormalAway, etc.) were also created by the backend pytest suite — same purge covers them.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both new rules (match_time guard + stake*odds ignoring tax) are live and verified. Backend guard is server.py line 527; error message must be surfaced verbatim by frontend for the toast. Frontend selectors used: [data-testid=header-submit-btn], [data-testid=submit-modal], [data-testid=tip-text], [data-testid=scan-button], [data-testid=detected-panel], [data-testid=publish-button], [data-testid=rescan-button]. Sonner toasts: [data-sonner-toast][data-type='error'|'success']. Test that reads a token in localStorage as 'tj_token' and calls fetch(origin+'/api/tips/mine') is a reliable way to assert whether a publish actually persisted. Live Gemini via EMERGENT_LLM_KEY is returning real values including proper stake/potential_return calculation and DD/MM/YYYY HH:MM match_time parsing.",
+  "rca of the issue": "Pre-fix behaviours (all now resolved): (1) analyze_tip() was returning a dict without stake/potential_return/legs/is_parlay keys, so SubmitTipModal.publish() posted 'undefined' for those, wiping parlay legs from the created tip. Fix: server.py analyze_tip return dict was extended to forward all four fields from the LLM JSON (lines 352-355). (2) Tips could be created without a match_time (empty string), producing wall entries with 'Kickoff: —' and confusing users. Fix: server.py create_tip() now raises HTTPException(400, 'Tip needs a match date & time — add the kickoff to publish.') if match_time.strip() is empty (line 527-528). (3) The AI was returning tax-adjusted potential_return (e.g. 828.63 for a slip showing German 5% Wettsteuer on 875) because it copied whatever number appeared under 'Möglicher Gewinn'. Fix: AI_SYSTEM prompt (lines 268-287) was updated with an explicit instruction 'ALWAYS compute it as stake MULTIPLIED BY odds ... IGNORE any tax, fees or deductions shown on the slip'. Reproduction (post-fix): submit slip text 'Einsatz 25, Gesamtquote 35.00, Steuer 5%, Möglicher Gewinn 828.63' -> analyze returns potential_return='875.00 EUR'. Confirmed live."
+}

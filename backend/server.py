@@ -277,7 +277,10 @@ AI_SYSTEM = (
     "'Djurgarden Total Over 0.5', 'Fouls Over 21.5'\"]}), "
     "home_team, away_team, match_time, country, league, "
     "market (a short human summary of all selections), odds (total/combined odds as a string), "
-    "stake (string, '' if unknown), potential_return (string, '' if unknown), "
+    "stake (string, '' if unknown), "
+    "potential_return (string): ALWAYS compute it as stake MULTIPLIED BY odds (stake x odds) and "
+    "IGNORE any tax, fees or deductions shown on the slip; use '' only if stake or odds is unknown. "
+    "match_time MUST contain the match DATE and kickoff TIME whenever they appear on the slip (e.g. '19/07/2026 21:00'). "
     "rating (1-10, quality/value of the bet), analysis (one short punchy sentence, max 160 chars). "
     "Copy each selection line EXACTLY as it appears on the slip. If a field is unknown use an empty "
     "string. Never invent scores or results."
@@ -346,6 +349,10 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
             "league": str(data.get("league", "") or ""),
             "market": str(data.get("market", "") or "") or text.strip()[:60],
             "odds": str(data.get("odds", "") or ""),
+            "stake": str(data.get("stake", "") or ""),
+            "potential_return": str(data.get("potential_return", "") or ""),
+            "legs": _sanitize_legs(data.get("legs")),
+            "is_parlay": bool(data.get("is_parlay", False)),
             "rating": round(rating, 1),
             "analysis": str(data.get("analysis", "") or "")[:200],
         }
@@ -517,6 +524,8 @@ async def analyze(file: Optional[UploadFile] = File(default=None), text: str = F
 
 @api_router.post("/tips")
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
+    if not (inp.match_time or "").strip():
+        raise HTTPException(status_code=400, detail="Tip needs a match date & time — add the kickoff to publish.")
     tip = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
