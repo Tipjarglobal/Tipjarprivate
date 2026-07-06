@@ -65,6 +65,17 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   TRUSTED_REPUTATION=7.0 in server.py. Frontend removes card + toast wall.removed (EN/DE/EL).
 - Verified: backend 51/51 pytest; frontend admin 1-star delete + non-trusted preserve confirmed.
 
+## Submit rules & moderation (2026-07-06, iteration 5-6)
+- Large screenshots: client-side auto-compression in SubmitTipModal (max 1600px, JPEG 0.85)
+  before upload → no more proxy 413 errors. Input accepts image/*.
+- Winnings rule: potential_return = stake x odds, taxes/fees IGNORED (AI_SYSTEM prompt + verified).
+- Reject tips without a match date+time: create_tip returns 400 if match_time empty.
+- Bugfix: analyze_tip() now returns stake/potential_return/legs/is_parlay (were dropped) — parlays
+  keep their legs, winnings flow through.
+- Demo-tip policy extended: TipJarAdmin-authored demo tips removed; @t.com test accounts' tips
+  auto-purged on startup; trusted 1-star purge (admin + highly-rated) still active.
+- Verified: iteration-5 (upload) 3/3, iteration-6 (rules) 9/9 backend + 2/2 frontend. AI is LIVE.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
