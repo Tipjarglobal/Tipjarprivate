@@ -147,6 +147,17 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   (corrected from 'live' — match starts later).
 - Verified iter 14 & 15: frontend 100%.
 
+## Delete tip + banner/bell UX (2026-06, iteration 16-17)
+- Fixed "Delete tip": TipCard now receives onDelete/canDelete props (were missing → button never rendered);
+  added i18n keys wall.delete/wall.deleted/wall.delete_confirm (EN/DE/EL). Backend DELETE /api/tips/{id}
+  (admin OR owner) verified: 5/5 pytest (admin-any, owner-own, non-owner 403, 404, unauth 401).
+- PromoBanner now dismissible: X button (data-testid promo-dismiss), persists via localStorage
+  tj_promo_dismissed, stays hidden after reload. i18n promo.dismiss (EN/DE/EL).
+- NotificationBell settings panel now centered on mobile (was cut off): switched from transform-based
+  centering (framer-motion clobbered -translate-x-1/2) to positional `fixed left-4 right-4 mx-auto
+  max-w-xs` on mobile, `sm:absolute sm:right-0` dropdown on desktop. Verified 390px (centered x=35→355)
+  + 1440px (right-aligned) both PASS.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
