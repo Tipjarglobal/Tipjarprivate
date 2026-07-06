@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useI18n } from "../i18n";
+
+const SPLASH_BY_LANG = {
+  en: "/splash-en.png",
+  de: "/splash-de.png",
+  el: "/splash-el.png",
+};
 
 export default function SplashScreen() {
+  const { lang } = useI18n();
   const [show, setShow] = useState(true);
+  const src = SPLASH_BY_LANG[lang] || SPLASH_BY_LANG.en;
   useEffect(() => {
     const timer = setTimeout(() => setShow(false), 2500);
     return () => clearTimeout(timer);
@@ -18,7 +27,8 @@ export default function SplashScreen() {
           transition={{ duration: 0.6, ease: [0.76, 0, 0.24, 1] }}
         >
           <motion.img
-            src="/splash.png"
+            key={src}
+            src={src}
             alt="TipJar"
             className="w-full h-full object-contain sm:max-w-md mx-auto select-none pointer-events-none"
             initial={{ opacity: 0, scale: 0.98 }}
