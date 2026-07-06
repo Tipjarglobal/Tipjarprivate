@@ -199,7 +199,7 @@ function tipFlags(tip) {
   return [...flags].slice(0, 5);
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete }) {
   const flags = tipFlags(tip);
   return (
     <motion.div

@@ -159,7 +159,7 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-3 w-72 z-50 rounded-2xl bg-surface border border-bell/40 p-4 text-white shadow-2xl"
+            className="fixed sm:absolute left-1/2 sm:left-auto sm:right-0 top-20 sm:top-auto -translate-x-1/2 sm:translate-x-0 sm:mt-3 w-[calc(100vw-2rem)] max-w-xs sm:w-72 z-50 rounded-2xl bg-surface border border-bell/40 p-4 text-white shadow-2xl"
             data-testid="bell-settings-panel"
           >
             <div className="flex items-center justify-between mb-3">

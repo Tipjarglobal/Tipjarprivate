@@ -1,0 +1,47 @@
+{
+  "summary": "Verified 3 recent fixes: (1) Backend DELETE /api/tips/{id} — all 5 pytest cases pass (admin-deletes-any, owner-deletes-own, non-owner-403, non-existent-404, unauth-401). (2) Frontend delete flow on Rate Wall — admin login → trash icon appears on tip cards → click → confirm dialog → card removed from wall without hard refresh → 'Tip deleted' toast fires. (3) Promo banner dismiss — X hides banner, localStorage tj_promo_dismissed='1', banner stays hidden after reload. (4) Desktop bell dropdown appears near the bell button, right-aligned, within viewport. HOWEVER — the mobile bell settings panel centering fix is BROKEN: on 390x844 the panel opens at x=195 with width 320, so it overflows the RIGHT edge by 125px (right-edge=515 > vw=390). Not the LEFT edge issue reported originally — the panel is now positioned incorrectly to the right instead.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "NotificationBell.jsx (mobile, viewport 390x844)",
+        "issue": "bell-settings-panel is NOT horizontally centered on mobile — it overflows off the right edge. Measured bounding box: x=195, width=320, right-edge=515 in a 390px viewport (125px cut off). Expected: left>=0 AND right<=390 AND horizontally centered.",
+        "selector": "[data-testid='bell-settings-panel']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_delete_tip.py",
+    "/app/test_reports/pytest/iteration_16_delete.xml",
+    "/app/test_reports/iter16_mobile_bell.png"
+  ],
+  "action_items": [
+    "Fix mobile centering in /app/frontend/src/components/NotificationBell.jsx line 162. The Tailwind class `-translate-x-1/2` is being nullified because Framer-motion sets inline `transform: none` (its animate={y:0, scale:1} collapses to identity transform, overriding Tailwind's transform utility). Result on mobile: computed style shows `left:195px; transform:none;` → panel starts at 50% viewport instead of centered around 50%.",
+    "Recommended fix (choose one): (a) Replace `left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-xs` with `left-4 right-4 w-auto max-w-xs mx-auto` so positioning doesn't rely on CSS transform. (b) Or add `x: '-50%'` to Framer motion's initial+animate+exit props so framer keeps the -50% X offset (e.g. initial={{opacity:0, y:-8, scale:0.96, x:'-50%'}}, animate={{opacity:1, y:0, scale:1, x:'-50%'}} — but this must be scoped to mobile only; simpler to drop transform-based centering)."
+  ],
+  "critical_code_review_comments": [
+    "NotificationBell.jsx line 162: Mixing Tailwind transform utilities (`-translate-x-1/2`) with Framer-motion animated transforms is a known anti-pattern — framer's inline transform always wins. Refactor to positional (left/right offsets) or bake all transforms into motion props.",
+    "RateWall.jsx line 74: `window.confirm(...)` is used for delete confirmation — works functionally but breaks the design system (native browser dialog vs. shadcn AlertDialog). Consider using a controlled confirm modal for brand consistency.",
+    "RateWall.jsx line 16-18: STATUS constant declared but unused (leftover from earlier version).",
+    "server.py line 677: DELETE /api/tips/{id} does not delete the associated storage file in db.files if image_path was set. Not blocking, but orphan files will accumulate."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_delete_tip.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 delete tests pass)",
+    "frontend": "75% (3/4: promo-dismiss ✓, desktop-bell ✓, admin-delete-flow ✓, mobile-bell-centering ✗)"
+  },
+  "test_credentials": "Admin: admin@tipjar.com / TipJarAdmin2026! — used successfully to obtain JWT and see delete icons on all wall cards.",
+  "seed_data_creation": "Created one ephemeral tip via API as admin (id be27d033...) to exercise the UI delete flow — was successfully deleted during the same test.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend delete endpoint is solid — no need to re-test unless server.py changes. Frontend: only the mobile NotificationBell centering needs re-verification after fix. Measure `document.querySelector('[data-testid=\"bell-settings-panel\"]').getBoundingClientRect()` at 390x844: rect.x should be >=8 AND rect.x+rect.width should be <= 382 AND (rect.x + rect.width/2) should be within ±20px of 195 (viewport center). Desktop 1440 dropdown was measured at x=645, right=933, well within viewport — no change needed.",
+  "rca_of_the_issue": "Root cause: In /app/frontend/src/components/NotificationBell.jsx line 157-163, the settings panel uses a `motion.div` with `animate={{ opacity: 1, y: 0, scale: 1 }}`. When y=0 and scale=1 (identity transform), Framer-motion sets the element's inline `style.transform` (which resolves to 'none' or an identity matrix) — this overrides the Tailwind `-translate-x-1/2` utility class. Verified via computed style: `transform: 'none'` and `left: '195px'` (=50% of 390px viewport) with no -50% offset applied. Reproduction: viewport 390x844 → click [data-testid=notification-bell] → measure panel getBoundingClientRect() → x=195, width=320, right=515 (overflows by 125px). Fix: stop relying on CSS transform for horizontal centering; use left/right positional utilities (e.g., `left-4 right-4 mx-auto max-w-xs`) — or set `x: '-50%'` inside Framer's animate/initial/exit props so it isn't clobbered."
+}
