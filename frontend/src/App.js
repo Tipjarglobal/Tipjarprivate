@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from "./auth";
 import api from "./api";
 
 import Header from "./components/Header";
+import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
 import Leaderboard from "./components/Leaderboard";
@@ -44,6 +45,7 @@ function Home() {
 
   return (
     <div className="App grain min-h-screen" id="top">
+      <PromoBanner />
       <Header
         onSubmit={() => setSubmitOpen(true)}
         onLogin={() => openAuth("login")}
