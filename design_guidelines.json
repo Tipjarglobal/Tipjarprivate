@@ -1,0 +1,107 @@
+{
+  "project_name": "TipJar",
+  "theme": "dark",
+  "archetype": "Archetype 7 (Electric & Neon) fused with Archetype 2 (Performance Pro)",
+  "emotional_tone": "High-energy, authoritative, thrilling, and instantly engaging.",
+  "design_principles": [
+    "Dark-First Workflow: True deep blacks (#09090B) to emulate OLED focus, pushing vibrant neon accents forward.",
+    "Tactical Gamification: Elements like the Rate Wall and Credit Economy use 'digital playground' mechanics (streaks, badges, glowing progress bars).",
+    "Signature Hero: The 'TipJar' is the literal centerpiece—a beautifully crafted CSS/Canvas glassmorphic jar with floating elements.",
+    "Kinetic Urgency: The primary 1-tap Bell notification uses vivid Electric Pink to command attention without feeling like a generic 'warning'.",
+    "Optical Hierarchy: Use size and opacity for text hierarchy. Tabular numerals for all sports odds and stats."
+  ],
+  "color_palette": {
+    "background": "#09090B",
+    "surface": "#18181B",
+    "surface_elevated": "#27272A",
+    "border": "#27272A",
+    "border_glow": "rgba(225, 255, 0, 0.3)",
+    "primary": "#E1FF00",
+    "primary_hover": "#CCEE00",
+    "accent_bell": "#FF1E56",
+    "accent_bell_pulse": "rgba(255, 30, 86, 0.5)",
+    "success_won": "#00FF94",
+    "danger_lost": "#FF1E56",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "text_inverse": "#09090B"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "'Outfit', sans-serif",
+      "body": "'Manrope', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "rules": {
+      "h1": "text-5xl md:text-6xl font-black tracking-tighter leading-none text-white",
+      "h2": "text-3xl md:text-4xl font-bold tracking-tight text-white",
+      "h3": "text-xl md:text-2xl font-bold tracking-tight text-white",
+      "body": "text-base text-[#A1A1AA] leading-relaxed",
+      "small_caps": "text-xs font-bold uppercase tracking-[0.2em] text-[#A1A1AA]",
+      "odds": "font-mono text-lg font-bold text-[#E1FF00]"
+    },
+    "notes": "Both Outfit and Manrope are chosen specifically for their robust support of English, German (äöü), and Greek character sets while maintaining an athletic, modern tech aesthetic."
+  },
+  "spacing_and_layout": {
+    "general": "Mobile-first. Generous padding in macro-layouts (p-12 to p-24 for sections), tight tactical spacing in micro-components (p-4 for betting cards).",
+    "bento_grid": "Use grid-cols-1 md:grid-cols-12 gap-6. The Rate Wall feed items should span col-span-12 md:col-span-8, while the gamification 'streaks/leaderboard' widgets span col-span-4.",
+    "surfaces": "Glassmorphic overlay for the Hero Jar and Sticky Header (`backdrop-blur-xl bg-black/60`). Cards are pure flat `#18181B` with 1px solid `#27272A` borders to avoid 'muddy' shadows."
+  },
+  "components": {
+    "header_nav": {
+      "style": "Sticky at top (`z-50`), Crystal Glassmorphism (`backdrop-blur-xl bg-black/60`), 1px bottom border (`border-white/10`).",
+      "bell_notification": "Absolute prominence. Color `#FF1E56`. Uses `framer-motion` to jiggle/pulse on interval. Requires `data-testid='notification-bell'`.",
+      "language_switcher": "Dropdown menu for EN, DE, GR. Compact."
+    },
+    "hero_animated_jar": {
+      "concept": "The platform signature. A large, stylized 'Jar' in the center.",
+      "implementation": "Container shaped like a jar using thick glowing borders and inner shadow (`box-shadow: inset 0 0 50px rgba(225,255,0,0.1)`). Inside, use `framer-motion` to animate multiple circular `div` 'balls' or 'coins' floating up and down with varied sine-wave timings and spring physics.",
+      "text": "Overlaid or adjacent high-energy storytelling text explaining the TipJar platform."
+    },
+    "submit_tip_modal": {
+      "style": "Shadcn Dialog. Dark surface `#18181B`. High-end feel.",
+      "layout": "Two paths inside: 'Open Tutorial' (carousel/tabs showing Argentina vs Cape Verde examples) or 'Direct Upload' (drag-and-drop zone with dashed border).",
+      "ai_feedback": "Once uploaded, a simulated 'scanning' laser effect (`framer-motion`), followed by auto-populating form inputs with team names, odds, etc."
+    },
+    "rate_wall_feed": {
+      "concept": "The core social engagement loop. A feed of pending tips.",
+      "card_style": "Tactical Minimalism. Flat dark cards, crisp edges (max `rounded-lg`).",
+      "rating_system": "The 'Apex Scale' (1 to 10 stars). Use segmented bars or high-tech stars. As user clicks higher ratings, the color shifts from white to `#E1FF00`.",
+      "gamification": "Include a 'Vibe Check' streak counter at the top of the wall. Upon rating, trigger `canvas-confetti` or a small micro-interaction burst."
+    },
+    "credits_economy": {
+      "display": "Prominent user wallet balance shown in navbar (`text-[#E1FF00] font-mono`).",
+      "actions": "Buy/Gift/Redeem buttons using solid primary color for high-conversion."
+    }
+  },
+  "motion_and_interaction": {
+    "hover_states": "Cards lift slightly (`-translate-y-1`) with a border color transition to `#E1FF00`.",
+    "button_active": "Scale down (`scale-95`) on click.",
+    "page_load": "Staggered fade-up for feed items using `framer-motion` (`initial={{opacity: 0, y: 20}}`).",
+    "accessibility": "Respect `prefers-reduced-motion`."
+  },
+  "media": {
+    "image_urls": {
+      "hero_background": {
+        "url": "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920",
+        "description": "Aerial view of a night football match. Use with heavy dark overlay (`bg-black/80`) to create depth behind the Animated Jar."
+      },
+      "credits_gamification_asset": {
+        "url": "https://images.pexels.com/photos/19704271/pexels-photo-19704271.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Gold coins. Can be used as a thumbnail or masked asset in the 'Redeem/Buy Credits' modal."
+      }
+    }
+  },
+  "testing": {
+    "requirements": "ALL interactive elements (Bell, Rate Stars, Submit Tip, Buy Credits, Language Switcher) MUST have a `data-testid` attribute using kebab-case role-based naming (e.g., `data-testid='submit-tip-button'`)."
+  },
+  "instructions_to_main_agent": [
+    "Install required dependencies: `framer-motion`, `lucide-react`, `canvas-confetti`.",
+    "Configure `tailwind.config.js` with the provided color palette (Void Black, Surface, Volt Yellow, Electric Pink).",
+    "Add 'Outfit' and 'Manrope' via Google Fonts in `index.html`, ensuring Greek character sets are loaded (`&subset=greek`).",
+    "Build the Animated TipJar using raw React + Framer Motion. Do not overcomplicate with 3D libraries unless necessary; a sleek CSS glassmorphic container with SVG/div balls animated via `framer-motion` variants provides the best 'cute but smooth' effect.",
+    "Ensure the Bell Notification is immediately visible without user authentication state logic blocking it.",
+    "For the 10-star rating system, map an array of 10 elements, visually styling them to represent the 'Apex Scale'.",
+    "Build out Shadcn components (Dialog, Button, Input) but aggressively override their default styles to match the dark 'Tactical' athletic look (remove default Vercel-like soft shadows, use pure borders)."
+  ]
+}
