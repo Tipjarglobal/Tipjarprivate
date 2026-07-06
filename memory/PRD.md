@@ -47,6 +47,15 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - "Road to 1,000 members" centered Invite section with copy-link + WhatsApp/Telegram/X share. GET /api/stats.
 - Verified: backend 38/38 pytest, all frontend flows; fixed 6 missing i18n keys (en/el).
 
+## Deployment readiness fixes (2026-07-06, iteration 3)
+- Fixed compilation blocker: missing `toast` import in App.js (VerifyBanner resend).
+- DB query optimization: /tips sorts+limits at DB level (cap 100), /tips/mine limit 100,
+  /credits/transactions limit 50. Added compound indexes (tips: user_id/created_at,
+  status/created_at, avg_rating/ratings_count, ai_rating; credit_transactions: from_user/to_user + created_at).
+- Verified: backend 47/47 pytest, frontend toast-fix regression (zero ReferenceError).
+- deployment_agent status: PASS. App is deployment-ready.
+- NOTE: App now live in production at https://tipjarglobal.com. Redeploy needed to push these fixes to prod.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
