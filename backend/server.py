@@ -1072,6 +1072,75 @@ app.add_middleware(
 )
 
 
+async def seed_showcase():
+    """Idempotently seed the TipJarHQ showcase account and its two demo-free showcase tips."""
+    hq_email = "hq@tipjar.com"
+    hq_pw = os.environ.get("HQ_PASSWORD", "TipJarHQ2026!")
+    hq = await db.users.find_one({"email": hq_email})
+    if not hq:
+        hq = {
+            "id": str(uuid.uuid4()), "email": hq_email, "password_hash": hash_password(hq_pw),
+            "username": "TipJarHQ", "role": "user", "timezone": "Europe/Berlin", "language": "de",
+            "credits": 100, "received_credits": 0, "streak": 0, "last_rated_date": None,
+            "ratings_given": 0, "email_verified": True,
+            "referral_code": gen_referral_code(), "referred_by": None, "referral_rewarded": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(hq)
+        logger.info("Seeded TipJarHQ account")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    if not await db.tips.find_one({"id": "seed-portugal-messi"}):
+        image_path = None
+        try:
+            img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
+            with open(img_file, "rb") as f:
+                data = f.read()
+            path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi.jpg"
+            image_path = put_object(path, data, "image/jpeg")["path"]
+            await db.files.insert_one({
+                "id": str(uuid.uuid4()), "storage_path": image_path,
+                "original_filename": "portugal_messi.jpg", "content_type": "image/jpeg",
+                "owner": hq["id"], "is_deleted": False, "created_at": now,
+            })
+        except Exception as e:
+            logger.error(f"seed image upload failed: {e}")
+        await db.tips.insert_one({
+            "id": "seed-portugal-messi", "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": image_path,
+            "home_team": "Portugal & Lionel Messi", "away_team": "",
+            "match_time": "19/07/2026 21:00", "country": "International",
+            "league": "World Cup – Player Specials", "market": "Winner & Top Scorer",
+            "odds": "35.00", "ai_rating": 2.0,
+            "ai_analysis": "Pure fan-favourite gamble: Messi banging in goals against easy opponents, chasing the Golden Boot — and the football gods teasing a dream Portugal vs Argentina final, Ronaldo vs Messi last dance. Unrealistic? Sure. Irresistible? Absolutely.",
+            "legs": [], "is_parlay": False, "stake": "25,00 €", "potential_return": "875,00 €",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "created_at": now,
+        })
+        logger.info("Seeded showcase tip: Portugal & Messi")
+
+    if not await db.tips.find_one({"id": "seed-hacken-parlay"}):
+        await db.tips.insert_one({
+            "id": "seed-hacken-parlay", "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": "BK Häcken – Djurgården", "away_team": "Portugal – Spanien",
+            "match_time": "06/07/2026 19:00 & 21:00", "country": "Sweden / International",
+            "league": "Allsvenskan / Länderspiel",
+            "market": "Häcken–Djurgården: Total Über 1,5 · Djurgården Team Über 0,5  |  Portugal–Spanien: Total Über 1,5 · Fouls Über 21,5",
+            "odds": "2.47", "ai_rating": 7.0,
+            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
+            "legs": [
+                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
+            ],
+            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,75 €",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "created_at": now,
+        })
+        logger.info("Seeded showcase tip: Haecken parlay")
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
@@ -1099,6 +1168,7 @@ async def startup():
     elif not verify_password(admin_pw, existing["password_hash"]):
         await db.users.update_one({"email": admin_email},
                                   {"$set": {"password_hash": hash_password(admin_pw), "role": "admin"}})
+    await seed_showcase()
     try:
         init_storage()
         logger.info("Storage initialized")

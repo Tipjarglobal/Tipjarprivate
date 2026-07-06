@@ -1,0 +1,48 @@
+{
+  "summary": "Backend-only verification of the startup TipJarHQ showcase seed (option A). All 9 targeted pytest checks passed against the preview URL; MongoDB-level counts additionally confirm exactly one document per seeded id (no duplicates after multiple restarts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_seed_showcase.py",
+    "/app/test_reports/pytest/iteration_8_seed.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "seed_showcase() is correctly idempotent: guards on {email} for the HQ user and on {id: 'seed-portugal-messi'|'seed-hacken-parlay'} for the tips. DB-level counts verified: 1/1/1.",
+    "German characters (Häcken, Djurgården, Über) round-trip cleanly through the API response — encoding is fine.",
+    "Regression: create_tip still returns HTTP 400 with the German-flavoured 'match date & time' guard message when match_time is empty; a normal payload with match_time succeeds.",
+    "HQ_PASSWORD env override is respected — default 'TipJarHQ2026!' authenticates successfully and returns a JWT token.",
+    "Image pipeline works end-to-end: seed_assets/portugal_messi.jpg was uploaded to storage on startup and is now served via GET /api/files/{path} as image/jpeg with a non-empty body.",
+    "Minor observation (not blocking): seed_showcase() catches image upload failure and still inserts the tip with image_path=None. That is the correct fail-open behaviour, but if the assets file is ever missing on deploy, the Portugal & Messi tip will silently render without a photo. Consider logging.warning at Sentry level so ops can spot it."
+  ],
+  "updated_files": ["/app/backend/tests/test_seed_showcase.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "N/A (not tested)"},
+  "test_credentials": "TipJarHQ: hq@tipjar.com / TipJarHQ2026! (verified). Admin: admin@tipjar.com / TipJarAdmin2026! (from previous iterations).",
+  "seed_data_creation": "None created by this test run. The @t.com users created by TestRegressionGuards will auto-purge on the next backend restart as documented.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration-8 focused strictly on the startup seed as requested (backend only). Test file at /app/backend/tests/test_seed_showcase.py covers seed presence (exact field values incl. odds/stake/potential_return/ai_rating/is_parlay/image_path), idempotency, HQ login+ownership (/api/tips/mine), image serving via /api/files/{path}, and the create_tip match_time guard regression + normal register/login. Full suite at backend/tests/backend_test.py was NOT re-run this iteration; run it if broader regression is needed.",
+  "detailed_checks": {
+    "seed_portugal_messi_present": true,
+    "seed_portugal_messi_odds": "35.00",
+    "seed_portugal_messi_ai_rating": 2.0,
+    "seed_portugal_messi_stake": "25,00 €",
+    "seed_portugal_messi_potential_return": "875,00 €",
+    "seed_portugal_messi_has_image_path": true,
+    "seed_portugal_messi_image_served_200_jpeg": true,
+    "seed_hacken_parlay_present": true,
+    "seed_hacken_parlay_odds": "2.47",
+    "seed_hacken_parlay_ai_rating": 7.0,
+    "seed_hacken_parlay_is_parlay": true,
+    "seed_hacken_parlay_legs_count": 2,
+    "seed_hacken_parlay_umlauts_preserved": true,
+    "seed_hacken_parlay_no_image": true,
+    "idempotency_api_level": "exactly 1 of each seed id in GET /api/tips",
+    "idempotency_db_level": "count_documents == 1 for both ids; 1 hq@tipjar.com user",
+    "hq_login_returns_jwt": true,
+    "hq_tips_mine_lists_both_seed_tips": true,
+    "create_tip_empty_match_time_400": true,
+    "create_tip_valid_match_time_200": true,
+    "new_user_register_login_ok": true
+  }
+}
