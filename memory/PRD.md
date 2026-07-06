@@ -56,6 +56,15 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - deployment_agent status: PASS. App is deployment-ready.
 - NOTE: App now live in production at https://tipjarglobal.com. Redeploy needed to push these fixes to prod.
 
+## Tip moderation (2026-07-06, iteration 4)
+- Demo/test tips prohibited: purge_demo_tips() deletes all tips (+ratings) from test-bot accounts
+  (email domain @t.com) on every backend startup. Only legit tips remain (e.g. TipJarHQ).
+- Trusted 1-star purge: a stars==1 rating instantly DELETES a tip, but ONLY from a trusted rater
+  = admin OR "highly-rated" tipster (own tips avg_rating >= 7.0 across >= 3 rated tips).
+  Non-trusted users' 1-star is recorded normally (no delete). Constants TRUSTED_MIN_TIPS=3,
+  TRUSTED_REPUTATION=7.0 in server.py. Frontend removes card + toast wall.removed (EN/DE/EL).
+- Verified: backend 51/51 pytest; frontend admin 1-star delete + non-trusted preserve confirmed.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
