@@ -76,6 +76,14 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   auto-purged on startup; trusted 1-star purge (admin + highly-rated) still active.
 - Verified: iteration-5 (upload) 3/3, iteration-6 (rules) 9/9 backend + 2/2 frontend. AI is LIVE.
 
+## Showcase seed & header polish (2026-07-06, iteration 7-8)
+- Header: removed the small crest icon (top-left); only "TipJar" wordmark remains, row sits further left.
+- Data-vs-code: clarified deploy ships CODE not DB data (preview & prod have separate DBs).
+- seed_showcase() (startup, idempotent): creates TipJarHQ account (hq@tipjar.com) + 2 showcase tips
+  with FIXED ids (seed-portugal-messi w/ image, seed-hacken-parlay). Now appear in ANY env after deploy.
+  Seed image bundled at backend/seed_assets/portugal_messi.jpg.
+- Verified: iteration-7 header 100%, iteration-8 seed 9/9 backend (no duplicates, login works, image 200).
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
