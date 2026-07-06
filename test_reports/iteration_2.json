@@ -1,0 +1,41 @@
+{
+  "summary": "Full backend + frontend E2E validation of TipJar iteration-2 features (referral rewards, dev-mode email verification, EUR credit economics, centered invite section, verify-email banner, /verify page). All 38 pytest cases pass. All requested frontend flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VerifyEmail (/verify page)", "issue": "Displays untranslated i18n keys instead of localized text. Shows literally 'verify.success', 'verify.done', 'verify.home' on the success screen and 'verify.fail', 'verify.home' on the failure screen. The success/failure logic and data-testid='verify-page' are correct; only the translation strings are missing from the i18n dictionary.", "selector": "[data-testid='verify-page']", "priority": "MEDIUM"},
+      {"component": "InviteSection", "issue": "Shows raw i18n keys 'invite.reward' (below subtitle, visible in the centered invite card) and 'invite.loginToEarn' (small text below the invite link when logged out) instead of localized text. Other invite.* keys (title, subtitle, badge, copy, goal, members, msg, copied) render correctly, so only 'invite.reward' and 'invite.loginToEarn' are missing from the i18n dictionary.", "selector": "[data-testid='invite-section']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add missing i18n strings for keys: 'verify.success', 'verify.done', 'verify.home', 'verify.fail', 'invite.reward', 'invite.loginToEarn' in the i18n dictionary (en/de/el) so the /verify page and the landing InviteSection show real localized copy instead of raw keys."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~1014 lines — past the 700-line threshold. Recommend splitting into routers/modules: auth (register/login/me/profile/verify/resend), tips (analyze/create/list/rate/status), credits (packages/checkout/webhook/gift/redeem), notifications, admin/settle. Same suggestion carried over from iteration-1 and is now more warranted.",
+    "In send_verification_email(), the origin parameter is treated as free-form and only trailing '/' is stripped. Consider validating that inp.origin_url starts with an allowed scheme (http/https) to prevent malicious verify links being embedded in the (currently dev-only) response payload once Resend is enabled.",
+    "verify-email endpoint always deletes the token at the end, even for the branch where user.email_verified is already true (no reward). Correct behavior, but consider adding an audit trail (referral credit_transactions is already inserted — good).",
+    "credits/checkout stores currency='eur' correctly, but there is no server-side validation that inp.origin_url is trusted; a malicious client could set success/cancel URLs to arbitrary hosts. Consider whitelisting.",
+    "REDEEM_EUR_PER_1000 math is correct (€5 per 1000), but redeem() resets received_credits to 0 unconditionally; if the redemption is later rejected by an admin, credits are lost. Consider a two-phase 'requested' -> 'paid'/'rejected' with balance restoration on rejection.",
+    "Frontend: verify-page and invite-section have missing translation keys (see ui_bugs) — the raw key strings are user-visible.",
+    "Frontend: no visible rate-limit or loading-state protection on the 'Resend email' button — repeated clicks will insert many verification tokens for the same user. Consider disabling for 30s after click."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (expanded with 10 new test cases: referral flow with reward validation, invalid/self-referral, resend-verification dev+already-verified, admin grandfathered email_verified, stats shape, redeem<10k error, settle-idle-without-key, EUR-currency checkout, updated package assertions to starter=1000/€10, pro=5000/€50, whale=10000/€100)"
+  ],
+  "success_rate": {"backend": "100% (38/38)", "frontend": "100% functional (invite section centered + logged-out/in link + share buttons + copy-invite + member-count; signup -> verify banner + resend button; wallet Buy €10/€50/€100 + Redeem 10k/€50/half messaging; /verify?token=valid shows verify-page success branch; /verify?token=bad shows failure branch). Cosmetic i18n text issues do not block flows."},
+  "test_credentials": "Admin admin@tipjar.com / TipJarAdmin2026! verified working. E2E test users created dynamically with TEST_/e2e_ prefix.",
+  "seed_data_creation": "Backend tests seed disposable TEST_-prefixed users A and B (session-scoped) plus additional users inside TestReferralAndVerify for isolated referral scenarios. Admin is seeded by backend startup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To rerun backend: `cd /app && python -m pytest /app/backend/tests/backend_test.py -v -n 0 --junitxml=/app/test_reports/pytest/pytest_results.xml`. New tests are in TestReferralAndVerify, TestStatsAndRedeem, TestSettleIdle classes. Dev-mode email verify path relies on register/resend-verification responses including a `verify_link` field — this is the intended test path per problem statement (RESEND_API_KEY not set). Referral reward is exactly 100 credits and is granted only once (referral_rewarded flag). Frontend verify page selector: [data-testid='verify-page']; verify-banner selector: [data-testid='verify-banner']; invite section selectors: invite-section/member-count/invite-link/copy-invite/share-whatsapp/share-telegram/share-x. All present and functional.",
+  "rca of the issue": "No app bugs found. Only UI polish gaps: (1) 6 i18n translation keys (verify.success, verify.done, verify.home, verify.fail, invite.reward, invite.loginToEarn) are not defined in the translation dictionary, so raw keys leak to the UI. Fix: add these keys with proper English/German/Greek copy in the i18n resource. Reproduction: navigate to /verify?token=<valid> — success page shows literal 'verify.success', 'verify.done', 'verify.home' instead of localized text; navigate to /verify?token=BADTOKEN — failure page shows 'verify.fail', 'verify.home'; scroll to Invite section on landing — 'invite.reward' shows as raw key, and if logged out, 'invite.loginToEarn' also shows as raw key."
+}

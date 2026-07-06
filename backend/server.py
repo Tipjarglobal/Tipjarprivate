@@ -15,7 +15,9 @@ from typing import List, Optional
 
 import jwt
 import bcrypt
+import secrets
 import requests
+import resend
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadFile, File, Form, Header, Query
 from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
@@ -48,14 +50,21 @@ APP_NAME = "tipjar"
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 
 # Credit economy config
+# 1 credit = €0.01 to buy. Withdrawals pay half: €5 per 1000 earned credits.
 CREDIT_PACKAGES = {
-    "starter": {"credits": 500, "price": 5.0, "label": "Starter"},
-    "pro": {"credits": 1200, "price": 10.0, "label": "Pro"},
-    "whale": {"credits": 2600, "price": 20.0, "label": "Whale"},
+    "starter": {"credits": 1000, "price": 10.0, "label": "Starter"},
+    "pro": {"credits": 5000, "price": 50.0, "label": "Pro"},
+    "whale": {"credits": 10000, "price": 100.0, "label": "Whale"},
 }
+CREDIT_CURRENCY = "eur"
 GIFT_FEE = 0.10                 # platform keeps 10% of gifted credits
-REDEEM_THRESHOLD = 10000        # received credits needed to redeem
-REDEEM_USD_PER_1000 = 1.0       # 1000 credits => $1
+REFERRAL_REWARD = 100           # credits to referrer when invitee verifies email
+REDEEM_THRESHOLD = 10000        # earned (received) credits needed to redeem
+REDEEM_EUR_PER_1000 = 5.0       # withdrawals pay €5 per 1000 credits (10k => €50)
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("tipjar")
@@ -125,6 +134,8 @@ def public_user(user: dict) -> dict:
         "received_credits": user.get("received_credits", 0),
         "streak": user.get("streak", 0),
         "ratings_given": user.get("ratings_given", 0),
+        "email_verified": user.get("email_verified", False),
+        "referral_code": user.get("referral_code"),
         "created_at": user.get("created_at"),
     }
 
@@ -154,6 +165,35 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+def gen_referral_code() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+async def send_verification_email(email: str, token: str, origin: str) -> dict:
+    link = f"{(origin or '').rstrip('/')}/verify?token={token}"
+    if not RESEND_API_KEY:
+        logger.info(f"[DEV] Email not configured. Verification link for {email}: {link}")
+        return {"sent": False, "link": link}
+    html = f"""
+    <div style="font-family:Arial,sans-serif;background:#09090b;padding:32px;color:#fff">
+      <div style="max-width:480px;margin:auto;background:#18181b;border:1px solid #27272a;border-radius:16px;padding:32px">
+        <h1 style="font-size:24px;margin:0 0 8px">Welcome to <span style="color:#E1FF00">TipJar</span> 🏆</h1>
+        <p style="color:#a1a1aa;line-height:1.6">Confirm your email to activate your account and unlock referral rewards.</p>
+        <a href="{link}" style="display:inline-block;margin-top:16px;background:#E1FF00;color:#09090b;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:999px">Verify my email</a>
+        <p style="color:#71717a;font-size:12px;margin-top:20px">Or paste this link: {link}</p>
+      </div>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": SENDER_EMAIL, "to": [email],
+            "subject": "Verify your TipJar email", "html": html,
+        })
+        return {"sent": True, "link": link}
+    except Exception as e:
+        logger.error(f"verification email failed: {e}")
+        return {"sent": False, "link": link}
+
+
 # ------------------------------------------------------------------ models
 class RegisterInput(BaseModel):
     email: EmailStr
@@ -161,6 +201,16 @@ class RegisterInput(BaseModel):
     username: str = Field(min_length=2, max_length=24)
     timezone: str = "UTC"
     language: str = "en"
+    ref: Optional[str] = None
+    origin_url: Optional[str] = None
+
+
+class VerifyInput(BaseModel):
+    token: str
+
+
+class OriginInput(BaseModel):
+    origin_url: Optional[str] = None
 
 
 class LoginInput(BaseModel):
@@ -285,6 +335,11 @@ async def register(inp: RegisterInput):
         raise HTTPException(status_code=400, detail="Email already registered")
     if await db.users.find_one({"username": inp.username}):
         raise HTTPException(status_code=400, detail="Username already taken")
+    referred_by = None
+    if inp.ref:
+        ref_user = await db.users.find_one({"referral_code": inp.ref})
+        if ref_user:
+            referred_by = ref_user["id"]
     user = {
         "id": str(uuid.uuid4()),
         "email": email,
@@ -298,11 +353,71 @@ async def register(inp: RegisterInput):
         "streak": 0,
         "last_rated_date": None,
         "ratings_given": 0,
+        "email_verified": False,
+        "referral_code": gen_referral_code(),
+        "referred_by": referred_by,
+        "referral_rewarded": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
+    vtoken = secrets.token_urlsafe(24)
+    await db.email_verification_tokens.insert_one({
+        "token": vtoken, "user_id": user["id"],
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
+    })
+    email_res = await send_verification_email(email, vtoken, inp.origin_url or "")
     token = create_access_token(user["id"], email)
-    return {"token": token, "user": public_user(user)}
+    resp = {"token": token, "user": public_user(user), "email_sent": email_res.get("sent", False)}
+    if not email_res.get("sent"):
+        resp["verify_link"] = email_res.get("link")  # dev aid until Resend key is set
+    return resp
+
+
+@api_router.post("/auth/verify-email")
+async def verify_email(inp: VerifyInput):
+    doc = await db.email_verification_tokens.find_one({"token": inp.token})
+    if not doc:
+        raise HTTPException(status_code=400, detail="Invalid or already-used verification link")
+    try:
+        expired = datetime.fromisoformat(doc["expires_at"]) < datetime.now(timezone.utc)
+    except Exception:
+        expired = False
+    if expired:
+        await db.email_verification_tokens.delete_one({"token": inp.token})
+        raise HTTPException(status_code=400, detail="Verification link expired")
+    user = await db.users.find_one({"id": doc["user_id"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    reward_granted = False
+    if not user.get("email_verified"):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}})
+        if user.get("referred_by") and not user.get("referral_rewarded"):
+            await db.users.update_one({"id": user["id"]}, {"$set": {"referral_rewarded": True}})
+            await db.users.update_one({"id": user["referred_by"]}, {"$inc": {"credits": REFERRAL_REWARD}})
+            await db.credit_transactions.insert_one({
+                "id": str(uuid.uuid4()), "type": "referral", "to_user": user["referred_by"],
+                "from_user": user["id"], "from_username": user.get("username"),
+                "amount": REFERRAL_REWARD, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            reward_granted = True
+    await db.email_verification_tokens.delete_one({"token": inp.token})
+    return {"verified": True, "referral_reward_granted": reward_granted}
+
+
+@api_router.post("/auth/resend-verification")
+async def resend_verification(inp: OriginInput, user: dict = Depends(get_current_user)):
+    if user.get("email_verified"):
+        return {"already_verified": True}
+    vtoken = secrets.token_urlsafe(24)
+    await db.email_verification_tokens.insert_one({
+        "token": vtoken, "user_id": user["id"],
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
+    })
+    res = await send_verification_email(user["email"], vtoken, inp.origin_url or "")
+    out = {"email_sent": res.get("sent", False)}
+    if not res.get("sent"):
+        out["verify_link"] = res.get("link")
+    return out
 
 
 @api_router.post("/auth/login")
@@ -316,6 +431,14 @@ async def login(inp: LoginInput):
 
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
+    updates = {}
+    if not user.get("referral_code"):
+        updates["referral_code"] = gen_referral_code()
+    if "email_verified" not in user:
+        updates["email_verified"] = True  # grandfather pre-existing accounts
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user.update(updates)
     return {"user": public_user(user)}
 
 
@@ -518,7 +641,7 @@ async def credits_checkout(inp: CheckoutInput, request: Request, user: dict = De
     success_url = f"{origin}/credits/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/?checkout=cancelled"
     metadata = {"user_id": user["id"], "package_id": inp.package_id, "credits": str(pkg["credits"])}
-    req = CheckoutSessionRequest(amount=float(pkg["price"]), currency="usd",
+    req = CheckoutSessionRequest(amount=float(pkg["price"]), currency=CREDIT_CURRENCY,
                                  success_url=success_url, cancel_url=cancel_url, metadata=metadata)
     session: CheckoutSessionResponse = await stripe.create_checkout_session(req)
     await db.payment_transactions.insert_one({
@@ -528,7 +651,7 @@ async def credits_checkout(inp: CheckoutInput, request: Request, user: dict = De
         "package_id": inp.package_id,
         "credits": pkg["credits"],
         "amount": float(pkg["price"]),
-        "currency": "usd",
+        "currency": CREDIT_CURRENCY,
         "payment_status": "initiated",
         "status": "initiated",
         "credited": False,
@@ -612,11 +735,11 @@ async def redeem(user: dict = Depends(get_current_user)):
     if rc < REDEEM_THRESHOLD:
         raise HTTPException(status_code=400,
                             detail=f"You need {REDEEM_THRESHOLD} received credits to redeem")
-    payout = round((rc / 1000.0) * REDEEM_USD_PER_1000, 2)
+    payout = round((rc / 1000.0) * REDEEM_EUR_PER_1000, 2)
     await db.users.update_one({"id": user["id"]}, {"$set": {"received_credits": 0}})
     redemption = {
         "id": str(uuid.uuid4()), "user_id": user["id"], "username": fresh["username"],
-        "credits": rc, "amount_usd": payout, "status": "requested",
+        "credits": rc, "amount_eur": payout, "currency": "eur", "status": "requested",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.redemptions.insert_one(redemption)
@@ -859,6 +982,7 @@ async def startup():
     await db.users.create_index("username", unique=True)
     await db.tips.create_index("status")
     await db.tip_ratings.create_index([("tip_id", 1), ("user_id", 1)])
+    await db.users.create_index("referral_code")
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})

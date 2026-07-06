@@ -35,10 +35,11 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (payload) => {
-    const { data } = await api.post("/auth/register", payload);
+    const ref = localStorage.getItem("tj_ref") || undefined;
+    const { data } = await api.post("/auth/register", { ...payload, ref, origin_url: window.location.origin });
     localStorage.setItem("tj_token", data.token);
     setUser(data.user);
-    return data.user;
+    return data;
   };
 
   const logout = () => {

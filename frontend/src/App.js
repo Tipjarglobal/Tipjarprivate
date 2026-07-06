@@ -3,7 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Toaster } from "sonner";
-import { Sparkles, Star, Loader2, CheckCircle2 } from "lucide-react";
+import { Sparkles, Star, Loader2, CheckCircle2, MailWarning } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
 import { AuthProvider, useAuth } from "./auth";
@@ -33,6 +33,11 @@ function Home() {
 
   useEffect(() => { if (user?.language) setLang(user.language); }, [user, setLang]);
 
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref) localStorage.setItem("tj_ref", ref);
+  }, []);
+
   const openAuth = (mode) => { setAuthMode(mode); setAuthOpen(true); };
   const requireLogin = useCallback(() => openAuth("login"), []);
   const onPublished = () => setRefreshKey((k) => k + 1);
@@ -46,6 +51,7 @@ function Home() {
         onWallet={() => setWalletOpen(true)}
         onProfile={() => setProfileOpen(true)}
       />
+      {user && !user.email_verified && <VerifyBanner />}
 
       {/* HERO */}
       <section className="relative overflow-hidden">
@@ -150,6 +156,69 @@ function CreditsSuccess() {
   );
 }
 
+function VerifyBanner() {
+  const { t } = useI18n();
+  const [sending, setSending] = useState(false);
+  const resend = async () => {
+    setSending(true);
+    try {
+      const { data } = await api.post("/auth/resend-verification", { origin_url: window.location.origin });
+      toast.success(t("banner.resent"));
+      if (data.verify_link) toast.message("Dev verify link: " + data.verify_link, { duration: 12000 });
+    } catch { /* ignore */ } finally { setSending(false); }
+  };
+  return (
+    <div data-testid="verify-banner" className="bg-bell/15 border-b border-bell/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-center gap-3 text-sm">
+        <MailWarning size={16} className="text-bell shrink-0" />
+        <span className="text-white">{t("banner.verify")}</span>
+        <button data-testid="resend-verification" onClick={resend} disabled={sending}
+          className="font-bold text-bell hover:underline disabled:opacity-50">{t("banner.resend")}</button>
+      </div>
+    </div>
+  );
+}
+
+function VerifyEmail() {
+  const { t } = useI18n();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+  const [state, setState] = useState("checking");
+  const [reward, setReward] = useState(false);
+
+  useEffect(() => {
+    const token = params.get("token");
+    if (!token) { setState("fail"); return; }
+    api.post("/auth/verify-email", { token })
+      .then(async (r) => {
+        setState("success");
+        setReward(r.data.referral_reward_granted);
+        try { const me = await api.get("/auth/me"); setUser(me.data.user); } catch { /* not logged in */ }
+      })
+      .catch(() => setState("fail"));
+  }, [params, setUser]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-void grain px-4">
+      <div className="text-center max-w-md" data-testid="verify-page">
+        {state === "checking" && (<><Loader2 className="mx-auto text-volt animate-spin mb-4" size={48} /><p className="text-white text-lg">{t("verify.checking")}</p></>)}
+        {state === "success" && (<>
+          <CheckCircle2 className="mx-auto text-won mb-4" size={56} />
+          <h2 className="font-heading text-3xl font-black text-white">{t("verify.success")}</h2>
+          <p className="text-zinc-400 mt-2">{reward ? t("verify.reward") : t("verify.done")}</p>
+          <button onClick={() => navigate("/")} className="mt-6 rounded-full bg-volt text-void font-bold px-6 py-3 hover:bg-volt-hover transition-colors" data-testid="verify-home">{t("verify.home")}</button>
+        </>)}
+        {state === "fail" && (<>
+          <MailWarning className="mx-auto text-lost mb-4" size={56} />
+          <p className="text-lost text-lg mb-4">{t("verify.fail")}</p>
+          <button onClick={() => navigate("/")} className="rounded-full border border-elevated text-white font-bold px-6 py-3 hover:border-volt transition-colors" data-testid="verify-home">{t("verify.home")}</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <I18nProvider>
@@ -159,6 +228,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/credits/success" element={<CreditsSuccess />} />
+            <Route path="/verify" element={<VerifyEmail />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

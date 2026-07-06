@@ -33,9 +33,11 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
         if (u.language) setLang(u.language);
         toast.success("👋 " + (u.username || ""));
       } else {
-        const u = await register(form);
+        const data = await register(form);
         setLang(form.language);
-        toast.success(t("auth.welcome"));
+        localStorage.removeItem("tj_ref");
+        toast.success(t("auth.checkEmail"));
+        if (data.verify_link) toast.message("Dev verify link: " + data.verify_link, { duration: 12000 });
       }
       onClose();
     } catch (err) {

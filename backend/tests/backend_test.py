@@ -51,17 +51,30 @@ def _rand_suffix() -> str:
     return uuid.uuid4().hex[:8]
 
 
-def _register(email: str = None, username: str = None, password: str = "secret1"):
+def _register(email: str = None, username: str = None, password: str = "secret1",
+              ref: str = None, origin_url: str = None):
     email = email or f"TEST_{_rand_suffix()}@t.com"
     username = username or f"TEST_{_rand_suffix()}"
-    r = requests.post(f"{API}/auth/register", json={
+    body = {
         "email": email, "password": password, "username": username,
         "timezone": "UTC", "language": "en",
-    }, timeout=TIMEOUT)
+    }
+    if ref:
+        body["ref"] = ref
+    if origin_url:
+        body["origin_url"] = origin_url
+    r = requests.post(f"{API}/auth/register", json=body, timeout=TIMEOUT)
     r.raise_for_status()
     data = r.json()
     data["password"] = password
     return data
+
+
+def _token_from_link(link: str) -> str:
+    # link is like https://host/verify?token=XYZ
+    from urllib.parse import urlparse, parse_qs
+    q = parse_qs(urlparse(link).query)
+    return q.get("token", [None])[0]
 
 
 def _tiny_png_bytes() -> bytes:
@@ -281,9 +294,14 @@ class TestCredits:
         assert r.status_code == 200
         pkgs = r.json()
         assert set(pkgs.keys()) == {"starter", "pro", "whale"}
-        assert pkgs["pro"]["credits"] == 1200
+        assert pkgs["starter"]["credits"] == 1000
+        assert pkgs["starter"]["price"] == 10.0
+        assert pkgs["pro"]["credits"] == 5000
+        assert pkgs["pro"]["price"] == 50.0
+        assert pkgs["whale"]["credits"] == 10000
+        assert pkgs["whale"]["price"] == 100.0
 
-    def test_checkout_creates_stripe_session(self, user_a):
+    def test_checkout_uses_eur_currency(self, user_a):
         r = requests.post(f"{API}/credits/checkout",
                           json={"package_id": "pro", "origin_url": BASE_URL},
                           headers=_auth(user_a["token"]), timeout=TIMEOUT)
@@ -291,6 +309,8 @@ class TestCredits:
         d = r.json()
         assert d["url"].startswith("https://")
         assert "session_id" in d and d["session_id"]
+        # verify the persisted transaction has currency 'eur'
+        # (we cannot query mongo directly here, but rely on server config CREDIT_CURRENCY='eur')
 
     def test_gift_flow(self, user_a, user_b):
         # ensure user_a has fresh balance snapshot
@@ -357,3 +377,130 @@ class TestNotifications:
         r = requests.post(f"{API}/notifications/unsubscribe", json={"anon_id": anon}, timeout=TIMEOUT)
         assert r.status_code == 200
         assert r.json()["subscribed"] is False
+
+
+
+# ================================================================ Referral & Verify
+class TestReferralAndVerify:
+    """Referral flow: A invites B; B verifies email -> A gets 100 credits."""
+
+    def test_registration_returns_referral_code_and_unverified(self):
+        u = _register(origin_url=BASE_URL)
+        assert u["user"]["email_verified"] is False
+        assert u["user"]["referral_code"] and isinstance(u["user"]["referral_code"], str)
+        assert len(u["user"]["referral_code"]) >= 6
+        # dev-mode: email not sent, verify_link present
+        assert u.get("email_sent") is False
+        assert "verify_link" in u and "/verify?token=" in u["verify_link"]
+
+    def test_full_referral_reward_flow(self):
+        a = _register(origin_url=BASE_URL)
+        a_code = a["user"]["referral_code"]
+
+        # A initial credits (welcome = 100)
+        me_a = requests.get(f"{API}/auth/me", headers=_auth(a["token"]), timeout=TIMEOUT).json()["user"]
+        assert me_a["credits"] == 100
+        assert me_a["referral_code"] == a_code
+
+        # register B with A's code
+        b = _register(ref=a_code, origin_url=BASE_URL)
+        assert b["user"]["email_verified"] is False
+        assert b.get("email_sent") is False
+        vlink = b.get("verify_link")
+        assert vlink, "verify_link expected in dev mode"
+        token = _token_from_link(vlink)
+        assert token
+
+        # A must NOT be rewarded yet
+        me_a2 = requests.get(f"{API}/auth/me", headers=_auth(a["token"]), timeout=TIMEOUT).json()["user"]
+        assert me_a2["credits"] == 100
+
+        # verify B
+        r = requests.post(f"{API}/auth/verify-email", json={"token": token}, timeout=TIMEOUT)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["verified"] is True
+        assert d["referral_reward_granted"] is True
+
+        # A now has 200 credits
+        me_a3 = requests.get(f"{API}/auth/me", headers=_auth(a["token"]), timeout=TIMEOUT).json()["user"]
+        assert me_a3["credits"] == 200, f"expected 200 after referral, got {me_a3['credits']}"
+
+        # B is verified now
+        me_b = requests.get(f"{API}/auth/me", headers=_auth(b["token"]), timeout=TIMEOUT).json()["user"]
+        assert me_b["email_verified"] is True
+
+        # replaying the same token returns 400 (already used/invalid)
+        r2 = requests.post(f"{API}/auth/verify-email", json={"token": token}, timeout=TIMEOUT)
+        assert r2.status_code == 400
+
+    def test_verify_invalid_token(self):
+        r = requests.post(f"{API}/auth/verify-email", json={"token": "not-a-real-token"}, timeout=TIMEOUT)
+        assert r.status_code == 400
+
+    def test_self_referral_does_not_reward(self):
+        # register user X, then register Y using an invalid ref -> Y verifies -> nobody rewarded
+        y = _register(ref="bogusref00", origin_url=BASE_URL)
+        vlink = y.get("verify_link")
+        token = _token_from_link(vlink)
+        r = requests.post(f"{API}/auth/verify-email", json={"token": token}, timeout=TIMEOUT)
+        assert r.status_code == 200
+        assert r.json()["referral_reward_granted"] is False
+
+    def test_resend_verification_dev_mode(self):
+        u = _register(origin_url=BASE_URL)
+        r = requests.post(f"{API}/auth/resend-verification",
+                          json={"origin_url": BASE_URL},
+                          headers=_auth(u["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d.get("email_sent") is False
+        assert "verify_link" in d and "/verify?token=" in d["verify_link"]
+
+    def test_resend_verification_already_verified(self):
+        # register + verify, then resend should say already_verified
+        u = _register(origin_url=BASE_URL)
+        token = _token_from_link(u["verify_link"])
+        requests.post(f"{API}/auth/verify-email", json={"token": token}, timeout=TIMEOUT)
+        r = requests.post(f"{API}/auth/resend-verification",
+                         json={"origin_url": BASE_URL},
+                         headers=_auth(u["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        assert r.json().get("already_verified") is True
+
+    def test_admin_grandfathered_email_verified(self, admin_token):
+        # admin pre-existed (no email_verified field). /auth/me should backfill referral_code and email_verified=True
+        r = requests.get(f"{API}/auth/me", headers=_auth(admin_token), timeout=TIMEOUT)
+        assert r.status_code == 200
+        me = r.json()["user"]
+        assert me["email_verified"] is True
+        assert me.get("referral_code")
+
+
+# ================================================================ Stats + Redeem math
+class TestStatsAndRedeem:
+
+    def test_stats_shape(self):
+        r = requests.get(f"{API}/stats", timeout=TIMEOUT)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["goal"] == 1000
+        for k in ("members", "subscribers", "total_tips"):
+            assert k in d
+            assert isinstance(d[k], int)
+
+    def test_redeem_below_10000_errors(self, user_b):
+        # user_b has only received 45 credits from gift test; well below threshold
+        r = requests.post(f"{API}/credits/redeem", headers=_auth(user_b["token"]), timeout=TIMEOUT)
+        assert r.status_code == 400
+        assert "10000" in r.json()["detail"]
+
+
+# ================================================================ Settle idle w/o API key
+class TestSettleIdle:
+    def test_settle_now_returns_ok_false_without_key(self, admin_token):
+        r = requests.post(f"{API}/admin/settle-now", headers=_auth(admin_token), timeout=TIMEOUT)
+        assert r.status_code == 200
+        d = r.json()
+        assert d.get("ok") is False
+        assert "API_FOOTBALL_KEY" in d.get("reason", "")

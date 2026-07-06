@@ -52,7 +52,7 @@ export default function WalletModal({ open, onClose }) {
     try {
       const { data } = await api.post("/credits/redeem");
       setUser(data.user);
-      toast.success(`${t("wallet.redeemOk")} ($${data.redemption.amount_usd})`);
+      toast.success(`${t("wallet.redeemOk")} (€${data.redemption.amount_eur})`);
     } catch (err) {
       toast.error(apiErr(err));
     } finally {
@@ -94,7 +94,7 @@ export default function WalletModal({ open, onClose }) {
                 <p className="font-heading font-bold text-white text-lg">{p.label}</p>
                 <p className="font-mono text-volt font-bold">{p.credits} {t("wallet.credits")}</p>
               </div>
-              <span className="font-mono font-black text-xl text-white group-hover:text-volt transition-colors">${p.price.toFixed(2)}</span>
+              <span className="font-mono font-black text-xl text-white group-hover:text-volt transition-colors">€{p.price.toFixed(2)}</span>
             </button>
           ))}
         </div>
