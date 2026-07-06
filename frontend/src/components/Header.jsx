@@ -154,6 +154,17 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           </button>
         </div>
       </div>
+
+      {/* Mobile: full-width green CTA below the header */}
+      <div className="md:hidden px-4 pb-2.5 pt-0.5">
+        <a
+          href="#ratewall"
+          data-testid="view-tips-btn-mobile"
+          className="flex items-center justify-center gap-2 w-full rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm py-3 active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
+        >
+          <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
+        </a>
+      </div>
     </header>
   );
 }
