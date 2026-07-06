@@ -10,6 +10,7 @@ const T = {
   en: {
     "nav.submit": "Submit a Tip",
     "nav.ratewall": "Rate Wall",
+    "nav.viewtips": "View Today's Tips",
     "nav.leaderboard": "Leaderboard",
     "nav.how": "How it works",
     "nav.invite": "Invite",
@@ -188,6 +189,7 @@ const T = {
   de: {
     "nav.submit": "Tipp abgeben",
     "nav.ratewall": "Bewertungswand",
+    "nav.viewtips": "Heutige Tipps ansehen",
     "nav.leaderboard": "Bestenliste",
     "nav.how": "So funktioniert's",
     "nav.invite": "Einladen",
@@ -363,6 +365,7 @@ const T = {
   el: {
     "nav.submit": "Υπόβαλε πρόγνωση",
     "nav.ratewall": "Τοίχος Βαθμολογίας",
+    "nav.viewtips": "Δες τα σημερινά tips",
     "nav.leaderboard": "Κατάταξη",
     "nav.how": "Πώς λειτουργεί",
     "nav.invite": "Κάλεσε",

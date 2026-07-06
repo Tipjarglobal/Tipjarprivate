@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download } from "lucide-react";
+import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import { useI18n, LANGUAGES } from "../i18n";
@@ -78,6 +78,14 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <a href="#how" className="hover:text-volt transition-colors" data-testid="nav-how">{t("nav.how")}</a>
           <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>
+
+        <a
+          href="#ratewall"
+          data-testid="view-tips-btn"
+          className="hidden md:flex items-center gap-2 rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm px-5 py-2.5 shrink-0 hover:bg-[#26b64c] active:scale-95 transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
+        >
+          <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
+        </a>
 
         <div className="flex items-center gap-2 sm:gap-3">
           <InstallAppButton />
