@@ -84,6 +84,15 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   Seed image bundled at backend/seed_assets/portugal_messi.jpg.
 - Verified: iteration-7 header 100%, iteration-8 seed 9/9 backend (no duplicates, login works, image 200).
 
+## Rate Wall polish (2026-07-06, iteration 9)
+- Country FLAGS now render on every tip card (data-testid='tip-flags'), derived from
+  country/team/league via NATION_FLAGS/LEAGUE_FLAGS maps in RateWall.jsx.
+- Single (non-parlay) tips now show the Einsatz/Gewinn row (previously only parlays did) —
+  so winnings (stake x odds) are always visible.
+- Removed the Häcken 4-leg parlay showcase (seed block deleted + startup delete_many by id,
+  so it's gone in every env after deploy). Only seed-portugal-messi remains.
+- Verified: iteration-9 backend 8/8, frontend 5/5.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
