@@ -1203,6 +1203,32 @@ async def seed_showcase():
     )
     logger.info("Seeded/updated showcase tip: Enzo/Lenini banker (10 stars)")
 
+    # Tutorial showcase — live lock (in-play, 9 stars)
+    live_analysis = (
+        "Live-Read: Halbzeit steht 1:0 und wir spielen Asiatisch Über 2,0 Tore. "
+        "Fallen genau 2 Tore, bekommen wir unseren kompletten Einsatz zurück (Push) — "
+        "kein Verlust. Ab dem 3. Tor gewinnen wir voll. Bei einem offenen Spiel mit Argentiniens "
+        "Offensivdruck ist ein zweites bzw. drittes Tor sehr wahrscheinlich. Abgesichertes "
+        "Live-Lock mit minimalem Risiko."
+    )
+    await db.tips.update_one(
+        {"id": "seed-tut-live"},
+        {"$set": {
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
+            "home_team": "Argentinien", "away_team": "Kap Verde",
+            "match_time": "12/07/2026 21:00", "country": "International",
+            "league": "Weltmeisterschaft",
+            "market": "Live: Asiatisch Über 2,0 Tore (HZ 1:0)",
+            "odds": "1.85", "ai_rating": 9.0,
+            "ai_analysis": live_analysis, "status": "live",
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+        },
+         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
+                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
+        upsert=True,
+    )
+    logger.info("Seeded/updated showcase tip: Live lock Asian Over 2.0 (9 stars)")
+
 
 @app.on_event("startup")
 async def startup():
