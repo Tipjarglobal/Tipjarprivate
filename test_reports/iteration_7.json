@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only regression check after removing the small crest icon from Header. Logo now renders only the 'TipJar' wordmark (no icon child element). All header controls render, are visible/clickable, and the app loads with zero page errors. Rate Wall regression passed - both TipJarHQ tips visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/header_check.png", "/app/test_reports/ratewall_check.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Header.jsx logo anchor is clean - only the wordmark <span> remains, matches the intended change.",
+    "Minor observation (not a regression): The literal string '875,00 €' from the review request was not found on the Rate Wall page. The Messi @ 35.00 card shows Stake 25,00 € and Tax 5,3% giving 46,38 €. The 875 € figure (25 × 35) is not displayed anywhere on that card. This is unrelated to the header change but worth confirming with the user whether the potential-winnings figure should be shown."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested)", "frontend": "100%"},
+  "test_credentials": "Not required for this check.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Header icon removal validated on preview URL. Logo test: querySelector('[data-testid=logo] div, [data-testid=logo] img, [data-testid=logo] svg') returns null. All 9 header testids (nav-ratewall, nav-leaderboard, nav-how, nav-invite, download-app-btn, language-switcher, login-btn, signup-btn, header-submit-btn) render and are visible on 1920x1080 viewport.",
+  "detailed_checks": {
+    "logo_has_no_icon_child": true,
+    "logo_text": "TipJar",
+    "logo_click_navigates_to_top": true,
+    "page_errors_count": 0,
+    "header_testids_all_present": true,
+    "rate_wall_shows_portugal_messi": true,
+    "rate_wall_shows_hacken_parlay": true,
+    "messi_odds_35_visible": true,
+    "messi_875_eur_winnings_visible": false
+  }
+}
