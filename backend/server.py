@@ -558,6 +558,16 @@ def compute_return(stake, odds, fallback=""):
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     if not (inp.match_time or "").strip():
         raise HTTPException(status_code=400, detail="Tip needs a match date & time — add the kickoff to publish.")
+    dup = await db.tips.find_one({
+        "user_id": user["id"],
+        "home_team": inp.home_team,
+        "away_team": inp.away_team,
+        "market": inp.market,
+        "odds": inp.odds,
+        "match_time": inp.match_time,
+    })
+    if dup:
+        raise HTTPException(status_code=409, detail="You already posted this tip — duplicates aren't allowed.")
     tip = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -662,6 +672,18 @@ async def list_tips(status: Optional[str] = None, sort: str = "new", limit: int 
 async def my_tips(user: dict = Depends(get_current_user)):
     tips = await db.tips.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
     return tips
+
+
+@api_router.delete("/tips/{tip_id}")
+async def delete_tip(tip_id: str, user: dict = Depends(get_current_user)):
+    tip = await db.tips.find_one({"id": tip_id})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    if user.get("role") != "admin" and tip.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own tips.")
+    await db.tips.delete_one({"id": tip_id})
+    await db.tip_ratings.delete_many({"tip_id": tip_id})
+    return {"deleted": True, "tip_id": tip_id}
 
 
 @api_router.post("/tips/{tip_id}/rate")

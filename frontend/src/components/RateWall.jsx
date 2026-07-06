@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2 } from "lucide-react";
 import StarRating from "./StarRating";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
@@ -67,6 +67,15 @@ export default function RateWall({ refreshKey, requireLogin }) {
     try {
       const { data } = await api.put(`/tips/${tip.id}/status`, { status: s });
       setTips((ts) => ts.map((x) => (x.id === tip.id ? data : x)));
+    } catch (err) { toast.error(apiErr(err)); }
+  };
+
+  const del = async (tip) => {
+    if (!window.confirm(t("wall.delete_confirm"))) return;
+    try {
+      await api.delete(`/tips/${tip.id}`);
+      setTips((ts) => ts.filter((x) => x.id !== tip.id));
+      toast.success(t("wall.deleted"));
     } catch (err) { toast.error(apiErr(err)); }
   };
 
@@ -139,7 +148,7 @@ export default function RateWall({ refreshKey, requireLogin }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {tips.map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} />
+            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} />
           ))}
         </div>
       )}
@@ -216,6 +225,16 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
             </span>
           )}
           <StatusBadge status={tip.status} t={t} />
+          {canDelete && (
+            <button
+              onClick={() => onDelete(tip)}
+              data-testid="delete-tip-btn"
+              title={t("wall.delete")}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-lost hover:bg-lost/15 transition-colors"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
         </div>
       </div>
 
