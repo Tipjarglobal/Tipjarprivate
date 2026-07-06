@@ -1182,8 +1182,9 @@ async def seed_showcase():
             "odds": "35.00", "ai_rating": 2.0,
             "ai_analysis": "Pure fan-favourite gamble: Messi banging in goals against easy opponents, chasing the Golden Boot — and the football gods teasing a dream Portugal vs Argentina final, Ronaldo vs Messi last dance. Unrealistic? Sure. Irresistible? Absolutely.",
             "legs": [], "is_parlay": False, "stake": "25,00 €", "potential_return": "875,00 €",
+            "status": "lost",
         },
-         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
                           "ratings_count": 0, "avg_rating": 0, "created_at": now}},
         upsert=True,
     )
@@ -1199,18 +1200,20 @@ async def seed_showcase():
             "league": "Allsvenskan / Länderspiel",
             "market": "",
             "odds": "2.47", "ai_rating": 7.0,
-            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
+            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hing am Fouls-Over-21,5-Leg — das kam, aber Portugal–Spanien Over 1,5 fiel nicht. Kombi damit verloren. Apex 7/10.",
             "legs": [
                 {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "pending", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "lost", "selections": ["Total Über 1,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "won", "selections": ["Fouls Über 21,5"]},
             ],
             "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
+            "status": "lost",
         },
-         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
                           "ratings_count": 0, "avg_rating": 0, "created_at": now}},
         upsert=True,
     )
-    logger.info("Seeded/updated showcase tip: Häcken parlay (4 legs spread out)")
+    logger.info("Seeded/updated showcase tip: Häcken parlay (settled: lost)")
 
 
 @app.on_event("startup")
