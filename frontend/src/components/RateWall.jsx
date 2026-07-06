@@ -195,6 +195,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
                 <span className="text-white font-heading font-bold text-sm leading-tight">{leg.match || "—"}</span>
                 {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{leg.kickoff}</span>}
               </div>
+              {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {(leg.selections || []).map((s, si) => (
                   <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">{s}</span>

@@ -220,6 +220,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                           <span className="text-white font-semibold text-sm">{leg.match}</span>
                           {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
                         </div>
+                        {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {(leg.selections || []).map((s, si) => (
                             <span key={si} className="text-[11px] text-zinc-200 bg-elevated rounded px-2 py-0.5">{s}</span>

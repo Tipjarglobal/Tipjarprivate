@@ -272,6 +272,7 @@ AI_SYSTEM = (
     "Read it precisely and return ONLY strict JSON, no markdown, with keys: "
     "is_parlay (true if more than one match OR more than one selection), "
     "legs (array with ONE object per MATCH, each: {\"match\": \"Home - Away\", "
+    "\"league\": \"competition/league name, e.g. 'Allsvenskan', 'La Liga', 'UEFA Nations League'\", "
     "\"kickoff\": \"HH:MM or ''\", \"selections\": [\"exact market lines, e.g. 'Total Over 1.5', "
     "'Djurgarden Total Over 0.5', 'Fouls Over 21.5'\"]}), "
     "home_team, away_team, match_time, country, league, "
@@ -291,6 +292,7 @@ def _sanitize_legs(legs) -> list:
                 sels = lg.get("selections") or []
                 out.append({
                     "match": str(lg.get("match", "") or ""),
+                    "league": str(lg.get("league", "") or ""),
                     "kickoff": str(lg.get("kickoff", "") or ""),
                     "selections": [str(s) for s in sels if s][:10],
                 })
