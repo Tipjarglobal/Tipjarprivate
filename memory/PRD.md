@@ -137,6 +137,16 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   before live monetization; Google Play real-money gambling policy. Offered to build legal pages.
 - TODO if user agrees: Impressum, Datenschutzerklärung, AGB, Responsible-Gambling/18+ pages + age gate.
 
+## 4-status system + per-leg status (2026-07-06, iteration 14-15)
+- StatusBadge now 4 states w/ icons+colors: pending(amber/clock), live(blue/pulse), won(green/check),
+  lost(red/x). Added tailwind color live=#3B82F6. Status filter adds "Live" (Pending/Live/Won/Lost).
+- Per-leg status: legs with status won/lost/live recolor text+border+badge; pending shows only a
+  subtle amber badge (white text). data-testid leg-status-{status}.
+- Rate Wall silent auto-refresh every 20s (load(silent), no flicker) for fast status updates.
+- Seed Häcken parlay: Häcken–Djurgården leg 'won' (green), Portugal–Spanien leg 'pending'
+  (corrected from 'live' — match starts later).
+- Verified iter 14 & 15: frontend 100%.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
