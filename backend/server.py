@@ -1150,6 +1150,11 @@ async def seed_showcase():
         await db.tips.delete_one({"id": old_id})
         await db.tip_ratings.delete_many({"tip_id": old_id})
 
+    # Authoritative: TipJarHQ owns exactly the 2 good showcase tips. Delete any other
+    # TipJarHQ-authored tips (e.g. old/ugly duplicate slips) in every env on startup.
+    allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay"]
+    await db.tips.delete_many({"user_id": hq["id"], "id": {"$nin": allowed_ids}})
+
     # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
     messi_image = None
     try:
@@ -1196,10 +1201,8 @@ async def seed_showcase():
             "odds": "2.47", "ai_rating": 7.0,
             "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hängt am Fouls-Over-21,5-Leg. Solider Value bei 2,47 — Apex 7/10.",
             "legs": [
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5"]},
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Djurgården Team Über 0,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "pending", "selections": ["Total Über 1,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "pending", "selections": ["Fouls Über 21,5"]},
+                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "pending", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
             ],
             "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
         },
@@ -1223,31 +1226,41 @@ async def startup():
     await db.credit_transactions.create_index([("to_user", 1), ("created_at", -1)])
     await db.tips.create_index([("avg_rating", -1), ("ratings_count", -1)])
     await db.tips.create_index([("ai_rating", -1)])
-    await purge_demo_tips()
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
-    admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
-    existing = await db.users.find_one({"email": admin_email})
-    if not existing:
-        await db.users.insert_one({
-            "id": str(uuid.uuid4()), "email": admin_email, "password_hash": hash_password(admin_pw),
-            "username": "TipJarAdmin", "role": "admin", "timezone": "UTC", "language": "en",
-            "credits": 0, "received_credits": 0, "streak": 0, "last_rated_date": None,
-            "ratings_given": 0, "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-    elif not verify_password(admin_pw, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email},
-                                  {"$set": {"password_hash": hash_password(admin_pw), "role": "admin"}})
-    await seed_showcase()
+    # Initialize storage BEFORE any seeding that uploads images
     try:
         init_storage()
         logger.info("Storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+    # Run purge/admin-seed/showcase-seed in the background so the readiness probe
+    # is never blocked by DB/storage latency (prevents deploy timeouts).
+    asyncio.create_task(_startup_seed())
     asyncio.create_task(settlement_loop())
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:
         logger.info("Auto-settlement idle — set API_FOOTBALL_KEY to enable")
+
+
+async def _startup_seed():
+    try:
+        await purge_demo_tips()
+        admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
+        admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
+        existing = await db.users.find_one({"email": admin_email})
+        if not existing:
+            await db.users.insert_one({
+                "id": str(uuid.uuid4()), "email": admin_email, "password_hash": hash_password(admin_pw),
+                "username": "TipJarAdmin", "role": "admin", "timezone": "UTC", "language": "en",
+                "credits": 0, "received_credits": 0, "streak": 0, "last_rated_date": None,
+                "ratings_given": 0, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        elif not verify_password(admin_pw, existing["password_hash"]):
+            await db.users.update_one({"email": admin_email},
+                                      {"$set": {"password_hash": hash_password(admin_pw), "role": "admin"}})
+        await seed_showcase()
+    except Exception as e:
+        logger.error(f"Startup seed failed: {e}")
 
 
 @app.on_event("shutdown")
