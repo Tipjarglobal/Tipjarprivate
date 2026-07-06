@@ -153,7 +153,34 @@ function StatusBadge({ status, t }) {
   return <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded ${s.cls}`}>{s.label}</span>;
 }
 
+const NATION_FLAGS = {
+  portugal: "🇵🇹", spain: "🇪🇸", spanien: "🇪🇸", argentina: "🇦🇷", argentinien: "🇦🇷",
+  brazil: "🇧🇷", brasilien: "🇧🇷", germany: "🇩🇪", deutschland: "🇩🇪", france: "🇫🇷", frankreich: "🇫🇷",
+  england: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", italy: "🇮🇹", italien: "🇮🇹", netherlands: "🇳🇱", niederlande: "🇳🇱", holland: "🇳🇱",
+  sweden: "🇸🇪", schweden: "🇸🇪", norway: "🇳🇴", norwegen: "🇳🇴", denmark: "🇩🇰", dänemark: "🇩🇰",
+  belgium: "🇧🇪", belgien: "🇧🇪", croatia: "🇭🇷", kroatien: "🇭🇷", usa: "🇺🇸", mexico: "🇲🇽",
+  greece: "🇬🇷", griechenland: "🇬🇷", turkey: "🇹🇷", türkei: "🇹🇷", poland: "🇵🇱", polen: "🇵🇱",
+  austria: "🇦🇹", österreich: "🇦🇹", switzerland: "🇨🇭", schweiz: "🇨🇭", scotland: "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+};
+const LEAGUE_FLAGS = {
+  allsvenskan: "🇸🇪", "la liga": "🇪🇸", "premier league": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", bundesliga: "🇩🇪",
+  "serie a": "🇮🇹", "ligue 1": "🇫🇷", eredivisie: "🇳🇱", "super league": "🇬🇷",
+};
+const GLOBAL_KEYS = ["world cup", "länderspiel", "laenderspiel", "international", "nations league", "friendly", " wm", " em", "euro", "champions league", "europa league"];
+
+function tipFlags(tip) {
+  const flags = new Set();
+  const texts = [tip.country, tip.home_team, tip.away_team, tip.league];
+  (tip.legs || []).forEach((l) => { texts.push(l.match, l.league); });
+  const hay = " " + texts.filter(Boolean).join(" ").toLowerCase() + " ";
+  Object.entries(NATION_FLAGS).forEach(([k, f]) => { if (hay.includes(k)) flags.add(f); });
+  Object.entries(LEAGUE_FLAGS).forEach(([k, f]) => { if (hay.includes(k)) flags.add(f); });
+  if (flags.size === 0 && GLOBAL_KEYS.some((k) => hay.includes(k))) flags.add("🌍");
+  return [...flags].slice(0, 5);
+}
+
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
+  const flags = tipFlags(tip);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
@@ -169,6 +196,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold">{tip.username}</span></span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {flags.length > 0 && (
+            <span className="text-base leading-none tracking-tight" data-testid="tip-flags">{flags.join(" ")}</span>
+          )}
           {tip.final_home != null && tip.final_away != null && (
             <span className="text-[10px] font-mono font-bold text-white bg-void border border-elevated px-2 py-1 rounded" data-testid="final-score">
               {t("wall.final")} {tip.final_home}-{tip.final_away}
@@ -226,6 +256,12 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
             <span className="text-white font-semibold text-sm truncate">{tip.market || "—"}</span>
             {tip.odds && <span className="font-mono font-bold text-volt shrink-0 ml-2">{tip.odds}</span>}
           </div>
+          {(tip.stake || tip.potential_return) && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-2 px-1">
+              {tip.stake && <span className="text-zinc-500">Einsatz <span className="text-white font-medium">{tip.stake}</span></span>}
+              {tip.potential_return && <span className="text-zinc-500">Gewinn <span className="text-won font-medium">{tip.potential_return}</span></span>}
+            </div>
+          )}
         </>
       )}
 

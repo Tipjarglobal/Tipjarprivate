@@ -1,0 +1,41 @@
+{
+  "summary": "Verified all three UI changes requested by the German user against the preview deployment. Backend: 8/8 pytest checks pass; only seed-portugal-messi is present in GET /api/tips (Häcken parlay is fully removed at seed and via startup delete_many). Frontend: Rate Wall on landing page renders the Portugal & Messi card with the Portuguese flag 🇵🇹 (data-testid='tip-flags') and the new 'Einsatz 25,00 €' / 'Gewinn 875,00 €' row for the single-tip card. No compile overlay, no console errors, no runtime errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_showcase_seed_v9.py",
+    "/app/test_reports/pytest/iteration_9_seed.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "startup() correctly issues `await db.tips.delete_many({'id': 'seed-hacken-parlay'})` before calling seed_showcase(), and seed_showcase() no longer inserts the Häcken parlay. Idempotent + backwards-compatible with older DBs still holding the record.",
+    "RateWall.jsx tipFlags() builds a haystack from country/home_team/away_team/league (+ leg.match/league) and matches against NATION_FLAGS/LEAGUE_FLAGS, falling back to 🌍 for GLOBAL_KEYS. Cap at 5 flags. Sensible and inexpensive.",
+    "Single-tip branch (~line 259) now renders Einsatz/Gewinn row conditionally on tip.stake || tip.potential_return — matches the parlay branch behaviour. Symmetry between the two branches is good.",
+    "Minor (non-blocking): The card image the user uploaded contains a printed 'Tax 5,3% 46,38 €' line — as flagged by the main agent this is inside the user's screenshot, not editable. The card now correctly writes the true Gewinn 875,00 € underneath, so viewers see the right value. Consistent with the request.",
+    "Minor (non-blocking): During navigation I saw warnings 'No routes matched location /wall' — the Rate Wall is only reachable via the landing route, not /wall. Not part of this bug fix, just an observation for future SEO/deep-linking work.",
+    "test_credentials.md still says 'Owns the 2 seeded showcase tips (Portugal & Messi @ 35.00, Häcken parlay @ 2.47)'. That doc is now stale after the Häcken removal — main agent may want to update line 18 to reflect just the single Portugal & Messi tip."
+  ],
+  "updated_files": ["/app/backend/tests/test_showcase_seed_v9.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (5/5 checks)"},
+  "test_credentials": "Admin: admin@tipjar.com / TipJarAdmin2026! (login OK). TipJarHQ: hq@tipjar.com / TipJarHQ2026! (login OK).",
+  "seed_data_creation": "None. Only queried existing seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 9 confirmed removal of Häcken parlay, country-flag rendering, and Einsatz/Gewinn on single-tip cards. The Rate Wall lives on the landing page (no /wall route). The user-uploaded slip image on the Portugal & Messi card still contains a printed 'Tax 5,3% 46,38 €' line — that is expected and MUST NOT be flagged as a bug (main agent explicitly called this out). Full backend regression can be re-run via /app/backend/tests/backend_test.py if needed; this iteration ran only the targeted seed+flag+winnings suite.",
+  "detailed_checks": {
+    "backend_only_portugal_messi_seed_present": true,
+    "backend_hacken_parlay_fully_removed": true,
+    "backend_portugal_messi_stake": "25,00 €",
+    "backend_portugal_messi_potential_return": "875,00 €",
+    "backend_portugal_messi_image_served_200_jpeg": true,
+    "frontend_tip_card_rendered": true,
+    "frontend_tip_flags_element_present": true,
+    "frontend_tip_flags_contains_pt_flag": true,
+    "frontend_einsatz_25_00_visible": true,
+    "frontend_gewinn_875_00_visible": true,
+    "frontend_compile_overlay_absent": true,
+    "frontend_console_errors": 0,
+    "frontend_pageerror_events": 0,
+    "header_tipjar_wordmark_visible_in_screenshot": true
+  }
+}
