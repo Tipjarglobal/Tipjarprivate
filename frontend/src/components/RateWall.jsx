@@ -43,6 +43,12 @@ export default function RateWall({ refreshKey, requireLogin }) {
     if (!user) { requireLogin(); return; }
     try {
       const { data } = await api.post(`/tips/${tip.id}/rate`, { stars });
+      if (data.deleted) {
+        setTips((ts) => ts.filter((x) => x.id !== data.tip_id));
+        if (user) setUser({ ...user, streak: data.streak });
+        toast.success(t("wall.removed"));
+        return;
+      }
       setMyRatings((m) => ({ ...m, [tip.id]: stars }));
       setTips((ts) => ts.map((x) => (x.id === tip.id ? data.tip : x)));
       if (user) setUser({ ...user, streak: data.streak, ratings_given: (user.ratings_given || 0) + 1 });

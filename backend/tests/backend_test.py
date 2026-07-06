@@ -625,3 +625,127 @@ class TestCreditTransactions:
         if len(txns) >= 2:
             for i in range(len(txns) - 1):
                 assert txns[i].get("created_at", "") >= txns[i + 1].get("created_at", "")
+
+
+# ================================================================ Iteration-4: Demo purge + Trusted 1-star delete
+class TestDemoPurgeState:
+    """After startup, tips authored by @t.com bot accounts must have been purged."""
+
+    def test_no_at_t_com_tips_visible(self):
+        r = requests.get(f"{API}/tips?sort=new&limit=100", timeout=TIMEOUT)
+        assert r.status_code == 200
+        tips = r.json()
+        # Purge runs at backend startup. Tips created BY @t.com users AFTER startup
+        # (e.g., by our own test suite in earlier classes) will still be present until
+        # the next restart — that's the documented design. But BEFORE this test suite
+        # started creating tips, the wall should have been essentially clean:
+        # the only pre-existing tip is TipJarHQ's demo. We assert that TipJarHQ tip is present.
+        assert any(t.get("username") == "TipJarHQ" for t in tips), \
+            "Expected the seeded TipJarHQ demo tip to survive purge"
+
+
+class TestTrustedOneStarPurge:
+    """Admin (trusted) rating 1 star must delete the tip instantly."""
+
+    def test_admin_one_star_deletes_tip(self, user_a, admin_token):
+        # Step 1: user_a creates a fresh tip we can delete
+        payload = {
+            "raw_text": "purge target tip",
+            "home_team": "PurgeHome", "away_team": "PurgeAway",
+            "match_time": "Fri 19:00", "country": "TestCountry",
+            "league": "TestLeague", "market": "1X2 - Home",
+            "odds": "2.10", "ai_rating": 5.0, "ai_analysis": "purge target",
+        }
+        r = requests.post(f"{API}/tips", json=payload,
+                          headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        tip_id = r.json()["id"]
+
+        # Step 2: verify tip exists in list
+        r_list = requests.get(f"{API}/tips?sort=new&limit=100", timeout=TIMEOUT)
+        assert any(t["id"] == tip_id for t in r_list.json()), "tip should be visible before delete"
+
+        # Step 3: admin rates 1 star
+        r_rate = requests.post(f"{API}/tips/{tip_id}/rate",
+                               json={"stars": 1}, headers=_auth(admin_token), timeout=TIMEOUT)
+        assert r_rate.status_code == 200, r_rate.text
+        data = r_rate.json()
+        assert data.get("deleted") is True
+        assert data.get("tip_id") == tip_id
+        assert "streak" in data and isinstance(data["streak"], int)
+
+        # Step 4: tip must no longer appear in GET /api/tips
+        r_after = requests.get(f"{API}/tips?sort=new&limit=100", timeout=TIMEOUT)
+        assert r_after.status_code == 200
+        assert not any(t["id"] == tip_id for t in r_after.json()), \
+            "tip should be deleted from the wall"
+
+        # Step 5: subsequent rating attempts must 404
+        r_gone = requests.post(f"{API}/tips/{tip_id}/rate",
+                               json={"stars": 5}, headers=_auth(admin_token), timeout=TIMEOUT)
+        assert r_gone.status_code == 404
+
+
+class TestNonTrustedOneStarNoDelete:
+    """A fresh normal user (0 rated tips) rating 1 star must NOT delete the tip."""
+
+    def test_fresh_user_one_star_records_but_does_not_delete(self, user_a):
+        # user_a creates a target tip
+        payload = {
+            "raw_text": "non-trusted target",
+            "home_team": "KeepHome", "away_team": "KeepAway",
+            "match_time": "Sat 20:00", "country": "TestCountry",
+            "league": "TestLeague", "market": "1X2 - Home",
+            "odds": "1.90", "ai_rating": 5.0, "ai_analysis": "keep me",
+        }
+        r = requests.post(f"{API}/tips", json=payload,
+                          headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        tip_id = r.json()["id"]
+
+        # Register a brand-new normal user with 0 rated tips (non-trusted)
+        fresh = _register()
+        r_rate = requests.post(f"{API}/tips/{tip_id}/rate",
+                               json={"stars": 1}, headers=_auth(fresh["token"]), timeout=TIMEOUT)
+        assert r_rate.status_code == 200, r_rate.text
+        data = r_rate.json()
+        # Must NOT be a delete response
+        assert data.get("deleted") is not True, \
+            f"non-trusted 1-star should not delete: {data}"
+        assert "tip" in data, "expected {tip:..., streak, your_stars} shape for normal rating"
+        assert data["tip"]["id"] == tip_id
+        assert data["tip"]["ratings_count"] >= 1
+        assert data["your_stars"] == 1
+
+        # Tip must still be in the list
+        r_list = requests.get(f"{API}/tips?sort=new&limit=100", timeout=TIMEOUT)
+        assert any(t["id"] == tip_id for t in r_list.json()), "tip must still exist after non-trusted 1-star"
+
+
+class TestNormalRatingStillWorks:
+    """A non-trusted user rating stars>=2 records normally with confetti-style response."""
+
+    def test_normal_rating_two_stars(self, user_a):
+        payload = {
+            "raw_text": "normal rating target",
+            "home_team": "NormalHome", "away_team": "NormalAway",
+            "match_time": "Sun 18:00", "country": "TestCountry",
+            "league": "TestLeague", "market": "1X2 - Home",
+            "odds": "1.75", "ai_rating": 5.0, "ai_analysis": "target",
+        }
+        r = requests.post(f"{API}/tips", json=payload,
+                          headers=_auth(user_a["token"]), timeout=TIMEOUT)
+        assert r.status_code == 200
+        tip_id = r.json()["id"]
+
+        rater = _register()
+        r_rate = requests.post(f"{API}/tips/{tip_id}/rate",
+                               json={"stars": 7}, headers=_auth(rater["token"]), timeout=TIMEOUT)
+        assert r_rate.status_code == 200, r_rate.text
+        data = r_rate.json()
+        assert data.get("deleted") is not True
+        assert "tip" in data
+        assert data["tip"]["ratings_count"] == 1
+        assert data["tip"]["avg_rating"] == 7.0
+        assert data["your_stars"] == 7
+        assert data["streak"] >= 1

@@ -552,6 +552,55 @@ def _clean_tip(t: dict) -> dict:
     return t
 
 
+# Trusted-rater gating for instant 1-star purge
+TRUSTED_MIN_TIPS = 3      # must have at least this many rated tips
+TRUSTED_REPUTATION = 7.0  # average avg_rating (Apex 1-10) required to be "highly rated"
+
+
+async def is_trusted_rater(user: dict) -> bool:
+    if user.get("role") == "admin":
+        return True
+    res = await db.tips.aggregate([
+        {"$match": {"user_id": user["id"], "ratings_count": {"$gt": 0}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$avg_rating"}, "n": {"$sum": 1}}},
+    ]).to_list(1)
+    if not res:
+        return False
+    r = res[0]
+    return r.get("n", 0) >= TRUSTED_MIN_TIPS and (r.get("avg") or 0) >= TRUSTED_REPUTATION
+
+
+async def _bump_rating_streak(user: dict, now: datetime) -> int:
+    today = now.date().isoformat()
+    streak = user.get("streak", 0)
+    last = user.get("last_rated_date")
+    if last != today:
+        yesterday = (now.date() - timedelta(days=1)).isoformat()
+        streak = streak + 1 if last == yesterday else 1
+        await db.users.update_one({"id": user["id"]},
+                                  {"$set": {"last_rated_date": today, "streak": streak},
+                                   "$inc": {"ratings_given": 1}})
+    else:
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"ratings_given": 1}})
+    return streak
+
+
+async def purge_demo_tips() -> int:
+    """Delete tips (and their ratings) submitted by test-bot accounts (emails on the @t.com domain)."""
+    testers = await db.users.find({"email": {"$regex": r"@t\.com$"}}, {"id": 1, "_id": 0}).to_list(100000)
+    ids = [u["id"] for u in testers]
+    if not ids:
+        return 0
+    tips = await db.tips.find({"user_id": {"$in": ids}}, {"id": 1, "_id": 0}).to_list(100000)
+    tip_ids = [t["id"] for t in tips]
+    if not tip_ids:
+        return 0
+    await db.tips.delete_many({"id": {"$in": tip_ids}})
+    await db.tip_ratings.delete_many({"tip_id": {"$in": tip_ids}})
+    logger.info(f"Purged {len(tip_ids)} demo/test tips")
+    return len(tip_ids)
+
+
 @api_router.get("/tips")
 async def list_tips(status: Optional[str] = None, sort: str = "new", limit: int = 50):
     q = {}
@@ -579,8 +628,16 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
     tip = await db.tips.find_one({"id": tip_id})
     if not tip:
         raise HTTPException(status_code=404, detail="Tip not found")
-    existing = await db.tip_ratings.find_one({"tip_id": tip_id, "user_id": user["id"]})
     now = datetime.now(timezone.utc)
+
+    # A 1-star vote from a trusted rater (admin or highly-rated tipster) purges the tip instantly.
+    if inp.stars == 1 and await is_trusted_rater(user):
+        await db.tips.delete_one({"id": tip_id})
+        await db.tip_ratings.delete_many({"tip_id": tip_id})
+        streak = await _bump_rating_streak(user, now)
+        return {"deleted": True, "tip_id": tip_id, "streak": streak}
+
+    existing = await db.tip_ratings.find_one({"tip_id": tip_id, "user_id": user["id"]})
     if existing:
         delta = inp.stars - existing["stars"]
         await db.tip_ratings.update_one(
@@ -1019,6 +1076,7 @@ async def startup():
     await db.credit_transactions.create_index([("to_user", 1), ("created_at", -1)])
     await db.tips.create_index([("avg_rating", -1), ("ratings_count", -1)])
     await db.tips.create_index([("ai_rating", -1)])
+    await purge_demo_tips()
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})

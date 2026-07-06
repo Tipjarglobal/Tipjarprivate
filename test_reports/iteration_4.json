@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration-4 verified two new behaviors: (1) demo/test tips authored by @t.com bot accounts are purged on backend startup (only TipJarHQ tip remains as expected), (2) a 1-star rating from a TRUSTED rater (admin) instantly deletes the tip, while a 1-star from a non-trusted fresh user records normally without deletion. Added 4 new pytest classes covering all 4 requested scenarios; all 51 backend tests pass. Frontend E2E via Playwright confirms: admin logs in, clicks 1st star on a target tip → tip disappears from wall + 'Tip removed — 1-star purge 🗑️' sonner toast shows + API GET /api/tips no longer contains it. Non-trusted user's 1-star is visible in the same UI run (KeepHome card CROWD 1(1) still present).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~1108 lines (well past 700-line threshold) — split into routers (auth/tips/credits/notifications/admin) still recommended (carry-over from iteration-2/3).",
+    "purge_demo_tips uses email regex '@t\\.com$' as the demo-account marker. This is a strong assumption tied to test convention — if a real user ever registers with a legitimate '@t.com' address (e.g., a Turks-and-Caicos domain), their tips will be silently deleted on every backend restart. Recommend flagging bot accounts by an explicit `is_test: true` field on the user document instead of relying on email domain, or at minimum log the emails purged for auditability.",
+    "is_trusted_rater aggregation query in rate_tip fires on every 1-star click and is not cached. For a hot post-match rate wall, this may be a hotspot. Consider denormalizing avg_rating/n_rated_tips onto the user document (updated on each new rating) so is_trusted_rater becomes an O(1) lookup.",
+    "The trusted-rate-delete branch calls _bump_rating_streak, which increments ratings_given even when the rating action is technically a *delete* (no rating persisted). This is a mild reporting anomaly: admin's 'ratings_given' counter grows when they've actually removed tips rather than rated them. Consider not counting purges toward ratings_given, or add a separate 'purges_performed' counter.",
+    "Non-idempotent purge on hot reload: purge_demo_tips runs on every backend startup / hot-reload — if a test suite creates @t.com tips, runs assertions, and then a reload happens mid-test, those tips would vanish. Documented as by-design per problem statement, but worth an admin-only /admin/purge-demo endpoint for on-demand purges so restarts aren't needed.",
+    "Frontend RateWall.rate() spreads `user` into setUser with only `streak` on the delete branch — no ratings_given increment for the trusted-delete path, whereas the normal branch does increment. Consistent with the ratings_given concern above, but worth aligning."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added 4 iteration-4 tests: TestDemoPurgeState.test_no_at_t_com_tips_visible, TestTrustedOneStarPurge.test_admin_one_star_deletes_tip, TestNonTrustedOneStarNoDelete.test_fresh_user_one_star_records_but_does_not_delete, TestNormalRatingStillWorks.test_normal_rating_two_stars)"
+  ],
+  "success_rate": {
+    "backend": "100% (51/51 pytest tests pass)",
+    "frontend": "100% for the requested trusted 1-star delete flow — admin UI login → click 1st star → tip removed + sonner toast fires + API confirms deletion. Non-trusted 1-star preservation visible in same session (KeepHome card CROWD 1(1) still in DOM)."
+  },
+  "test_credentials": "Admin admin@tipjar.com / TipJarAdmin2026! verified. Test users created dynamically with TEST_ prefix on @t.com — these are documented to be purged on next backend restart.",
+  "seed_data_creation": "Test suite creates several disposable @t.com users + tips inside TestTrustedOneStarPurge / TestNonTrustedOneStarNoDelete / TestNormalRatingStillWorks. All are auto-purged on next backend restart by design.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run backend suite serially: `cd /app && python -m pytest /app/backend/tests/backend_test.py -v -n 0 --junitxml=/app/test_reports/pytest/pytest_results.xml` (xdist would split TestTips/TestRating/TestAdmin across workers and break shared pytest.tipjar_tip_id state). New iteration-4 classes: TestDemoPurgeState, TestTrustedOneStarPurge, TestNonTrustedOneStarNoDelete, TestNormalRatingStillWorks. Frontend selectors used: [data-testid='login-btn'], [data-testid='auth-email'], [data-testid='auth-password'], [data-testid='auth-submit'], [data-testid='sort-new'], [data-testid='tip-card-{id}']. StarRating buttons inside tip card have no data-testid — they are the 10 icon-only <button> elements; first index = 1 star. Consider adding data-testid='star-{n}' on StarRating for future robustness. AI auto-rating still returns fallback rating 5 (EMERGENT_LLM_KEY out of balance) — not a bug per problem statement.",
+  "rca of the issue": "No new bugs found. All requested iteration-4 behaviors are correctly implemented: (1) purge_demo_tips runs on @startup and correctly matches ^*@t.com$ users then deletes their tips + ratings; verified pre-suite wall showed only TipJarHQ tip. (2) rate_tip early-branches when stars==1 AND is_trusted_rater(user) is True → deletes tip + ratings, returns {deleted, tip_id, streak}; verified via TestTrustedOneStarPurge (admin path) at both API and UI level. (3) Non-trusted fresh users (0 rated tips) fall through to normal rating branch even at stars=1 — verified TestNonTrustedOneStarNoDelete asserts {tip, streak, your_stars} shape and tip still in GET /api/tips. (4) Frontend RateWall.rate() correctly handles {deleted:true} response by filtering setTips + firing toast.success(t('wall.removed')) — visually confirmed. (5) i18n key wall.removed present in EN/DE/EL as required."
+}
