@@ -78,6 +78,9 @@ const T = {
     "wall.won": "WON",
     "wall.lost": "LOST",
     "wall.mark": "Settle",
+    "wall.sync": "Sync results now",
+    "wall.syncing": "Checking finished matches…",
+    "wall.final": "Final",
 
     "auth.login": "Welcome back",
     "auth.signup": "Join TipJar",
@@ -322,6 +325,9 @@ const T = {
     "wall.won": "ΚΕΡΔΙΣΜΕΝΟ",
     "wall.lost": "ΧΑΜΕΝΟ",
     "wall.mark": "Διευθέτηση",
+    "wall.sync": "Ενημέρωση αποτελεσμάτων",
+    "wall.syncing": "Έλεγχος τελειωμένων αγώνων…",
+    "wall.final": "Τελικό",
 
     "auth.login": "Καλώς ήρθες πίσω",
     "auth.signup": "Μπες στο TipJar",

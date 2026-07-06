@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw } from "lucide-react";
 import StarRating from "./StarRating";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
@@ -25,6 +25,7 @@ export default function RateWall({ refreshKey, requireLogin }) {
   const [status, setStatus] = useState("pending");
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +60,20 @@ export default function RateWall({ refreshKey, requireLogin }) {
     } catch (err) { toast.error(apiErr(err)); }
   };
 
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { data } = await api.post("/admin/settle-now");
+      if (!data.ok) toast.error(data.reason || "Results engine not configured");
+      else toast.success(`✅ ${data.settled} settled / ${data.checked} checked`);
+      load();
+    } catch (err) {
+      toast.error(apiErr(err));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <section id="ratewall" className="max-w-7xl mx-auto px-4 sm:px-6 py-16 scroll-mt-20">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
@@ -68,11 +83,20 @@ export default function RateWall({ refreshKey, requireLogin }) {
           <p className="text-zinc-400 mt-2 max-w-lg">{t("wall.subtitle")}</p>
         </div>
         {user && (
-          <div className="flex items-center gap-3 rounded-2xl bg-surface border border-elevated px-4 py-3" data-testid="streak-widget">
-            <Flame className="text-bell" size={28} />
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("wall.streak")}</p>
-              <p className="font-mono font-black text-2xl text-white">{user.streak || 0} <span className="text-sm text-zinc-500">{t("wall.days")}</span></p>
+          <div className="flex items-center gap-3">
+            {user.role === "admin" && (
+              <button data-testid="sync-results-btn" onClick={syncNow} disabled={syncing}
+                className="flex items-center gap-2 rounded-2xl border border-volt/40 text-volt font-semibold px-4 py-3 hover:bg-volt/10 active:scale-95 transition-all disabled:opacity-50">
+                <RefreshCw size={18} className={syncing ? "animate-spin" : ""} />
+                <span className="text-sm">{syncing ? t("wall.syncing") : t("wall.sync")}</span>
+              </button>
+            )}
+            <div className="flex items-center gap-3 rounded-2xl bg-surface border border-elevated px-4 py-3" data-testid="streak-widget">
+              <Flame className="text-bell" size={28} />
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("wall.streak")}</p>
+                <p className="font-mono font-black text-2xl text-white">{user.streak || 0} <span className="text-sm text-zinc-500">{t("wall.days")}</span></p>
+              </div>
             </div>
           </div>
         )}
@@ -138,7 +162,14 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle }) {
           </div>
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold">{tip.username}</span></span>
         </div>
-        <StatusBadge status={tip.status} t={t} />
+        <div className="flex items-center gap-2 shrink-0">
+          {tip.final_home != null && tip.final_away != null && (
+            <span className="text-[10px] font-mono font-bold text-white bg-void border border-elevated px-2 py-1 rounded" data-testid="final-score">
+              {t("wall.final")} {tip.final_home}-{tip.final_away}
+            </span>
+          )}
+          <StatusBadge status={tip.status} t={t} />
+        </div>
       </div>
 
       {tip.image_path && (

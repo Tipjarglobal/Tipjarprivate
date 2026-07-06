@@ -38,6 +38,11 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY')
 AI_MODEL_PROVIDER = "gemini"
 AI_MODEL = "gemini-3.1-pro-preview"
+API_FOOTBALL_KEY = os.environ.get('API_FOOTBALL_KEY')
+API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
+SETTLE_INTERVAL_SECONDS = 15 * 60
+SETTLE_BATCH_CAP = 20   # max tips processed per settlement run (respects free-tier limits)
+FINISHED_STATUSES = {"FT", "AET", "PEN"}
 
 APP_NAME = "tipjar"
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
@@ -664,6 +669,166 @@ async def download_file(path: str):
     return Response(content=data, media_type=record.get("content_type") or content_type)
 
 
+# ------------------------------------------------------------------ results engine (API-Football)
+def _norm(s: str) -> str:
+    return "".join(c for c in (s or "").lower() if c.isalnum() or c.isspace()).strip()
+
+
+def _teams_match(a: str, b: str) -> bool:
+    na, nb = _norm(a), _norm(b)
+    if not na or not nb:
+        return False
+    if na == nb or na in nb or nb in na:
+        return True
+    ta, tb = set(na.split()), set(nb.split())
+    common = ta & tb
+    stop = {"fc", "cf", "sc", "ac", "club", "de", "the", "and"}
+    common = {w for w in common if w not in stop and len(w) > 2}
+    return len(common) >= 1
+
+
+def _apifootball(path: str, params: dict):
+    if not API_FOOTBALL_KEY:
+        return None
+    try:
+        r = requests.get(f"{API_FOOTBALL_BASE}{path}", params=params,
+                         headers={"x-apisports-key": API_FOOTBALL_KEY}, timeout=20)
+        r.raise_for_status()
+        return r.json().get("response", [])
+    except Exception as e:
+        logger.error(f"API-Football {path} failed: {e}")
+        return None
+
+
+async def resolve_team_id(name: str):
+    if not name or len(name.strip()) < 3:
+        return None
+    key = _norm(name)
+    cached = await db.team_cache.find_one({"key": key})
+    if cached:
+        return cached.get("team_id")
+    resp = _apifootball("/teams", {"search": name.strip()})
+    team_id = None
+    if resp:
+        # prefer an exact-ish name match, else first result
+        for item in resp:
+            if _teams_match(item.get("team", {}).get("name", ""), name):
+                team_id = item["team"]["id"]
+                break
+        if team_id is None:
+            team_id = resp[0].get("team", {}).get("id")
+    await db.team_cache.update_one({"key": key}, {"$set": {"key": key, "team_id": team_id}}, upsert=True)
+    return team_id
+
+
+def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
+    for date in dates:
+        fixtures = _apifootball("/fixtures", {"team": team_id, "date": date})
+        if not fixtures:
+            continue
+        for fx in fixtures:
+            th = fx.get("teams", {}).get("home", {}).get("name", "")
+            ta = fx.get("teams", {}).get("away", {}).get("name", "")
+            if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
+                status = fx.get("fixture", {}).get("status", {}).get("short")
+                if status in FINISHED_STATUSES:
+                    return {
+                        "home_name": th, "away_name": ta,
+                        "home_goals": fx.get("goals", {}).get("home"),
+                        "away_goals": fx.get("goals", {}).get("away"),
+                        "status": status,
+                    }
+    return None
+
+
+async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
+    """Use the LLM to decide won/lost/void for a bet market given the final score."""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"judge-{uuid.uuid4()}",
+            system_message=(
+                "You are a betting settlement engine. Given a football bet market and the final "
+                "full-time score, decide the outcome. Reply with ONLY one lowercase word: "
+                "'won', 'lost', or 'void'. No punctuation, no explanation."
+            ),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        prompt = (
+            f"Match: {home} {hg} - {ag} {away} (final full-time score).\n"
+            f"Bet market: {market}\n"
+            "Did this bet win, lose, or void? Answer with one word only."
+        )
+        resp = await chat.send_message(UserMessage(text=prompt))
+        out = (resp if isinstance(resp, str) else str(resp)).strip().lower()
+        for word in ("void", "won", "lost"):
+            if word in out:
+                return word
+        return "void"
+    except Exception as e:
+        logger.error(f"judge_market failed: {e}")
+        return "void"
+
+
+async def settle_pending_tips() -> dict:
+    if not API_FOOTBALL_KEY:
+        return {"ok": False, "reason": "API_FOOTBALL_KEY not configured", "checked": 0, "settled": 0}
+    pending = await db.tips.find(
+        {"status": "pending", "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
+        {"_id": 0},
+    ).sort("created_at", 1).to_list(SETTLE_BATCH_CAP)
+    checked, settled, details = 0, 0, []
+    for tip in pending:
+        checked += 1
+        created = tip.get("created_at", "")[:10]
+        try:
+            base = datetime.fromisoformat(created) if created else datetime.now(timezone.utc)
+        except Exception:
+            base = datetime.now(timezone.utc)
+        dates = [(base + timedelta(days=d)).date().isoformat() for d in (0, 1, 2, -1)]
+        team_id = await resolve_team_id(tip["home_team"])
+        if not team_id:
+            team_id = await resolve_team_id(tip["away_team"])
+            if team_id:
+                opponent = tip["home_team"]
+            else:
+                continue
+        else:
+            opponent = tip["away_team"]
+        fx = find_finished_fixture(team_id, opponent, dates)
+        if not fx:
+            continue
+        outcome = await judge_market(tip.get("market", ""), tip["home_team"], tip["away_team"],
+                                     fx["home_goals"], fx["away_goals"])
+        new_status = outcome if outcome in ("won", "lost") else "void"
+        if new_status == "void":
+            continue
+        await db.tips.update_one({"id": tip["id"]}, {"$set": {
+            "status": new_status,
+            "final_home": fx["home_goals"], "final_away": fx["away_goals"],
+            "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
+        }})
+        settled += 1
+        details.append({"tip": tip["id"], "match": f"{tip['home_team']} vs {tip['away_team']}",
+                        "score": f"{fx['home_goals']}-{fx['away_goals']}", "result": new_status})
+    return {"ok": True, "checked": checked, "settled": settled, "details": details}
+
+
+@api_router.post("/admin/settle-now")
+async def settle_now(admin: dict = Depends(require_admin)):
+    return await settle_pending_tips()
+
+
+async def settlement_loop():
+    while True:
+        await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
+        try:
+            if API_FOOTBALL_KEY:
+                result = await settle_pending_tips()
+                logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked")
+        except Exception as e:
+            logger.error(f"settlement_loop error: {e}")
+
+
 @api_router.get("/")
 async def root():
     return {"message": "TipJar API live"}
@@ -704,6 +869,11 @@ async def startup():
         logger.info("Storage initialized")
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
+    asyncio.create_task(settlement_loop())
+    if API_FOOTBALL_KEY:
+        logger.info("Auto-settlement engine enabled (API-Football)")
+    else:
+        logger.info("Auto-settlement idle — set API_FOOTBALL_KEY to enable")
 
 
 @app.on_event("shutdown")
