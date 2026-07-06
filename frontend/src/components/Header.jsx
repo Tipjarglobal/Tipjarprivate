@@ -46,7 +46,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips }) {
   const { t, lang, setLang } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -79,13 +79,14 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>
 
-        <a
-          href="#ratewall"
+        <button
+          type="button"
+          onClick={onViewTips}
           data-testid="view-tips-btn"
           className="hidden md:flex items-center gap-2 rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm px-5 py-2.5 shrink-0 hover:bg-[#26b64c] active:scale-95 transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
         >
           <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
-        </a>
+        </button>
 
         <div className="flex items-center gap-2 sm:gap-3">
           <InstallAppButton />
@@ -157,13 +158,14 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
 
       {/* Mobile: full-width green CTA below the header */}
       <div className="md:hidden px-4 pb-2.5 pt-0.5">
-        <a
-          href="#ratewall"
+        <button
+          type="button"
+          onClick={onViewTips}
           data-testid="view-tips-btn-mobile"
           className="flex items-center justify-center gap-2 w-full rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm py-3 active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
         >
           <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
-        </a>
+        </button>
       </div>
     </header>
   );

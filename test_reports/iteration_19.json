@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only verification of Rate Wall overlay refactor. Rate Wall no longer inline on the home page; instead a full-screen overlay (tips-window) is opened via 3 triggers: desktop header green button (view-tips-btn), mobile full-width green button (view-tips-btn-mobile), and hero secondary button (hero-rate-btn). All 6 requested scenarios PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "home_page_no_tip_cards": "PASS - 0 tip cards on home (desktop and mobile)",
+    "home_sections_present": "PASS - hero-rate-btn, #how, #invite, #leaderboard all visible",
+    "desktop_view_tips_btn_opens_overlay": "PASS - tips-window opens; 2 tip cards visible (Portugal & Häcken parlay)",
+    "tips_window_close_btn": "PASS - closes overlay and returns to home",
+    "hero_rate_btn_opens_overlay": "PASS",
+    "mobile_view_tips_btn_opens_overlay": "PASS - 2 tips shown, close works",
+    "sort_and_status_filters_in_overlay": "PASS - sort-new, sort-hype, sort-top, status-pending/live/won/lost all present and clickable; sort-hype click keeps 2 tip cards visible"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Header still has a dead nav link <a href='#ratewall'> (data-testid nav-ratewall). Since the Rate Wall no longer lives on the home page as a section, this anchor scrolls to nothing. Consider either converting nav-ratewall to also trigger onViewTips or removing it to avoid a broken/inert nav link."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "not used (viewing does not require login)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 triggers open the same data-testid='tips-window' overlay which contains the RateWall. 2 seeded tips (Portugal & Messi, Häcken parlay) are shown. Header nav-ratewall anchor (#ratewall) is now dead since RateWall isn't inline anymore - minor cleanup suggestion only."
+}

@@ -3,7 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Toaster, toast } from "sonner";
-import { Sparkles, Star, Loader2, CheckCircle2, MailWarning } from "lucide-react";
+import { Sparkles, Star, Loader2, CheckCircle2, MailWarning, X } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
 import { AuthProvider, useAuth } from "./auth";
@@ -30,6 +30,7 @@ function Home() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => { if (user?.language) setLang(user.language); }, [user, setLang]);
@@ -52,6 +53,7 @@ function Home() {
         onSignup={() => openAuth("signup")}
         onWallet={() => setWalletOpen(true)}
         onProfile={() => setProfileOpen(true)}
+        onViewTips={() => setTipsOpen(true)}
       />
       {user && !user.email_verified && <VerifyBanner />}
 
@@ -75,10 +77,10 @@ function Home() {
                 className="flex items-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_30px_rgba(225,255,0,0.3)]">
                 <Sparkles size={18} /> {t("hero.cta.submit")}
               </button>
-              <a href="#ratewall" data-testid="hero-rate-btn"
+              <button data-testid="hero-rate-btn" onClick={() => setTipsOpen(true)}
                 className="flex items-center gap-2 rounded-full border border-elevated text-white font-bold px-6 py-3.5 hover:border-volt/60 hover:bg-white/5 active:scale-95 transition-all">
                 <Star size={18} /> {t("hero.cta.rate")}
-              </a>
+              </button>
             </div>
           </motion.div>
 
@@ -96,7 +98,6 @@ function Home() {
         </div>
       </section>
 
-      <RateWall refreshKey={refreshKey} requireLogin={requireLogin} />
       <InviteSection />
       <Leaderboard refreshKey={refreshKey} />
 
@@ -104,6 +105,26 @@ function Home() {
         <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
         <p className="text-xs text-zinc-600 mt-2">Post it. Rate it. Cash it. · 18+ · Play responsibly</p>
       </footer>
+
+      {tipsOpen && (
+        <div className="fixed inset-0 z-[100] bg-void grain overflow-y-auto" data-testid="tips-window">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 h-16 bg-black/80 backdrop-blur-xl border-b border-white/10">
+            <span className="font-heading font-black text-lg sm:text-xl text-white truncate">
+              Tip<span className="text-volt">Jar</span>
+              <span className="text-zinc-400 font-bold text-sm sm:text-base"> · {t("nav.viewtips")}</span>
+            </span>
+            <button
+              onClick={() => setTipsOpen(false)}
+              data-testid="tips-window-close"
+              className="rounded-full p-2 text-zinc-400 hover:text-white hover:bg-elevated active:scale-90 transition-all shrink-0"
+              aria-label={t("common.close")}
+            >
+              <X size={22} />
+            </button>
+          </div>
+          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} />
+        </div>
+      )}
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
       <SubmitTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
