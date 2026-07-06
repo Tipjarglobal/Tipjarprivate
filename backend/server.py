@@ -1123,39 +1123,44 @@ async def seed_showcase():
 
     now = datetime.now(timezone.utc).isoformat()
 
-    if not await db.tips.find_one({"id": "seed-portugal-messi"}):
-        image_path = None
-        try:
-            img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
-            with open(img_file, "rb") as f:
-                data = f.read()
-            path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi.jpg"
-            image_path = put_object(path, data, "image/jpeg")["path"]
-            await db.files.insert_one({
-                "id": str(uuid.uuid4()), "storage_path": image_path,
-                "original_filename": "portugal_messi.jpg", "content_type": "image/jpeg",
-                "owner": hq["id"], "is_deleted": False, "created_at": now,
-            })
-        except Exception as e:
-            logger.error(f"seed image upload failed: {e}")
-        await db.tips.insert_one({
-            "id": "seed-portugal-messi", "user_id": hq["id"], "username": "TipJarHQ",
-            "raw_text": "", "image_path": image_path,
+    # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
+    messi_image = None
+    try:
+        img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
+        with open(img_file, "rb") as f:
+            data = f.read()
+        path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi-notax.jpg"
+        messi_image = put_object(path, data, "image/jpeg")["path"]
+        await db.files.update_one(
+            {"storage_path": messi_image},
+            {"$set": {"owner": hq["id"], "content_type": "image/jpeg", "is_deleted": False},
+             "$setOnInsert": {"id": str(uuid.uuid4()), "original_filename": "portugal_messi.jpg", "created_at": now}},
+            upsert=True,
+        )
+    except Exception as e:
+        logger.error(f"seed image upload failed: {e}")
+
+    await db.tips.update_one(
+        {"id": "seed-portugal-messi"},
+        {"$set": {
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": messi_image,
             "home_team": "Portugal & Lionel Messi", "away_team": "",
             "match_time": "19/07/2026 21:00", "country": "International",
             "league": "World Cup – Player Specials", "market": "Winner & Top Scorer",
             "odds": "35.00", "ai_rating": 2.0,
             "ai_analysis": "Pure fan-favourite gamble: Messi banging in goals against easy opponents, chasing the Golden Boot — and the football gods teasing a dream Portugal vs Argentina final, Ronaldo vs Messi last dance. Unrealistic? Sure. Irresistible? Absolutely.",
             "legs": [], "is_parlay": False, "stake": "25,00 €", "potential_return": "875,00 €",
-            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-            "created_at": now,
-        })
-        logger.info("Seeded showcase tip: Portugal & Messi")
+        },
+         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
+        upsert=True,
+    )
+    logger.info("Seeded/updated showcase tip: Portugal & Messi")
 
-    if not await db.tips.find_one({"id": "seed-hacken-parlay"}):
-        await db.tips.insert_one({
-            "id": "seed-hacken-parlay", "user_id": hq["id"], "username": "TipJarHQ",
-            "raw_text": "", "image_path": None,
+    await db.tips.update_one(
+        {"id": "seed-hacken-parlay"},
+        {"$set": {
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
             "home_team": "BK Häcken – Djurgården", "away_team": "Portugal – Spanien",
             "match_time": "06/07/2026 19:00 & 21:00", "country": "Sweden / International",
             "league": "Allsvenskan / Länderspiel",
@@ -1167,10 +1172,12 @@ async def seed_showcase():
                 {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "selections": ["Total Über 1,5", "Fouls Über 21,5"]},
             ],
             "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
-            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-            "created_at": now,
-        })
-        logger.info("Seeded showcase tip: Häcken parlay")
+        },
+         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
+        upsert=True,
+    )
+    logger.info("Seeded/updated showcase tip: Häcken parlay")
 
 
 @app.on_event("startup")

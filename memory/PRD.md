@@ -106,6 +106,13 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Rule "accept bet only with date+time" already enforced (create_tip 400 if match_time empty).
 - Verified via curl: input "66,20 € (after tax)" with stake 20 x odds 3.5 -> stored "70,00 €".
 
+## Tax removal made bulletproof (2026-07-06, iteration 10c)
+- seed_showcase() is now AUTHORITATIVE: it re-uploads the tax-free image and force-updates
+  (upsert $set) both showcase tips' content/image_path on every startup — so redeploy fixes
+  production even though the tip already exists. Image uses a NEW versioned path
+  (seed-portugal-messi-notax.jpg) to bust any CDN/browser cache.
+- Confirmed served image no longer contains the 'Tax 5,3%' row (byte-verified + visual).
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
