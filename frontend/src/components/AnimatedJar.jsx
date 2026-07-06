@@ -81,15 +81,14 @@ export default function AnimatedJar() {
           </motion.div>
         ))}
 
-        {/* TipJar label band */}
-        <div
-          className="absolute left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-md"
-          style={{ bottom: "40%", background: "rgba(9,9,11,0.82)", border: "1px solid rgba(225,255,0,0.4)" }}
-        >
-          <span className="font-heading font-black tracking-tight text-white text-lg">
-            Tip<span className="text-volt">Jar</span>
-          </span>
-        </div>
+        {/* TipJar crest logo */}
+        <img
+          src="/tipjar-crest.png?v=2"
+          alt="TipJar"
+          draggable="false"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-36 h-36 object-contain"
+          style={{ filter: "drop-shadow(0 0 22px rgba(225,255,0,0.45))" }}
+        />
       </div>
     </div>
   );

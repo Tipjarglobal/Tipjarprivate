@@ -27,14 +27,12 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-        <div className="flex items-center shrink-0 select-none" data-testid="logo">
-          <img
-            src="https://static.prod-images.emergentagent.com/jobs/4b261389-a41a-494e-abd5-641af3b0ea25/images/074a025a225e62e1261e4cab826ac19e5728fb9863ebb9ba05a6f6b4a9a7c227.png"
-            alt="TipJar"
-            className="h-11 w-auto"
-            draggable="false"
-          />
-        </div>
+        <a href="#top" className="flex items-center gap-2 shrink-0" data-testid="logo">
+          <div className="w-8 h-9 rounded-b-xl rounded-t-sm border-2 border-volt/60 flex items-end justify-center pb-1" style={{ boxShadow: "inset 0 0 12px rgba(225,255,0,0.25)" }}>
+            <div className="w-2 h-2 rounded-full bg-volt" />
+          </div>
+          <span className="font-heading font-black text-xl tracking-tighter text-white">Tip<span className="text-volt">Jar</span></span>
+        </a>
 
         <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-zinc-300">
           <a href="#ratewall" className="hover:text-volt transition-colors" data-testid="nav-ratewall">{t("nav.ratewall")}</a>
