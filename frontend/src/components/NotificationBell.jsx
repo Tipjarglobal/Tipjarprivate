@@ -42,6 +42,7 @@ export default function NotificationBell() {
   const [on, setOn] = useState(localStorage.getItem("tj_bell") === "1");
   const [min, setMin] = useState(Number(localStorage.getItem("tj_bell_min")) || 8);
   const [count, setCount] = useState(0);
+  const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
   const seen = useRef(null);
   const onRef = useRef(on);
@@ -54,7 +55,7 @@ export default function NotificationBell() {
   }, [min]);
 
   useEffect(() => {
-    const openHandler = () => setOpen(true);
+    const openHandler = () => { setOpen(true); setUnseen(0); };
     window.addEventListener("tj-open-alerts", openHandler);
     return () => window.removeEventListener("tj-open-alerts", openHandler);
   }, []);
@@ -78,6 +79,7 @@ export default function NotificationBell() {
                 ? `${(tp.legs || []).length}-leg parlay`
                 : `${tp.home_team || "Tip"}${tp.away_team ? " vs " + tp.away_team : ""}`;
               pushNotify(t("bell.push_title"), `${name} — ${tipRating(tp)}/10 \u2b50`);
+              if (mounted) setUnseen((u) => u + 1);
             }
             seen.current.add(tp.id);
           }
@@ -124,7 +126,7 @@ export default function NotificationBell() {
     <div className="relative">
       <motion.button
         data-testid="notification-bell"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen((o) => { const nx = !o; if (nx) setUnseen(0); return nx; })}
         whileTap={{ scale: 0.9 }}
         title={t("bell.tooltip")}
         className={`relative flex items-center gap-2 rounded-full pl-3 pr-4 py-2 font-semibold text-sm transition-colors ${
@@ -145,9 +147,9 @@ export default function NotificationBell() {
             {min}+
           </span>
         )}
-        {count > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 bg-void text-volt text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border border-volt/50">
-            {count}
+        {on && unseen > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 bg-void text-volt text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border border-volt/50" data-testid="bell-unseen-badge">
+            {unseen > 9 ? "9+" : unseen}
           </span>
         )}
       </motion.button>
@@ -193,6 +195,11 @@ export default function NotificationBell() {
             />
             <p className="text-[11px] text-zinc-500 mt-2 leading-snug">{t("bell.threshold_hint")}</p>
             {on && <p className="text-[11px] text-bell mt-2">{t("bell.on")}</p>}
+            {count > 0 && (
+              <p className="text-[11px] text-zinc-500 mt-3 pt-3 border-t border-elevated flex items-center gap-1.5" data-testid="bell-subscriber-count">
+                <BellRing size={12} className="text-bell" /> {count} {t("bell.subscribers")}
+              </p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
