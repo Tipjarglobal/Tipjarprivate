@@ -1,0 +1,26 @@
+{
+  "summary": "Frontend-only verification of the German hero-title clipping fix. Tested H1 rendering across EN/DE/EL with language switcher. Fix works visually in all 3 languages — no descender clipping, no title/subtitle overlap, buttons + promo banner render fine. Noted a robustness concern: `leading-[1.08]` is being overridden by Tailwind's `md:text-7xl` (which ships line-height:1). Effective clearance is coming from `pb-1` (4px padding-bottom) — visually sufficient today, but fragile.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Hero H1 (all langs at md+)", "issues": ["`leading-[1.08]` is overridden by `md:text-7xl` — computed line-height at 1920px is 72px (ratio 1.0, not 1.08). Reported bug is visually hidden today only because `pb-1` (4px) provides just enough extra space to avoid descender clipping (no ancestor `overflow:hidden`). If any parent gets clipping later, or a heavier-descender font is loaded, the bug can regress. Suggest using `md:!leading-[1.08]` (with important) or Tailwind's font-size/line-height shorthand `md:text-7xl/[1.08]` so the intended line-height actually applies at md+ breakpoints."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional hardening: change H1 line-height so it actually applies at md+. Replace `leading-[1.08]` with `text-5xl/[1.15] md:text-7xl/[1.08]` (or `md:!leading-[1.08]`). Verified computed line-height = 72px (1.0 ratio) at desktop; only `pb-1` is providing the descender clearance."
+  ],
+  "critical_code_review_comments": [
+    "App.js hero H1: `leading-[1.08]` is dead code at md+ breakpoints because `md:text-7xl` (Tailwind) applies `line-height:1` in the responsive layer that beats the non-responsive `leading-[1.08]` in cascade order. The user-visible fix comes solely from `pb-1`.",
+    "Consider adding a data-testid to the hero H1 (e.g., `data-testid=\"hero-title\"`) to make future regression tests more robust; currently relying on the H1 tag itself."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100% (all 3 languages visually pass, no clipping/overlap, buttons + promo banner OK)"},
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Playwright tool wrapper has a parser quirk that fails on some scripts containing `page.screenshot(..., clip={...})` and embedded JS with braces — line-error 'closing parenthesis ) does not match opening parenthesis {'. Workaround: use `page.locator(...).evaluate(\"el => getComputedStyle(el).X\")` calls with short JS (no `{}` bodies), and omit the `clip=` kwarg on `page.screenshot`. That variant runs cleanly. Measurements captured for reference: EN H1 'Post it. Rate it. Cash it.' box_h=148, scrollH=153, clientH=148; DE H1 'Posten. Bewerten. Kassieren.' box_h=148, scrollH=153, clientH=148; EL H1 'Ανέβασε. Βαθμολόγησε. Εισέπραξε.' (3 lines) box_h=220, scrollH=225, clientH=220. Font-size=72px, line-height=72px (ratio 1.0), padding-bottom=4px at 1920px width. Subtitle Y is always ≥20px BELOW H1 bottom (no overlap). Hero submit & rate buttons visible=True in all languages. Language switcher data-testid values: `language-switcher`, `lang-en`, `lang-de`, `lang-el`. Verified promo banner text updates per language (screenshot at EL shows 'Ρύθμισε ειδοποιήσεις' CTA).",
+  "rca of the issue": "Original bug: user reported German title 'Posten. Bewerten. Kassieren.' had its 'p' descender clipped and/or line overlap due to `leading-[0.95]` on the hero H1 (font-size 72px * 0.95 = 68.4px line-box, cutting descenders and squeezing lines). Applied fix in App.js changed to `leading-[1.08] pb-1`. Verified visually all 3 languages now render fully with descenders (β, γ in Greek; p in Posten) intact and clear vertical gap to the subtitle paragraph. Caveat (see design_issues): the `leading-[1.08]` class is being overridden by `md:text-7xl`'s bundled line-height:1 rule at md+ breakpoints — computed line-height at 1920px is 72px (ratio 1.0). The visible bug is resolved because `pb-1` (4px padding-bottom) plus lack of `overflow:hidden` on the H1/section is enough to let the descenders render freely below the em-box. Consider `md:text-7xl/[1.08]` or `md:!leading-[1.08]` for a robust fix."
+}

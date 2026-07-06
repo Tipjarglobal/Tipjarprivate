@@ -66,7 +66,7 @@ function Home() {
             <span className="inline-flex items-center gap-2 rounded-full border border-volt/30 bg-volt/5 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-volt">
               <Sparkles size={13} /> {t("hero.badge")}
             </span>
-            <h1 className="font-heading text-5xl md:text-7xl font-black tracking-tighter leading-[0.95] text-white mt-5">
+            <h1 className="font-heading text-5xl md:text-7xl font-black tracking-tighter leading-[1.08] text-white mt-5 pb-1">
               {t("hero.title")}
             </h1>
             <p className="text-lg text-zinc-400 mt-5 max-w-xl leading-relaxed">{t("hero.subtitle")}</p>
