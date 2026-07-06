@@ -1,0 +1,33 @@
+{
+  "short_name": "TipJar",
+  "name": "TipJar — Post it. Rate it. Cash it.",
+  "description": "Post football tips, get them AI-rated, rate the crowd on the Apex Scale and turn credits into real money.",
+  "icons": [
+    {
+      "src": "apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#09090B",
+  "background_color": "#09090B",
+  "categories": ["sports", "social"],
+  "lang": "en"
+}

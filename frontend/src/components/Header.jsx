@@ -1,9 +1,50 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus } from "lucide-react";
+import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download } from "lucide-react";
+import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import { useI18n, LANGUAGES } from "../i18n";
 import { useAuth } from "../auth";
+
+function InstallAppButton() {
+  const { t } = useI18n();
+  const [deferred, setDeferred] = useState(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const onPrompt = (e) => { e.preventDefault(); setDeferred(e); };
+    const onInstalled = () => setHidden(true);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (standalone) setHidden(true);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+  if (hidden) return null;
+  const click = async () => {
+    if (deferred) {
+      deferred.prompt();
+      const res = await deferred.userChoice;
+      if (res && res.outcome === "accepted") toast.success(t("install.installing"));
+      setDeferred(null);
+    } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      toast(t("install.ios"), { duration: 6000 });
+    } else {
+      toast(t("install.menu"), { duration: 6000 });
+    }
+  };
+  return (
+    <button
+      data-testid="download-app-btn"
+      onClick={click}
+      className="flex items-center gap-1.5 rounded-full border border-volt/50 bg-volt/10 text-volt font-bold text-sm px-3 py-2 hover:bg-volt/20 active:scale-95 transition-all"
+    >
+      <Download size={16} /> <span className="hidden sm:inline">{t("nav.download")}</span>
+    </button>
+  );
+}
 
 export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile }) {
   const { t, lang, setLang } = useI18n();
@@ -42,6 +83,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <InstallAppButton />
           <NotificationBell />
 
           {/* language switcher */}
