@@ -19,6 +19,7 @@ import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
 import InviteSection from "./components/InviteSection";
+import SplashScreen from "./components/SplashScreen";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -46,6 +47,7 @@ function Home() {
 
   return (
     <div className="App grain min-h-screen overflow-x-hidden" id="top">
+      <SplashScreen />
       <PromoBanner />
       <Header
         onSubmit={() => setSubmitOpen(true)}
