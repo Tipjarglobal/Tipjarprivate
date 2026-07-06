@@ -14,7 +14,7 @@ export default function AnimatedJar() {
         style={{ background: "radial-gradient(circle at 50% 50%, #E1FF00, transparent 62%)" }}
       />
       <motion.img
-        src="/tipjar-crest.png?v=4"
+        src="/tipjar-crest.png?v=5"
         alt="TipJar"
         draggable="false"
         className="relative z-10 w-[420px] h-[420px] object-contain"
