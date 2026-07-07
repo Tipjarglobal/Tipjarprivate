@@ -70,6 +70,19 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Deferred by user
+- SESSION 2026-07-07 (part 3): Removed Leaderboard entirely. Redesigned Systems into 5
+  winning-focused bundles (lock=Sicherheits-Kombi ~1.3x high win-rate, value=Banker-Kombi
+  DC favorites, smartvalue=Value-Kombi BTTS/Over, risk=Risk-Kombi DC+BTTS, gamble=Jackpot
+  3 likely correct-scores ~35-300x). Ratings capped at 9.0 auto; Predictz posts ONLY when
+  Forebet agrees. Double-Chance real odds added. NEW "Earn Credits / Zeig deinen Gewinn":
+  upload WON slip → Gemini Vision reads it → auto-award credits IF it matches a real TipJar
+  SYSTEM (anti-fraud). Types: played (5+ legs, credits=legs count), posted (20), live (4+
+  legs each >1.60, 20). Public Hall of Fame ("Best of", sorted by total odds). Endpoints:
+  POST /api/wins/claim, GET /api/wins/hall-of-fame. Win rewards credited to received_credits
+  (redeemable). Owner strategy notes in /app/memory/betting_strategy_notes.md (INTERNAL).
+- KNOWN: win.* i18n only en+de (others fall back to EN); systems titles server-side German.
+
+
 - SESSION 2026-07-07 (part 2): Rating discipline tightened — auto-tip ceiling now 9.0★
   (no 9.5/10 automated); Forebet DNB max 8.5, "Über 1.5" max 8.0, "Über 0.5" the top
   banker (9.0 only when high-scoring predicted). Predictz now ONLY posts when Forebet
