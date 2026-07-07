@@ -74,7 +74,6 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
 
         <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-zinc-300">
           <button type="button" onClick={onViewTips} className="hover:text-volt transition-colors" data-testid="nav-ratewall">{t("nav.ratewall")}</button>
-          <a href="#leaderboard" className="hover:text-volt transition-colors" data-testid="nav-leaderboard">{t("nav.leaderboard")}</a>
           <a href="#how" className="hover:text-volt transition-colors" data-testid="nav-how">{t("nav.how")}</a>
           <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>

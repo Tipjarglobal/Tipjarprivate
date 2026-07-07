@@ -13,7 +13,6 @@ import Header from "./components/Header";
 import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
-import Leaderboard from "./components/Leaderboard";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
@@ -146,7 +145,6 @@ function Home() {
       </section>
 
       <InviteSection />
-      <Leaderboard refreshKey={refreshKey} />
 
       <footer className="border-t border-elevated py-10 text-center px-4">
         <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
