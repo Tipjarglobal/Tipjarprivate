@@ -1587,8 +1587,11 @@ def _parse_kickoff(mt: str):
 
 
 async def purge_expired_autotips() -> int:
-    """Delete pending HQ auto-tips (and their predictions) whose kickoff is in the past."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+    """Delete pending HQ auto-tips (and predictions) whose kickoff is well past.
+    When the results engine (API-Football) is active we keep them longer so
+    auto-settlement can mark them won/lost before any cleanup."""
+    grace = timedelta(hours=36) if API_FOOTBALL_KEY else timedelta(hours=3)
+    cutoff = datetime.now(timezone.utc) - grace
     docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending"}, {"id": 1, "match_time": 1}).to_list(1000)
     stale = [d["id"] for d in docs
