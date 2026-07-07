@@ -182,6 +182,52 @@ async def admin_predictz_run(admin: dict = Depends(require_admin)):
     return await predictz_autopost()
 
 
+@api_router.get("/system-slip")
+async def system_slip():
+    """Curated 'System-Schein der Woche': bundles the safest current HQ bankers
+    into a ready-to-play system bet (bankers marked, combined odds, loss tolerance)."""
+    docs = await db.tips.find(
+        {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}}
+    ).sort("ai_rating", -1).limit(80).to_list(80)
+    picks, seen = [], set()
+    for d in docs:
+        key = f"{d.get('home_team')}|{d.get('away_team')}"
+        if key in seen:
+            continue
+        try:
+            odds = float(str(d.get("odds") or "0").replace(",", "."))
+        except Exception:
+            odds = 0.0
+        if odds < 1.01:
+            continue
+        seen.add(key)
+        picks.append({
+            "id": d["id"], "home_team": d.get("home_team"), "away_team": d.get("away_team"),
+            "market": d.get("market"), "odds": round(odds, 2),
+            "rating": d.get("ai_rating"), "match_time": d.get("match_time"),
+        })
+        if len(picks) >= 6:
+            break
+    banker_n = min(2, len(picks))
+    total = 1.0
+    for i, p in enumerate(picks):
+        p["banker"] = i < banker_n
+        total *= p["odds"]
+    n = len(picks)
+    if n >= 5:
+        system_label = f"{n} Auswahlen · {n - 1}er-System · 1 Fehler erlaubt"
+    elif n >= 3:
+        system_label = f"{n} Auswahlen · Kombi"
+    else:
+        system_label = f"{n} Auswahlen"
+    return {
+        "selections": picks, "count": n, "banker_count": banker_n,
+        "total_odds": round(total, 2), "system_label": system_label,
+        "week": datetime.now(timezone.utc).strftime("KW %V"),
+    }
+
+
+
 
 def gen_referral_code() -> str:
     return uuid.uuid4().hex[:8]

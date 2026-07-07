@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2 } from "lucide-react";
 import StarRating from "./StarRating";
+import { SystemSlipCard } from "./SystemSlipCard";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
 import { useAuth } from "../auth";
@@ -120,6 +121,9 @@ export default function RateWall({ refreshKey, requireLogin }) {
           </div>
         )}
       </div>
+
+      {/* System-Schein der Woche */}
+      <SystemSlipCard />
 
       {/* filters */}
       <div className="flex flex-wrap gap-2 mb-6">
