@@ -839,11 +839,11 @@ async def _bump_rating_streak(user: dict, now: datetime) -> int:
 
 async def purge_demo_tips() -> int:
     """Delete tips (and their ratings) submitted by test-bot accounts (emails on the @t.com domain)."""
-    testers = await db.users.find({"email": {"$regex": r"@t\.com$"}}, {"id": 1, "_id": 0}).to_list(100000)
+    testers = await db.users.find({"email": {"$regex": r"@t\.com$"}}, {"id": 1, "_id": 0}).to_list(1000)
     ids = [u["id"] for u in testers]
     if not ids:
         return 0
-    tips = await db.tips.find({"user_id": {"$in": ids}}, {"id": 1, "_id": 0}).to_list(100000)
+    tips = await db.tips.find({"user_id": {"$in": ids}}, {"id": 1, "_id": 0}).to_list(5000)
     tip_ids = [t["id"] for t in tips]
     if not tip_ids:
         return 0
