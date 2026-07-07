@@ -2187,6 +2187,20 @@ def _forebet_candidates(r: dict) -> list[dict]:
         ph, pa = sc
         total = ph + pa
         both = ph >= 1 and pa >= 1
+        # OWNER RULE (smartest): the weaker side that STILL scores. In a clear
+        # favourite game (e.g. Real – Atlético) the underdog usually finds the net
+        # and often scores early → "<Underdog> Über 0.5 Tore" (team-to-score) is the
+        # smartest banker: it wins even when the underdog loses the match. We flag it
+        # with priority so it beats plain totals when both are available.
+        if pred in ("1", "2"):
+            if pred == "1" and pa >= 1:          # home favourite, away underdog scores
+                under, uprob = away, (probs[2] if len(probs) >= 3 else 0)
+                opts.append({"sfx": "-utg", "market": f"{under} Über 0.5 Tore",
+                             "odds": "1.45", "rating": 8.5, "priority": True})
+            elif pred == "2" and ph >= 1:        # away favourite, home underdog scores
+                under, uprob = home, (probs[0] if len(probs) >= 1 else 0)
+                opts.append({"sfx": "-utg", "market": f"{under} Über 0.5 Tore",
+                             "odds": "1.45", "rating": 8.5, "priority": True})
         # Most ambitious: torreiches Spiel, beide treffen klar erwartet
         if both and total >= 4 and avg >= 3.2:
             opts.append({"sfx": "-o25btts", "market": "Über 2.5 Tore + Beide treffen",
@@ -2207,8 +2221,13 @@ def _forebet_candidates(r: dict) -> list[dict]:
             opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.0})
     if not opts:
         return []
-    # smartest = best rating × odds (expected value); tie-break the more ambitious one
-    best = max(opts, key=lambda o: (round(o["rating"] * float(o["odds"]), 3), float(o["odds"])))
+    # smartest = priority (underdog-to-score) first, then best rating × odds (EV),
+    # tie-break the more ambitious (higher-odds) one.
+    best = max(opts, key=lambda o: (
+        1 if o.get("priority") else 0,
+        round(o["rating"] * float(o["odds"]), 3),
+        float(o["odds"]),
+    ))
     return [best]
 
 
@@ -2256,9 +2275,17 @@ async def forebet_autopost() -> dict:
             logger.warning(f"forebet prediction store failed: {e}")
         for c in _forebet_candidates(r):
             candidates.append((round(c["rating"], 1), r, c, kickoff))
-    # Split into DNB vs goals so DNB (favourite) picks always get a fair share
+    # Split into DNB vs goals so DNB (favourite) picks always get a fair share.
+    # Owner rule: bevorzuge torreiche Spiele (früh + genug Tore → Wette wird sicher
+    # grün). We therefore rank goals-picks by rating AND predicted goal expectancy.
+    def _avg_goals(x):
+        try:
+            return float((x[1].get("avg") or "0").replace(",", "."))
+        except Exception:
+            return 0.0
     dnb = sorted([x for x in candidates if x[2]["sfx"] == "-dnb"], key=lambda x: x[0], reverse=True)
-    goals = sorted([x for x in candidates if x[2]["sfx"] != "-dnb"], key=lambda x: x[0], reverse=True)
+    goals = sorted([x for x in candidates if x[2]["sfx"] != "-dnb"],
+                   key=lambda x: (x[0], _avg_goals(x)), reverse=True)
     DNB_QUOTA = 8
     ordered = dnb[:DNB_QUOTA] + goals + dnb[DNB_QUOTA:]
 
@@ -2271,6 +2298,12 @@ async def forebet_autopost() -> dict:
         tip_id = f"hqtip-a-{matchid}{c['sfx']}"
         lcode = (r.get("lcode") or "").strip().lower()
         cc = (r.get("cc") or "").strip().lower()
+        # Enforce ONE pick per match: drop any other pending hq-auto tip for this
+        # exact game (e.g. an older Über 0.5 when we now post Über 2.5+BTTS).
+        await db.tips.delete_many({
+            "source": "hq-auto", "status": "pending",
+            "home_team": r["home"], "away_team": r["away"], "match_time": kickoff,
+            "id": {"$ne": tip_id}})
         existing = await db.tips.find_one({"id": tip_id})
         if existing:
             # backfill league metadata on tips created before whitelist existed

@@ -54,3 +54,26 @@ key is short-priced, high-confidence favorites across leagues, bundled.
 → TODO idea: add a "Banker-Kombi" system = 5–6 strongest Match-Winner favorites
   (real odds ~1.10–1.45, highest win% from Forebet probs) combined into one parlay.
 
+## Over-market timing insight (owner voice note, 2026-07-08)
+- Even the "banker" Über 0.5 can wobble until the 90th minute (real case: Víkingur
+  0-0 bis zur letzten Minute, dann 1-0). So Über 0.5 is NEVER a true 10★ — keep the
+  auto ceiling at 9.0.
+- Prefer matches that score EARLY and score ENOUGH, so the bet turns green quickly
+  and comfortably (3 goals by the 20th minute = Über 2.5 already won). We can't get
+  goal minutes from Forebet, so use goal EXPECTANCY as the proxy: high Ø goals/game +
+  high predicted total = attacking, early-scoring game.
+- Engine mapping: goals-picks are now ranked by rating AND predicted Ø goals, so the
+  most torreiche games surface first. Ambitious over-markets (Über 2.5, Über 2.5+BTTS)
+  are only offered with a clear cushion (predicted total ≥ 4 AND Ø ≥ 3.2).
+- Rule: ONE selection per match only — the "smartest" (best rating × odds). No more
+  overlapping Über 0.5 + Über 2.5+BTTS on the same game.
+
+## Underdog-scores-early rule (owner voice note, 2026-07-08) — HIGHEST PRIORITY
+- In a game with a CLEAR favourite (e.g. Real – Atlético), prioritise the UNDERDOG /
+  weaker side "<Team> Über 0.5 Tore" (team-to-score). The weaker team usually finds
+  the net and often scores EARLY, so the bet turns green fast and wins even when they
+  lose the match. This beats a plain match Über 0.5.
+- Engine: when Forebet predicts pred=1/2 (clear favourite) AND the underdog's predicted
+  score ≥ 1, we post "<Underdog> Über 0.5 Tore" with priority — it is chosen over all
+  other markets for that match.
+
