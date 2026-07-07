@@ -6,6 +6,10 @@ const SPLASH_BY_LANG = {
   en: "/splash-en.png",
   de: "/splash-de.png",
   el: "/splash-el.png",
+  fr: "/splash-fr.png",
+  it: "/splash-it.png",
+  ar: "/splash-ar.png",
+  tr: "/splash-tr.png",
 };
 
 export default function SplashScreen() {
