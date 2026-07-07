@@ -70,6 +70,19 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Deferred by user
+- SESSION 2026-07-07 (part 2): Rating discipline tightened — auto-tip ceiling now 9.0★
+  (no 9.5/10 automated); Forebet DNB max 8.5, "Über 1.5" max 8.0, "Über 0.5" the top
+  banker (9.0 only when high-scoring predicted). Predictz now ONLY posts when Forebet
+  AGREES on the same match (owner distrusts Predictz alone). Real bookmaker odds via
+  API-Football /odds now include Double Chance. SYSTEMS REDESIGNED for winning: 5 systems
+  = Sicherheits-Kombi (4× Über0.5, ~1.3x, high win rate), Banker-Kombi (5× Doppelte Chance
+  favorites, real odds), Value-Kombi (BTTS/Over2.5), Risk-Kombi (DC+BTTS bet-builders),
+  Jackpot (3 most-likely correct scores, ~35-300x). Owner strategy notes saved to
+  /app/memory/betting_strategy_notes.md (INTERNAL, never shown on site).
+- KNOWN: systems bundle titles/subtitles are server-side German only (not localized) —
+  future i18n pass.
+
+
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 - Full legal pages (Impressum/AGB/Datenschutz): BLOCKED on user providing business address data.
 - Telegram integration; Stripe payments go-live.

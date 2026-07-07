@@ -100,10 +100,11 @@ const SystemCard = ({ system }) => {
       </div>
 
       <p className={`text-[11px] text-zinc-500 mt-4 border-l-2 pl-2 leading-snug ${cfg.ring}`}>
-        {system.key === "lock" && "Die Banker stehen in jeder Spalte. Beim System darfst du einen Tipp verlieren und gewinnst trotzdem."}
-        {system.key === "value" && "Nur Auswahlen ab Quote 1,50 — mehr Wert pro Spiel, 1 Fehler abgesichert."}
+        {system.key === "lock" && "Sicherheits-Kombi: 4 Spiele mit mindestens 1 Tor — auf regelmäßiges Gewinnen gebaut."}
+        {system.key === "value" && "Banker-Kombi: die 5 stärksten Favoriten als Doppelte Chance, mit echten Buchmacher-Quoten."}
+        {system.key === "smartvalue" && "Value-Kombi: Tor-Value aus BTTS & Über 2.5 — mittlere Quote, guter Wert."}
         {system.key === "risk" && "Bet-Builder pro Spiel: Doppelte Chance kombiniert mit Beide-treffen. Höheres Risiko, höhere Quote."}
-        {system.key === "gamble" && "Reine Zocker-Kombi mit genauen Ergebnissen & Außenseitern. Kleiner Einsatz, großer Traum."}
+        {system.key === "gamble" && "Jackpot-Jagd: genaue Ergebnisse & Außenseiter. Kleiner Einsatz, großer Traum (70x+)."}
       </p>
     </motion.div>
   );

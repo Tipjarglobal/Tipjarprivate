@@ -1791,43 +1791,50 @@ async def build_systems() -> dict:
     goals_sorted = sorted(preds, key=lambda p: (p.get("total") or 0), reverse=True)
     fav_sorted = sorted(preds, key=lambda p: (p.get("fav_prob") or 0), reverse=True)
 
-    # 1) LOCK BET — safest goals bankers
-    locks, used = [], set()
+    def _dc_sel(p, mult=1.0, rating=8.5, suffix=""):
+        team = _fav_team(p)
+        if not team:
+            return None
+        dc = "1X" if p.get("fav") == "home" else "X2"
+        od = round(_dc_odds(p.get("fav_prob")) * mult, 2)
+        return _sel(p, f"{team} Doppelte Chance {dc}{suffix}", od, rating)
+
+    # 1) SICHERHEITS-KOMBI — 4 short "1+ goal" legs, meant to WIN most weeks
+    safe, used = [], set()
     for p in goals_sorted:
         t = p.get("total")
-        if t is None or p["id"] in used:
-            continue
-        if t >= 3:
-            mk, od, rt = "Über 1.5 Tore", 1.20, 9.5
-        elif t == 2:
-            mk, od, rt = "Über 1.5 Tore", 1.30, 9.0
-        elif t == 1:
-            mk, od, rt = "Über 0.5 Tore", 1.03, 9.0
-        else:
+        if t is None or t < 2 or p["id"] in used:
             continue
         used.add(p["id"])
-        locks.append(_sel(p, mk, od, rt))
-        if len(locks) >= 6:
+        safe.append(_sel(p, "Über 0.5 Tore", 1.08, 9.0 if t >= 3 else 8.5))
+        if len(safe) >= 4:
             break
 
-    # 2) VALUE — only selections at odds >= 1.50
+    # 2) BANKER-KOMBI — 5 strongest favourites as Double Chance (owner's winning style)
+    bankers = []
+    for p in fav_sorted:
+        if (p.get("fav_prob") or 0) < 45:
+            continue
+        s = _dc_sel(p, 1.0, 8.5)
+        if s:
+            bankers.append(s)
+        if len(bankers) >= 5:
+            break
+
+    # 3) VALUE-KOMBI — 4 goals-value legs (BTTS / Über 2.5), moderate total odds
     vals = []
     for p in fav_sorted:
         if p.get("btts"):
-            mk, od, rt = "Beide Teams treffen (BTTS)", 1.70, 8.5
+            mk, od, rt = "Beide Teams treffen (BTTS)", 1.70, 8.0
         elif p.get("over25") or (p.get("total") or 0) >= 4:
-            mk, od, rt = "Über 2.5 Tore", 1.55, 8.5
+            mk, od, rt = "Über 2.5 Tore", 1.55, 8.0
         else:
-            od = _dnb_odds(p.get("fav_prob"))
-            team = _fav_team(p)
-            if od < 1.50 or not team:
-                continue
-            mk, rt = f"{team} (Draw No Bet)", 8.0
+            continue
         vals.append(_sel(p, mk, od, rt))
-        if len(vals) >= 8:
+        if len(vals) >= 4:
             break
 
-    # 3) RISK — double-chance + BTTS bet-builder per match
+    # 4) RISK-KOMBI — double-chance + BTTS bet-builders, higher total odds
     risks = []
     for p in fav_sorted:
         team = _fav_team(p)
@@ -1836,51 +1843,47 @@ async def build_systems() -> dict:
         dc = "1X" if p["fav"] == "home" else "X2"
         od = round(_dc_odds(p.get("fav_prob")) * 1.70, 2)
         risks.append(_sel(p, f"{team} Doppelte Chance {dc} + Beide treffen", od, 6.5))
-        if len(risks) >= 4:
+        if len(risks) >= 5:
             break
-    if len(risks) < 4:  # relax: DC + Über 1.5 when not enough BTTS matches
-        chosen = {s["home_team"] + s["away_team"] for s in risks}
-        for p in fav_sorted:
-            team = _fav_team(p)
-            if not team or (p.get("home") + p.get("away")) in chosen:
-                continue
-            if (p.get("total") or 0) < 2:
-                continue
-            dc = "1X" if p["fav"] == "home" else "X2"
-            od = round(_dc_odds(p.get("fav_prob")) * 1.30, 2)
-            risks.append(_sel(p, f"{team} Doppelte Chance {dc} + Über 1.5 Tore", od, 6.0))
-            if len(risks) >= 4:
-                break
 
-    # 4) GAMBLE — correct-score / draw longshots
-    gambles = []
-    for p in goals_sorted:
+    # 5) JACKPOT — big-odds lottery: the 3 MOST-LIKELY correct scores (dream combo)
+    cs_cands = []
+    for p in preds:
         ph, pa = p.get("ph"), p.get("pa")
         if ph is None or pa is None:
             continue
-        if p.get("fav") == "draw":
-            mk, od, rt = "Unentschieden (X)", 3.30, 4.0
+        cs_cands.append((_cs_odds(ph, pa), p, ph, pa))
+    cs_cands.sort(key=lambda x: x[0])  # most likely (lowest odds) first
+    gambles = []
+    for od, p, ph, pa in cs_cands:
+        if p.get("fav") == "draw" and ph == pa:
+            mk, rt = "Unentschieden (X)", 4.0
+            od = 3.30
         else:
-            mk, od, rt = f"Genaues Ergebnis {ph}:{pa}", _cs_odds(ph, pa), 3.0
+            mk, rt = f"Genaues Ergebnis {ph}:{pa}", 3.0
         gambles.append(_sel(p, mk, od, rt))
-        if len(gambles) >= 5:
+        if len(gambles) >= 3:
             break
 
-    for s in locks:
+    for s in safe:
+        _apply_real(s)
+    for s in bankers:
         _apply_real(s)
     for s in vals:
         _apply_real(s)
     return {
         "week": datetime.now(timezone.utc).strftime("KW %V"),
         "systems": [
-            _finalize_system(locks, 2, "lock", "Lock Bet System der Woche",
-                             "Die sichersten Tor-Banker — 1 Fehler erlaubt", "safe"),
-            _finalize_system(vals, 3, "value", "Value System der Woche",
-                             "Nur Quoten ab 1,50 · 8 Spiele · 3 Banker", "value"),
-            _finalize_system(risks, 0, "risk", "Risk System der Woche",
-                             "Doppelte Chance + Beide treffen · 4 Spiele", "risk"),
-            _finalize_system(gambles, 0, "gamble", "Gamble System der Woche",
-                             "Zocker-Kombi: genaue Ergebnisse & Außenseiter", "gamble"),
+            _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi der Woche",
+                             "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
+            _finalize_system(bankers, len(bankers), "value", "Banker-Kombi der Woche",
+                             "5 stärkste Favoriten · Doppelte Chance · echte Quoten", "value"),
+            _finalize_system(vals, 2, "smartvalue", "Value-Kombi der Woche",
+                             "Tor-Value: BTTS & Über 2.5 · mittlere Quote", "value"),
+            _finalize_system(risks, 0, "risk", "Risk-Kombi der Woche",
+                             "Doppelte Chance + Beide treffen · höhere Quote", "risk"),
+            _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi der Woche",
+                             "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
         ],
     }
 
@@ -2436,6 +2439,10 @@ def _parse_odds(resp) -> dict:
                 elif nm == "Match Winner":
                     setd("win_home", vals.get("Home"))
                     setd("win_away", vals.get("Away"))
+                elif nm == "Double Chance":
+                    setd("dc_1x", vals.get("Home/Draw"))
+                    setd("dc_x2", vals.get("Draw/Away"))
+                    setd("dc_12", vals.get("Home/Away"))
     return out
 
 
@@ -2487,6 +2494,11 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
         return odds.get("over05")
     if "beide teams treffen" in m or "btts" in m:
         return odds.get("btts")
+    if "doppelte chance" in m and "+" not in m:
+        if "1x" in m:
+            return odds.get("dc_1x")
+        if "x2" in m:
+            return odds.get("dc_x2")
     if "draw no bet" in m:
         if home and home.lower() in m:
             return odds.get("dnb_home")
