@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Bell, BellRing, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import api from "../api";
 import { useI18n } from "../i18n";
 
@@ -78,7 +79,16 @@ export default function NotificationBell() {
               const name = tp.is_parlay
                 ? `${(tp.legs || []).length}-leg parlay`
                 : `${tp.home_team || "Tip"}${tp.away_team ? " vs " + tp.away_team : ""}`;
-              pushNotify(t("bell.push_title"), `${name} — ${tipRating(tp)}/10 \u2b50`);
+              const body = `${name} — ${tipRating(tp)}/10 \u2b50`;
+              pushNotify(t("bell.push_title"), body);
+              toast.success(t("bell.push_title"), {
+                description: body,
+                duration: 10000,
+                action: {
+                  label: t("nav.viewtips"),
+                  onClick: () => window.dispatchEvent(new CustomEvent("tj-open-tips")),
+                },
+              });
               if (mounted) setUnseen((u) => u + 1);
             }
             seen.current.add(tp.id);

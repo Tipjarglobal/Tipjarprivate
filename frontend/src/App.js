@@ -41,6 +41,12 @@ function Home() {
     if (ref) localStorage.setItem("tj_ref", ref);
   }, []);
 
+  useEffect(() => {
+    const openTips = () => setTipsOpen(true);
+    window.addEventListener("tj-open-tips", openTips);
+    return () => window.removeEventListener("tj-open-tips", openTips);
+  }, []);
+
   const openAuth = (mode) => { setAuthMode(mode); setAuthOpen(true); };
   const requireLogin = useCallback(() => openAuth("login"), []);
   const onPublished = () => setRefreshKey((k) => k + 1);
