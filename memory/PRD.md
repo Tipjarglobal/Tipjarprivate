@@ -276,6 +276,18 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Verified: insult tip → 422 ("direct insults and abusive language"); clean tip → 200. Image
   moderation is LLM-based (Gemini vision) — strong but not 100%.
 
+## System-Schein Whitelist (Jul 2026)
+- FIX: "System-Schein der Woche" bundelte unwettbare Spiele (Somalia, Korea-Frauen, U19,
+  australische Amateurligen, USL League Two). Ursache: Forebet-Tipps speicherten keine Liga-Info.
+- Forebet-Tipps speichern jetzt `league_code` (lcode) + `country` (cc); Bestandstipps werden beim
+  nächsten Forebet-Lauf per Backfill aktualisiert (upsert in forebet_autopost).
+- /system-slip filtert per STRIKTER WHITELIST (_slip_eligible): Forebet nach league_code
+  (FOREBET_SLIP_CODES: UCL/UEL/ECL/WC + Top-Ligen), Predictz nach Liga-Namen-Keywords
+  (SLIP_LEAGUE_KEYWORDS). Frauen/Jugend/2.-4. Ligen/Amateur ausgeschlossen.
+- Duplikat-Erkennung verbessert (_match_key: prefix-/reihenfolge-unabhängig, "SD Aucas"=="Aucas").
+- Verifiziert (Preview, curl): Schein enthält nur CL/EL/ECL-Quali, Brasilien Serie B, Ecuador Serie A.
+- Einzel-Tipps auf der Wall bleiben unverändert (nur der Schein wird gefiltert, wie vom User gewünscht).
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

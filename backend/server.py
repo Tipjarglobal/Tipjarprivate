@@ -199,10 +199,12 @@ async def system_slip():
     into a ready-to-play system bet (bankers marked, combined odds, loss tolerance)."""
     docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}}
-    ).sort("ai_rating", -1).limit(80).to_list(80)
+    ).sort("ai_rating", -1).limit(150).to_list(150)
     picks, seen = [], set()
     for d in docs:
-        key = f"{d.get('home_team')}|{d.get('away_team')}"
+        if not _slip_eligible(d):
+            continue
+        key = _match_key(d.get("home_team"), d.get("away_team"))
         if key in seen:
             continue
         try:
@@ -1419,6 +1421,87 @@ def _league_blocked_predictz(league: str) -> bool:
     lg = (league or "").lower()
     return any(kw in lg for kw in PREDICTZ_BLOCKED_KW)
 
+
+# ---------------------------------------------------------------------------
+# System-Schein whitelist: the weekly system bet must ONLY bundle matches that
+# mainstream bookmakers actually offer. We use a strict WHITELIST (not blacklist).
+#  - Forebet picks are matched by their league short-code (lcode), e.g. En1, UCL.
+#  - Predictz picks are matched by keywords in their (readable) league name.
+# Everything else (Somalia, USL League Two, women/youth, 3rd/4th tiers, obscure
+# national leagues) is excluded from the slip.
+# ---------------------------------------------------------------------------
+FOREBET_SLIP_CODES = {
+    # UEFA / FIFA competitions
+    "ucl", "uel", "el", "ecl", "uecl", "wc", "ec", "euro", "nl", "unl",
+    "wcq", "ecq", "cq", "cqu",
+    # England / Germany / Spain / Italy / France (top 2 tiers)
+    "en1", "en2", "ge1", "ge2", "sp1", "sp2", "it1", "it2", "fr1", "fr2",
+    # Other major European top flights
+    "ne1", "po1", "be1", "tu1", "sc1", "gr1", "au1", "sw1", "da1", "no1",
+    "se1", "sv1", "fi1", "ru1", "ua1", "pl1", "cz1", "cr1", "sr1", "hr1", "ro1",
+    # Americas
+    "br1", "br2", "ar1", "us1", "ml1", "mls", "mx1", "co1", "cl1", "ec1",
+    "pe1", "ur1",
+    # Asia
+    "jp1", "kr1", "ko1", "cn1", "sa1", "qa1", "ae1",
+}
+
+SLIP_LEAGUE_KEYWORDS = (
+    "champions league", "europa league", "conference league", "europa conference",
+    "uefa", "world cup", "nations league", "qualif", "copa america",
+    "copa libertadores", "copa sudamericana",
+    "premier league", "bundesliga", "la liga", "laliga", "serie a", "serie b",
+    "ligue 1", "ligue 2", "eredivisie", "primeira liga", "liga portugal",
+    "championship", "efl", "pro league", "super lig", "süper lig",
+    "brazil serie", "brasileir", "argentina", "liga mx", "liga profesional",
+    "major league soccer", "mls", "primera division", "primera división",
+    "ecuador serie", "bolivia primera", "colombia primera", "peru primera",
+    "uruguay primera", "chile primera", "j1 league", "j league", "j.league",
+    "k league", "k1 league", "saudi", "allsvenskan", "eliteserien",
+    "superligaen", "danish superliga", "ekstraklasa", "super league",
+    "united soccer league",
+)
+
+SLIP_BLOCK_KEYWORDS = (
+    "league two", "women", "reserve", "futsal", "friendly", " ii", " u19",
+    " u21", " u17", " u20", " u23",
+)
+
+
+def _is_women_or_youth(name: str) -> bool:
+    n = (name or "").lower().strip()
+    if n.endswith(" w") or n.endswith("(w)"):
+        return True
+    return bool(re.search(r"\bu(?:17|18|19|20|21|23)\b", n))
+
+
+def _slip_eligible(tip: dict) -> bool:
+    """True only if this HQ tip is a bookmaker-available, top-competition match."""
+    if _is_women_or_youth(tip.get("home_team")) or _is_women_or_youth(tip.get("away_team")):
+        return False
+    league = (tip.get("league") or "").lower()
+    if any(b in f" {league} " for b in SLIP_BLOCK_KEYWORDS):
+        return False
+    tid = tip.get("id", "")
+    if tid.startswith("hqtip-a"):  # forebet -> whitelist by league short-code
+        return (tip.get("league_code") or "").strip().lower() in FOREBET_SLIP_CODES
+    # predictz (hqtip-b) -> whitelist by readable league name
+    return any(k in league for k in SLIP_LEAGUE_KEYWORDS)
+
+
+# common club-name noise stripped when de-duplicating the same match across sources
+_CLUB_NOISE = {"fc", "sc", "sd", "ca", "ac", "cd", "cf", "afc", "cfc", "club",
+               "cds", "aa", "ec", "se", "if", "sk", "fk", "cs", "us"}
+
+
+def _match_key(home: str, away: str) -> str:
+    """Order-independent, prefix-insensitive key so 'SD Aucas' == 'Aucas'."""
+    def core(n: str) -> str:
+        toks = [t for t in re.sub(r"[^a-z0-9 ]", " ", (n or "").lower()).split()
+                if t and t not in _CLUB_NOISE]
+        return "".join(sorted(toks)) or (n or "").lower().replace(" ", "")
+    return f"{core(home)}|{core(away)}"
+
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
 FOREBET_TIME_INDEX: dict[str, str] = {}
 
@@ -1576,7 +1659,14 @@ async def forebet_autopost() -> dict:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
         tip_id = f"hqtip-a-{matchid}{c['sfx']}"
-        if await db.tips.find_one({"id": tip_id}):
+        lcode = (r.get("lcode") or "").strip().lower()
+        cc = (r.get("cc") or "").strip().lower()
+        existing = await db.tips.find_one({"id": tip_id})
+        if existing:
+            # backfill league metadata on tips created before whitelist existed
+            if existing.get("league_code") != lcode:
+                await db.tips.update_one(
+                    {"id": tip_id}, {"$set": {"league_code": lcode, "country": cc}})
             continue
         home, away = r["home"], r["away"]
         market, odds = c["market"], c["odds"]
@@ -1591,7 +1681,8 @@ async def forebet_autopost() -> dict:
             "raw_text": "", "image_path": None,
             "home_team": home, "away_team": away,
             "match_time": kickoff,
-            "country": "", "league": "TipJarHQ Pick", "market": market,
+            "country": cc, "league": "TipJarHQ Pick", "league_code": lcode,
+            "market": market,
             "odds": str(odds), "ai_rating": rating, "ai_analysis": analysis,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
