@@ -1884,6 +1884,8 @@ def _remember_forebet_match(home: str, away: str, ko: str):
 # On first scrape we verify chromium launches; if not, install it at runtime. ---
 _chromium_ready = False
 _chromium_lock = asyncio.Lock()
+SCRAPE_TIMEOUT = 90  # hard cap (s) per scrape so a stuck browser can't hang the task/shutdown
+_BG_TASKS: list = []  # long-running background loops, cancelled on shutdown
 
 
 async def _chromium_launchable() -> bool:
@@ -2005,7 +2007,10 @@ async def forebet_autopost() -> dict:
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
     try:
-        rows = await scrape_forebet_today(60)
+        rows = await asyncio.wait_for(scrape_forebet_today(60), timeout=SCRAPE_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error("Forebet scrape timed out")
+        return {"posted": 0, "reason": "scrape timeout"}
     except Exception as e:
         logger.error(f"Forebet scrape failed: {e}")
         return {"posted": 0, "reason": f"scrape error: {e}"}
@@ -2177,7 +2182,10 @@ async def _index_forebet_times(url: str, limit: int = 250) -> int:
     """Populate FOREBET_TIME_INDEX from a forebet page (times only, no posting)
     so predictz future matches can display an exact kickoff time."""
     try:
-        rows = await scrape_forebet_today(limit, url=url)
+        rows = await asyncio.wait_for(scrape_forebet_today(limit, url=url), timeout=SCRAPE_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning(f"forebet time-index scrape timed out ({url})")
+        return 0
     except Exception as e:
         logger.warning(f"forebet time-index scrape failed ({url}): {e}")
         return 0
@@ -2198,7 +2206,10 @@ async def predictz_autopost() -> dict:
     # enrich the kickoff-time index with forebet's tomorrow page (exact HH:MM)
     await _index_forebet_times("https://www.forebet.com/en/football-tips-and-predictions-for-tomorrow")
     try:
-        rows = await scrape_predictz(_predictz_date_paths())
+        rows = await asyncio.wait_for(scrape_predictz(_predictz_date_paths()), timeout=SCRAPE_TIMEOUT * 2)
+    except asyncio.TimeoutError:
+        logger.error("Predictz scrape timed out")
+        return {"posted": 0, "reason": "scrape timeout"}
     except Exception as e:
         logger.error(f"Predictz scrape failed: {e}")
         return {"posted": 0, "reason": f"scrape error: {e}"}
@@ -2324,9 +2335,9 @@ async def startup():
     # Run purge/admin-seed/showcase-seed in the background so the readiness probe
     # is never blocked by DB/storage latency (prevents deploy timeouts).
     asyncio.create_task(_startup_seed())
-    asyncio.create_task(settlement_loop())
-    asyncio.create_task(forebet_loop())
-    asyncio.create_task(predictz_loop())
+    _BG_TASKS.append(asyncio.create_task(settlement_loop()))
+    _BG_TASKS.append(asyncio.create_task(forebet_loop()))
+    _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:
@@ -2356,4 +2367,8 @@ async def _startup_seed():
 
 @app.on_event("shutdown")
 async def shutdown():
+    for task in _BG_TASKS:
+        task.cancel()
+    if _BG_TASKS:
+        await asyncio.gather(*_BG_TASKS, return_exceptions=True)
     client.close()
