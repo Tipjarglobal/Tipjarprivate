@@ -1476,7 +1476,9 @@ async def forebet_loop():
                 res = await forebet_autopost()
                 logger.info(f"HQ loop A: {res}")
             else:
-                logger.error("HQ loop A skipped: chromium unavailable")
+                logger.error("HQ loop A skipped: chromium unavailable — retrying in 20 min")
+                await asyncio.sleep(20 * 60)
+                continue
         except Exception as e:
             logger.error(f"HQ loop A error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours
@@ -1601,7 +1603,9 @@ async def predictz_loop():
                 res = await predictz_autopost()
                 logger.info(f"HQ loop B: {res}")
             else:
-                logger.error("HQ loop B skipped: chromium unavailable")
+                logger.error("HQ loop B skipped: chromium unavailable — retrying in 20 min")
+                await asyncio.sleep(20 * 60)
+                continue
         except Exception as e:
             logger.error(f"HQ loop B error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours
