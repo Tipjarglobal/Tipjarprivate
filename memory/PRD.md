@@ -80,7 +80,10 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   legs each >1.60, 20). Public Hall of Fame ("Best of", sorted by total odds). Endpoints:
   POST /api/wins/claim, GET /api/wins/hall-of-fame. Win rewards credited to received_credits
   (redeemable). Owner strategy notes in /app/memory/betting_strategy_notes.md (INTERNAL).
-- KNOWN: win.* i18n only en+de (others fall back to EN); systems titles server-side German.
+- KNOWN: system TITLES/subtitles/labels + win.* + Hall of Fame now localized in ALL 8
+  languages via i18n keys (sys.* / win.*). Remaining: the individual bet MARKET strings
+  inside system legs (e.g. "Über 0.5 Tore", "Doppelte Chance 1X + Beide treffen") are still
+  server-side German — a future backend market-localization pass.
 
 
 - SESSION 2026-07-07 (part 2): Rating discipline tightened — auto-tip ceiling now 9.0★

@@ -2,32 +2,34 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers } from "lucide-react";
 import { OddsValue } from "./OddsValue";
+import { useI18n } from "../i18n";
 import api from "../api";
 
 const RISK = {
   safe: {
-    label: "Sicher", Icon: ShieldCheck,
+    riskKey: "safe", Icon: ShieldCheck,
     ring: "border-volt/40", grad: "from-volt/10", chip: "bg-volt text-void",
     accent: "text-volt", odds: "text-volt",
   },
   value: {
-    label: "Value", Icon: TrendingUp,
+    riskKey: "value", Icon: TrendingUp,
     ring: "border-cyan-400/40", grad: "from-cyan-400/10", chip: "bg-cyan-400 text-void",
     accent: "text-cyan-300", odds: "text-cyan-300",
   },
   risk: {
-    label: "Risk", Icon: Flame,
+    riskKey: "risk", Icon: Flame,
     ring: "border-orange-400/40", grad: "from-orange-400/10", chip: "bg-orange-400 text-void",
     accent: "text-orange-300", odds: "text-orange-300",
   },
   gamble: {
-    label: "Zocker", Icon: Dices,
+    riskKey: "gamble", Icon: Dices,
     ring: "border-rose-400/40", grad: "from-rose-400/10", chip: "bg-rose-400 text-void",
     accent: "text-rose-300", odds: "text-rose-300",
   },
 };
 
 const SystemCard = ({ system }) => {
+  const { t } = useI18n();
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
   if (!system.selections || system.selections.length < 2) return null;
@@ -47,24 +49,24 @@ const SystemCard = ({ system }) => {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className={`text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 ${cfg.chip}`}>
-                {cfg.label}
+                {t(`sys.risk.${cfg.riskKey}`)}
               </span>
               <h3 className="font-heading font-black text-white text-base sm:text-lg leading-none truncate">
-                {system.title}
+                {t(`sys.title.${system.key}`)}
               </h3>
             </div>
-            <p className="text-xs text-zinc-400 mt-1.5 truncate">{system.week} · {system.system_label}</p>
+            <p className="text-xs text-zinc-400 mt-1.5 truncate">{system.week} · {system.count} {t("sys.picks")}</p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500">Gesamtquote</p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("sys.totalodds")}</p>
           <p className={`font-mono font-black text-2xl ${cfg.odds}`} data-testid={`system-odds-${system.key}`}>
             {system.total_odds}
           </p>
         </div>
       </div>
 
-      <p className="text-xs text-zinc-400 mb-3">{system.subtitle}</p>
+      <p className="text-xs text-zinc-400 mb-3">{t(`sys.sub.${system.key}`)}</p>
 
       <div className="space-y-2 flex-1">
         {system.selections.map((s) => (
@@ -78,10 +80,9 @@ const SystemCard = ({ system }) => {
                 {s.banker && (
                   <span
                     data-testid="system-banker-badge"
-                    title="Banker (steht in jeder Spalte)"
                     className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 shrink-0 ${cfg.chip}`}
                   >
-                    <ShieldCheck size={10} /> Banker
+                    <ShieldCheck size={10} /> {t("sys.banker")}
                   </span>
                 )}
                 <span className="font-heading font-bold text-white text-sm truncate">
@@ -98,19 +99,12 @@ const SystemCard = ({ system }) => {
           </div>
         ))}
       </div>
-
-      <p className={`text-[11px] text-zinc-500 mt-4 border-l-2 pl-2 leading-snug ${cfg.ring}`}>
-        {system.key === "lock" && "Sicherheits-Kombi: 4 Spiele mit mindestens 1 Tor — auf regelmäßiges Gewinnen gebaut."}
-        {system.key === "value" && "Banker-Kombi: die 5 stärksten Favoriten als Doppelte Chance, mit echten Buchmacher-Quoten."}
-        {system.key === "smartvalue" && "Value-Kombi: Tor-Value aus BTTS & Über 2.5 — mittlere Quote, guter Wert."}
-        {system.key === "risk" && "Bet-Builder pro Spiel: Doppelte Chance kombiniert mit Beide-treffen. Höheres Risiko, höhere Quote."}
-        {system.key === "gamble" && "Jackpot-Jagd: genaue Ergebnisse & Außenseiter. Kleiner Einsatz, großer Traum (70x+)."}
-      </p>
     </motion.div>
   );
 };
 
 export const Systems = () => {
+  const { t } = useI18n();
   const [systems, setSystems] = useState([]);
 
   useEffect(() => {
@@ -124,7 +118,7 @@ export const Systems = () => {
     <section id="systeme" data-testid="systems-section" className="mb-10 scroll-mt-24">
       <div className="flex items-center gap-2.5 mb-5">
         <Layers className="text-volt" size={22} />
-        <h3 className="font-heading font-black text-white text-2xl tracking-tight">Systeme der Woche</h3>
+        <h3 className="font-heading font-black text-white text-2xl tracking-tight">{t("sys.heading")}</h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {visible.map((s) => <SystemCard key={s.key} system={s} />)}
