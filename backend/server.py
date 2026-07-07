@@ -358,6 +358,11 @@ AI_SYSTEM = (
     "IGNORE any tax, fees or deductions shown on the slip; use '' only if stake or odds is unknown. "
     "match_time MUST contain the match DATE and kickoff TIME whenever they appear on the slip (e.g. '19/07/2026 21:00'). "
     "rating (1-10, quality/value of the bet), analysis (one short punchy sentence, max 160 chars). "
+    "ALSO act as a content-moderator on BOTH the image and the written text and add two keys: "
+    "safe (boolean) and flag_reason (short string). Set safe=false if the image or text contains ANY "
+    "of: nudity or sexual/pornographic content, graphic violence or gore, hate speech, insults, "
+    "harassment or profanity directed at people, or content that is clearly NOT a football bet slip/tip "
+    "(spam, random selfies, unrelated pictures). Otherwise safe=true and flag_reason=''. "
     "Copy each selection line EXACTLY as it appears on the slip. If a field is unknown use an empty "
     "string. Never invent scores or results."
 )
@@ -384,6 +389,7 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
         "league": "", "market": text.strip()[:60], "odds": "",
         "rating": 5.0, "analysis": "Auto-rating unavailable, rated neutral.",
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+        "safe": True, "flag_reason": "",
     }
     if not EMERGENT_LLM_KEY:
         return fallback
@@ -431,10 +437,40 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
             "is_parlay": bool(data.get("is_parlay", False)),
             "rating": round(rating, 1),
             "analysis": str(data.get("analysis", "") or "")[:200],
+            "safe": bool(data.get("safe", True)),
+            "flag_reason": str(data.get("flag_reason", "") or "")[:160],
         }
     except Exception as e:
         logger.error(f"AI analyze failed: {e}")
         return fallback
+
+
+async def moderate_text(text: str) -> tuple[bool, str]:
+    """Lightweight text moderation. Returns (safe, reason). Fails open on error."""
+    text = (text or "").strip()
+    if not text or not EMERGENT_LLM_KEY:
+        return True, ""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"mod-{uuid.uuid4()}",
+            system_message=(
+                "You are a strict content moderator for a football betting-tips community. "
+                "Return ONLY strict JSON {\"safe\": boolean, \"reason\": string}. "
+                "Set safe=false if the text contains insults, hate speech, harassment, threats, "
+                "sexual/pornographic content, or spam/links unrelated to a football tip. "
+                "Normal football/betting talk is safe."
+            ),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=f"Moderate this text:\n{text[:1500]}"))
+        raw = (resp if isinstance(resp, str) else str(resp)).strip()
+        s, e = raw.find("{"), raw.rfind("}")
+        if s != -1 and e != -1:
+            data = json.loads(raw[s:e + 1])
+            return bool(data.get("safe", True)), str(data.get("reason", "") or "")[:160]
+    except Exception as e:
+        logger.error(f"text moderation failed: {e}")
+    return True, ""
 
 
 # ------------------------------------------------------------------ auth routes
@@ -595,24 +631,36 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
 async def analyze(file: Optional[UploadFile] = File(default=None), text: str = Form(default=""),
                   user: dict = Depends(get_current_user)):
     image_b64 = None
-    image_path = None
+    raw_bytes = None
+    file_meta = None
     if file is not None:
-        data = await file.read()
-        image_b64 = base64.b64encode(data).decode("utf-8")
-        ext = (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png").lower()
+        raw_bytes = await file.read()
+        image_b64 = base64.b64encode(raw_bytes).decode("utf-8")
+        file_meta = file
+    # Moderate (image + text) FIRST — never store or publish unsafe content.
+    detected = await analyze_tip(image_b64, text)
+    if not detected.get("safe", True):
+        raise HTTPException(
+            status_code=422,
+            detail=(detected.get("flag_reason")
+                    or "This content can't be posted (offensive or not a bet slip)."),
+        )
+    # Only now upload the image to storage.
+    image_path = None
+    if raw_bytes is not None:
+        ext = (file_meta.filename.rsplit(".", 1)[-1] if file_meta.filename and "." in file_meta.filename else "png").lower()
         path = f"{APP_NAME}/tips/{user['id']}/{uuid.uuid4()}.{ext}"
         try:
-            result = put_object(path, data, file.content_type or "image/png")
+            result = put_object(path, raw_bytes, file_meta.content_type or "image/png")
             image_path = result["path"]
             await db.files.insert_one({
                 "id": str(uuid.uuid4()), "storage_path": image_path,
-                "original_filename": file.filename, "content_type": file.content_type,
+                "original_filename": file_meta.filename, "content_type": file_meta.content_type,
                 "owner": user["id"], "is_deleted": False,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
         except Exception as e:
             logger.error(f"upload failed: {e}")
-    detected = await analyze_tip(image_b64, text)
     detected["image_path"] = image_path
     return detected
 
@@ -652,6 +700,12 @@ def compute_return(stake, odds, fallback=""):
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     legs = _sanitize_legs(inp.legs)
     is_parlay = inp.is_parlay or (inp.legs is not None and len(inp.legs) > 1)
+    # Text moderation safety net (catches typed insults / bypassing the analyze step).
+    mod_text = " ".join(str(x or "") for x in [inp.raw_text, inp.market, inp.ai_analysis,
+                                               inp.home_team, inp.away_team]).strip()
+    safe, reason = await moderate_text(mod_text)
+    if not safe:
+        raise HTTPException(status_code=422, detail=reason or "This tip contains content that isn't allowed.")
     match_time = (inp.match_time or "").strip()
     if not match_time:
         if is_parlay and legs:

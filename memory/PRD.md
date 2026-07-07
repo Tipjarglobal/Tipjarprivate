@@ -265,6 +265,17 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - OPEN (user asked): auto-verify that user-submitted slip games really exist before posting — NOT yet
   implemented (needs a data source + fuzzy name match; larger task).
 
+## Content moderation (2026-07, iteration 29)
+- USER: prevent insults / nude images from being posted & published.
+- IMAGE + TEXT moderation folded into the existing Gemini vision analyze call: AI_SYSTEM now also
+  returns safe(bool)+flag_reason. /tips/analyze moderates FIRST and only uploads the image to storage
+  if safe; unsafe → HTTP 422 with reason (nudity/sexual, violence/gore, hate/insults/harassment, or
+  not-a-bet-slip/spam). 
+- TEXT safety-net: moderate_text() (LLM JSON classifier) runs in create_tip on raw_text+market+
+  analysis+teams; insults/hate/harassment/sexual/spam → HTTP 422. Fails open on LLM error.
+- Verified: insult tip → 422 ("direct insults and abusive language"); clean tip → 200. Image
+  moderation is LLM-based (Gemini vision) — strong but not 100%.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

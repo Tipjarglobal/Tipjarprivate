@@ -102,6 +102,11 @@ export default function WalletModal({ open, onClose }) {
             <AlertTriangle size={18} className="shrink-0 mt-0.5" />
             <p className="text-sm font-semibold leading-snug">{t("wallet.buyDisabled")}</p>
           </div>
+          <div data-testid="credits-purpose-notice"
+            className="flex items-start gap-2.5 rounded-xl border border-elevated bg-void p-4 text-zinc-400">
+            <Gift size={18} className="shrink-0 mt-0.5 text-volt" />
+            <p className="text-sm leading-snug">{t("wallet.creditsPurpose")}</p>
+          </div>
         </div>
       )}
 
