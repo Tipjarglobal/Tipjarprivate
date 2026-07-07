@@ -2153,14 +2153,19 @@ def _forebet_datetime(raw: Optional[str]) -> str:
 
 
 def _forebet_candidates(r: dict) -> list[dict]:
-    """From one forebet row derive: a Draw-No-Bet pick for a strong favourite
-    (never a plain 'gewinnt'), plus a safe goals banker from the predicted score.
-    Each dict: {sfx, market, odds, rating}."""
-    out = []
+    """Return EXACTLY ONE 'smartest' pick per match (or none).
+
+    Owner rule: never post several overlapping markets for the same game
+    (e.g. Über 0.5 AND Über 2.5+BTTS). We evaluate every sensible market for
+    THIS match and keep only the single smartest one — the best trade-off of
+    confidence (rating) and ambition (odds), scored as rating × odds. So a
+    genuinely high-scoring both-teams-score game yields 'Über 2.5 + Beide
+    treffen', a boring favourite game yields Draw-No-Bet / Über 0.5."""
+    opts = []
     probs = r.get("probs") or []
     pred = (r.get("pred") or "").strip()
     home, away = r.get("home"), r.get("away")
-    # 1) Draw No Bet for the favoured side
+    # Draw No Bet for a strong favourite (never a plain 'gewinnt')
     if pred in ("1", "2") and len(probs) >= 3:
         if pred == "1":
             win, loss, team = probs[0], probs[2], home
@@ -2169,32 +2174,42 @@ def _forebet_candidates(r: dict) -> list[dict]:
         if win >= FOREBET_MIN_PROB:
             dnb_prob = win / max(win + loss, 1)
             odds = round(1.0 / max(dnb_prob, 0.01), 2)
-            # DNB can still lose if the favourite loses → keep cautious, max 8.5
             dnb_rating = 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5
-            out.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
-                        "odds": str(odds), "rating": dnb_rating})
-    # 2) Safe goals banker from predicted correct score.
-    # PHILOSOPHY: only "Über 0.5 Tore" (1+ goal in the match) is a true 9-10★ banker —
-    # it loses only on a 0-0. "Über 1.5" (2+ goals) loses on any 1-goal game, so it is
-    # capped at 8.5 and only offered when a high-scoring game is predicted.
+            opts.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
+                         "odds": str(odds), "rating": dnb_rating})
+    # Goals markets derived from the predicted correct score.
     sc = parse_pred_score(r.get("score"))
-    avg = 0.0
     try:
         avg = float((r.get("avg") or "0").replace(",", "."))
     except Exception:
         avg = 0.0
     if sc:
-        total = sc[0] + sc[1]
+        ph, pa = sc
+        total = ph + pa
+        both = ph >= 1 and pa >= 1
+        # Most ambitious: torreiches Spiel, beide treffen klar erwartet
+        if both and total >= 4 and avg >= 3.2:
+            opts.append({"sfx": "-o25btts", "market": "Über 2.5 Tore + Beide treffen",
+                         "odds": "2.80", "rating": 8.5})
+        if both and total >= 3:
+            opts.append({"sfx": "-btts", "market": "Beide Teams treffen (BTTS)",
+                         "odds": "1.70", "rating": 8.0})
+        if total >= 4 and avg >= 3.2:
+            opts.append({"sfx": "-o25", "market": "Über 2.5 Tore",
+                         "odds": "1.55", "rating": 8.0})
+        if total >= 3:
+            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore",
+                         "odds": "1.30", "rating": 8.5})
         if total >= 2:
-            # 1+ goal is the safest banker but still loses on a 0-0 → cap at 9.0,
-            # and only reach 9.0 when a clearly high-scoring game is predicted.
-            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
-                        "rating": 9.0 if (total >= 3 and avg >= 3.0) else 8.5})
-            if total >= 4 and avg >= 3.2:
-                out.append({"sfx": "-g2", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 8.0})
+            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
+                         "rating": 9.0 if (total >= 3 and avg >= 3.0) else 8.5})
         elif total == 1:
-            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.0})
-    return out
+            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.0})
+    if not opts:
+        return []
+    # smartest = best rating × odds (expected value); tie-break the more ambitious one
+    best = max(opts, key=lambda o: (round(o["rating"] * float(o["odds"]), 3), float(o["odds"])))
+    return [best]
 
 
 async def forebet_autopost() -> dict:
