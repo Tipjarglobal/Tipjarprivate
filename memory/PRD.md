@@ -2,333 +2,86 @@
 
 ## Problem Statement (verbatim intent)
 Global community platform "TipJar" where people worldwide post football/sports betting tips.
-AI auto-rates each tip; other users rate them on a Rate Wall (Apex Scale, 1–10 stars, gamified).
-Fancy-but-clean landing with a signature ANIMATED JAR (floating coins) + a top ALARM BELL that
-enables tip notifications with NO signup. Submit flow = built-in tutorial (Argentina vs Cape Verde,
-a bad tip, a banker pregame, a live lock) OR direct screenshot upload; AI auto-detects teams, time,
-country, league and auto-rates. Credits economy: signup (choose timezone+language), buy credits
-(Stripe), gift credits (platform keeps 10%), redeem at 10,000 received credits for real money (PayPal).
-Users change username freely. 3 languages: English, German (umlauts ö ä ü), Greek.
-Auto results engine (sofascore.com + optaplayerstats.statsperform.com) to flip Pending->Won/Lost.
+AI auto-rates each tip; users rate them on a Rate Wall (Apex Scale 1–10). Animated jar + alarm bell
+(no-signup alerts). Submit = tutorial or screenshot upload; AI auto-detects teams/time/country/league
+and auto-rates. Credits economy (Stripe buy, gift w/ 10% fee, redeem at 10k for real money via PayPal).
+Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) flips Pending->Won/Lost.
+Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
+"Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
 ## Tech Stack
 FastAPI + MongoDB (motor) + React (CRA/craco) + Tailwind. framer-motion, canvas-confetti, lucide-react.
-AI: Gemini 3.1 Pro via emergentintegrations (EMERGENT_LLM_KEY). Payments: Stripe (test key).
-Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (localStorage).
+AI: Gemini 3.1 Pro via emergentintegrations (EMERGENT_LLM_KEY). Payments: Stripe (test). Object storage:
+Emergent. Auth: JWT Bearer. Scrapers: Playwright/Chromium (forebet.py, predictz.py). Results + player
+stats: API-Football Pro (api-sports.io, 7500 req/day, season stats available).
 
 ## Personas
-- Tipster: posts tips, builds a track record, earns credits/gifts, redeems for cash.
-- Rater: browses Rate Wall, scores pending tips, builds daily streak.
-- Anonymous visitor: enables the bell for tip alerts without signing up.
-- Admin: settles tips Won/Lost.
+Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 
-## Implemented (2026-07-06)
-- Auth: register/login/me/profile (JWT). 100 welcome credits. Username changeable anytime + uniqueness.
-- Landing: animated glass jar w/ floating coins, hero, long story section, footer.
-- Notification bell: no-signup subscribe/unsubscribe, subscriber count, browser Notification + polling.
-- Submit modal: Tutorial (4 examples) + Upload (drag/drop) + AI scan (Gemini) + publish to Rate Wall.
-- AI auto-detect + auto-rating (teams/time/country/league/market/odds + 1–10 rating + analysis). WORKING.
-- Rate Wall: filters (fresh/hype/top + pending/won/lost), 10-star Apex Scale, confetti, streak widget.
-- Leaderboard: aggregated top tipsters (tips, won, win%).
-- Credits: buy (Stripe checkout + polling + webhook idempotency), gift (10% fee), redeem (10k threshold).
-- i18n EN/DE/EL full UI translation incl. German umlauts.
-- Admin settle Won/Lost.
-- Verified by testing agent: backend 28/28, frontend 7/7 critical flows.
+## Current areas (tips window tabs + header quick-views)
+1. AI Picks (source=hq-auto) — Forebet/Predictz-derived DNB + safe goals bankers, kickoff-window filter.
+2. AI System Picks (GET /api/systems) — 4 systems: lock / value / risk / gamble (whitelist leagues).
+3. Smart Bets (source=smart) — NEW, player props from API-Football season stats.
+4. Members Picks (source NOT in [hq-auto, smart]).
+5. Live Picks (status=live).
 
-## Implemented (2026-07-06, iteration 2)
-- Auto-results engine: API-Football + AI market judging + 15-min background job + admin "Sync now".
-  Idle until API_FOOTBALL_KEY set. Settled tips store final_home/final_away/settled_by/settled_at.
-- Referral rewards: each user has a stable referral_code; invite link `?ref=CODE`. Referrer earns
-  100 credits ONLY after the invitee signs up AND verifies email. referral_rewarded guards double-pay.
-- Email verification via Resend (send_verification_email). DEV mode (no key) returns verify_link in
-  register/resend responses. /verify page + verify-email banner + resend button.
-- EUR economics: buy 1000/€10, 5000/€50, 10000/€100 (€0.01/credit); withdraw 10,000 earned => €50
-  (€5/1000, half price); must EARN 10,000 received credits to withdraw. Stripe currency=eur.
-- "Road to 1,000 members" centered Invite section with copy-link + WhatsApp/Telegram/X share. GET /api/stats.
-- Verified: backend 38/38 pytest, all frontend flows; fixed 6 missing i18n keys (en/el).
+## Key backend endpoints
+- GET /api/tips?source=ai|smart|members&status=pending|won|lost|live&window=24|48|48plus&sort
+- GET /api/tips/counts -> {ai, ai_total, members, live, systems, smart}
+- GET /api/systems, GET /api/system-slip
+- POST /api/admin/settle-now, /api/admin/forebet/run, /api/admin/predictz/run,
+  /api/admin/autotips/reset, /api/admin/smart/run, /api/admin/smart/reset
+- Auth login body key: "email" OR "username" + "password".
 
-## Deployment readiness fixes (2026-07-06, iteration 3)
-- Fixed compilation blocker: missing `toast` import in App.js (VerifyBanner resend).
-- DB query optimization: /tips sorts+limits at DB level (cap 100), /tips/mine limit 100,
-  /credits/transactions limit 50. Added compound indexes (tips: user_id/created_at,
-  status/created_at, avg_rating/ratings_count, ai_rating; credit_transactions: from_user/to_user + created_at).
-- Verified: backend 47/47 pytest, frontend toast-fix regression (zero ReferenceError).
-- deployment_agent status: PASS. App is deployment-ready.
-- NOTE: App now live in production at https://tipjarglobal.com. Redeploy needed to push these fixes to prod.
+## Implemented history (condensed — see git log for full detail)
+- Core: auth (JWT, optional email), landing + animated jar, notification bell, submit+AI analyze,
+  Rate Wall (filters, 10-star, streak), leaderboard, credits (Stripe buy/gift/redeem), i18n EN/DE/EL/FR/IT,
+  admin settle, referral rewards, email verify (Resend/dev-link), content moderation (Gemini vision+text).
+- Auto-tips: Forebet (primary, DNB + goals bankers w/ kickoff time) + Predictz (supplementary BTTS/Over),
+  source anonymised as "hq-auto"/"TipJarHQ", league whitelist, realistic odds, chromium self-heal.
+- Systems: match_predictions store -> 4 systems (lock/value/risk/gamble), whitelist-only slip.
+- Auto-settlement: API-Football Pro, every 15 min, only finished games, quota-safe; settled tips kept
+  (won/lost visible under status filter). Verified won/lost render in UI.
+- Navigation: 4 (now 5) green quick-view buttons w/ live counts; tab switcher inside tips window;
+  per-area notification toggles.
 
-## Tip moderation (2026-07-06, iteration 4)
-- Demo/test tips prohibited: purge_demo_tips() deletes all tips (+ratings) from test-bot accounts
-  (email domain @t.com) on every backend startup. Only legit tips remain (e.g. TipJarHQ).
-- Trusted 1-star purge: a stars==1 rating instantly DELETES a tip, but ONLY from a trusted rater
-  = admin OR "highly-rated" tipster (own tips avg_rating >= 7.0 across >= 3 rated tips).
-  Non-trusted users' 1-star is recorded normally (no delete). Constants TRUSTED_MIN_TIPS=3,
-  TRUSTED_REPUTATION=7.0 in server.py. Frontend removes card + toast wall.removed (EN/DE/EL).
-- Verified: backend 51/51 pytest; frontend admin 1-star delete + non-trusted preserve confirmed.
+## Session 2026-07-07 (this fork)
+### Bug fix — scraper robustness (verified)
+- Root cause of intermittent "0 tips": during Playwright scraper runs, an app reload/shutdown could
+  hang waiting on the mid-flight scrape task (NOT event-loop blocking — proven: /api/tips stayed at
+  0.01s latency during an active scrape). "won cards visible: 0" earlier was a transient reload window.
+- Fix: SCRAPE_TIMEOUT=90s hard cap via asyncio.wait_for on every scrape (forebet, predictz, time-index);
+  background loops tracked in _BG_TASKS and cancelled+awaited in the shutdown handler. Backend now
+  restarts cleanly in ~1.4s. Won/Lost tips confirmed rendering in UI.
 
-## Submit rules & moderation (2026-07-06, iteration 5-6)
-- Large screenshots: client-side auto-compression in SubmitTipModal (max 1600px, JPEG 0.85)
-  before upload → no more proxy 413 errors. Input accepts image/*.
-- Winnings rule: potential_return = stake x odds, taxes/fees IGNORED (AI_SYSTEM prompt + verified).
-- Reject tips without a match date+time: create_tip returns 400 if match_time empty.
-- Bugfix: analyze_tip() now returns stake/potential_return/legs/is_parlay (were dropped) — parlays
-  keep their legs, winnings flow through.
-- Demo-tip policy extended: TipJarAdmin-authored demo tips removed; @t.com test accounts' tips
-  auto-purged on startup; trusted 1-star purge (admin + highly-rated) still active.
-- Verified: iteration-5 (upload) 3/3, iteration-6 (rules) 9/9 backend + 2/2 frontend. AI is LIVE.
-
-## Showcase seed & header polish (2026-07-06, iteration 7-8)
-- Header: removed the small crest icon (top-left); only "TipJar" wordmark remains, row sits further left.
-- Data-vs-code: clarified deploy ships CODE not DB data (preview & prod have separate DBs).
-- seed_showcase() (startup, idempotent): creates TipJarHQ account (hq@tipjar.com) + 2 showcase tips
-  with FIXED ids (seed-portugal-messi w/ image, seed-hacken-parlay). Now appear in ANY env after deploy.
-  Seed image bundled at backend/seed_assets/portugal_messi.jpg.
-- Verified: iteration-7 header 100%, iteration-8 seed 9/9 backend (no duplicates, login works, image 200).
-
-## Rate Wall polish (2026-07-06, iteration 9)
-- Country FLAGS now render on every tip card (data-testid='tip-flags'), derived from
-  country/team/league via NATION_FLAGS/LEAGUE_FLAGS maps in RateWall.jsx.
-- Single (non-parlay) tips now show the Einsatz/Gewinn row (previously only parlays did) —
-  so winnings (stake x odds) are always visible.
-- Removed the Häcken 4-leg parlay showcase (seed block deleted + startup delete_many by id,
-  so it's gone in every env after deploy). Only seed-portugal-messi remains.
-- Verified: iteration-9 backend 8/8, frontend 5/5.
-
-## Showcase restored (2026-07-06, iteration 10)
-- Tax row pixel-erased from Messi slip image (only that row); analysis & Gewinn 875 € kept.
-- Häcken 4-leg parlay showcase RE-ADDED to seed (user changed mind); startup delete_many removed.
-- Both showcase tips now seed idempotently: seed-portugal-messi (image, no tax) + seed-hacken-parlay.
-
-## Winnings recalculation rule (2026-07-06, iteration 10b)
-- Added compute_return(stake, odds): winnings = stake x odds, taxes NEVER applied. Robust
-  locale-aware number parsing (_parse_num) + German € formatting (_fmt_eur). Added `import re`.
-- Applied server-side in create_tip (overrides any tax-adjusted value on publish) and in
-  analyze_tip preview. Häcken seed recalced to 131,48 € (53,23 x 2.47).
-- Rule "accept bet only with date+time" already enforced (create_tip 400 if match_time empty).
-- Verified via curl: input "66,20 € (after tax)" with stake 20 x odds 3.5 -> stored "70,00 €".
-
-## Tax removal made bulletproof (2026-07-06, iteration 10c)
-- seed_showcase() is now AUTHORITATIVE: it re-uploads the tax-free image and force-updates
-  (upsert $set) both showcase tips' content/image_path on every startup — so redeploy fixes
-  production even though the tip already exists. Image uses a NEW versioned path
-  (seed-portugal-messi-notax.jpg) to bust any CDN/browser cache.
-- Confirmed served image no longer contains the 'Tax 5,3%' row (byte-verified + visual).
-
-## Star-threshold alerts + promo banner (2026-07-06, iteration 11)
-- NotificationBell: 1–10 threshold slider (localStorage tj_bell_min, default 8). Polls
-  /tips every 15s; fires push (serviceWorker.showNotification) for NEW tips where
-  max(ai_rating, avg_rating) >= threshold. Enable/disable + threshold badge on bell.
-- PromoBanner at very top: "only community with adjustable alerts" marketing + CTA that
-  opens the alert settings (window 'tj-open-alerts' event). i18n EN/DE/EL.
-- Verified: iteration-11 frontend 100% (slider persists, toggle, promo CTA wiring, no errors).
-- LIMITATION: push works while the web tab / PWA is open or backgrounded-alive (polling +
-  SW showNotification). True closed-app push would need server-side web-push (VAPID) — not built.
-
-## Mobile hero overflow fix (2026-07-06, iteration 13)
-- Root cause: AnimatedJar crest had fixed 440px width -> forced single-column hero grid track
-  wider than mobile viewport -> H1 + subtitle clipped on the right (overflow-x-hidden).
-- Fix: AnimatedJar responsive (w-full max-w-[440px] aspect-square); hero column min-w-0;
-  H1 -> text-4xl sm:text-5xl lg:text-6xl + break-words; root overflow-x-hidden.
-- Verified iteration-13: 100% frontend, no horizontal overflow at 360/390px, EN/DE/EL, desktop OK.
-- Also fixed earlier (iter 12): H1 leading-[0.95] -> leading-[1.08] (German 'Posten' p-descender clip).
-
-## Legal / compliance (open, user asked 2026-07-06)
-- User asked about AGB/penalties. Advised: not legal advice; real-money payout is the sensitive
-  part (possible gambling/gaming classification), needs Impressum + Datenschutz + AGB + 18+ gate
-  before live monetization; Google Play real-money gambling policy. Offered to build legal pages.
-- TODO if user agrees: Impressum, Datenschutzerklärung, AGB, Responsible-Gambling/18+ pages + age gate.
-
-## 4-status system + per-leg status (2026-07-06, iteration 14-15)
-- StatusBadge now 4 states w/ icons+colors: pending(amber/clock), live(blue/pulse), won(green/check),
-  lost(red/x). Added tailwind color live=#3B82F6. Status filter adds "Live" (Pending/Live/Won/Lost).
-- Per-leg status: legs with status won/lost/live recolor text+border+badge; pending shows only a
-  subtle amber badge (white text). data-testid leg-status-{status}.
-- Rate Wall silent auto-refresh every 20s (load(silent), no flicker) for fast status updates.
-- Seed Häcken parlay: Häcken–Djurgården leg 'won' (green), Portugal–Spanien leg 'pending'
-  (corrected from 'live' — match starts later).
-- Verified iter 14 & 15: frontend 100%.
-
-## Forebet auto-tips + optional-email auth + splash + tips window (Jun 2026)
-- **Forebet auto-tips**: TipJarHQ scrapes forebet.com via Playwright (Cloudflare-protected → needs a real browser) every 6h + on startup, picks predictions where the predicted 1X2 outcome prob >= 58%, posts up to 3 new picks/run to the Rate Wall (id `forebet-<matchid>`, source='forebet', league='Forebet Pick', odds=100/prob, Apex from prob). Admin trigger: POST /api/admin/forebet/run. Files: backend/forebet.py + forebet_autopost()/forebet_loop() in server.py. Authoritative HQ purge preserves `forebet-*` ids. NOTE: needs PLAYWRIGHT_BROWSERS_PATH + chromium installed — works in Preview; PRODUCTION needs chromium in the container (job degrades gracefully otherwise). Telegram channel reading = Part B, deferred (needs user's Telegram api_id/api_hash + phone).
-- **Auth: email now OPTIONAL**. Username+password mandatory. Login by username OR email (single field). No-email accounts active immediately (email_verified=true), referral reward granted at signup. Partial unique index on email ({$type:string}). Verified 100% (backend 8/8 pytest, frontend 12/12).
-- **Splash screen**: language-specific (/splash-en|de|el.png) shows 2.5s then slides up. **Tips window**: Rate Wall removed from home page; opens as full-screen overlay via green "View Today's Tips" button (header desktop+mobile, hero, nav). **Wallet**: buy buttons disabled + red "purchases disabled until 1000 members" notice.
-
-## Delete tip + banner/bell UX (2026-06, iteration 16-17)
-- Fixed "Delete tip": TipCard now receives onDelete/canDelete props (were missing → button never rendered);
-  added i18n keys wall.delete/wall.deleted/wall.delete_confirm (EN/DE/EL). Backend DELETE /api/tips/{id}
-  (admin OR owner) verified: 5/5 pytest (admin-any, owner-own, non-owner 403, 404, unauth 401).
-- PromoBanner now dismissible: X button (data-testid promo-dismiss), persists via localStorage
-  tj_promo_dismissed, stays hidden after reload. i18n promo.dismiss (EN/DE/EL).
-- NotificationBell settings panel now centered on mobile (was cut off): switched from transform-based
-  centering (framer-motion clobbered -translate-x-1/2) to positional `fixed left-4 right-4 mx-auto
-  max-w-xs` on mobile, `sm:absolute sm:right-0` dropdown on desktop. Verified 390px (centered x=35→355)
-  + 1440px (right-aligned) both PASS.
-
-## Notification popup bugfix (2026-06, iteration 23)
-- BUG: German user reported NO popup when a new high-rated tip auto-posts. Root cause:
-  NotificationBell only used serviceWorker.showNotification (pushNotify), which silently
-  returns when browser Notification.permission != 'granted' (the user's state).
-- FIX: poll() now ALSO fires an unconditional sonner toast.success (top-center, 10s) with the
-  tip name + rating and a 'View Today's Tips' action button that dispatches 'tj-open-tips'
-  CustomEvent; App.js listens and opens the tips window. Works with OR without browser permission.
-- Verified iteration-23: frontend 4/4 (bell enable → new tip via API → toast appears within ~7s,
-  unseen badge increments, action opens tips-window). PASS.
-
-## Predictz safe "10-star" auto-tips + notification popup fix (2026-07, iteration 23-24)
-- **Notification popup fix (iter 23)**: NotificationBell now shows an in-app sonner toast
-  (top-center, 10s, "View Today's Tips" action → tj-open-tips event opens tips window) IN
-  ADDITION to browser push (which silently failed without OS permission). Verified 4/4.
-- **Predictz auto-tips (iter 24)**: New backend/predictz.py (Playwright, chromium reinstalled
-  to build 1228 to match updated Playwright — Forebet was also broken by the version mismatch).
-  scrape_predictz() reads predictz.com tomorrow + day-after pages (bot-protected → needs browser),
-  parses predicted score per match. predictz_autopost() derives SAFE goals-market "10-star"
-  bankers (predicted total>=3 → Über 1.5 @10★; ==2 → Über 1.5 @9★; ==1 → Über 0.5 @9★;
-  0-0 skipped; ngreen +0.5 / nred -1.5; only rating>=8.5 posted, max 10/run). Posts as TipJarHQ
-  to the NORMAL Rate Wall (source='predictz', id predictz-<matchid>), match_time = kickoff day
-  (~24-72h ahead = user's "50h before" lead time to build system bets). Loop every 6h + admin
-  trigger POST /api/admin/predictz/run. seed_showcase purge now preserves ^(forebet|predictz)- ids.
-  Verified: curl posted 9 picks, rendered correctly on preview Rate Wall (safe markets, ratings,
-  German analysis, flags, dates). NOTE: PRODUCTION needs redeploy + chromium in container.
-- User's betting strategy studied extensively (goals>result, safe Over/BTTS/team-goals/1st-half/
-  player-props/DNB/handicap bankers, system bets w/ loss-tolerance, HT/FT & correct-score spread,
-  cash-out discipline, context-driven markets). Sunday disappointments = "Match Result favorite"
-  legs failing (Olympiacos draws) → avoid result bets, favor goals markets. THIS is why predictz
-  auto-tips focus on Over/goals markets only.
-- NEXT: add more sources (oddspedia incl. YouTube, betarades.gr, kingbet.gr, matchmoney.com.gr,
-  foxbet.gr, predictz BTTS/Over2.5 pages); optional "Sunday priority"; player-prop / HT-FT tips.
-
-## Auto-tips overhaul: DNB + kickoff time + source-anonymised (2026-07, iteration 25)
-- USER REQUEST: (1) favourite-win picks → Draw No Bet (never plain "gewinnt"); (2) kickoff
-  TIME on every tip (was date-only); (3) HQ publishes automatically w/o manual deploy;
-  (4) DO NOT name sources publicly (legal fear).
-- SOURCE ANONYMISATION: removed all public source names. tip ids now neutral hqtip-a-*
-  (forebet-derived) / hqtip-b-* (predictz-derived); source field = "hq-auto"; league label
-  "TipJarHQ Pick"; analysis text "TipJarHQ-Analyse…" (no Forebet/Predictz). Purge regex now
-  preserves ^hqtip-. Old forebet-*/predictz-* tips deleted.
-- FOREBET is now the PRIMARY engine (it provides kickoff datetime + predicted score + 1X2):
-  emits DNB picks for strong favourites (win%>=55, DNB odds from win/(win+loss)) AND safe
-  goals bankers from predicted score (total>=3→Über1.5@10★; ==2→Über1.5@9; ==1→Über0.5@9),
-  all with real kickoff time (DD/MM/YYYY HH:MM). DNB quota=8/run so DNB always surfaces
-  (else 10★ goals crowd them out). Cap 20/run, loop every 3h.
-- PREDICTZ stays supplementary (BTTS/Über2.5/goals from tomorrow+day-after incl. sub-pages);
-  attaches kickoff time via FOREBET_TIME_INDEX (normalised team-name match), else date label.
-  Loop every 3h (starts 90s after forebet so index is filled).
-- Verified (preview, curl + screenshot): DNB tips render ("Argentina (Draw No Bet) 1.19"),
-  kickoff time on every card, goals bankers, ZERO source names visible.
-- AUTO-PUBLISH NOTE: loops run automatically on startup + every 3h in the live backend — after
-  the ONE-TIME code deploy to production, no further deploys are needed; it self-publishes.
-  Production still needs chromium in the container for Playwright.
-
-## Production chromium self-heal (2026-07, iteration 26)
-- PROBLEM: After deploy, production (tipjarglobal.com) showed 0 hq-auto tips. Root cause:
-  the deployed container ships the playwright PYTHON package (in requirements.txt) but NOT the
-  chromium BROWSER BINARY (I had installed it manually into /pw-browsers in the PREVIEW pod only;
-  that fs is ephemeral & not part of the image). Both predictz & forebet block plain HTTP (403
-  Cloudflare) even with rich headers / cloudscraper — a real browser is mandatory.
-- FIX: added ensure_chromium() self-heal in server.py. On first scrape (loops + admin triggers)
-  it verifies chromium launches; if not, picks a writable browsers path (PLAYWRIGHT_BROWSERS_PATH
-  or falls back to /tmp/pw-browsers) and runs `python -m playwright install chromium` at runtime,
-  then re-checks. Guarded by asyncio.Lock + _chromium_ready flag (one-time). Loops skip the run
-  gracefully if chromium stays unavailable. Verified in preview (still posts fine).
-- UNVERIFIABLE IN PROD by agent: works only if the prod container allows outbound to the
-  playwright CDN AND has chromium system libs. If it still fails after redeploy → platform
-  limitation → user must contact Emergent Support to enable Playwright/chromium in the deploy image.
-
-## System-Schein der Woche + Responsible-Gambling disclaimer (2026-07, iteration 27)
-- FEATURE A "System-Schein der Woche": GET /api/system-slip bundles the safest current
-  hq-auto bankers into a ready system bet — dedupes by match, top 6 by ai_rating, marks top 2
-  as Banker, returns combined odds + system_label ("6 Auswahlen · 5er-System · 1 Fehler erlaubt")
-  + week (KW). Frontend SystemSlipCard.jsx renders a highlighted card at the top of the Rate Wall
-  (inside tips window) with banker badges, kickoff time, odds, ratings. Verified curl + screenshot.
-- FEATURE E (part 1) Responsible gambling: Disclaimer.jsx (Disclaimer block in footer + compact
-  DisclaimerBar in tips window). Text: TipJar is NOT a bookmaker/betting operator, tips are for
-  entertainment only, no guarantee of winnings, 18+, gambling can be addictive, help resources
-  (DE: BZgA check-dein-spiel.de 0800 1 37 27 00 / EN: BeGambleAware). Language-aware (de/en, else en).
-  Verified: disclaimer-block + disclaimer-bar render.
-- STILL PENDING for full legal (E part 2): user must provide Impressum data (name, address, email,
-  legal form) + confirm languages, before Impressum/AGB/Datenschutz pages can be built.
-
-## Odds realism + league filter + multibet posting fix (2026-07, iteration 28)
-- ODDS made realistic per user's real slips: Über 0.5 → 1.03, Über 1.5 → 1.20 (total>=3) / 1.30 (==2).
-  Frontend: odds < 1.04 display the note "niedrige Quote pregame, die man aber im Live höher
-  finden könnte" (OddsValue component, DE/EN) instead of the tiny number — wired into RateWall
-  TipCard + SystemSlipCard. Done & verified.
-- LEAGUE FILTER (user: delete amateur leagues EXCEPT Australia; delete USA League Two completely,
-  never touch these again): forebet.py now extracts league short-code (lcode). server.py blocks
-  FOREBET_BLOCKED_CODES={"us4"(USA USL League Two),"fi3"(Finland 3rd tier)} and PREDICTZ_BLOCKED_KW
-  =("usl league two","league two usa","kakkonen"). Australia (AuQ/AuA) kept. Verified: 0 USL/US-amateur,
-  0 Finnish-3, Australia present. To add more blocked leagues later, extend these sets.
-- MULTIBET POSTING FIX: create_tip no longer forces a top-level match_time for parlays — if empty and
-  legs exist, it derives match_time from the first leg's kickoff (else "Multibet"). Single tips still
-  require a date. Verified: parlay with no top match_time + leg kickoffs posts OK (match_time from leg).
-- NEW admin endpoint POST /api/admin/autotips/reset: wipes all hqtip-* and regenerates with current
-  filters/odds (use to clean production after redeploy).
-- OPEN (user asked): auto-verify that user-submitted slip games really exist before posting — NOT yet
-  implemented (needs a data source + fuzzy name match; larger task).
-
-## Content moderation (2026-07, iteration 29)
-- USER: prevent insults / nude images from being posted & published.
-- IMAGE + TEXT moderation folded into the existing Gemini vision analyze call: AI_SYSTEM now also
-  returns safe(bool)+flag_reason. /tips/analyze moderates FIRST and only uploads the image to storage
-  if safe; unsafe → HTTP 422 with reason (nudity/sexual, violence/gore, hate/insults/harassment, or
-  not-a-bet-slip/spam). 
-- TEXT safety-net: moderate_text() (LLM JSON classifier) runs in create_tip on raw_text+market+
-  analysis+teams; insults/hate/harassment/sexual/spam → HTTP 422. Fails open on LLM error.
-- Verified: insult tip → 422 ("direct insults and abusive language"); clean tip → 200. Image
-  moderation is LLM-based (Gemini vision) — strong but not 100%.
-
-## Auto-Settlement aktiviert — API-Football Pro (Jul 2026)
-- API_FOOTBALL_KEY in backend/.env hinterlegt; Plan: **Pro** (7500 req/Tag, aktuelle Saison).
-- Free-Plan war unbrauchbar (nur Saisons 2022–2024) → User auf Fußball-Pro (19$/Mon) umgestiegen.
-- settle_pending_tips optimiert: nur BEENDETE Spiele (kickoff < now-2h) werden geprüft,
-  settle_attempts-Cap (4) + gecachte Team-IDs = quota-sicher. Batch 50/Lauf, Loop alle 15 Min.
-- FIX: Pro-Plan verlangt `season`-Param bei /fixtures → season=Jahr (+Vorjahr-Fallback) ergänzt.
-- FIX: resolve_team_id mit Fallbacks (Bindestrich→Space, erstes Wort) für Namen wie "Ararat-Armenia".
-- Beendete Tipps werden NICHT mehr gelöscht (36h Karenz bei aktivem Key); gewonnen/verloren
-  bleiben dauerhaft unter Status-Filter sichtbar (Trefferquote/Track-Record).
-- Verifiziert: Lincoln Red Imps 3:1 → gewonnen ✅, Argentina 3:2 Egypt → gewonnen ✅ (settled_by=auto).
-- Zeitfenster-Filter greift nur bei status=pending (nicht bei won/lost).
-- OFFEN/Idee: Spieler-Prop „Smart System" (Schüsse/Fouls via /fixtures/players) möglich auf Pro-Plan.
-
-## 4 Systeme + Bereichs-Navigation + Bereichs-Alerts (Jul 2026)
-- match_predictions Collection: Forebet & Predictz speichern jetzt volle Match-Prognosen
-  (pred score, fav+fav_prob, btts, over25, league_code, kickoff) → Basis für alle Systeme.
-- GET /api/systems liefert 4 Systeme (nur wettbare Whitelist-Ligen):
-  - lock (Lock Bet, sichere Über-Banker, 6 Spiele, 2 Banker)
-  - value (nur Quoten ≥1,50: BTTS/Über2,5/DNB, 8 Spiele, 3 Banker)
-  - risk (Doppelte Chance + Beide treffen Bet-Builder, 4 Spiele)
-  - gamble (genaue Ergebnisse / Außenseiter, 5 Spiele)
-  Frontend: components/Systems.jsx (4 Karten, Risk-Farben SICHER/VALUE/RISK/ZOCKER).
-  SystemSlipCard.jsx entfernt.
-- GET /api/tips?source=ai|members + status=live → Filter nach Bereich.
-- GET /api/tips/counts → {ai, members, live, systems} für Homepage-Badges.
-- Header: 4 grüne Buttons (View AI Picks / AI System Picks / Members Picks / Live Picks)
-  mit Live-Zählern; mobil gestapelt, Desktop in Reihe. Tab-Switcher auch im Tipp-Fenster
-  (Header-Buttons sind bei offenem Overlay verdeckt → Tabs im Fenster lösen das).
-- NotificationBell: pro-Bereich Toggles (KI/Mitglieder/Live), separate Live-Abfrage
-  (Tipp der live geht klingelt immer), Popup nennt klar den Bereich (Live: 🔴 + 15s).
-- X/@EmpTips "Smart System" verworfen (User-Entscheidung: X-API kostenpflichtig/riskant).
-
-## System-Schein Whitelist (Jul 2026)
-- FIX: "System-Schein der Woche" bundelte unwettbare Spiele (Somalia, Korea-Frauen, U19,
-  australische Amateurligen, USL League Two). Ursache: Forebet-Tipps speicherten keine Liga-Info.
-- Forebet-Tipps speichern jetzt `league_code` (lcode) + `country` (cc); Bestandstipps werden beim
-  nächsten Forebet-Lauf per Backfill aktualisiert (upsert in forebet_autopost).
-- /system-slip filtert per STRIKTER WHITELIST (_slip_eligible): Forebet nach league_code
-  (FOREBET_SLIP_CODES: UCL/UEL/ECL/WC + Top-Ligen), Predictz nach Liga-Namen-Keywords
-  (SLIP_LEAGUE_KEYWORDS). Frauen/Jugend/2.-4. Ligen/Amateur ausgeschlossen.
-- Duplikat-Erkennung verbessert (_match_key: prefix-/reihenfolge-unabhängig, "SD Aucas"=="Aucas").
-- Verifiziert (Preview, curl): Schein enthält nur CL/EL/ECL-Quali, Brasilien Serie B, Ecuador Serie A.
-- Einzel-Tipps auf der Wall bleiben unverändert (nur der Schein wird gefiltert, wie vom User gewünscht).
+### NEW Feature — Smart Bets (player props) (verified, 9/9 backend + frontend)
+- Computes player props from API-Football /players season stats (shots, shots on target, fouls
+  committed/drawn, yellow cards, goals=anytime scorer, GK saves). Poisson-based probability -> Apex
+  rating + estimated odds. Markets in German (e.g. "X — Über 0,5 Schüsse aufs Tor (1+)", "Über 1,5
+  Paraden", "Torschütze (Anytime)", "Über 0,5 mal gefoult", "sieht eine Karte").
+- Only regular starters (lineups>=8) of teams in upcoming WHITELIST match_predictions (next 5 days).
+  Team players cached 24h (db.player_stats_cache). smart_autopost caps 14 matches, 4 props/team.
+- Stored as source="smart", league "TipJarHQ Smart Bet". smart_loop every 12h. Excluded from
+  settle engine (score-based settle can't judge props) and from members/settle queries.
+- Frontend: 5th quick-view button (Header, data-testid=view-smart-btn, Brain icon, grid-cols-5),
+  tab tabview-smart in tips window, RateWall view="smart" -> source=smart. i18n nav.viewsmart (5 langs).
+- DATA LIMITATION (told to user): API-Football does NOT provide offsides, corners, throw-ins,
+  free-kicks, headed/long-range goals, corner-by-10th-minute, team-scores-first -> those props omitted.
+  Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
+- Full legal pages (Impressum/AGB/Datenschutz): BLOCKED on user providing business address data.
+- Telegram integration; Stripe payments go-live.
 
-## Backlog / Next
-- Set RESEND_API_KEY (+ verified sender domain) to send real verification emails (currently DEV link).
-- Set API_FOOTBALL_KEY to activate live auto-settlement.
-- Redeem two-phase (requested->paid/rejected) restoring balance on rejection.
-- Debounce/rate-limit resend-verification; whitelist origin_url on checkout/verify.
-- P1: PayPal payout execution; disable star-rating on already-settled tips.
-- P1: Disable star rating on already-settled tips; optionally block rating own tip.
-- P1: Push notifications (web-push/VAPID) for true off-site tip alerts.
-- P2: My Tips / profile track record page; audit log for admin settlements; DB-side pagination.
+## Backlog / Next (P1)
+- Refactor server.py (~2650 lines) into modules: routes/, models/, scrapers/, engines/ (settle, smart).
+- Smart Bets: expand markets when top leagues resume; consider team-corner props via /fixtures/statistics
+  aggregation; add a probable-lineup source (~40min pre-kickoff) to refine which players start.
+- Disable star rating on already-settled tips.
+- Web-push (VAPID) for true off-site alerts; My Tips / track-record page.
+
+## Credentials
+- Admin: admin@tipjar.com / TipJarAdmin2026!  (login field "email" or "username")
+- HQ: hq@tipjar.com / TipJarHQ2026!
+- See /app/memory/test_credentials.md
