@@ -1261,35 +1261,43 @@ async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
 async def settle_pending_tips() -> dict:
     if not API_FOOTBALL_KEY:
         return {"ok": False, "reason": "API_FOOTBALL_KEY not configured", "checked": 0, "settled": 0}
-    pending = await db.tips.find(
-        {"status": "pending", "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
+    now = datetime.now(timezone.utc)
+    raw = await db.tips.find(
+        {"status": "pending", "is_parlay": {"$ne": True},
+         "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
         {"_id": 0},
-    ).sort("created_at", 1).to_list(SETTLE_BATCH_CAP)
+    ).sort("created_at", 1).to_list(300)
+    # only spend API calls on matches that have actually finished (kickoff > 2h ago)
+    # and that we haven't already failed to resolve several times (quota protection)
+    finished = []
+    for t in raw:
+        ko = _parse_kickoff(t.get("match_time"))
+        if ko and ko < now - timedelta(hours=2) and t.get("settle_attempts", 0) < 4:
+            finished.append((ko, t))
+    finished.sort(key=lambda x: x[0])  # oldest finished first
     checked, settled, details = 0, 0, []
-    for tip in pending:
+    for ko, tip in finished[:SETTLE_BATCH_CAP]:
         checked += 1
-        created = tip.get("created_at", "")[:10]
-        try:
-            base = datetime.fromisoformat(created) if created else datetime.now(timezone.utc)
-        except Exception:
-            base = datetime.now(timezone.utc)
-        dates = [(base + timedelta(days=d)).date().isoformat() for d in (0, 1, 2, -1)]
+        dates = [ko.date().isoformat(),
+                 (ko + timedelta(days=1)).date().isoformat(),
+                 (ko - timedelta(days=1)).date().isoformat()]
         team_id = await resolve_team_id(tip["home_team"])
+        opponent = tip["away_team"]
         if not team_id:
             team_id = await resolve_team_id(tip["away_team"])
-            if team_id:
-                opponent = tip["home_team"]
-            else:
-                continue
-        else:
-            opponent = tip["away_team"]
+            opponent = tip["home_team"]
+        if not team_id:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+            continue
         fx = find_finished_fixture(team_id, opponent, dates)
         if not fx:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         outcome = await judge_market(tip.get("market", ""), tip["home_team"], tip["away_team"],
                                      fx["home_goals"], fx["away_goals"])
         new_status = outcome if outcome in ("won", "lost") else "void"
         if new_status == "void":
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         await db.tips.update_one({"id": tip["id"]}, {"$set": {
             "status": new_status,
