@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Layers, ShieldCheck, TrendingUp } from "lucide-react";
+import { OddsValue } from "./OddsValue";
 import api from "../api";
 
 export const SystemSlipCard = () => {
@@ -64,7 +65,7 @@ export const SystemSlipCard = () => {
               </p>
             </div>
             <div className="text-right shrink-0">
-              <span className="font-mono font-bold text-volt text-sm">{s.odds}</span>
+              <OddsValue odds={s.odds} className="font-mono font-bold text-volt text-sm" />
               <p className="text-[10px] text-zinc-500">{s.rating}★</p>
             </div>
           </div>

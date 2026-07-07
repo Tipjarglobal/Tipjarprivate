@@ -182,6 +182,17 @@ async def admin_predictz_run(admin: dict = Depends(require_admin)):
     return await predictz_autopost()
 
 
+@api_router.post("/admin/autotips/reset")
+async def admin_autotips_reset(admin: dict = Depends(require_admin)):
+    """Wipe all auto-posted HQ tips and regenerate them with current filters/odds."""
+    deleted = (await db.tips.delete_many({"id": {"$regex": "^hqtip-"}})).deleted_count
+    if not await ensure_chromium():
+        return {"deleted": deleted, "posted_a": 0, "posted_b": 0, "reason": "chromium unavailable"}
+    a = await forebet_autopost()
+    b = await predictz_autopost()
+    return {"deleted": deleted, "forebet": a, "predictz": b}
+
+
 @api_router.get("/system-slip")
 async def system_slip():
     """Curated 'System-Schein der Woche': bundles the safest current HQ bankers
@@ -639,15 +650,22 @@ def compute_return(stake, odds, fallback=""):
 
 @api_router.post("/tips")
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
-    if not (inp.match_time or "").strip():
-        raise HTTPException(status_code=400, detail="Tip needs a match date & time — add the kickoff to publish.")
+    legs = _sanitize_legs(inp.legs)
+    is_parlay = inp.is_parlay or (inp.legs is not None and len(inp.legs) > 1)
+    match_time = (inp.match_time or "").strip()
+    if not match_time:
+        if is_parlay and legs:
+            # Multibet: no single kickoff — take the first leg that carries a date/time.
+            match_time = next((lg["kickoff"] for lg in legs if lg.get("kickoff")), "") or "Multibet"
+        else:
+            raise HTTPException(status_code=400, detail="Tip needs a match date & time — add the kickoff to publish.")
     dup = await db.tips.find_one({
         "user_id": user["id"],
         "home_team": inp.home_team,
         "away_team": inp.away_team,
         "market": inp.market,
         "odds": inp.odds,
-        "match_time": inp.match_time,
+        "match_time": match_time,
     })
     if dup:
         raise HTTPException(status_code=409, detail="You already posted this tip — duplicates aren't allowed.")
@@ -659,15 +677,15 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "image_path": inp.image_path,
         "home_team": inp.home_team,
         "away_team": inp.away_team,
-        "match_time": inp.match_time,
+        "match_time": match_time,
         "country": inp.country,
         "league": inp.league,
         "market": inp.market,
         "odds": inp.odds,
         "ai_rating": inp.ai_rating,
         "ai_analysis": inp.ai_analysis,
-        "legs": _sanitize_legs(inp.legs),
-        "is_parlay": inp.is_parlay or (inp.legs is not None and len(inp.legs) > 1),
+        "legs": legs,
+        "is_parlay": is_parlay,
         "stake": inp.stake,
         "potential_return": compute_return(inp.stake, inp.odds, inp.potential_return),
         "status": "pending",
@@ -1332,6 +1350,21 @@ async def seed_showcase():
 FOREBET_MIN_PROB = 55      # DNB: only when the favoured side is at least this likely
 FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
 
+# Leagues TipJar must NEVER touch (amateur / not offered by bookmakers).
+# Forebet league short-codes (lowercased): Us4 = USA USL League Two, Fi3 = Finland 3rd tier.
+FOREBET_BLOCKED_CODES = {"us4", "fi3"}
+# Predictz league-string substrings to block (predictz has no short-code).
+PREDICTZ_BLOCKED_KW = ("usl league two", "league two usa", "kakkonen")
+
+
+def _league_blocked_forebet(r: dict) -> bool:
+    return (r.get("lcode") or "").strip().lower() in FOREBET_BLOCKED_CODES
+
+
+def _league_blocked_predictz(league: str) -> bool:
+    lg = (league or "").lower()
+    return any(kw in lg for kw in PREDICTZ_BLOCKED_KW)
+
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
 FOREBET_TIME_INDEX: dict[str, str] = {}
 
@@ -1468,6 +1501,8 @@ async def forebet_autopost() -> dict:
 
     candidates = []
     for r in rows:
+        if _league_blocked_forebet(r):
+            continue
         kickoff = _forebet_datetime(r.get("datetime"))
         # remember kickoff time for predictz to reuse
         if r.get("home") and r.get("away"):
@@ -1594,6 +1629,8 @@ async def predictz_autopost() -> dict:
 
     candidates = []
     for r in rows:
+        if _league_blocked_predictz(r.get("league")):
+            continue
         for c in _predictz_candidates(r):
             candidates.append((round(c["rating"], 1), r, c))
     candidates.sort(key=lambda x: x[0], reverse=True)

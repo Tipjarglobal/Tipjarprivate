@@ -247,6 +247,24 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - STILL PENDING for full legal (E part 2): user must provide Impressum data (name, address, email,
   legal form) + confirm languages, before Impressum/AGB/Datenschutz pages can be built.
 
+## Odds realism + league filter + multibet posting fix (2026-07, iteration 28)
+- ODDS made realistic per user's real slips: Über 0.5 → 1.03, Über 1.5 → 1.20 (total>=3) / 1.30 (==2).
+  Frontend: odds < 1.04 display the note "niedrige Quote pregame, die man aber im Live höher
+  finden könnte" (OddsValue component, DE/EN) instead of the tiny number — wired into RateWall
+  TipCard + SystemSlipCard. Done & verified.
+- LEAGUE FILTER (user: delete amateur leagues EXCEPT Australia; delete USA League Two completely,
+  never touch these again): forebet.py now extracts league short-code (lcode). server.py blocks
+  FOREBET_BLOCKED_CODES={"us4"(USA USL League Two),"fi3"(Finland 3rd tier)} and PREDICTZ_BLOCKED_KW
+  =("usl league two","league two usa","kakkonen"). Australia (AuQ/AuA) kept. Verified: 0 USL/US-amateur,
+  0 Finnish-3, Australia present. To add more blocked leagues later, extend these sets.
+- MULTIBET POSTING FIX: create_tip no longer forces a top-level match_time for parlays — if empty and
+  legs exist, it derives match_time from the first leg's kickoff (else "Multibet"). Single tips still
+  require a date. Verified: parlay with no top match_time + leg kickoffs posts OK (match_time from leg).
+- NEW admin endpoint POST /api/admin/autotips/reset: wipes all hqtip-* and regenerates with current
+  filters/odds (use to clean production after redeploy).
+- OPEN (user asked): auto-verify that user-submitted slip games really exist before posting — NOT yet
+  implemented (needs a data source + fuzzy name match; larger task).
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

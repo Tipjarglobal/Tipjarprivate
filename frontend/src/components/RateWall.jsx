@@ -4,6 +4,7 @@ import confetti from "canvas-confetti";
 import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2 } from "lucide-react";
 import StarRating from "./StarRating";
 import { SystemSlipCard } from "./SystemSlipCard";
+import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
 import { useAuth } from "../auth";
@@ -298,7 +299,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           </h4>
           <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
             <span className="text-white font-semibold text-sm truncate">{tip.market || "—"}</span>
-            {tip.odds && <span className="font-mono font-bold text-volt shrink-0 ml-2">{tip.odds}</span>}
+            {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0 ml-2" />}
           </div>
           {(tip.stake || tip.potential_return) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-2 px-1">
