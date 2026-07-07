@@ -240,6 +240,14 @@ async def system_slip():
     }
 
 
+@api_router.get("/systems")
+async def systems():
+    """Four curated system bets by risk profile, built from HQ match predictions:
+    Lock Bet (safe goals), Value (odds >=1.50), Risk (double-chance + BTTS combos),
+    Gamble (correct-score / draw longshots). Only bookmaker-available leagues."""
+    return await build_systems()
+
+
 
 
 def gen_referral_code() -> str:
@@ -1502,6 +1510,228 @@ def _match_key(home: str, away: str) -> str:
         return "".join(sorted(toks)) or (n or "").lower().replace(" ", "")
     return f"{core(home)}|{core(away)}"
 
+
+# ---------------------------------------------------------------------------
+# Match-prediction store + multi-system builder (Lock Bet / Value / Risk / Gamble)
+# ---------------------------------------------------------------------------
+def _pred_whitelisted(p: dict) -> bool:
+    if _is_women_or_youth(p.get("home")) or _is_women_or_youth(p.get("away")):
+        return False
+    league = (p.get("league") or "").lower()
+    if any(b in f" {league} " for b in SLIP_BLOCK_KEYWORDS):
+        return False
+    if p.get("source") == "forebet":
+        return (p.get("league_code") or "").strip().lower() in FOREBET_SLIP_CODES
+    return any(k in league for k in SLIP_LEAGUE_KEYWORDS)
+
+
+async def store_match_prediction(source, matchid, home, away, kickoff, ph, pa, fav,
+                                 fav_prob, btts, over25, conf, league="",
+                                 league_code="", country=""):
+    if not home or not away:
+        return
+    total = (ph + pa) if (ph is not None and pa is not None) else None
+    pid = f"mp-{source[0]}-{matchid}"
+    doc = {
+        "id": pid, "source": source, "home": home, "away": away,
+        "league": league, "league_code": (league_code or "").strip().lower(),
+        "country": country, "kickoff": kickoff or "",
+        "ph": ph, "pa": pa, "total": total, "fav": fav, "fav_prob": fav_prob,
+        "btts": bool(btts), "over25": bool(over25), "conf": conf, "status": "pending",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.match_predictions.update_one({"id": pid}, {"$set": doc}, upsert=True)
+
+
+def _dc_odds(fav_prob):
+    if fav_prob is None:
+        return 1.30
+    if fav_prob >= 65:
+        return 1.15
+    if fav_prob >= 55:
+        return 1.22
+    if fav_prob >= 45:
+        return 1.30
+    return 1.40
+
+
+def _dnb_odds(fav_prob):
+    if fav_prob is None:
+        return 1.60
+    if fav_prob >= 70:
+        return 1.25
+    if fav_prob >= 60:
+        return 1.45
+    if fav_prob >= 52:
+        return 1.65
+    return 1.85
+
+
+def _cs_odds(ph, pa):
+    m = {(1, 0): 6.5, (0, 1): 7.0, (1, 1): 5.8, (2, 1): 8.5, (1, 2): 9.5,
+         (2, 0): 9.0, (0, 2): 11.0, (2, 2): 13.0, (3, 1): 17.0, (1, 3): 21.0,
+         (3, 0): 15.0, (0, 3): 19.0, (3, 2): 26.0, (2, 3): 34.0}
+    if (ph, pa) in m:
+        return m[(ph, pa)]
+    return 15.0 if (ph + pa) >= 4 else 8.0
+
+
+def _fav_team(p):
+    if p.get("fav") == "home":
+        return p.get("home")
+    if p.get("fav") == "away":
+        return p.get("away")
+    return None
+
+
+def _sel(p, market, odds, rating):
+    return {
+        "id": f"{p['id']}-{re.sub(r'[^a-z0-9]', '', market.lower())[:10]}",
+        "home_team": p.get("home"), "away_team": p.get("away"),
+        "market": market, "odds": round(float(odds), 2), "rating": rating,
+        "match_time": p.get("kickoff", ""), "banker": False,
+        "league": p.get("league") or "",
+    }
+
+
+def _finalize_system(sels, bankers, key, title, subtitle, risk):
+    total = 1.0
+    for i, s in enumerate(sels):
+        s["banker"] = i < bankers
+        total *= s["odds"]
+    n = len(sels)
+    if key in ("lock", "value") and n >= 5:
+        label = f"{n} Auswahlen · {n - 1}er-System · 1 Fehler erlaubt"
+    elif n >= 3:
+        label = f"{n} Auswahlen · Kombi"
+    else:
+        label = f"{n} Auswahlen"
+    return {
+        "key": key, "title": title, "subtitle": subtitle, "risk": risk,
+        "selections": sels, "count": n,
+        "banker_count": sum(1 for s in sels if s["banker"]),
+        "total_odds": round(total, 2), "system_label": label,
+        "week": datetime.now(timezone.utc).strftime("KW %V"),
+    }
+
+
+async def build_systems() -> dict:
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    raw = await db.match_predictions.find(
+        {"status": "pending", "updated_at": {"$gte": cutoff}}).to_list(500)
+    preds = [p for p in raw if _pred_whitelisted(p)]
+
+    # de-duplicate the same match across sources; merge complementary fields
+    by_key = {}
+    for p in preds:
+        k = _match_key(p.get("home"), p.get("away"))
+        if k not in by_key:
+            by_key[k] = dict(p)
+        else:
+            cur = by_key[k]
+            if cur.get("fav_prob") is None and p.get("fav_prob") is not None:
+                cur["fav_prob"] = p["fav_prob"]
+                cur["fav"] = p.get("fav")
+            cur["btts"] = cur.get("btts") or p.get("btts")
+            cur["over25"] = cur.get("over25") or p.get("over25")
+            if cur.get("total") is None and p.get("total") is not None:
+                cur["ph"], cur["pa"], cur["total"] = p.get("ph"), p.get("pa"), p.get("total")
+            if not cur.get("kickoff") and p.get("kickoff"):
+                cur["kickoff"] = p["kickoff"]
+    preds = list(by_key.values())
+
+    goals_sorted = sorted(preds, key=lambda p: (p.get("total") or 0), reverse=True)
+    fav_sorted = sorted(preds, key=lambda p: (p.get("fav_prob") or 0), reverse=True)
+
+    # 1) LOCK BET — safest goals bankers
+    locks, used = [], set()
+    for p in goals_sorted:
+        t = p.get("total")
+        if t is None or p["id"] in used:
+            continue
+        if t >= 3:
+            mk, od, rt = "Über 1.5 Tore", 1.20, 9.5
+        elif t == 2:
+            mk, od, rt = "Über 1.5 Tore", 1.30, 9.0
+        elif t == 1:
+            mk, od, rt = "Über 0.5 Tore", 1.03, 9.0
+        else:
+            continue
+        used.add(p["id"])
+        locks.append(_sel(p, mk, od, rt))
+        if len(locks) >= 6:
+            break
+
+    # 2) VALUE — only selections at odds >= 1.50
+    vals = []
+    for p in fav_sorted:
+        if p.get("btts"):
+            mk, od, rt = "Beide Teams treffen (BTTS)", 1.70, 8.5
+        elif p.get("over25") or (p.get("total") or 0) >= 4:
+            mk, od, rt = "Über 2.5 Tore", 1.55, 8.5
+        else:
+            od = _dnb_odds(p.get("fav_prob"))
+            team = _fav_team(p)
+            if od < 1.50 or not team:
+                continue
+            mk, rt = f"{team} (Draw No Bet)", 8.0
+        vals.append(_sel(p, mk, od, rt))
+        if len(vals) >= 8:
+            break
+
+    # 3) RISK — double-chance + BTTS bet-builder per match
+    risks = []
+    for p in fav_sorted:
+        team = _fav_team(p)
+        if not team or not p.get("btts"):
+            continue
+        dc = "1X" if p["fav"] == "home" else "X2"
+        od = round(_dc_odds(p.get("fav_prob")) * 1.70, 2)
+        risks.append(_sel(p, f"{team} Doppelte Chance {dc} + Beide treffen", od, 6.5))
+        if len(risks) >= 4:
+            break
+    if len(risks) < 4:  # relax: DC + Über 1.5 when not enough BTTS matches
+        chosen = {s["home_team"] + s["away_team"] for s in risks}
+        for p in fav_sorted:
+            team = _fav_team(p)
+            if not team or (p.get("home") + p.get("away")) in chosen:
+                continue
+            if (p.get("total") or 0) < 2:
+                continue
+            dc = "1X" if p["fav"] == "home" else "X2"
+            od = round(_dc_odds(p.get("fav_prob")) * 1.30, 2)
+            risks.append(_sel(p, f"{team} Doppelte Chance {dc} + Über 1.5 Tore", od, 6.0))
+            if len(risks) >= 4:
+                break
+
+    # 4) GAMBLE — correct-score / draw longshots
+    gambles = []
+    for p in goals_sorted:
+        ph, pa = p.get("ph"), p.get("pa")
+        if ph is None or pa is None:
+            continue
+        if p.get("fav") == "draw":
+            mk, od, rt = "Unentschieden (X)", 3.30, 4.0
+        else:
+            mk, od, rt = f"Genaues Ergebnis {ph}:{pa}", _cs_odds(ph, pa), 3.0
+        gambles.append(_sel(p, mk, od, rt))
+        if len(gambles) >= 5:
+            break
+
+    return {
+        "week": datetime.now(timezone.utc).strftime("KW %V"),
+        "systems": [
+            _finalize_system(locks, 2, "lock", "Lock Bet System der Woche",
+                             "Die sichersten Tor-Banker — 1 Fehler erlaubt", "safe"),
+            _finalize_system(vals, 3, "value", "Value System der Woche",
+                             "Nur Quoten ab 1,50 · 8 Spiele · 3 Banker", "value"),
+            _finalize_system(risks, 0, "risk", "Risk System der Woche",
+                             "Doppelte Chance + Beide treffen · 4 Spiele", "risk"),
+            _finalize_system(gambles, 0, "gamble", "Gamble System der Woche",
+                             "Zocker-Kombi: genaue Ergebnisse & Außenseiter", "gamble"),
+        ],
+    }
+
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
 FOREBET_TIME_INDEX: dict[str, str] = {}
 
@@ -1644,6 +1874,26 @@ async def forebet_autopost() -> dict:
         # remember kickoff time for predictz to reuse
         if r.get("home") and r.get("away"):
             FOREBET_TIME_INDEX[f"{_norm_team(r['home'])}|{_norm_team(r['away'])}"] = kickoff
+        # store the full match prediction (feeds the multi-system builder)
+        try:
+            sc = parse_pred_score(r.get("score"))
+            ph, pa = sc if sc else (None, None)
+            probs = r.get("probs") or []
+            pred = (r.get("pred") or "").strip()
+            if pred == "1":
+                fav, fav_prob = "home", (probs[0] if len(probs) >= 1 else None)
+            elif pred == "2":
+                fav, fav_prob = "away", (probs[2] if len(probs) >= 3 else None)
+            else:
+                fav, fav_prob = "draw", (probs[1] if len(probs) >= 2 else None)
+            btts = bool(ph and pa and ph >= 1 and pa >= 1)
+            over25 = bool(ph is not None and pa is not None and (ph + pa) >= 3)
+            await store_match_prediction(
+                "forebet", r.get("matchid") or f"{r['home']}-{r['away']}",
+                r.get("home"), r.get("away"), kickoff, ph, pa, fav, fav_prob,
+                btts, over25, None, league_code=r.get("lcode"), country=r.get("cc"))
+        except Exception as e:
+            logger.warning(f"forebet prediction store failed: {e}")
         for c in _forebet_candidates(r):
             candidates.append((round(c["rating"], 1), r, c, kickoff))
     # Split into DNB vs goals so DNB (favourite) picks always get a fair share
@@ -1773,9 +2023,38 @@ async def predictz_autopost() -> dict:
         return {"posted": 0, "reason": f"scrape error: {e}"}
 
     candidates = []
+    _today = datetime.now(timezone.utc).date()
     for r in rows:
         if _league_blocked_predictz(r.get("league")):
             continue
+        # store full match prediction (feeds the multi-system builder)
+        try:
+            home, away = r.get("home"), r.get("away")
+            matched = FOREBET_TIME_INDEX.get(f"{_norm_team(home)}|{_norm_team(away)}")
+            if matched:
+                kickoff = matched
+            else:
+                md = _today + timedelta(days=r.get("day_offset", 1))
+                kickoff = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+            ps = parse_pred_score(r.get("pred"))
+            ph, pa = ps if ps else (None, None)
+            predl = (r.get("pred") or "").lower()
+            if "home" in predl or (ps and ph > pa):
+                fav = "home"
+            elif "away" in predl or (ps and pa > ph):
+                fav = "away"
+            else:
+                fav = "draw"
+            btts = ((r.get("btts_tip") or "").strip().lower() == "btts yes") or \
+                   bool(ps and ph >= 1 and pa >= 1)
+            over25 = ((r.get("ou_tip") or "").strip().lower() == "over 2.5") or \
+                     bool(ps and (ph + pa) >= 3)
+            await store_match_prediction(
+                "predictz", r.get("matchid") or f"{home}-{away}", home, away, kickoff,
+                ph, pa, fav, None, btts, over25, r.get("conf"),
+                league=(r.get("league") or "").title())
+        except Exception as e:
+            logger.warning(f"predictz prediction store failed: {e}")
         for c in _predictz_candidates(r):
             candidates.append((round(c["rating"], 1), r, c))
     candidates.sort(key=lambda x: x[0], reverse=True)
