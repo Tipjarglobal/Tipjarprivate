@@ -2011,8 +2011,8 @@ def _forebet_candidates(r: dict) -> list[dict]:
         if win >= FOREBET_MIN_PROB:
             dnb_prob = win / max(win + loss, 1)
             odds = round(1.0 / max(dnb_prob, 0.01), 2)
-            # DNB can still lose if the favourite loses → never award 9.5/10
-            dnb_rating = 9.0 if win >= 70 else 8.5 if win >= 62 else 8.0
+            # DNB can still lose if the favourite loses → keep cautious, max 8.5
+            dnb_rating = 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5
             out.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
                         "odds": str(odds), "rating": dnb_rating})
     # 2) Safe goals banker from predicted correct score.
@@ -2028,12 +2028,14 @@ def _forebet_candidates(r: dict) -> list[dict]:
     if sc:
         total = sc[0] + sc[1]
         if total >= 2:
+            # 1+ goal is the safest banker but still loses on a 0-0 → cap at 9.0,
+            # and only reach 9.0 when a clearly high-scoring game is predicted.
             out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
-                        "rating": 9.5 if (total >= 3 and avg >= 2.8) else 9.0})
+                        "rating": 9.0 if (total >= 3 and avg >= 3.0) else 8.5})
             if total >= 4 and avg >= 3.2:
-                out.append({"sfx": "-g2", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 8.5})
+                out.append({"sfx": "-g2", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 8.0})
         elif total == 1:
-            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.5})
+            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.0})
     return out
 
 
@@ -2280,6 +2282,26 @@ async def predictz_autopost() -> dict:
             candidates.append((round(c["rating"], 1), r, c))
     candidates.sort(key=lambda x: x[0], reverse=True)
 
+    # Predictz is only trusted when FOREBET agrees on the same match (owner rule).
+    fb_docs = await db.match_predictions.find(
+        {"source": "forebet"},
+        {"_id": 0, "home": 1, "away": 1, "ph": 1, "pa": 1, "total": 1, "btts": 1, "over25": 1},
+    ).to_list(2000)
+    fb_map = {_match_key(x.get("home"), x.get("away")): x for x in fb_docs}
+
+    def _forebet_agrees(market: str, fb: dict) -> bool:
+        if not fb:
+            return False
+        m = (market or "").lower()
+        total = fb.get("total") or 0
+        if "über 0.5 tore" in m:
+            return total >= 2
+        if "über 2.5 tore" in m:
+            return bool(fb.get("over25")) or total >= 3
+        if "beide teams treffen" in m or "btts" in m:
+            return bool(fb.get("btts")) or ((fb.get("ph") or 0) >= 1 and (fb.get("pa") or 0) >= 1)
+        return False
+
     posted = 0
     now = datetime.now(timezone.utc).isoformat()
     d = datetime.now(timezone.utc).date()
@@ -2290,6 +2312,9 @@ async def predictz_autopost() -> dict:
         tip_id = f"hqtip-b-{matchid}{c['sfx']}"
         market = c["market"]
         home, away = r["home"], r["away"]
+        # Owner rule: only trust Predictz when Forebet agrees on the same match.
+        if not _forebet_agrees(market, fb_map.get(_match_key(home, away))):
+            continue
         match_time = _predictz_kickoff(r, d)
         existing = await db.tips.find_one({"id": tip_id}, {"match_time": 1})
         if existing:
