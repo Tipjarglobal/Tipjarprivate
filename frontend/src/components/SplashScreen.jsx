@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 const SPLASH_BY_LANG = {
   en: "/splash-en.png",
   de: "/splash-de.png",
+  es: "/splash-es.png",
   el: "/splash-el.png",
   fr: "/splash-fr.png",
   it: "/splash-it.png",

@@ -1,0 +1,53 @@
+{
+  "summary": "Iter25 verifies (1) recalibrated AI tip ratings (Über 1.5 <9, cap 9.5, only safe markets 9.0-9.5), (2) real bookmaker odds integration with fallback (mix of 'Echte Buchmacher-Quote' and estimated odds in AI analyses), (3) 4 Systems bundles (lock/value/risk/gamble) with numeric selection odds and correct computed total_odds, (4) counts endpoint contains {ai,ai_total,members,live,systems,smart} all int, (5) Smart tips still present (7) and not touched by settle engine, (6) POST /api/admin/smart/run returns {posted,matches,candidates}, (7) POST /api/admin/autotips/reset returns {deleted:53, forebet:{posted:9}, predictz:{posted:15}} in 35s, (8) FRONTEND Spanish language switcher (data-testid='lang-es') works: hero H1 'Publícalo. Puntúalo. Cóbralo.', quick-view buttons show 'Ver Picks de IA/Sistemas de IA/Smart Bets/Picks de Miembros/Picks en Vivo', bell settings show 'Ajustes de Alertas' with 5 area toggles (Picks de IA, Sistemas, Smart Bets, Picks de Miembros, Picks en Vivo), no raw i18n keys leaked, (9) Splash /splash-es.png HTTP 200 (1.2MB) and renders as SplashScreen bg when localStorage tj_lang='es' on reload, (10) Language switching en→de→es→el preserves all 5 quick-view buttons and Systems/Smart/AI tabs continue to render correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Systems view (all languages)", "issues": ["System bundle titles/subtitles ('Systeme der Woche', 'Lock Bet System der Woche', 'BANKER', 'GESAMTQUOTE', 'Die sichersten Tor-Banker...') remain in German across en/es/el — server-side systems content is not localized. NOT in this iteration's scope but flag for future i18n pass."]}
+    ]
+  },
+  "test_evidence": {
+    "counts_endpoint": "{\"ai\":9,\"ai_total\":39,\"members\":1,\"live\":0,\"systems\":4,\"smart\":7} (post-reset: ai_total=24)",
+    "ai_ratings_cap": "0 tips with Über 1.5 >=9; 0 tips with rating >9.5; safe-market check passed for all pending AI tips.",
+    "real_odds_split": "AI tips include both 'Echte Buchmacher-Quote' entries and fallback estimate entries in ai_analysis (partial coverage as expected per API-Football July fixtures).",
+    "systems_shape": "GET /api/systems returns {week:'KW 28', systems:[4]}: keys=lock/value/risk/gamble; each has numeric selection.odds >1.0 and total_odds within 5% of product. Lock=3.23, Value=73.57, Risk=25.69, Gamble=487687.5.",
+    "smart_isolation": "GET /api/tips?source=smart returns 7 tips, all source='smart', league='TipJarHQ Smart Bet'.",
+    "admin_smart_run": "POST /api/admin/smart/run → 200 {posted:int, matches:int, candidates:int}. Unauth = 401/403.",
+    "admin_autotips_reset": "POST /api/admin/autotips/reset → 200 in 35s: {deleted:53, forebet:{posted:9}, predictz:{posted:15}}.",
+    "splash_es_asset": "GET /splash-es.png → 200, 1,202,895 bytes. SplashScreen img src='/splash-es.png' after reload with tj_lang='es'.",
+    "spanish_translation": "H1='Publícalo. Puntúalo. Cóbralo.'; quick-view buttons: 'Ver Picks de IA', 'Ver Sistemas de IA', 'Ver Smart Bets', 'Ver Picks de Miembros', 'Ver Picks en Vivo'. Bell panel title 'Ajustes de Alertas'; 5 toggles: Picks de IA / Sistemas / Smart Bets / Picks de Miembros / Picks en Vivo.",
+    "no_raw_i18n_keys": "Body scan for 'nav.viewtips', 'nav.viewsystems', 'nav.viewmembers', 'nav.viewlive', 'nav.viewsmart', 'hero.title', 'hero.subtitle' — 0 hits in Spanish view.",
+    "language_regression": "Switched en→de→es→el sequentially; H1 changes correctly (Post it→Posten→Publícalo→Ανέβασε); all 5 quick-view buttons remain present at each step.",
+    "smart_view_render": "view-smart-btn → tips-window opens with tabview-smart selected, 7 tip-card-* rendered with player-prop markets (A. Llano Über 0,5 Schüsse aufs Tor 1.21, H. Rodríguez 1.18, R. Sappinen Torschütze 2.42, E. Mero 1.20, G. Napa Über 1,5 Paraden 1.12, D. Díaz Über 0,5 mal gefoult 1.13).",
+    "systems_view_render": "view-systems-btn → all 4 system cards rendered with per-selection odds, BANKER markers, GESAMTQUOTE totals, correct per-system risk labels."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_odds_and_spanish.py",
+    "/app/test_reports/pytest/iter25_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (future i18n pass, out of scope now): localize Systems bundle titles/subtitles/badges ('Systeme der Woche', 'Lock Bet System der Woche', 'BANKER', 'GESAMTQUOTE', bundle descriptions) — currently only German because generated server-side.",
+    "OPTIONAL: Won-filter regression not empirically re-verifiable this iteration because there are currently 0 settled won/lost AI tips server-side (all 53 AI tips are 'pending' — historical hqtip-a-* WON tips from iter24 were purged by autotips/reset). The frontend correctly renders the empty state. Not a regression bug — data state."
+  ],
+  "critical_code_review_comments": [
+    "AI rating cap logic in _forebet_candidates/_predictz_candidates is enforced end-to-end: no 'Über 1.5 Tore' pick has rating>=9 in live data; only 'Über 0.5', 'DNB' and similar safe markets reach 9.0-9.5. Predictz picks correctly capped ≤8.0.",
+    "Real-odds integration is well-designed: analysis distinguishes 'Echte Buchmacher-Quote' vs fallback estimates, so users can see provenance. Partial coverage (some fixtures without odds) is handled gracefully with fallback — no 500s observed across pending/won/lost filters.",
+    "Systems endpoint returns clean numeric selection.odds and computed total_odds that matches the product of selection odds within 5% (float rounding). All 4 bundle types (lock/value/risk/gamble) present with distinct copy and risk tags.",
+    "Smart tips are correctly source-isolated: source='smart' filter returns only smart, and settle_pending_tips does not touch them (7 smart tips remained after autotips/reset ran and deleted 53 hq-auto tips).",
+    "Admin auth is correctly enforced on /api/admin/smart/run (401/403 without token). Admin /api/admin/autotips/reset accepts credentials in body and completes with structured response — good ergonomics for the admin panel.",
+    "i18n: Spanish 'es' block is complete for hero + nav.view* + bell.area.* — no missing keys observed on the home screen after switching. Splash localization uses SPLASH_BY_LANG.es→/splash-es.png (1.2MB, HTTP 200)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter25_odds_and_spanish.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8 non-slow + autotips/reset verified via curl)", "frontend": "100% (Spanish switch, splash-es, bell settings, systems, smart, AI picks all render)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (Bearer token used for admin/smart/run and admin/autotips/reset)",
+  "seed_data_creation": "None. autotips/reset endpoint was invoked once end-to-end which is a legitimate admin operation (deleted 53 hq-auto tips + reposted 9 forebet + 15 predictz).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 25 features all pass. Backend regression file: /app/backend/tests/test_iter25_odds_and_spanish.py (8 tests, run with `pytest ... -m 'not slow'`; the @slow autotips/reset test is guarded because it can take up to 4 min — I verified it via curl in 35s returning {deleted:53, forebet:{posted:9}, predictz:{posted:15}}). Language testids: [data-testid=language-switcher] → menu with [data-testid=lang-{en,de,es,el,fr,it,ar,tr}]. Quick-view testids: view-tips-btn (AI), view-systems-btn, view-smart-btn, view-members-btn, view-live-btn. Bell: notification-bell → bell-settings-panel → 5 bell-area-toggle-{ai,systems,smart,members,live}. Splash: [data-testid=splash-screen] with SPLASH_BY_LANG.es='/splash-es.png'. If the won-filter needs empirical UI verification in future, first ensure at least one AI tip is settled (either wait for real fixture settlement or use admin PUT /api/tips/{id}/status).",
+  "rca of the issue": "N/A — no bugs found. All 10 acceptance criteria pass."
+}

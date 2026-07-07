@@ -1777,6 +1777,17 @@ async def build_systems() -> dict:
                 cur["kickoff"] = p["kickoff"]
     preds = list(by_key.values())
 
+    # real bookmaker odds (populated by the autopost loops) to replace heuristics
+    odds_docs = await db.odds_cache.find({}, {"_id": 0, "key": 1, "odds": 1}).to_list(2000)
+    odds_map = {d["key"]: d.get("odds", {}) for d in odds_docs}
+
+    def _apply_real(sel):
+        ro = _real_odd_for(sel["market"], odds_map.get(_match_key(sel["home_team"], sel["away_team"]), {}),
+                           sel["home_team"], sel["away_team"])
+        if ro:
+            sel["odds"] = round(float(ro), 2)
+        return sel
+
     goals_sorted = sorted(preds, key=lambda p: (p.get("total") or 0), reverse=True)
     fav_sorted = sorted(preds, key=lambda p: (p.get("fav_prob") or 0), reverse=True)
 
@@ -1855,6 +1866,10 @@ async def build_systems() -> dict:
         if len(gambles) >= 5:
             break
 
+    for s in locks:
+        _apply_real(s)
+    for s in vals:
+        _apply_real(s)
     return {
         "week": datetime.now(timezone.utc).strftime("KW %V"),
         "systems": [
@@ -2089,12 +2104,14 @@ async def forebet_autopost() -> dict:
                     {"id": tip_id}, {"$set": {"league_code": lcode, "country": cc}})
             continue
         home, away = r["home"], r["away"]
-        market, odds = c["market"], c["odds"]
+        market = c["market"]
+        odds, real = await apply_real_odds(market, c["odds"], home, away, kickoff)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
         analysis = (
             f"TipJarHQ-Analyse: {market}. Erwartetes Ergebnis {score}, Ø {avg} Tore. "
-            f"Anstoß {kickoff}. Datenbasierter Pick — automatisch von TipJarHQ."
+            f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
+            f"Datenbasierter Pick — automatisch von TipJarHQ."
         )
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
@@ -2271,7 +2288,7 @@ async def predictz_autopost() -> dict:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
         tip_id = f"hqtip-b-{matchid}{c['sfx']}"
-        market, odds = c["market"], c["odds"]
+        market = c["market"]
         home, away = r["home"], r["away"]
         match_time = _predictz_kickoff(r, d)
         existing = await db.tips.find_one({"id": tip_id}, {"match_time": 1})
@@ -2280,10 +2297,12 @@ async def predictz_autopost() -> dict:
             if ":" in match_time and existing.get("match_time") != match_time:
                 await db.tips.update_one({"id": tip_id}, {"$set": {"match_time": match_time}})
             continue
+        odds, real = await apply_real_odds(market, c["odds"], home, away, match_time)
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         analysis = (
             f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
             f"{market} ist bei diesem Spielbild ein starker Pick. "
+            f"{'Echte Buchmacher-Quote. ' if real else ''}"
             f"Rechtzeitig gepostet, damit du dein Systemwette-Programm aufbauen kannst — "
             f"automatisch von TipJarHQ."
         )
@@ -2337,6 +2356,132 @@ SMART_LOOKAHEAD_H = 120      # only matches within the next 5 days
 
 async def _apifootball_async(path: str, params: dict):
     return await asyncio.to_thread(_apifootball, path, params)
+
+
+# ---------------------------------------------------------------------------
+# Real bookmaker odds (API-Football /odds) — replaces the old hard-coded odds so
+# every tip carries a realistic quote. Fetched per match, 6h-cached in odds_cache.
+# ---------------------------------------------------------------------------
+ODDS_CACHE_TTL_H = 6
+
+
+def _find_fixture_id(team_id: int, opponent_name: str, dates: list, year: int):
+    for date in dates:
+        for season in (year, year - 1):
+            fixtures = _apifootball("/fixtures", {"team": team_id, "date": date, "season": season})
+            if not fixtures:
+                continue
+            for fx in fixtures:
+                th = fx.get("teams", {}).get("home", {}).get("name", "")
+                ta = fx.get("teams", {}).get("away", {}).get("name", "")
+                if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
+                    return fx.get("fixture", {}).get("id"), season
+            break
+    return None, None
+
+
+def _parse_odds(resp) -> dict:
+    """Normalise API-Football /odds response into {market_key: float}. First
+    bookmaker offering a market wins."""
+    out = {}
+    if not resp:
+        return out
+
+    def setd(k, val):
+        if val and k not in out:
+            try:
+                out[k] = round(float(val), 2)
+            except Exception:
+                pass
+
+    for entry in resp:
+        for bm in entry.get("bookmakers", []):
+            for bet in bm.get("bets", []):
+                nm = (bet.get("name") or "").strip()
+                vals = {v.get("value"): v.get("odd") for v in bet.get("values", [])}
+                if nm == "Goals Over/Under":
+                    setd("over05", vals.get("Over 0.5"))
+                    setd("over15", vals.get("Over 1.5"))
+                    setd("over25", vals.get("Over 2.5"))
+                elif nm in ("Both Teams Score", "Both Teams To Score"):
+                    setd("btts", vals.get("Yes"))
+                elif nm == "Home/Away":  # = Draw No Bet
+                    setd("dnb_home", vals.get("Home"))
+                    setd("dnb_away", vals.get("Away"))
+                elif nm == "Match Winner":
+                    setd("win_home", vals.get("Home"))
+                    setd("win_away", vals.get("Away"))
+    return out
+
+
+async def ensure_match_odds(home: str, away: str, kickoff: str) -> dict:
+    """Fetch + 6h-cache real bookmaker odds for a match. Returns {} if unavailable."""
+    if not API_FOOTBALL_KEY or not home or not away:
+        return {}
+    ko = _parse_kickoff(kickoff)
+    if not ko:
+        return {}
+    key = _match_key(home, away)
+    now = datetime.now(timezone.utc)
+    cached = await db.odds_cache.find_one({"key": key})
+    if cached:
+        try:
+            if now - datetime.fromisoformat(cached["cached_at"]) < timedelta(hours=ODDS_CACHE_TTL_H):
+                return cached.get("odds", {})
+        except Exception:
+            pass
+    tid = await resolve_team_id(home)
+    opp = away
+    if not tid:
+        tid = await resolve_team_id(away)
+        opp = home
+    odds = {}
+    if tid:
+        dates = [ko.date().isoformat(),
+                 (ko + timedelta(days=1)).date().isoformat(),
+                 (ko - timedelta(days=1)).date().isoformat()]
+        fid, season = await asyncio.to_thread(_find_fixture_id, tid, opp, dates, ko.year)
+        if fid:
+            resp = await _apifootball_async("/odds", {"fixture": fid, "season": season or ko.year})
+            odds = _parse_odds(resp)
+    await db.odds_cache.update_one(
+        {"key": key}, {"$set": {"key": key, "odds": odds, "cached_at": now.isoformat()}}, upsert=True)
+    return odds
+
+
+def _real_odd_for(market: str, odds: dict, home: str, away: str):
+    """Map one of our German market strings to a real bookmaker odd, or None."""
+    if not odds:
+        return None
+    m = (market or "").lower()
+    if "über 2.5 tore" in m:
+        return odds.get("over25")
+    if "über 1.5 tore" in m:
+        return odds.get("over15")
+    if "über 0.5 tore" in m:
+        return odds.get("over05")
+    if "beide teams treffen" in m or "btts" in m:
+        return odds.get("btts")
+    if "draw no bet" in m:
+        if home and home.lower() in m:
+            return odds.get("dnb_home")
+        if away and away.lower() in m:
+            return odds.get("dnb_away")
+    return None
+
+
+async def apply_real_odds(market, fallback, home, away, kickoff):
+    """Return (odds_str, is_real). Real bookmaker odд if available, else fallback."""
+    try:
+        odds = await ensure_match_odds(home, away, kickoff)
+    except Exception as e:
+        logger.warning(f"odds fetch failed {home} vs {away}: {e}")
+        odds = {}
+    real = _real_odd_for(market, odds, home, away)
+    if real:
+        return f"{real:.2f}", True
+    return str(fallback), False
+
 
 
 def _smart_seasons(kickoff_str: str) -> list[int]:
