@@ -28,6 +28,9 @@ async def scrape_forebet_today(limit: int = 40) -> list[dict]:
                     const href = link ? link.getAttribute('href') : null;
                     let matchid = null;
                     if (href) { const m = href.match(/-(\\d+)$/); if (m) matchid = m[1]; }
+                    let cc = null;
+                    const flag = r.querySelector('img[src*="/images/fc/"]');
+                    if (flag) { const fm = (flag.getAttribute('src')||'').match(/\\/images\\/fc\\/([^\\/.]+)\\.png/); if (fm) cc = fm[1].toLowerCase(); }
                     const probs = Array.from(r.querySelectorAll('.fprc span')).map(e => parseInt(e.textContent.trim(), 10)).filter(n => !isNaN(n));
                     const fulltext = r.textContent || '';
                     const dm = fulltext.match(/(\\d{2}\\/\\d{2}\\/\\d{4}\\s+\\d{1,2}:\\d{2}\\s*[AP]M)/);
@@ -39,6 +42,7 @@ async def scrape_forebet_today(limit: int = 40) -> list[dict]:
                         score: q('.ex_sc') || q('.tnmscr'),
                         avg: q('.avg_sc'),
                         matchid: matchid,
+                        cc: cc,
                         datetime: dm ? dm[1] : null
                     });
                 }

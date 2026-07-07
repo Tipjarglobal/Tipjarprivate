@@ -1447,11 +1447,11 @@ def _forebet_candidates(r: dict) -> list[dict]:
         total = sc[0] + sc[1]
         if total >= 3:
             rating = 10.0 if avg >= 3.0 else 9.5
-            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.25", "rating": rating})
+            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.20", "rating": rating})
         elif total == 2:
-            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.35", "rating": 9.0})
+            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 9.0})
         elif total == 1:
-            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.10", "rating": 9.0})
+            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.03", "rating": 9.0})
     return out
 
 
@@ -1567,11 +1567,11 @@ def _predictz_candidates(r: dict) -> list[dict]:
     if ps:
         total = ps[0] + ps[1]
         if total >= 3:
-            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.25", "rating": _conf_adj(10.0, conf)})
+            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.20", "rating": _conf_adj(10.0, conf)})
         elif total == 2:
-            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.35", "rating": _conf_adj(9.0, conf)})
+            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.30", "rating": _conf_adj(9.0, conf)})
         elif total == 1:
-            out.append({"sfx": "", "market": "Über 0.5 Tore", "odds": "1.10", "rating": _conf_adj(9.0, conf)})
+            out.append({"sfx": "", "market": "Über 0.5 Tore", "odds": "1.03", "rating": _conf_adj(9.0, conf)})
     # 2) Over 2.5 tip (predictz O/U page)
     if (r.get("ou_tip") or "").strip().lower() == "over 2.5":
         out.append({"sfx": "-o25", "market": "Über 2.5 Tore", "odds": "1.55", "rating": _conf_adj(8.5, conf)})
