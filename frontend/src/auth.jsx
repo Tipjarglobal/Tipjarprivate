@@ -27,8 +27,8 @@ export function AuthProvider({ children }) {
     loadMe();
   }, [loadMe]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  const login = async (identifier, password) => {
+    const { data } = await api.post("/auth/login", { username: identifier, password });
     localStorage.setItem("tj_token", data.token);
     setUser(data.user);
     return data.user;
@@ -36,7 +36,9 @@ export function AuthProvider({ children }) {
 
   const register = async (payload) => {
     const ref = localStorage.getItem("tj_ref") || undefined;
-    const { data } = await api.post("/auth/register", { ...payload, ref, origin_url: window.location.origin });
+    const body = { ...payload, ref, origin_url: window.location.origin };
+    if (!body.email) delete body.email;
+    const { data } = await api.post("/auth/register", body);
     localStorage.setItem("tj_token", data.token);
     setUser(data.user);
     return data;

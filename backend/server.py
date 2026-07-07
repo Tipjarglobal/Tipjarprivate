@@ -26,6 +26,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from forebet import scrape_forebet_today
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest,
 )
@@ -166,6 +167,12 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+@api_router.post("/admin/forebet/run")
+async def admin_forebet_run(admin: dict = Depends(require_admin)):
+    return await forebet_autopost()
+
+
+
 def gen_referral_code() -> str:
     return uuid.uuid4().hex[:8]
 
@@ -197,7 +204,7 @@ async def send_verification_email(email: str, token: str, origin: str) -> dict:
 
 # ------------------------------------------------------------------ models
 class RegisterInput(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
     password: str = Field(min_length=6)
     username: str = Field(min_length=2, max_length=24)
     timezone: str = "UTC"
@@ -215,7 +222,8 @@ class OriginInput(BaseModel):
 
 
 class LoginInput(BaseModel):
-    email: EmailStr
+    username: Optional[str] = None
+    email: Optional[str] = None
     password: str
 
 
@@ -365,21 +373,24 @@ async def analyze_tip(image_b64: Optional[str], text: str) -> dict:
 # ------------------------------------------------------------------ auth routes
 @api_router.post("/auth/register")
 async def register(inp: RegisterInput):
-    email = inp.email.lower()
-    if await db.users.find_one({"email": email}):
+    email = inp.email.lower() if inp.email else None
+    username = inp.username.strip()
+    if email and await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
-    if await db.users.find_one({"username": inp.username}):
+    if await db.users.find_one({"username": username}):
         raise HTTPException(status_code=400, detail="Username already taken")
     referred_by = None
     if inp.ref:
         ref_user = await db.users.find_one({"referral_code": inp.ref})
         if ref_user:
             referred_by = ref_user["id"]
+    # No email => no verification needed, account is active immediately
+    has_email = bool(email)
     user = {
         "id": str(uuid.uuid4()),
         "email": email,
         "password_hash": hash_password(inp.password),
-        "username": inp.username,
+        "username": username,
         "role": "user",
         "timezone": inp.timezone,
         "language": inp.language,
@@ -388,23 +399,36 @@ async def register(inp: RegisterInput):
         "streak": 0,
         "last_rated_date": None,
         "ratings_given": 0,
-        "email_verified": False,
+        "email_verified": not has_email,
         "referral_code": gen_referral_code(),
         "referred_by": referred_by,
         "referral_rewarded": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
-    vtoken = secrets.token_urlsafe(24)
-    await db.email_verification_tokens.insert_one({
-        "token": vtoken, "user_id": user["id"],
-        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
-    })
-    email_res = await send_verification_email(email, vtoken, inp.origin_url or "")
-    token = create_access_token(user["id"], email)
-    resp = {"token": token, "user": public_user(user), "email_sent": email_res.get("sent", False)}
-    if not email_res.get("sent"):
-        resp["verify_link"] = email_res.get("link")  # dev aid until Resend key is set
+    token = create_access_token(user["id"], email or username)
+    resp = {"token": token, "user": public_user(user)}
+    if has_email:
+        vtoken = secrets.token_urlsafe(24)
+        await db.email_verification_tokens.insert_one({
+            "token": vtoken, "user_id": user["id"],
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
+        })
+        email_res = await send_verification_email(email, vtoken, inp.origin_url or "")
+        resp["email_sent"] = email_res.get("sent", False)
+        if not email_res.get("sent"):
+            resp["verify_link"] = email_res.get("link")  # dev aid until Resend key is set
+    else:
+        # email-less account is active now -> grant referral reward immediately
+        if referred_by:
+            await db.users.update_one({"id": user["id"]}, {"$set": {"referral_rewarded": True}})
+            await db.users.update_one({"id": referred_by}, {"$inc": {"credits": REFERRAL_REWARD}})
+            await db.credit_transactions.insert_one({
+                "id": str(uuid.uuid4()), "type": "referral", "to_user": referred_by,
+                "from_user": user["id"], "from_username": user.get("username"),
+                "amount": REFERRAL_REWARD, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        resp["email_sent"] = False
     return resp
 
 
@@ -457,10 +481,13 @@ async def resend_verification(inp: OriginInput, user: dict = Depends(get_current
 
 @api_router.post("/auth/login")
 async def login(inp: LoginInput):
-    user = await db.users.find_one({"email": inp.email.lower()})
+    ident = (inp.username or inp.email or "").strip()
+    if not ident:
+        raise HTTPException(status_code=400, detail="Username or email required")
+    user = await db.users.find_one({"$or": [{"username": ident}, {"email": ident.lower()}]})
     if not user or not verify_password(inp.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user["id"], user["email"])
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = create_access_token(user["id"], user.get("email") or user["username"])
     return {"token": token, "user": public_user(user)}
 
 
@@ -1150,10 +1177,13 @@ async def seed_showcase():
         await db.tips.delete_one({"id": old_id})
         await db.tip_ratings.delete_many({"tip_id": old_id})
 
-    # Authoritative: TipJarHQ owns exactly the 2 good showcase tips. Delete any other
-    # TipJarHQ-authored tips (e.g. old/ugly duplicate slips) in every env on startup.
+    # Authoritative: TipJarHQ owns the 2 showcase tips + any auto-posted Forebet picks (id forebet-*).
+    # Delete any OTHER TipJarHQ-authored tips (e.g. old/ugly duplicate slips) in every env on startup.
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay"]
-    await db.tips.delete_many({"user_id": hq["id"], "id": {"$nin": allowed_ids}})
+    await db.tips.delete_many({
+        "user_id": hq["id"],
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^forebet-"}},
+    })
 
     # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
     messi_image = None
@@ -1216,9 +1246,125 @@ async def seed_showcase():
     logger.info("Seeded/updated showcase tip: Häcken parlay (settled: lost)")
 
 
+# ---------------------------------------------------------------------------
+# Forebet auto-tips: TipJarHQ reads forebet.com daily and auto-posts strong picks
+# ---------------------------------------------------------------------------
+FOREBET_MIN_PROB = 58      # only publish picks where the predicted outcome prob >= this
+FOREBET_MAX_PER_RUN = 3    # cap new tips per run to avoid flooding the wall
+
+
+def _forebet_rating(prob: int) -> float:
+    if prob >= 75:
+        return 9.0
+    if prob >= 68:
+        return 8.5
+    if prob >= 62:
+        return 8.0
+    return 7.0
+
+
+def _forebet_datetime(raw: Optional[str]) -> str:
+    # Forebet uses US format "MM/DD/YYYY H:MM AM/PM" -> app display "DD/MM/YYYY HH:MM"
+    if not raw:
+        return datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    try:
+        dt = datetime.strptime(raw.strip(), "%m/%d/%Y %I:%M %p")
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return raw.strip()
+
+
+async def forebet_autopost() -> dict:
+    """Scrape forebet, pick the strongest predictions and publish them as TipJarHQ."""
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    try:
+        rows = await scrape_forebet_today(40)
+    except Exception as e:
+        logger.error(f"Forebet scrape failed: {e}")
+        return {"posted": 0, "reason": f"scrape error: {e}"}
+
+    idx = {"1": 0, "X": 1, "2": 2}
+    candidates = []
+    for r in rows:
+        pred = (r.get("pred") or "").strip()
+        if pred not in idx:
+            continue
+        probs = r.get("probs") or []
+        if len(probs) < 3:
+            continue
+        prob = probs[idx[pred]]
+        if prob < FOREBET_MIN_PROB:
+            continue
+        candidates.append((prob, r, pred))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    posted = 0
+    now = datetime.now(timezone.utc).isoformat()
+    for prob, r, pred in candidates:
+        if posted >= FOREBET_MAX_PER_RUN:
+            break
+        matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
+        tip_id = f"forebet-{matchid}"
+        if await db.tips.find_one({"id": tip_id}):
+            continue
+        home, away = r["home"], r["away"]
+        if pred == "1":
+            market = f"{home} gewinnt"
+        elif pred == "2":
+            market = f"{away} gewinnt"
+        else:
+            market = "Unentschieden"
+        odds = round(100.0 / max(prob, 1), 2)
+        score = r.get("score") or "?"
+        avg = r.get("avg") or "?"
+        analysis = (
+            f"Forebet-Mathematikmodell: {market} mit {prob}% Wahrscheinlichkeit. "
+            f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Datenbasierter Pick — automatisch von TipJarHQ."
+        )
+        tip = {
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away,
+            "match_time": _forebet_datetime(r.get("datetime")),
+            "country": "", "league": "Forebet Pick", "market": market,
+            "odds": str(odds), "ai_rating": _forebet_rating(prob), "ai_analysis": analysis,
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "forebet", "created_at": now,
+        }
+        await db.tips.insert_one(tip)
+        posted += 1
+        logger.info(f"Forebet auto-posted: {home} vs {away} — {market} ({prob}%)")
+    return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
+
+
+async def forebet_loop():
+    await asyncio.sleep(30)  # let startup settle
+    while True:
+        try:
+            res = await forebet_autopost()
+            logger.info(f"Forebet loop: {res}")
+        except Exception as e:
+            logger.error(f"Forebet loop error: {e}")
+        await asyncio.sleep(6 * 3600)  # every 6 hours
+
+
+
 @app.on_event("startup")
 async def startup():
-    await db.users.create_index("email", unique=True)
+    # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
+    try:
+        existing = await db.users.index_information()
+        if "email_1" in existing and not existing["email_1"].get("partialFilterExpression"):
+            await db.users.drop_index("email_1")
+    except Exception as e:
+        logger.error(f"email index migration: {e}")
+    await db.users.create_index(
+        "email", unique=True,
+        partialFilterExpression={"email": {"$type": "string"}},
+    )
     await db.users.create_index("username", unique=True)
     await db.tips.create_index("status")
     await db.tip_ratings.create_index([("tip_id", 1), ("user_id", 1)])
@@ -1239,6 +1385,7 @@ async def startup():
     # is never blocked by DB/storage latency (prevents deploy timeouts).
     asyncio.create_task(_startup_seed())
     asyncio.create_task(settlement_loop())
+    asyncio.create_task(forebet_loop())
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

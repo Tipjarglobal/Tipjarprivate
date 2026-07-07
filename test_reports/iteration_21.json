@@ -1,0 +1,56 @@
+{
+  "summary": "End-to-end verification of TipJar auth (A) username + optional email, and (B) Forebet auto-post on Rate Wall. All 8 backend regression tests PASS and every frontend flow succeeds. Fresh browser (SW/caches cleared) → header 'Sign up' opens auth modal → username+password only (email blank) creates an account, returns a token and shows the exact welcome toast 'Welcome! Your account is ready 🎉' (NO inbox/verify message). username+password+valid-email signup shows 'Account created! Check your inbox to verify your email 📧'. Login mode hides the email field; login by username AND by email both work (toast '👋 <username>'). Backend also confirmed: /api/auth/register with no email returns user with email_verified=true and multiple null-email accounts can coexist (partial unique index). Tips window (view-tips-btn → [data-testid=tips-window]) renders the Forebet auto-pick tip-card-forebet-2460219 authored by TipJarHQ with league 'Forebet Pick' and market 'Lonestar gewinnt', source='forebet'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "backend": {
+      "test_register_without_email": "PASS (email_verified=true, token returned)",
+      "test_register_with_email": "PASS",
+      "test_multiple_email_less_accounts": "PASS (partial unique index on email works)",
+      "test_duplicate_username_rejected": "PASS (400)",
+      "test_login_by_username": "PASS",
+      "test_login_by_email": "PASS (email typed into 'username' field)",
+      "test_admin_login_by_email_still_works": "PASS (admin@tipjar.com / TipJarAdmin2026!)",
+      "test_forebet_tip_on_wall": "PASS (forebet-2460219 by TipJarHQ, league='Forebet Pick', market='Lonestar gewinnt', source='forebet')"
+    },
+    "frontend": {
+      "signup_modal_opens_from_header": "PASS - [data-testid='signup-btn'] → [data-testid='auth-modal']",
+      "email_label_optional": "PASS - label reads exactly 'EMAIL (OPTIONAL)'",
+      "email_input_not_required_attr": "PASS - required attr is null on [data-testid='auth-email']",
+      "signup_no_email_creates_token": "PASS - tj_token set after submit with blank email",
+      "signup_no_email_welcome_toast": "PASS - 'Welcome! Your account is ready 🎉' (no inbox/verify text)",
+      "signup_with_email_creates_token": "PASS",
+      "signup_with_email_inbox_toast": "PASS - 'Account created! Check your inbox to verify your email 📧'",
+      "login_mode_hides_email_field": "PASS - [data-testid='auth-email'] not visible in login mode",
+      "login_by_username_success": "PASS - toast '👋 <username>'",
+      "login_by_email_success": "PASS - typing the email into the username field logs the user in",
+      "tips_window_opens": "PASS - [data-testid='view-tips-btn'] → [data-testid='tips-window']",
+      "tips_window_forebet_card_present": "PASS - [data-testid='tip-card-forebet-2460219'] visible, 'by TipJarHQ', 'Forebet Pick', 'Lonestar gewinnt', odds 1.49, AI 8/10"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_optional_email.py",
+    "/app/test_reports/pytest/pytest_auth_optional_email.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AuthModal only calls setLang after a successful signup (line 37) but not after a successful login when the returned user has a different language than the current i18n state — the login branch handles this (line 33), so this is fine. No issue.",
+    "auth.jsx only persists tj_token in localStorage; the user profile is refetched via GET /api/auth/me on refresh. This is a good pattern (single source of truth), just noting so future testers don't check localStorage for tj_user (there isn't one).",
+    "Small UX polish: after an email-less signup the modal shows a fleeting 'Welcome' toast; consider also nudging the user to add an email later in settings so they can recover the account. Not a blocker.",
+    "Forebet market strings (e.g. 'Lonestar gewinnt') are German-only regardless of the UI language. If the user is in en/el, this reads a bit off. Consider localising the auto-generated market label. Non-blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_optional_email.py (new pytest regression file, 8 tests, all green)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (12/12 checks)"},
+  "test_credentials": "Admin admin@tipjar.com / TipJarAdmin2026! (still logs in by email). Random test users created per run (TEST_/tst_ prefixed) — safe to leave, they have null email and 100 credits.",
+  "seed_data_creation": "Test suite creates ~6 disposable users per run via /api/auth/register; each has TEST_ or tst_ prefix and is a non-blocking noise on the DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Header signup/login testids are 'signup-btn' and 'login-btn' (NOT 'header-signup-btn'). The auth modal has testId 'auth-modal'. Fields: auth-username, auth-email (signup only, optional), auth-password, auth-timezone, auth-language, auth-submit, auth-switch-mode. LocalStorage: tj_token only (no tj_user). Playwright NOTE: clicking [data-testid='signup-btn'] with force=True in this app can miss the onClick handler (button is inside the sticky header with a translated pill layout); a regular click() worked reliably. Forebet auto-pick already existed at test time as 'forebet-2460219' (Lonestar vs Hill Country Lobos); if it ever goes missing, POST /api/admin/forebet/run with the admin Bearer token to regenerate.",
+  "rca of the issue": "No functional issue found. Two testing-side gotchas worth documenting: (1) force=True on the header signup button caused clicks to be swallowed (the header uses overflow-hidden pill styling); switching to a normal click resolved it. (2) The app does not store the user object under localStorage.tj_user — an early assertion that read 'tj_user' produced a false negative. Verification should rely on tj_token presence + the visible welcome toast."
+}

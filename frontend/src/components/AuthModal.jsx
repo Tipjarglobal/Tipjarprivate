@@ -29,14 +29,14 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
     setLoading(true);
     try {
       if (mode === "login") {
-        const u = await login(form.email, form.password);
+        const u = await login(form.username, form.password);
         if (u.language) setLang(u.language);
         toast.success("👋 " + (u.username || ""));
       } else {
         const data = await register(form);
         setLang(form.language);
         localStorage.removeItem("tj_ref");
-        toast.success(t("auth.checkEmail"));
+        toast.success(form.email ? t("auth.checkEmail") : t("auth.welcome"));
         if (data.verify_link) toast.message("Dev verify link: " + data.verify_link, { duration: 12000 });
       }
       onClose();
@@ -55,9 +55,16 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
             <input data-testid="auth-username" className={inputCls} value={form.username} onChange={upd("username")} required minLength={2} />
           </Field>
         )}
-        <Field label={t("auth.email")}>
-          <input data-testid="auth-email" type="email" className={inputCls} value={form.email} onChange={upd("email")} required />
-        </Field>
+        {mode === "login" && (
+          <Field label={t("auth.username")}>
+            <input data-testid="auth-username" className={inputCls} value={form.username} onChange={upd("username")} required />
+          </Field>
+        )}
+        {mode === "signup" && (
+          <Field label={t("auth.emailOptional")}>
+            <input data-testid="auth-email" type="email" className={inputCls} value={form.email} onChange={upd("email")} />
+          </Field>
+        )}
         <Field label={t("auth.password")}>
           <input data-testid="auth-password" type="password" className={inputCls} value={form.password} onChange={upd("password")} required minLength={6} />
         </Field>
