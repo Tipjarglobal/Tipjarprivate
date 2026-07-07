@@ -42,10 +42,12 @@ function tipRating(tp) {
 function tipArea(tp) {
   if (tp.status === "live") return "live";
   if (tp.source === "hq-auto") return "ai";
+  if (tp.source === "smart") return "smart";
   return "members";
 }
 
-const DEFAULT_AREAS = { ai: true, members: true, live: true };
+const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true };
+const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive" };
 
 function loadAreas() {
   try {
@@ -65,6 +67,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const seen = useRef(null);
   const seenLive = useRef(null);
+  const lastSystems = useRef(null);
   const onRef = useRef(on);
   const minRef = useRef(min);
   const areasRef = useRef(areas);
@@ -101,7 +104,7 @@ export default function NotificationBell() {
       description: body,
       duration: area === "live" ? 15000 : 10000,
       action: {
-        label: t(`nav.view${area === "ai" ? "tips" : area === "members" ? "members" : "live"}`),
+        label: t(`nav.${VIEW_KEY[area] || "viewtips"}`),
         onClick: () => window.dispatchEvent(new CustomEvent("tj-open-view", { detail: area })),
       },
     });
@@ -147,6 +150,21 @@ export default function NotificationBell() {
               seenLive.current.add(tp.id);
             }
           }
+        }
+
+        // 3) System Picks — no per-tip event, so ring when the systems count grows
+        const counts = await api.get("/tips/counts");
+        if (!mounted) return;
+        const sysN = Number(counts.data.systems || 0);
+        if (lastSystems.current === null) {
+          lastSystems.current = sysN;
+        } else if (sysN > lastSystems.current) {
+          if (onRef.current && areasRef.current.systems !== false) {
+            fireAlert({ home_team: t("bell.area.systems"), away_team: "" }, "systems");
+          }
+          lastSystems.current = sysN;
+        } else {
+          lastSystems.current = sysN;
         }
       } catch {
         /* ignore */
@@ -261,7 +279,7 @@ export default function NotificationBell() {
 
             <div className="mt-3 pt-3 border-t border-elevated">
               <p className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("bell.areas")}</p>
-              {[["ai", "bell.area.ai"], ["members", "bell.area.members"], ["live", "bell.area.live"]].map(([k, lbl]) => (
+              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["members", "bell.area.members"], ["live", "bell.area.live"]].map(([k, lbl]) => (
                 <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1.5 cursor-pointer">
                   <span className="text-sm text-zinc-300 flex items-center gap-2">
                     {k === "live" && <span className="w-2 h-2 rounded-full bg-live animate-pulse" />}
