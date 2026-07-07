@@ -248,6 +248,20 @@ async def systems():
     return await build_systems()
 
 
+@api_router.get("/tips/counts")
+async def tips_counts():
+    """Post counts per picks area — powers the homepage badges & area alerts."""
+    ai = await db.tips.count_documents({"source": "hq-auto", "status": "pending"})
+    members = await db.tips.count_documents({"source": {"$ne": "hq-auto"}, "status": "pending"})
+    live = await db.tips.count_documents({"status": "live"})
+    try:
+        sysdata = await build_systems()
+        systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
+    except Exception:
+        systems_n = 0
+    return {"ai": ai, "members": members, "live": live, "systems": systems_n}
+
+
 
 
 def gen_referral_code() -> str:
@@ -818,10 +832,15 @@ async def purge_demo_tips() -> int:
 
 
 @api_router.get("/tips")
-async def list_tips(status: Optional[str] = None, sort: str = "new", limit: int = 50):
+async def list_tips(status: Optional[str] = None, sort: str = "new",
+                    source: Optional[str] = None, limit: int = 50):
     q = {}
     if status:
         q["status"] = status
+    if source == "ai":
+        q["source"] = "hq-auto"
+    elif source == "members":
+        q["source"] = {"$ne": "hq-auto"}
     limit = max(1, min(limit, 100))
     if sort == "top":
         cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(limit)

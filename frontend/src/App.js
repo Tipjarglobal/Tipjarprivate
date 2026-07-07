@@ -33,6 +33,8 @@ function Home() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [tipsView, setTipsView] = useState("ai");
+  const [counts, setCounts] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => { if (user?.language) setLang(user.language); }, [user, setLang]);
@@ -48,9 +50,40 @@ function Home() {
     return () => window.removeEventListener("tj-open-tips", openTips);
   }, []);
 
+  useEffect(() => {
+    const loadCounts = async () => {
+      try { const { data } = await api.get("/tips/counts"); setCounts(data); } catch { /* ignore */ }
+    };
+    loadCounts();
+    const iv = setInterval(loadCounts, 20000);
+    return () => clearInterval(iv);
+  }, [refreshKey]);
+
   const openAuth = (mode) => { setAuthMode(mode); setAuthOpen(true); };
   const requireLogin = useCallback(() => openAuth("login"), []);
   const onPublished = () => setRefreshKey((k) => k + 1);
+
+  const openTipsView = (view) => {
+    setTipsView(view);
+    setTipsOpen(true);
+    if (view === "systems") {
+      let tries = 0;
+      const tick = () => {
+        const el = document.getElementById("systeme");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        else if (tries++ < 25) setTimeout(tick, 120);
+      };
+      setTimeout(tick, 180);
+    } else {
+      setTimeout(() => document.querySelector('[data-testid="tips-window"]')?.scrollTo({ top: 0 }), 60);
+    }
+  };
+
+  useEffect(() => {
+    const h = (e) => openTipsView(e.detail || "ai");
+    window.addEventListener("tj-open-view", h);
+    return () => window.removeEventListener("tj-open-view", h);
+  }, []);
 
   return (
     <div className="App grain min-h-screen overflow-x-hidden" id="top">
@@ -62,7 +95,11 @@ function Home() {
         onSignup={() => openAuth("signup")}
         onWallet={() => setWalletOpen(true)}
         onProfile={() => setProfileOpen(true)}
-        onViewTips={() => setTipsOpen(true)}
+        onViewTips={() => openTipsView("ai")}
+        onViewSystems={() => openTipsView("systems")}
+        onViewMembers={() => openTipsView("members")}
+        onViewLive={() => openTipsView("live")}
+        counts={counts}
       />
       {user && !user.email_verified && <VerifyBanner />}
 
@@ -118,22 +155,39 @@ function Home() {
 
       {tipsOpen && (
         <div className="fixed inset-0 z-[100] bg-void grain overflow-y-auto" data-testid="tips-window">
-          <div className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 h-16 bg-black/80 backdrop-blur-xl border-b border-white/10">
-            <span className="font-heading font-black text-lg sm:text-xl text-white truncate">
-              Tip<span className="text-volt">Jar</span>
-              <span className="text-zinc-400 font-bold text-sm sm:text-base"> · {t("nav.viewtips")}</span>
-            </span>
-            <button
-              onClick={() => setTipsOpen(false)}
-              data-testid="tips-window-close"
-              className="rounded-full p-2 text-zinc-400 hover:text-white hover:bg-elevated active:scale-90 transition-all shrink-0"
-              aria-label={t("common.close")}
-            >
-              <X size={22} />
-            </button>
+          <div className="sticky top-0 z-10 flex flex-col gap-2 px-4 sm:px-6 py-3 bg-black/85 backdrop-blur-xl border-b border-white/10">
+            <div className="flex items-center justify-between">
+              <span className="font-heading font-black text-lg sm:text-xl text-white truncate">
+                Tip<span className="text-volt">Jar</span>
+              </span>
+              <button
+                onClick={() => setTipsOpen(false)}
+                data-testid="tips-window-close"
+                className="rounded-full p-2 text-zinc-400 hover:text-white hover:bg-elevated active:scale-90 transition-all shrink-0"
+                aria-label={t("common.close")}
+              >
+                <X size={22} />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => (
+                <button
+                  key={v}
+                  data-testid={`tabview-${v}`}
+                  onClick={() => openTipsView(v)}
+                  className={`whitespace-nowrap flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${tipsView === v ? "bg-[#2ECC57] text-black" : "bg-surface border border-elevated text-zinc-300 hover:text-white"}`}
+                >
+                  {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${tipsView === v ? "bg-black" : "bg-live"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
+                  {t(lbl)}
+                  {counts[v] != null && (
+                    <span className={`text-[10px] font-mono rounded-full px-1.5 ${tipsView === v ? "bg-black/20" : "bg-void/60 text-zinc-400"}`}>{counts[v]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
           <DisclaimerBar />
-          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} />
+          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} />
         </div>
       )}
 

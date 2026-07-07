@@ -276,6 +276,25 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Verified: insult tip → 422 ("direct insults and abusive language"); clean tip → 200. Image
   moderation is LLM-based (Gemini vision) — strong but not 100%.
 
+## 4 Systeme + Bereichs-Navigation + Bereichs-Alerts (Jul 2026)
+- match_predictions Collection: Forebet & Predictz speichern jetzt volle Match-Prognosen
+  (pred score, fav+fav_prob, btts, over25, league_code, kickoff) → Basis für alle Systeme.
+- GET /api/systems liefert 4 Systeme (nur wettbare Whitelist-Ligen):
+  - lock (Lock Bet, sichere Über-Banker, 6 Spiele, 2 Banker)
+  - value (nur Quoten ≥1,50: BTTS/Über2,5/DNB, 8 Spiele, 3 Banker)
+  - risk (Doppelte Chance + Beide treffen Bet-Builder, 4 Spiele)
+  - gamble (genaue Ergebnisse / Außenseiter, 5 Spiele)
+  Frontend: components/Systems.jsx (4 Karten, Risk-Farben SICHER/VALUE/RISK/ZOCKER).
+  SystemSlipCard.jsx entfernt.
+- GET /api/tips?source=ai|members + status=live → Filter nach Bereich.
+- GET /api/tips/counts → {ai, members, live, systems} für Homepage-Badges.
+- Header: 4 grüne Buttons (View AI Picks / AI System Picks / Members Picks / Live Picks)
+  mit Live-Zählern; mobil gestapelt, Desktop in Reihe. Tab-Switcher auch im Tipp-Fenster
+  (Header-Buttons sind bei offenem Overlay verdeckt → Tabs im Fenster lösen das).
+- NotificationBell: pro-Bereich Toggles (KI/Mitglieder/Live), separate Live-Abfrage
+  (Tipp der live geht klingelt immer), Popup nennt klar den Bereich (Live: 🔴 + 15s).
+- X/@EmpTips "Smart System" verworfen (User-Entscheidung: X-API kostenpflichtig/riskant).
+
 ## System-Schein Whitelist (Jul 2026)
 - FIX: "System-Schein der Woche" bundelte unwettbare Spiele (Somalia, Korea-Frauen, U19,
   australische Amateurligen, USL League Two). Ursache: Forebet-Tipps speicherten keine Liga-Info.

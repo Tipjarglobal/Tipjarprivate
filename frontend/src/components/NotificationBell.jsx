@@ -38,22 +38,47 @@ function tipRating(tp) {
   return Math.max(Number(tp.ai_rating || 0), Number(tp.avg_rating || 0));
 }
 
+// Which picks area does a tip belong to (for area-targeted alerts)?
+function tipArea(tp) {
+  if (tp.status === "live") return "live";
+  if (tp.source === "hq-auto") return "ai";
+  return "members";
+}
+
+const DEFAULT_AREAS = { ai: true, members: true, live: true };
+
+function loadAreas() {
+  try {
+    const raw = localStorage.getItem("tj_bell_areas");
+    if (raw) return { ...DEFAULT_AREAS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return DEFAULT_AREAS;
+}
+
 export default function NotificationBell() {
   const { t } = useI18n();
   const [on, setOn] = useState(localStorage.getItem("tj_bell") === "1");
   const [min, setMin] = useState(Number(localStorage.getItem("tj_bell_min")) || 8);
+  const [areas, setAreas] = useState(loadAreas());
   const [count, setCount] = useState(0);
   const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
   const seen = useRef(null);
+  const seenLive = useRef(null);
   const onRef = useRef(on);
   const minRef = useRef(min);
+  const areasRef = useRef(areas);
   onRef.current = on;
   minRef.current = min;
+  areasRef.current = areas;
 
   useEffect(() => {
     localStorage.setItem("tj_bell_min", String(min));
   }, [min]);
+
+  useEffect(() => {
+    localStorage.setItem("tj_bell_areas", JSON.stringify(areas));
+  }, [areas]);
 
   useEffect(() => {
     const openHandler = () => { setOpen(true); setUnseen(0); };
@@ -61,37 +86,66 @@ export default function NotificationBell() {
     return () => window.removeEventListener("tj-open-alerts", openHandler);
   }, []);
 
+  const fireAlert = (tp, area) => {
+    const areaLabel = t(`bell.area.${area}`);
+    const name = tp.is_parlay
+      ? `${(tp.legs || []).length}-leg parlay`
+      : `${tp.home_team || "Tip"}${tp.away_team ? " vs " + tp.away_team : ""}`;
+    const rating = tipRating(tp);
+    const title = area === "live"
+      ? `\uD83D\uDD34 ${t("bell.new.live")} — ${areaLabel}`
+      : `${t(`bell.new.${area}`)}`;
+    const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
+    pushNotify(title, body);
+    toast[area === "live" ? "message" : "success"](title, {
+      description: body,
+      duration: area === "live" ? 15000 : 10000,
+      action: {
+        label: t(`nav.view${area === "ai" ? "tips" : area === "members" ? "members" : "live"}`),
+        onClick: () => window.dispatchEvent(new CustomEvent("tj-open-view", { detail: area })),
+      },
+    });
+    setUnseen((u) => u + 1);
+  };
+
   useEffect(() => {
     let mounted = true;
     const poll = async () => {
       try {
         const stats = await api.get("/notifications/stats");
         if (mounted) setCount(stats.data.subscriber_count);
+
+        // 1) New posts (AI / members) — detected by new tip ids
         const { data } = await api.get("/tips?limit=30&sort=new");
         if (!mounted) return;
         if (seen.current === null) {
           seen.current = new Set(data.map((tp) => tp.id));
-          return;
-        }
-        for (const tp of data) {
-          if (!seen.current.has(tp.id)) {
-            if (onRef.current && tipRating(tp) >= minRef.current) {
-              const name = tp.is_parlay
-                ? `${(tp.legs || []).length}-leg parlay`
-                : `${tp.home_team || "Tip"}${tp.away_team ? " vs " + tp.away_team : ""}`;
-              const body = `${name} — ${tipRating(tp)}/10 \u2b50`;
-              pushNotify(t("bell.push_title"), body);
-              toast.success(t("bell.push_title"), {
-                description: body,
-                duration: 10000,
-                action: {
-                  label: t("nav.viewtips"),
-                  onClick: () => window.dispatchEvent(new CustomEvent("tj-open-tips")),
-                },
-              });
-              if (mounted) setUnseen((u) => u + 1);
+        } else {
+          for (const tp of data) {
+            if (!seen.current.has(tp.id)) {
+              const area = tipArea(tp);
+              if (onRef.current && (areasRef.current[area] !== false) &&
+                  (area === "live" || tipRating(tp) >= minRef.current)) {
+                fireAlert(tp, area);
+              }
+              seen.current.add(tp.id);
             }
-            seen.current.add(tp.id);
+          }
+        }
+
+        // 2) Live picks — detected separately so a tip going LIVE always rings
+        const live = await api.get("/tips?status=live&limit=30");
+        if (!mounted) return;
+        if (seenLive.current === null) {
+          seenLive.current = new Set(live.data.map((tp) => tp.id));
+        } else {
+          for (const tp of live.data) {
+            if (!seenLive.current.has(tp.id)) {
+              if (onRef.current && areasRef.current.live !== false) {
+                fireAlert({ ...tp, status: "live" }, "live");
+              }
+              seenLive.current.add(tp.id);
+            }
           }
         }
       } catch {
@@ -204,6 +258,26 @@ export default function NotificationBell() {
               className="w-full accent-bell cursor-pointer"
             />
             <p className="text-[11px] text-zinc-500 mt-2 leading-snug">{t("bell.threshold_hint")}</p>
+
+            <div className="mt-3 pt-3 border-t border-elevated">
+              <p className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("bell.areas")}</p>
+              {[["ai", "bell.area.ai"], ["members", "bell.area.members"], ["live", "bell.area.live"]].map(([k, lbl]) => (
+                <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1.5 cursor-pointer">
+                  <span className="text-sm text-zinc-300 flex items-center gap-2">
+                    {k === "live" && <span className="w-2 h-2 rounded-full bg-live animate-pulse" />}
+                    {t(lbl)}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={areas[k] !== false}
+                    onChange={(e) => setAreas((a) => ({ ...a, [k]: e.target.checked }))}
+                    data-testid={`bell-area-toggle-${k}`}
+                    className="accent-bell w-4 h-4 cursor-pointer"
+                  />
+                </label>
+              ))}
+            </div>
+
             {on && <p className="text-[11px] text-bell mt-2">{t("bell.on")}</p>}
             {count > 0 && (
               <p className="text-[11px] text-zinc-500 mt-3 pt-3 border-t border-elevated flex items-center gap-1.5" data-testid="bell-subscriber-count">

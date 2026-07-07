@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2 } from "lucide-react";
 import StarRating from "./StarRating";
-import { SystemSlipCard } from "./SystemSlipCard";
+import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { useI18n } from "../i18n";
@@ -15,29 +15,42 @@ const FILTERS = [
   { k: "hype", label: "wall.filter.hype" },
   { k: "top", label: "wall.filter.top" },
 ];
+const VIEW_TITLE_KEY = {
+  ai: "nav.viewtips",
+  systems: "nav.viewsystems",
+  members: "nav.viewmembers",
+  live: "nav.viewlive",
+};
 const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
 ];
 
-export default function RateWall({ refreshKey, requireLogin }) {
+export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [tips, setTips] = useState([]);
   const [sort, setSort] = useState("new");
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState(view === "live" ? "live" : "pending");
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setStatus(view === "live" ? "live" : "pending");
+  }, [view]);
 
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
     try {
       const params = { sort };
-      if (status) params.status = status;
+      const st = view === "live" ? "live" : status;
+      if (st) params.status = st;
+      if (view === "ai") params.source = "ai";
+      else if (view === "members") params.source = "members";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
-  }, [sort, status]);
+  }, [sort, status, view]);
 
   useEffect(() => {
     load();
@@ -100,7 +113,7 @@ export default function RateWall({ refreshKey, requireLogin }) {
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
         <div>
           <span className="text-xs font-bold uppercase tracking-[0.25em] text-volt flex items-center gap-2"><Zap size={14} /> Apex Scale</span>
-          <h2 className="font-heading text-3xl md:text-5xl font-black text-white tracking-tighter mt-2">{t("wall.title")}</h2>
+          <h2 className="font-heading text-3xl md:text-5xl font-black text-white tracking-tighter mt-2">{t(VIEW_TITLE_KEY[view] || "wall.title")}</h2>
           <p className="text-zinc-400 mt-2 max-w-lg">{t("wall.subtitle")}</p>
         </div>
         {user && (
@@ -123,9 +136,11 @@ export default function RateWall({ refreshKey, requireLogin }) {
         )}
       </div>
 
-      {/* System-Schein der Woche */}
-      <SystemSlipCard />
+      {/* Systeme der Woche (Lock Bet / Value / Risk / Gamble) */}
+      {view === "systems" && <Systems />}
 
+      {view !== "systems" && (
+        <>
       {/* filters */}
       <div className="flex flex-wrap gap-2 mb-6">
         {FILTERS.map((f) => (
@@ -134,8 +149,8 @@ export default function RateWall({ refreshKey, requireLogin }) {
             {t(f.label)}
           </button>
         ))}
-        <span className="w-px bg-elevated mx-1" />
-        {[["pending", "wall.filter.pending"], ["live", "wall.filter.live"], ["won", "wall.filter.won"], ["lost", "wall.filter.lost"]].map(([v, lbl]) => (
+        {view !== "live" && <span className="w-px bg-elevated mx-1" />}
+        {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"], ["won", "wall.filter.won"], ["lost", "wall.filter.lost"]].map(([v, lbl]) => (
           <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
             {t(lbl)}
@@ -156,6 +171,8 @@ export default function RateWall({ refreshKey, requireLogin }) {
             <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} />
           ))}
         </div>
+      )}
+        </>
       )}
     </section>
   );

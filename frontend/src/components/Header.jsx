@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, ArrowRight } from "lucide-react";
+import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import { useI18n, LANGUAGES } from "../i18n";
@@ -46,7 +46,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, counts = {} }) {
   const { t, lang, setLang } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -78,15 +78,6 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <a href="#how" className="hover:text-volt transition-colors" data-testid="nav-how">{t("nav.how")}</a>
           <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>
-
-        <button
-          type="button"
-          onClick={onViewTips}
-          data-testid="view-tips-btn"
-          className="hidden md:flex items-center gap-2 rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm px-5 py-2.5 shrink-0 hover:bg-[#26b64c] active:scale-95 transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
-        >
-          <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
-        </button>
 
         <div className="flex items-center gap-2 sm:gap-3">
           <InstallAppButton />
@@ -156,18 +147,35 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
         </div>
       </div>
 
-      {/* Mobile: full-width green CTA below the header */}
-      <div className="md:hidden px-4 pb-2.5 pt-0.5">
-        <button
-          type="button"
-          onClick={onViewTips}
-          data-testid="view-tips-btn-mobile"
-          className="flex items-center justify-center gap-2 w-full rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm py-3 active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(46,204,87,0.35)]"
-        >
-          <ArrowRight size={17} strokeWidth={2.5} /> {t("nav.viewtips")}
-        </button>
+      {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
+      <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-2">
+          <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} />
+          <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} />
+          <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} />
+          <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} live />
+        </div>
       </div>
     </header>
+  );
+}
+
+function QuickView({ onClick, icon: Icon, label, testId, count, live }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="flex items-center justify-center gap-2 w-full rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm py-2.5 active:scale-[0.98] hover:bg-[#26b64c] transition-all shadow-[0_0_16px_rgba(46,204,87,0.3)]"
+    >
+      {live && count > 0 ? <span className="w-2 h-2 rounded-full bg-red-700 animate-pulse" /> : <Icon size={16} strokeWidth={2.5} />}
+      {label}
+      {count != null && (
+        <span data-testid={`${testId}-count`} className="min-w-[20px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
