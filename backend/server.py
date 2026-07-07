@@ -1131,6 +1131,152 @@ async def credit_txns(user: dict = Depends(get_current_user)):
     return txns
 
 
+# ------------------------------------------------------------------ earn credits: win claims
+WIN_MIN_PLAYED_LEGS = 5          # a played-along slip must have >= 5 legs
+WIN_MIN_SYSTEM_MATCH = 3         # >= 3 legs must match a TipJar system (anti-fraud)
+WIN_LIVE_MIN_LEGS = 4            # live streak: 4 in a row
+WIN_LIVE_MIN_ODDS = 1.60         # each live leg must be > 1.60
+WIN_POSTED_CREDITS = 20
+WIN_LIVE_CREDITS = 20
+WIN_MAX_CREDITS = 20             # cap per claim
+
+
+async def extract_win_slip(image_b64: str) -> dict:
+    """Gemini Vision: read a bookmaker bet-slip screenshot into structured JSON."""
+    fallback = {"status": "unknown", "total_odds": 0, "stake": "", "winnings": "", "legs": []}
+    if not EMERGENT_LLM_KEY or not image_b64:
+        return fallback
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"win-{uuid.uuid4()}",
+                       system_message=("You read betting bet-slip screenshots and output STRICT JSON only. "
+                                       "Never invent legs that are not visible.")).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        prompt = (
+            "Read this bet-slip screenshot. Return STRICT JSON: "
+            '{"status":"won|lost|open","total_odds":<number>,"stake":"","winnings":"",'
+            '"legs":[{"home":"","away":"","market":"","odds":<number>,"result":"won|lost|open"}]}. '
+            "status is the overall slip result. Extract every leg. If a value is missing use empty/0."
+        )
+        resp = await chat.send_message(UserMessage(text=prompt, file_contents=[ImageContent(image_base64=image_b64)]))
+        raw = (resp if isinstance(resp, str) else str(resp)).strip()
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.lstrip().startswith("json"):
+                raw = raw.lstrip()[4:]
+        s, e = raw.find("{"), raw.rfind("}")
+        if s == -1 or e == -1:
+            return fallback
+        data = json.loads(raw[s:e + 1])
+        legs = []
+        for lg in (data.get("legs") or [])[:20]:
+            try:
+                od = float(lg.get("odds") or 0)
+            except Exception:
+                od = 0.0
+            legs.append({"home": str(lg.get("home", "") or ""), "away": str(lg.get("away", "") or ""),
+                         "market": str(lg.get("market", "") or ""), "odds": od,
+                         "result": str(lg.get("result", "") or "").lower()})
+        try:
+            total = float(data.get("total_odds") or 0)
+        except Exception:
+            total = 0.0
+        return {"status": str(data.get("status", "") or "").lower(), "total_odds": round(total, 2),
+                "stake": str(data.get("stake", "") or ""), "winnings": str(data.get("winnings", "") or ""),
+                "legs": legs}
+    except Exception as ex:
+        logger.error(f"win slip extract failed: {ex}")
+        return fallback
+
+
+async def _system_match_keys() -> set:
+    try:
+        data = await build_systems()
+    except Exception:
+        return set()
+    keys = set()
+    for sysd in data.get("systems", []):
+        for sel in sysd.get("selections", []):
+            keys.add(_match_key(sel.get("home_team"), sel.get("away_team")))
+    return keys
+
+
+@api_router.post("/wins/claim")
+async def claim_win(file: UploadFile = File(...), type: str = Form(...),
+                    user: dict = Depends(get_current_user)):
+    ctype = (type or "").strip().lower()
+    if ctype not in ("played", "posted", "live"):
+        raise HTTPException(status_code=400, detail="Invalid claim type")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+    image_b64 = base64.b64encode(raw).decode("utf-8")
+    slip = await extract_win_slip(image_b64)
+
+    if slip["status"] != "won":
+        raise HTTPException(status_code=422, detail="Nur GEWONNENE Scheine zählen (Slip ist nicht 'Won').")
+    legs = slip["legs"]
+    legs_n = len(legs)
+    if legs_n < 2:
+        raise HTTPException(status_code=422, detail="Kein gültiger Kombi-Schein erkannt.")
+
+    # anti-duplicate: same set of legs can't be claimed twice
+    sig = hashlib.md5(("|".join(sorted(f"{l['home']}-{l['away']}-{l['market']}" for l in legs))
+                       + f"|{slip['total_odds']}").encode()).hexdigest()
+    if await db.win_claims.find_one({"sig": sig}):
+        raise HTTPException(status_code=409, detail="Dieser Schein wurde bereits eingereicht.")
+
+    sys_keys = await _system_match_keys()
+    matched = sum(1 for l in legs if _match_key(l["home"], l["away"]) in sys_keys)
+
+    if ctype == "live":
+        if legs_n < WIN_LIVE_MIN_LEGS:
+            raise HTTPException(status_code=422, detail=f"Live-Serie braucht mind. {WIN_LIVE_MIN_LEGS} Picks.")
+        if any((l["odds"] or 0) <= WIN_LIVE_MIN_ODDS for l in legs):
+            raise HTTPException(status_code=422, detail=f"Jede Live-Auswahl muss Quote > {WIN_LIVE_MIN_ODDS} haben.")
+        credits = WIN_LIVE_CREDITS
+    else:
+        if matched < WIN_MIN_SYSTEM_MATCH:
+            raise HTTPException(status_code=422,
+                                detail="Das zählt nicht als mitgespielt — der Schein passt zu keinem TipJar-System.")
+        if ctype == "played":
+            if legs_n < WIN_MIN_PLAYED_LEGS:
+                raise HTTPException(status_code=422, detail=f"Mitgespielter Schein braucht mind. {WIN_MIN_PLAYED_LEGS} Legs.")
+            credits = min(WIN_MAX_CREDITS, WIN_MIN_PLAYED_LEGS + (legs_n - WIN_MIN_PLAYED_LEGS))
+        else:  # posted
+            credits = WIN_POSTED_CREDITS
+
+    # store image now that the claim is valid
+    ext = (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png").lower()
+    image_path = None
+    try:
+        result = put_object(f"{APP_NAME}/wins/{user['id']}/{uuid.uuid4()}.{ext}", raw,
+                            file.content_type or "image/png")
+        image_path = result["path"]
+    except Exception as ex:
+        logger.error(f"win image upload failed: {ex}")
+
+    claim = {
+        "id": str(uuid.uuid4()), "sig": sig, "user_id": user["id"], "username": user["username"],
+        "type": ctype, "image_path": image_path, "legs": legs, "legs_count": legs_n,
+        "matched_legs": matched, "total_odds": slip["total_odds"], "stake": slip["stake"],
+        "winnings": slip["winnings"], "credits": credits, "status": "approved",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.win_claims.insert_one(claim)
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"received_credits": credits}})
+    claim.pop("_id", None)
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"claim": claim, "credits_awarded": credits, "user": public_user(updated)}
+
+
+@api_router.get("/wins/hall-of-fame")
+async def hall_of_fame():
+    docs = await db.win_claims.find(
+        {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
+    ).sort("total_odds", -1).limit(24).to_list(24)
+    return docs
+
+
+
 # ------------------------------------------------------------------ notifications (no signup)
 @api_router.post("/notifications/subscribe")
 async def subscribe(inp: SubscribeInput):

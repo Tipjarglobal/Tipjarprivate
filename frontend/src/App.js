@@ -3,7 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Toaster, toast } from "sonner";
-import { Sparkles, Star, Loader2, CheckCircle2, MailWarning, X } from "lucide-react";
+import { Sparkles, Star, Loader2, CheckCircle2, MailWarning, X, Coins } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
 import { AuthProvider, useAuth } from "./auth";
@@ -18,6 +18,8 @@ import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
 import InviteSection from "./components/InviteSection";
+import HallOfFame from "./components/HallOfFame";
+import WinClaimModal from "./components/WinClaimModal";
 import SplashScreen from "./components/SplashScreen";
 import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 
@@ -31,6 +33,7 @@ function Home() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [winOpen, setWinOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
   const [tipsView, setTipsView] = useState("ai");
   const [counts, setCounts] = useState({});
@@ -127,6 +130,10 @@ function Home() {
                 className="flex items-center gap-2 rounded-full border border-elevated text-white font-bold px-6 py-3.5 hover:border-volt/60 hover:bg-white/5 active:scale-95 transition-all">
                 <Star size={18} /> {t("hero.cta.rate")}
               </button>
+              <button data-testid="hero-earn-btn" onClick={() => setWinOpen(true)}
+                className="flex items-center gap-2 rounded-full border border-volt/40 bg-volt/10 text-volt font-bold px-6 py-3.5 hover:bg-volt/20 active:scale-95 transition-all">
+                <Coins size={18} /> {t("win.earn")}
+              </button>
             </div>
           </motion.div>
 
@@ -145,6 +152,7 @@ function Home() {
       </section>
 
       <InviteSection />
+      <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} />
 
       <footer className="border-t border-elevated py-10 text-center px-4">
         <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
@@ -194,6 +202,8 @@ function Home() {
       <SubmitTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
       <WalletModal open={walletOpen} onClose={() => setWalletOpen(false)} />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
+        requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished} />
     </div>
   );
 }

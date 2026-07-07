@@ -1,0 +1,50 @@
+{
+  "summary": "Iter26 verifies: (1) Leaderboard/Bestenliste completely removed from landing (no data-testid=nav-leaderboard, 'Bestenliste' string absent from body); (2) 5-system engine returns exactly {lock,value,smartvalue,risk,gamble} with lock.total_odds=1.36 (in 1.2-1.7 target range) and every selection has numeric odds>1.0; (3) /api/tips/counts returns all required int fields with systems=5; (4) /api/wins/hall-of-fame returns 200 + JSON array (empty in current DB) and Hall of Fame section on landing renders with empty-state + hof-earn-btn; (5) POST /api/wins/claim -> unauth=401, admin+type=xxx=400 'Invalid claim type', admin+type=played+non-slip PNG=422 'Nur GEWONNENE Scheine zählen (Slip ist nicht Won)' (Gemini vision correctly rejects); (6) hero-earn-btn: when NOT logged in click opens LOGIN modal (win-claim-modal NOT rendered); when LOGGED IN click opens win-claim-modal with all 3 type toggles (played/posted/live), win-upload-btn and win-submit-btn; (7) Systems tab renders all 5 system-card-{lock,value,smartvalue,risk,gamble}; Spanish lang-es switches H1 to 'Publícalo. Puntúalo. Cóbralo.'; Smart Bets tab still clickable/renders.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_evidence": {
+    "hall_of_fame_endpoint": "GET /api/wins/hall-of-fame -> 200, body=[] (no approved claims yet)",
+    "wins_claim_unauth": "POST /api/wins/claim (no Authorization) -> 401 {\"detail\":\"Not authenticated\"}",
+    "wins_claim_bad_type": "POST /api/wins/claim with admin Bearer + type=xxx -> 400 {\"detail\":\"Invalid claim type\"}",
+    "wins_claim_non_slip": "POST /api/wins/claim with admin Bearer + type=played + PNG that is NOT a bet-slip -> 422 {\"detail\":\"Nur GEWONNENE Scheine zählen (Slip ist nicht 'Won').\"} (Gemini vision correctly rejected)",
+    "systems_shape": "GET /api/systems -> week='KW 28', 5 systems keys=[lock,value,smartvalue,risk,gamble], total_odds: lock=1.36, value=2.20, smartvalue=8.95, risk=56.77, gamble=35.94. All selection odds numeric>1.0.",
+    "counts": "GET /api/tips/counts -> {ai:8, ai_total:8, members:1, live:0, systems:5, smart:7} — all ints, systems==5",
+    "no_leaderboard_ui": "data-testid=nav-leaderboard absent; body text does not contain 'Bestenliste'",
+    "hall_of_fame_ui": "data-testid=hall-of-fame present; data-testid=hof-empty present (empty state); data-testid=hof-earn-btn present",
+    "hero_earn_unauth": "Click hero-earn-btn while logged out -> AuthModal (login form) opens; win-claim-modal is NOT rendered",
+    "hero_earn_auth": "Click hero-earn-btn while logged in as admin -> data-testid=win-claim-modal opens; win-type-played, win-type-posted, win-type-live, win-upload-btn, win-submit-btn all present",
+    "systems_ui": "Opening tabview-systems shows all 5 cards: system-card-lock, system-card-value, system-card-smartvalue, system-card-risk, system-card-gamble",
+    "spanish_switch": "language-switcher -> lang-es -> H1='Publícalo. Puntúalo. Cóbralo.'"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter26_wins_and_hof.py",
+    "/app/test_reports/pytest/iter26_results.xml"
+  ],
+  "action_items": [
+    "LOW-priority (React warning, not a functional bug): WinClaimModal calls requireLogin?.() inside the render body when open && !user. This triggers a React dev warning: 'Cannot update a component (Home) while rendering a different component (WinClaimModal). To locate the bad setState() call inside Home...'. Behaviour still works (login modal opens, win modal closes), but this should be moved to a useEffect: e.g. useEffect(() => { if (open && !user) { requireLogin?.(); } }, [open, user, requireLogin]); and return null while !user."
+  ],
+  "critical_code_review_comments": [
+    "server.py claim_win correctly enforces the full validation chain: auth -> ctype in (played,posted,live) -> file present -> Gemini extract_win_slip -> status=='won' -> legs>=2 -> anti-duplicate sig -> live-branch (legs>=4 & every odds>1.60) or matched>=3 for played/posted -> played legs>=5, credits capped at WIN_MAX_CREDITS(20). All error paths return proper HTTP codes (400/401/409/422).",
+    "build_systems() emits exactly 5 systems as required, each _finalize_system with distinct key/title/subtitle/risk. Sicherheits-Kombi uses 4x 'Über 0.5 Tore' legs (~1.08 each) giving total_odds=1.36 — well inside the 1.2-1.7 target. Real bookmaker odds are applied to safe/bankers/vals via _apply_real; smartvalue reuses the 'vals' list which is fine and matches the requirement.",
+    "hall_of_fame() properly hides mongo _id, sig, user_id fields via projection and sorts by total_odds desc, limit=24 — matches 'Best of' sort spec.",
+    "React setState-in-render in WinClaimModal.jsx line 25-28: calling requireLogin?.() during render triggers a Home setState. Not a bug in user flow but produces a console error and could cause double-invocation in StrictMode/concurrent mode. Move to useEffect.",
+    "App.js hero-earn-btn onClick={() => setWinOpen(true)} unconditionally — the auth gate is delegated to WinClaimModal which is fine architecturally, but the setState-in-render issue above stems from this. Preferable to compute requireLogin inline at click time.",
+    "HallOfFame.jsx correctly renders empty state via data-testid=hof-empty, and passes onEarn up to Home which reuses the same WinClaimModal. Good composability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter26_wins_and_hof.py (new, 9 tests)",
+    "/app/test_reports/pytest/iter26_results.xml (new, junit report)"
+  ],
+  "success_rate": {"backend": "100% (9/9 pytest passed in 3.64s)", "frontend": "100% (14/14 UI assertions passed: no leaderboard, HoF, hero-earn auth-gate, win modal contents, 5 systems, smart tab, Spanish)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (Bearer token used for /api/wins/claim validation paths)",
+  "seed_data_creation": "None. No test data was inserted (no valid winning slips available, per the note in the request).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 26 features all pass. Regression file: /app/backend/tests/test_iter26_wins_and_hof.py (9 tests). Note: the Hall of Fame is empty because /api/wins/claim requires a REAL winning bet-slip PNG that matches a live TipJar system — cannot be tested end-to-end with dummy images (per problem statement). Frontend testids added this round: hero-earn-btn (hero CTA), hall-of-fame + hof-empty + hof-earn-btn (landing section), win-claim-modal + win-claim-close + win-type-{played,posted,live} + win-type-desc + win-file-input + win-upload-btn + win-submit-btn (modal), system-card-smartvalue (5th system card). Backend endpoints new/changed: POST /api/wins/claim, GET /api/wins/hall-of-fame, GET /api/systems now returns 5 systems (was 4 in iter25). One minor React warning outstanding — see action_items.",
+  "rca of the issue": "N/A — no functional bugs. Only 1 low-priority React dev-mode warning about setState-in-render in WinClaimModal.jsx (login flow still works correctly)."
+}
