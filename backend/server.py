@@ -1996,10 +1996,14 @@ def _forebet_candidates(r: dict) -> list[dict]:
         if win >= FOREBET_MIN_PROB:
             dnb_prob = win / max(win + loss, 1)
             odds = round(1.0 / max(dnb_prob, 0.01), 2)
-            dnb_rating = 9.5 if win >= 72 else 9.0 if win >= 64 else 8.5 if win >= 58 else 8.0
+            # DNB can still lose if the favourite loses → never award 9.5/10
+            dnb_rating = 9.0 if win >= 70 else 8.5 if win >= 62 else 8.0
             out.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
                         "odds": str(odds), "rating": dnb_rating})
-    # 2) Safe goals banker from predicted correct score
+    # 2) Safe goals banker from predicted correct score.
+    # PHILOSOPHY: only "Über 0.5 Tore" (1+ goal in the match) is a true 9-10★ banker —
+    # it loses only on a 0-0. "Über 1.5" (2+ goals) loses on any 1-goal game, so it is
+    # capped at 8.5 and only offered when a high-scoring game is predicted.
     sc = parse_pred_score(r.get("score"))
     avg = 0.0
     try:
@@ -2008,13 +2012,13 @@ def _forebet_candidates(r: dict) -> list[dict]:
         avg = 0.0
     if sc:
         total = sc[0] + sc[1]
-        if total >= 3:
-            rating = 10.0 if avg >= 3.0 else 9.5
-            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.20", "rating": rating})
-        elif total == 2:
-            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 9.0})
+        if total >= 2:
+            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
+                        "rating": 9.5 if (total >= 3 and avg >= 2.8) else 9.0})
+            if total >= 4 and avg >= 3.2:
+                out.append({"sfx": "-g2", "market": "Über 1.5 Tore", "odds": "1.30", "rating": 8.5})
         elif total == 1:
-            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.03", "rating": 9.0})
+            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.5})
     return out
 
 
@@ -2172,27 +2176,23 @@ def _conf_adj(rating: float, conf: str) -> float:
 
 
 def _predictz_candidates(r: dict) -> list[dict]:
-    """From one match row, derive all safe goals-market bankers (may be several:
-    a score-based Über line, plus Über 2.5 and/or BTTS when predicted)."""
+    """Predictz is treated as SUPPLEMENTARY only — its predicted scores are unreliable
+    (a '4-1' can end '0-2'), so we NEVER give its picks 9-10★. We derive only the
+    genuinely safe 1+ goal market from the score, plus Predictz's own O/U-2.5 & BTTS
+    tip columns, all capped low."""
     conf = r.get("conf")
     out = []
-    # 1) Score-based Über line (safest)
+    # 1) Only the safe 1+ goal market from the (unreliable) predicted score
     ps = parse_pred_score(r.get("pred"))
-    if ps:
-        total = ps[0] + ps[1]
-        if total >= 3:
-            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.20", "rating": _conf_adj(10.0, conf)})
-        elif total == 2:
-            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.30", "rating": _conf_adj(9.0, conf)})
-        elif total == 1:
-            out.append({"sfx": "", "market": "Über 0.5 Tore", "odds": "1.03", "rating": _conf_adj(9.0, conf)})
-    # 2) Over 2.5 tip (predictz O/U page)
+    if ps and (ps[0] + ps[1]) >= 1:
+        out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08", "rating": _conf_adj(8.0, conf)})
+    # 2) Over 2.5 tip (predictz O/U page) — capped, supplementary
     if (r.get("ou_tip") or "").strip().lower() == "over 2.5":
-        out.append({"sfx": "-o25", "market": "Über 2.5 Tore", "odds": "1.55", "rating": _conf_adj(8.5, conf)})
-    # 3) BTTS Yes tip (predictz BTTS page)
+        out.append({"sfx": "-o25", "market": "Über 2.5 Tore", "odds": "1.55", "rating": _conf_adj(7.5, conf)})
+    # 3) BTTS Yes tip (predictz BTTS page) — capped, supplementary
     if (r.get("btts_tip") or "").strip().lower() == "btts yes":
-        out.append({"sfx": "-btts", "market": "Beide Teams treffen (BTTS)", "odds": "1.70", "rating": _conf_adj(8.5, conf)})
-    return [c for c in out if round(c["rating"], 1) >= 8.5]
+        out.append({"sfx": "-btts", "market": "Beide Teams treffen (BTTS)", "odds": "1.70", "rating": _conf_adj(7.5, conf)})
+    return [c for c in out if round(c["rating"], 1) >= 7.5]
 
 
 async def _index_forebet_times(url: str, limit: int = 250) -> int:
@@ -2355,11 +2355,12 @@ def _prob_over(line: float, lam: float) -> float:
 
 
 def _rating_from_prob(p: float) -> float:
-    if p >= 0.80: return 9.5
-    if p >= 0.72: return 9.0
-    if p >= 0.64: return 8.5
-    if p >= 0.56: return 8.0
-    if p >= 0.48: return 7.5
+    # 9-10★ reserved for near-certain props (must not lose); calibrated conservatively
+    if p >= 0.90: return 9.5
+    if p >= 0.84: return 9.0
+    if p >= 0.77: return 8.5
+    if p >= 0.70: return 8.0
+    if p >= 0.62: return 7.5
     return 7.0
 
 
