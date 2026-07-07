@@ -163,6 +163,16 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   max-w-xs` on mobile, `sm:absolute sm:right-0` dropdown on desktop. Verified 390px (centered x=35→355)
   + 1440px (right-aligned) both PASS.
 
+## Notification popup bugfix (2026-06, iteration 23)
+- BUG: German user reported NO popup when a new high-rated tip auto-posts. Root cause:
+  NotificationBell only used serviceWorker.showNotification (pushNotify), which silently
+  returns when browser Notification.permission != 'granted' (the user's state).
+- FIX: poll() now ALSO fires an unconditional sonner toast.success (top-center, 10s) with the
+  tip name + rating and a 'View Today's Tips' action button that dispatches 'tj-open-tips'
+  CustomEvent; App.js listens and opens the tips window. Works with OR without browser permission.
+- Verified iteration-23: frontend 4/4 (bell enable → new tip via API → toast appears within ~7s,
+  unseen badge increments, action opens tips-window). PASS.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
