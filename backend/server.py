@@ -46,7 +46,7 @@ AI_MODEL = "gemini-3.1-pro-preview"
 API_FOOTBALL_KEY = os.environ.get('API_FOOTBALL_KEY')
 API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
 SETTLE_INTERVAL_SECONDS = 15 * 60
-SETTLE_BATCH_CAP = 20   # max tips processed per settlement run (respects free-tier limits)
+SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 req/day)
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 
 APP_NAME = "tipjar"
