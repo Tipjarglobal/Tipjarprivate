@@ -20,6 +20,7 @@ import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
 import InviteSection from "./components/InviteSection";
 import SplashScreen from "./components/SplashScreen";
+import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -109,9 +110,10 @@ function Home() {
       <InviteSection />
       <Leaderboard refreshKey={refreshKey} />
 
-      <footer className="border-t border-elevated py-10 text-center">
+      <footer className="border-t border-elevated py-10 text-center px-4">
         <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
-        <p className="text-xs text-zinc-600 mt-2">Post it. Rate it. Cash it. · 18+ · Play responsibly</p>
+        <p className="text-xs text-zinc-600 mt-2 mb-6">Post it. Rate it. Cash it.</p>
+        <Disclaimer />
       </footer>
 
       {tipsOpen && (
@@ -130,6 +132,7 @@ function Home() {
               <X size={22} />
             </button>
           </div>
+          <DisclaimerBar />
           <RateWall refreshKey={refreshKey} requireLogin={requireLogin} />
         </div>
       )}

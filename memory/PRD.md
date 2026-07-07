@@ -233,6 +233,20 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   playwright CDN AND has chromium system libs. If it still fails after redeploy → platform
   limitation → user must contact Emergent Support to enable Playwright/chromium in the deploy image.
 
+## System-Schein der Woche + Responsible-Gambling disclaimer (2026-07, iteration 27)
+- FEATURE A "System-Schein der Woche": GET /api/system-slip bundles the safest current
+  hq-auto bankers into a ready system bet — dedupes by match, top 6 by ai_rating, marks top 2
+  as Banker, returns combined odds + system_label ("6 Auswahlen · 5er-System · 1 Fehler erlaubt")
+  + week (KW). Frontend SystemSlipCard.jsx renders a highlighted card at the top of the Rate Wall
+  (inside tips window) with banker badges, kickoff time, odds, ratings. Verified curl + screenshot.
+- FEATURE E (part 1) Responsible gambling: Disclaimer.jsx (Disclaimer block in footer + compact
+  DisclaimerBar in tips window). Text: TipJar is NOT a bookmaker/betting operator, tips are for
+  entertainment only, no guarantee of winnings, 18+, gambling can be addictive, help resources
+  (DE: BZgA check-dein-spiel.de 0800 1 37 27 00 / EN: BeGambleAware). Language-aware (de/en, else en).
+  Verified: disclaimer-block + disclaimer-bar render.
+- STILL PENDING for full legal (E part 2): user must provide Impressum data (name, address, email,
+  legal form) + confirm languages, before Impressum/AGB/Datenschutz pages can be built.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 
