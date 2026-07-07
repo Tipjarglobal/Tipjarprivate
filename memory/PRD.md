@@ -147,6 +147,11 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   (corrected from 'live' — match starts later).
 - Verified iter 14 & 15: frontend 100%.
 
+## Forebet auto-tips + optional-email auth + splash + tips window (Jun 2026)
+- **Forebet auto-tips**: TipJarHQ scrapes forebet.com via Playwright (Cloudflare-protected → needs a real browser) every 6h + on startup, picks predictions where the predicted 1X2 outcome prob >= 58%, posts up to 3 new picks/run to the Rate Wall (id `forebet-<matchid>`, source='forebet', league='Forebet Pick', odds=100/prob, Apex from prob). Admin trigger: POST /api/admin/forebet/run. Files: backend/forebet.py + forebet_autopost()/forebet_loop() in server.py. Authoritative HQ purge preserves `forebet-*` ids. NOTE: needs PLAYWRIGHT_BROWSERS_PATH + chromium installed — works in Preview; PRODUCTION needs chromium in the container (job degrades gracefully otherwise). Telegram channel reading = Part B, deferred (needs user's Telegram api_id/api_hash + phone).
+- **Auth: email now OPTIONAL**. Username+password mandatory. Login by username OR email (single field). No-email accounts active immediately (email_verified=true), referral reward granted at signup. Partial unique index on email ({$type:string}). Verified 100% (backend 8/8 pytest, frontend 12/12).
+- **Splash screen**: language-specific (/splash-en|de|el.png) shows 2.5s then slides up. **Tips window**: Rate Wall removed from home page; opens as full-screen overlay via green "View Today's Tips" button (header desktop+mobile, hero, nav). **Wallet**: buy buttons disabled + red "purchases disabled until 1000 members" notice.
+
 ## Delete tip + banner/bell UX (2026-06, iteration 16-17)
 - Fixed "Delete tip": TipCard now receives onDelete/canDelete props (were missing → button never rendered);
   added i18n keys wall.delete/wall.deleted/wall.delete_confirm (EN/DE/EL). Backend DELETE /api/tips/{id}
