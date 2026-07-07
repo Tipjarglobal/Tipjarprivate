@@ -8,6 +8,8 @@ import os
 import uuid
 import re
 import json
+import math
+import hashlib
 import base64
 import logging
 import asyncio
@@ -193,6 +195,18 @@ async def admin_autotips_reset(admin: dict = Depends(require_admin)):
     return {"deleted": deleted, "forebet": a, "predictz": b}
 
 
+@api_router.post("/admin/smart/run")
+async def admin_smart_run(admin: dict = Depends(require_admin)):
+    return await smart_autopost()
+
+
+@api_router.post("/admin/smart/reset")
+async def admin_smart_reset(admin: dict = Depends(require_admin)):
+    deleted = (await db.tips.delete_many({"source": "smart"})).deleted_count
+    res = await smart_autopost()
+    return {"deleted": deleted, **res}
+
+
 @api_router.get("/system-slip")
 async def system_slip():
     """Curated 'System-Schein der Woche': bundles the safest current HQ bankers
@@ -259,14 +273,15 @@ async def tips_counts():
         {"match_time": 1}).to_list(500)
     ai = sum(1 for d in ai_docs if _in_kickoff_window(d.get("match_time"), "24", now))
     ai_total = len(ai_docs)
-    members = await db.tips.count_documents({"source": {"$ne": "hq-auto"}, "status": "pending"})
+    members = await db.tips.count_documents({"source": {"$nin": ["hq-auto", "smart"]}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
+    smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
-    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n}
+    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n, "smart": smart}
 
 
 
@@ -847,8 +862,10 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["status"] = status
     if source == "ai":
         q["source"] = "hq-auto"
+    elif source == "smart":
+        q["source"] = "smart"
     elif source == "members":
-        q["source"] = {"$ne": "hq-auto"}
+        q["source"] = {"$nin": ["hq-auto", "smart"]}
     limit = max(1, min(limit, 100))
     fetch = 300 if window in ("24", "48", "48plus") else limit
     if sort == "top":
@@ -1277,7 +1294,7 @@ async def settle_pending_tips() -> dict:
         return {"ok": False, "reason": "API_FOOTBALL_KEY not configured", "checked": 0, "settled": 0}
     now = datetime.now(timezone.utc)
     raw = await db.tips.find(
-        {"status": "pending", "is_parlay": {"$ne": True},
+        {"status": "pending", "is_parlay": {"$ne": True}, "source": {"$ne": "smart"},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
         {"_id": 0},
     ).sort("created_at", 1).to_list(300)
@@ -1615,7 +1632,7 @@ async def purge_expired_autotips() -> int:
     grace = timedelta(hours=36) if API_FOOTBALL_KEY else timedelta(hours=3)
     cutoff = datetime.now(timezone.utc) - grace
     docs = await db.tips.find(
-        {"source": "hq-auto", "status": "pending"}, {"id": 1, "match_time": 1}).to_list(1000)
+        {"source": {"$in": ["hq-auto", "smart"]}, "status": "pending"}, {"id": 1, "match_time": 1}).to_list(1000)
     stale = [d["id"] for d in docs
              if (ko := _parse_kickoff(d.get("match_time"))) and ko < cutoff]
     if stale:
@@ -2303,6 +2320,255 @@ async def predictz_loop():
         await asyncio.sleep(3 * 3600)  # every 3 hours
 
 
+# ---------------------------------------------------------------------------
+# Smart Bet: data-driven PLAYER PROPS from API-Football season statistics.
+# API-Football does NOT provide prop predictions/odds, so we compute them from
+# each player's real season stats (shots, shots on target, fouls, cards, saves,
+# goals) for the regular starters of the teams in our upcoming whitelist matches.
+# NOTE: markets NOT covered by API-Football data (offsides, corners, throw-ins,
+# free-kicks, headed/long-range goals, corners-by-10min) are intentionally omitted.
+# ---------------------------------------------------------------------------
+PLAYER_CACHE_TTL_H = 24
+SMART_MAX_MATCHES = 14       # upcoming matches processed per run
+SMART_PROPS_PER_TEAM = 4     # best props kept per team (1 per player)
+SMART_MIN_RATING = 7.0
+SMART_LOOKAHEAD_H = 120      # only matches within the next 5 days
+
+
+async def _apifootball_async(path: str, params: dict):
+    return await asyncio.to_thread(_apifootball, path, params)
+
+
+def _smart_seasons(kickoff_str: str) -> list[int]:
+    ko = _parse_kickoff(kickoff_str)
+    yr = ko.year if ko else datetime.now(timezone.utc).year
+    return [yr, yr - 1]  # summer months = new season may be empty → fall back
+
+
+def _prob_over(line: float, lam: float) -> float:
+    """Poisson P(count >= ceil(line))."""
+    if lam <= 0:
+        return 0.0
+    need = int(math.floor(line)) + 1  # 0.5→1, 1.5→2, 2.5→3
+    cdf = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(need))
+    return max(0.0, min(0.99, 1 - cdf))
+
+
+def _rating_from_prob(p: float) -> float:
+    if p >= 0.80: return 9.5
+    if p >= 0.72: return 9.0
+    if p >= 0.64: return 8.5
+    if p >= 0.56: return 8.0
+    if p >= 0.48: return 7.5
+    return 7.0
+
+
+def _odds_from_prob(p: float) -> str:
+    if p <= 0:
+        return "2.00"
+    return f"{max(1.05, round(1 / p, 2)):.2f}"
+
+
+def _build_player_props(pstat: dict) -> list[dict]:
+    """Return candidate props for one player's season stat block."""
+    player = pstat.get("player", {}) or {}
+    name = player.get("name") or ""
+    stats = (pstat.get("statistics") or [{}])[0] or {}
+    games = stats.get("games") or {}
+    apps = games.get("appearences") or 0
+    lineups = games.get("lineups") or 0
+    pos = (games.get("position") or "").lower()
+    if not name or apps < 6:
+        return []
+    is_gk = pos.startswith("goal")
+    # need a regular starter (assumed to start the next match); GKs judged by apps
+    if not is_gk and lineups < 8:
+        return []
+    denom = max(lineups, 1) if not is_gk else max(apps, 1)
+
+    shots = stats.get("shots") or {}
+    goals = stats.get("goals") or {}
+    fouls = stats.get("fouls") or {}
+    cards = stats.get("cards") or {}
+    sot = (shots.get("on") or 0) / denom
+    sh = (shots.get("total") or 0) / denom
+    fc = (fouls.get("committed") or 0) / denom
+    fd = (fouls.get("drawn") or 0) / denom
+    gl = (goals.get("total") or 0) / denom
+    sv = (goals.get("saves") or 0) / max(apps, 1)
+    yc = (cards.get("yellow") or 0) / max(apps, 1)
+
+    cands = []
+
+    def add(line, lam, label, kind):
+        p = _prob_over(line, lam)
+        cands.append({"market": f"{name} — {label}", "prob": p,
+                      "rating": _rating_from_prob(p), "odds": _odds_from_prob(p),
+                      "kind": kind, "avg": lam})
+
+    if is_gk:
+        if sv >= 3.0:
+            add(2.5 if sv >= 4.0 else 1.5, sv,
+                "Über 2,5 Paraden" if sv >= 4.0 else "Über 1,5 Paraden", "saves")
+    else:
+        if sot >= 1.1:
+            add(0.5, sot, "Über 0,5 Schüsse aufs Tor (1+)", "sot")
+        if sh >= 2.6:
+            add(1.5, sh, "Über 1,5 Schüsse (2+)", "shots")
+        elif sh >= 1.6:
+            add(0.5, sh, "Über 0,5 Schüsse (1+)", "shots")
+        if fc >= 1.3:
+            add(0.5, fc, "Über 0,5 Fouls begangen", "fouls_c")
+        if fd >= 1.3:
+            add(0.5, fd, "Über 0,5 mal gefoult", "fouls_d")
+        if gl >= 0.5:
+            # anytime scorer: cap rating (inherently riskier)
+            p = _prob_over(0.5, gl)
+            cands.append({"market": f"{name} — Torschütze (Anytime)", "prob": p,
+                          "rating": min(8.0, _rating_from_prob(p)),
+                          "odds": _odds_from_prob(p), "kind": "scorer", "avg": gl})
+        if yc >= 0.45:
+            p = min(0.85, yc)
+            cands.append({"market": f"{name} — sieht eine Karte", "prob": p,
+                          "rating": min(7.5, _rating_from_prob(p)),
+                          "odds": _odds_from_prob(p), "kind": "card", "avg": yc})
+
+    return [c for c in cands if c["rating"] >= SMART_MIN_RATING]
+
+
+async def get_team_players(team_id: int, seasons: list[int]) -> list[dict]:
+    """Fetch (and 24h-cache) all players + season stats for a team."""
+    now = datetime.now(timezone.utc)
+    cached = await db.player_stats_cache.find_one({"team_id": team_id})
+    if cached:
+        ts = cached.get("cached_at")
+        try:
+            age = now - datetime.fromisoformat(ts)
+            if age < timedelta(hours=PLAYER_CACHE_TTL_H):
+                return cached.get("players", [])
+        except Exception:
+            pass
+    players = []
+    for season in seasons:
+        page = 1
+        got = []
+        while page <= 5:
+            resp = await _apifootball_async("/players", {"team": team_id, "season": season, "page": page})
+            if not resp:
+                break
+            got.extend(resp)
+            # paging info isn't returned by _apifootball (it strips to 'response'); stop when short page
+            if len(resp) < 20:
+                break
+            page += 1
+        if got:
+            players = got
+            break
+    await db.player_stats_cache.update_one(
+        {"team_id": team_id},
+        {"$set": {"team_id": team_id, "players": players, "cached_at": now.isoformat()}},
+        upsert=True)
+    return players
+
+
+async def _team_best_props(team_name: str, seasons: list[int]) -> list[dict]:
+    tid = await resolve_team_id(team_name)
+    if not tid:
+        return []
+    players = await get_team_players(tid, seasons)
+    all_props = []
+    for pstat in players:
+        all_props.extend(_build_player_props(pstat))
+    all_props.sort(key=lambda c: c["rating"], reverse=True)
+    # one prop per player, keep the best few
+    seen, out = set(), []
+    for c in all_props:
+        pl = c["market"].split(" — ")[0]
+        if pl in seen:
+            continue
+        seen.add(pl)
+        out.append(c)
+        if len(out) >= SMART_PROPS_PER_TEAM:
+            break
+    return out
+
+
+async def smart_autopost() -> dict:
+    """Generate player-prop 'Smart Bet' tips for upcoming whitelist matches."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    # upcoming, whitelisted, within lookahead window, de-duped
+    upcoming, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        upcoming.append((ko, p))
+    upcoming.sort(key=lambda x: x[0])
+    posted, scanned, candidates = 0, 0, 0
+    for ko, p in upcoming[:SMART_MAX_MATCHES]:
+        scanned += 1
+        seasons = _smart_seasons(p.get("kickoff"))
+        home, away = p.get("home"), p.get("away")
+        props = (await _team_best_props(home, seasons)) + (await _team_best_props(away, seasons))
+        candidates += len(props)
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        for c in props:
+            slug = re.sub(r"[^a-z0-9]+", "-", c["market"].lower()).strip("-")[:40]
+            tip_id = f"smart-{mkey}-{slug}"
+            if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+                continue
+            pct = round(c["prob"] * 100)
+            analysis = (
+                f"TipJarHQ Smart Bet: {c['market']}. Saison-Ø {c['avg']:.2f} pro Spiel "
+                f"→ ~{pct}% Trefferwahrscheinlichkeit. Datenbasierter Spieler-Prop, "
+                f"Anstoß {p.get('kickoff')}. Quote ist eine Schätzung."
+            )
+            await db.tips.insert_one({
+                "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None,
+                "home_team": home, "away_team": away,
+                "match_time": p.get("kickoff") or "",
+                "country": p.get("country") or "", "league": "TipJarHQ Smart Bet",
+                "league_code": p.get("league_code") or "",
+                "market": c["market"], "odds": str(c["odds"]),
+                "ai_rating": c["rating"], "ai_analysis": analysis,
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            posted += 1
+    logger.info(f"Smart Bet run: posted {posted}, matches {scanned}, candidates {candidates}")
+    return {"posted": posted, "matches": scanned, "candidates": candidates}
+
+
+async def smart_loop():
+    await asyncio.sleep(150)  # let predictions populate (forebet+predictz) first
+    while True:
+        try:
+            if API_FOOTBALL_KEY:
+                logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
+        except Exception as e:
+            logger.error(f"smart_loop error: {e}")
+        await asyncio.sleep(12 * 3600)  # every 12 hours (season stats change slowly)
+
+
+
+
 @app.on_event("startup")
 async def startup():
     # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
@@ -2338,6 +2604,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
+    _BG_TASKS.append(asyncio.create_task(smart_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

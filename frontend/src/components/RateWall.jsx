@@ -20,6 +20,7 @@ const VIEW_TITLE_KEY = {
   systems: "nav.viewsystems",
   members: "nav.viewmembers",
   live: "nav.viewlive",
+  smart: "nav.viewsmart",
 };
 const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
@@ -48,6 +49,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; }
       else if (view === "members") params.source = "members";
+      else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }

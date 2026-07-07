@@ -1,0 +1,42 @@
+{
+  "summary": "Fully verified the NEW Smart Bet player-props feature (backend + frontend) and the won/lost tips filter regression. Backend: 9/9 pytest tests PASS in /app/backend/tests/test_smart_bets.py. GET /api/tips/counts returns {ai:36, ai_total:87, members:1, live:0, systems:4, smart:7}. GET /api/tips?source=smart&status=pending returns 7 tips all with source='smart', league='TipJarHQ Smart Bet', proper player-prop German markets (e.g. 'A. Llano — Über 0,5 Schüsse aufs Tor (1+)' @ 1.21, 'R. Sappinen — Torschütze (Anytime)' @ 2.42, 'G. Napa — Über 1,5 Paraden' @ 1.12, 'D. Díaz — Über 0,5 mal gefoult' @ 1.13), odds, ai_rating and German ai_analysis with Saison-Ø + Trefferwahrscheinlichkeit. GET /api/tips?source=members correctly EXCLUDES smart & hq-auto tips (0 leaks). GET /api/tips?status=won&source=ai returns exactly 3 settled hqtip-a-* WON tips. GET /api/tips?status=lost returns only status='lost' tips. Admin auth is enforced on /api/admin/smart/run and /api/admin/smart/reset (401/403 without token). Admin smart/run and smart/reset both succeed with proper token and return {posted, matches, candidates} and {deleted, posted, matches, candidates}. Frontend: view-smart-btn present on home with green background + count badge '7', clicking opens the tips-window on the Smart Bet view (title 'View Smart Bets') with tabview-smart selected and 7 tip-card-* rendering with the player-prop markets, German AI analysis, and Apex ratings. Won regression: opening tips-window on AI tab and clicking [data-testid='status-won'] shows 3 tip-card-* with 3 [data-testid='status-badge-won'] WON badges (Argentina vs Egypt final 3-2, Lincoln Red Imps vs Inter d'Escaldes final 3-1, Argentina vs Egypt Über 1.5). All acceptance criteria PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_evidence": {
+    "counts_endpoint": "{\"ai\":36,\"ai_total\":87,\"members\":1,\"live\":0,\"systems\":4,\"smart\":7}",
+    "smart_tips_sample": "7 tips returned, all source=smart, league='TipJarHQ Smart Bet'. Markets include: 'A. Llano — Über 0,5 Schüsse aufs Tor (1+)' (1.21), 'H. Rodríguez — Über 0,5 Schüsse (1+)' (1.18), 'R. Sappinen — Torschütze (Anytime)' (2.42), 'G. Napa — Über 1,5 Paraden' (1.12), 'E. Mero — Über 0,5 Schüsse (1+)' (1.20), 'D. Díaz — Über 0,5 mal gefoult' (1.13)",
+    "members_feed_exclusion": "GET /api/tips?source=members returns 0 leaks of source=smart or hq-auto",
+    "won_ai_settled": "GET /api/tips?status=won&source=ai returns 3 tips: hqtip-a-2467510-dnb, hqtip-a-2467410-g, hqtip-a-2467510-g (all status=won, source=hq-auto)",
+    "admin_auth_enforcement": "POST /api/admin/smart/run without token → 401/403; with admin Bearer token → 200 {posted, matches, candidates}. Same for /api/admin/smart/reset.",
+    "frontend_view_smart_btn": "Header renders [data-testid='view-smart-btn'] (green) with inner text 'View Smart Bets\\n7'; clicking opens [data-testid='tips-window'] and activates [data-testid='tabview-smart']",
+    "frontend_smart_cards": "7 [data-testid^='tip-card-'] rendered on Smart Bet view with player-prop markets & German analysis containing 'Saison-Ø' + 'Trefferwahrscheinlichkeit'",
+    "frontend_won_filter": "AI Picks tab → click [data-testid='status-won'] → 3 [data-testid^='tip-card-'] with 3 [data-testid='status-badge-won'] (green WON badges). Cards: Argentina vs Egypt (Draw No Bet @1.19), Lincoln Red Imps vs Inter d'Escaldes (Über 1.5 @1.20), Argentina vs Egypt (Über 1.5 @1.30)."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smart_bets.py",
+    "/app/test_reports/pytest/smart_bets_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "list_tips source mapping (ai→hq-auto, smart→smart, members→$nin[hq-auto,smart]) works correctly — members feed cleanly excludes both smart and hq-auto tips as designed.",
+    "settle_pending_tips correctly excludes source=='smart' so player-prop tips are not auto-settled by the goals/score-based settler — good, since player props need per-player stats to settle.",
+    "smart_autopost / admin_smart_run / admin_smart_reset routes are registered before app.include_router, so they are reachable — verified via 200 responses with valid admin auth and 401 without.",
+    "Backend counts endpoint correctly includes 'smart' key alongside ai/ai_total/members/live/systems — no schema surprises for the frontend.",
+    "Frontend view-smart-btn uses grid-cols-5 layout (5 quick-view buttons) and the green highlight matches the AI Picks button visual language. UX consistent.",
+    "German copy in player-prop markets is well-formed: 'Über 0,5 Schüsse aufs Tor (1+)', 'Über 1,5 Paraden', 'Torschütze (Anytime)', 'Über 0,5 mal gefoult' — all read naturally for a German audience.",
+    "Minor observation (non-blocking): on the AI Picks tab, one of the 3 WON cards is 'Lincoln Red Imps vs Inter d'Escaldes' which is a repeat match with a different market — this is expected behaviour but if in future you want deduped 'match-level' cards on the Won tab, that would be an enhancement not a bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_smart_bets.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (3/3 acceptance criteria: view-smart-btn, smart cards render, won filter regression)"},
+  "test_credentials": "Admin admin@tipjar.com / TipJarAdmin2026! — used to obtain Bearer token for /api/admin/smart/run + /api/admin/smart/reset",
+  "seed_data_creation": "None — did not create test tips. Called POST /api/admin/smart/reset which is a legitimate admin op that regenerates the smart tip set (deleted+reposted). Existing 7 smart tips + 3 settled won hq-auto tips were used as-is.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Smart Bet feature is live and healthy. If a future run finds counts.smart == 0, call POST /api/admin/smart/run as admin and re-check — smart tips depend on upcoming whitelist matches in match_predictions. The full backend test file /app/backend/tests/test_smart_bets.py covers counts, smart source filter, members-exclusion, won/lost, admin auth enforcement, and admin smart/run + smart/reset — run it with `pytest /app/backend/tests/test_smart_bets.py -v -s`. Frontend testids to remember: view-smart-btn (home quickview), tabview-smart (tips-window tab), tip-card-* (tip cards), status-won (filter), status-badge-won (badge on won cards). To open tips-window reliably in playwright, dispatch window CustomEvent('tj-open-tips') — the direct button click sometimes fails when the promo banner overlays the header on first load.",
+  "rca of the issue": "N/A — no bugs found. Both the Smart Bet feature and the won/lost filter (previously-reported bug) are working end-to-end. The smart player-props tips render with correct German copy, correct source filtering (smart/members/ai), correct admin auth on the admin routes, and correct settlement exclusion (smart tips are not touched by settle_pending_tips)."
+}
