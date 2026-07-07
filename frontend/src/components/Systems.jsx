@@ -71,7 +71,7 @@ const SystemCard = ({ system }) => {
           <div
             key={s.id}
             data-testid={`system-${system.key}-leg`}
-            className="flex items-center justify-between gap-3 rounded-lg bg-void border border-elevated px-3 py-2.5"
+            className="flex items-start justify-between gap-3 rounded-lg bg-void border border-elevated px-3 py-2.5"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -88,11 +88,11 @@ const SystemCard = ({ system }) => {
                   {s.home_team} <span className="text-zinc-600">vs</span> {s.away_team}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5 truncate">
+              <p className="text-xs text-zinc-400 mt-0.5 leading-snug break-words">
                 {s.market}{s.match_time ? ` · ${s.match_time}` : ""}
               </p>
             </div>
-            <div className="text-right shrink-0">
+            <div className="text-right shrink-0 pt-0.5">
               <OddsValue odds={s.odds} className={`font-mono font-bold text-sm ${cfg.odds}`} />
             </div>
           </div>

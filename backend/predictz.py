@@ -34,7 +34,13 @@ _ROW_JS = """() => {
             const parts = href.replace(/^https?:\\/\\/[^/]+/, '').split('/').filter(Boolean);
             if (parts.length >= 3) league = parts.slice(1, -1).join(' ').replace(/-/g, ' ');
         }
-        if (matchid) out.push({ home, away, pred, conf, matchid, league });
+        // kickoff time (e.g. "15:00") — predictz shows it per row
+        let time = '';
+        const tel = r.querySelector('.pttime, .ptmoht');
+        const tsrc = (tel?.textContent || r.textContent || '');
+        const tm = tsrc.match(/\\b([01]?\\d|2[0-3]):[0-5]\\d\\b/);
+        if (tm) time = tm[0];
+        if (matchid) out.push({ home, away, pred, conf, matchid, league, time });
     }
     return out;
 }"""

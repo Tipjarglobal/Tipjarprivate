@@ -1519,7 +1519,8 @@ def _slip_eligible(tip: dict) -> bool:
 
 # common club-name noise stripped when de-duplicating the same match across sources
 _CLUB_NOISE = {"fc", "sc", "sd", "ca", "ac", "cd", "cf", "afc", "cfc", "club",
-               "cds", "aa", "ec", "se", "if", "sk", "fk", "cs", "us"}
+               "cds", "aa", "ec", "se", "if", "sk", "fk", "cs", "us", "ik",
+               "bk", "ff", "kf", "nk", "hnk", "cd", "ud", "sv", "vfl", "vfb"}
 
 
 def _match_key(home: str, away: str) -> str:
@@ -1805,6 +1806,30 @@ async def build_systems() -> dict:
 
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
 FOREBET_TIME_INDEX: dict[str, str] = {}
+# token-set match list so 'Kairat' matches 'Kairat Almaty', 'Torpedo' matches 'Torpedo Kutaisi'
+FOREBET_MATCHES: dict[str, dict] = {}
+
+
+def _sig_tokens(name: str) -> set:
+    return {t for t in re.sub(r"[^a-z0-9 ]", " ", (name or "").lower()).split()
+            if t and t not in _CLUB_NOISE and len(t) >= 3}
+
+
+def _forebet_time_for(home: str, away: str):
+    """Find a forebet kickoff by token overlap (handles city-suffix name diffs)."""
+    ph, pa = _sig_tokens(home), _sig_tokens(away)
+    if not ph or not pa:
+        return None
+    for e in FOREBET_MATCHES.values():
+        if (ph & e["ht"]) and (pa & e["at"]):
+            return e["time"]
+    return None
+
+
+def _remember_forebet_match(home: str, away: str, ko: str):
+    FOREBET_TIME_INDEX[f"{_norm_team(home)}|{_norm_team(away)}"] = ko
+    FOREBET_MATCHES[_match_key(home, away)] = {
+        "ht": _sig_tokens(home), "at": _sig_tokens(away), "time": ko}
 
 
 # --- Self-healing chromium: deployed containers may not ship the browser binary.
@@ -1944,7 +1969,7 @@ async def forebet_autopost() -> dict:
         kickoff = _forebet_datetime(r.get("datetime"))
         # remember kickoff time for predictz to reuse
         if r.get("home") and r.get("away"):
-            FOREBET_TIME_INDEX[f"{_norm_team(r['home'])}|{_norm_team(r['away'])}"] = kickoff
+            _remember_forebet_match(r["home"], r["away"], kickoff)
         # store the full match prediction (feeds the multi-system builder)
         try:
             sc = parse_pred_score(r.get("score"))
@@ -2051,6 +2076,23 @@ def _predictz_date_paths() -> list[str]:
     return ["/predictions/tomorrow/", f"/predictions/{d2.strftime('%Y%m%d')}/"]
 
 
+def _predictz_kickoff(r: dict, base_date) -> str:
+    """Kickoff string for a predictz row: reuse forebet's exact time if the same
+    match is on forebet, else use predictz's own HH:MM, else fall back to date."""
+    matched = FOREBET_TIME_INDEX.get(f"{_norm_team(r.get('home'))}|{_norm_team(r.get('away'))}")
+    if matched:
+        return matched
+    fuzzy = _forebet_time_for(r.get("home"), r.get("away"))
+    if fuzzy:
+        return fuzzy
+    md = base_date + timedelta(days=r.get("day_offset", 1))
+    tm = (r.get("time") or "").strip()
+    m = re.match(r"^(\d{1,2}):([0-5]\d)$", tm)
+    if m:
+        return f"{md.strftime('%d/%m/%Y')} {int(m.group(1)):02d}:{m.group(2)}"
+    return f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+
+
 def _conf_adj(rating: float, conf: str) -> float:
     if conf == "ngreen":
         return min(10.0, rating + 0.5)
@@ -2083,11 +2125,30 @@ def _predictz_candidates(r: dict) -> list[dict]:
     return [c for c in out if round(c["rating"], 1) >= 8.5]
 
 
+async def _index_forebet_times(url: str, limit: int = 250) -> int:
+    """Populate FOREBET_TIME_INDEX from a forebet page (times only, no posting)
+    so predictz future matches can display an exact kickoff time."""
+    try:
+        rows = await scrape_forebet_today(limit, url=url)
+    except Exception as e:
+        logger.warning(f"forebet time-index scrape failed ({url}): {e}")
+        return 0
+    n = 0
+    for r in rows:
+        if r.get("home") and r.get("away") and r.get("datetime"):
+            _remember_forebet_match(r["home"], r["away"], _forebet_datetime(r["datetime"]))
+            n += 1
+    logger.info(f"Indexed {n} forebet kickoff times from {url.rsplit('/', 1)[-1]}")
+    return n
+
+
 async def predictz_autopost() -> dict:
     """Scrape predictz upcoming days, publish safe goals-market bankers as TipJarHQ."""
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
+    # enrich the kickoff-time index with forebet's tomorrow page (exact HH:MM)
+    await _index_forebet_times("https://www.forebet.com/en/football-tips-and-predictions-for-tomorrow")
     try:
         rows = await scrape_predictz(_predictz_date_paths())
     except Exception as e:
@@ -2102,12 +2163,7 @@ async def predictz_autopost() -> dict:
         # store full match prediction (feeds the multi-system builder)
         try:
             home, away = r.get("home"), r.get("away")
-            matched = FOREBET_TIME_INDEX.get(f"{_norm_team(home)}|{_norm_team(away)}")
-            if matched:
-                kickoff = matched
-            else:
-                md = _today + timedelta(days=r.get("day_offset", 1))
-                kickoff = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+            kickoff = _predictz_kickoff(r, _today)
             ps = parse_pred_score(r.get("pred"))
             ph, pa = ps if ps else (None, None)
             predl = (r.get("pred") or "").lower()
@@ -2139,17 +2195,15 @@ async def predictz_autopost() -> dict:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
         tip_id = f"hqtip-b-{matchid}{c['sfx']}"
-        if await db.tips.find_one({"id": tip_id}):
-            continue
         market, odds = c["market"], c["odds"]
         home, away = r["home"], r["away"]
-        matched = FOREBET_TIME_INDEX.get(f"{_norm_team(home)}|{_norm_team(away)}")
-        if matched:
-            match_time = matched
-        else:
-            offset = r.get("day_offset", 1)
-            md = d + timedelta(days=offset)
-            match_time = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+        match_time = _predictz_kickoff(r, d)
+        existing = await db.tips.find_one({"id": tip_id}, {"match_time": 1})
+        if existing:
+            # backfill kickoff time onto tips posted before we scraped times
+            if ":" in match_time and existing.get("match_time") != match_time:
+                await db.tips.update_one({"id": tip_id}, {"$set": {"match_time": match_time}})
+            continue
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         analysis = (
             f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
