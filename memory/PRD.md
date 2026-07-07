@@ -218,6 +218,21 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
   the ONE-TIME code deploy to production, no further deploys are needed; it self-publishes.
   Production still needs chromium in the container for Playwright.
 
+## Production chromium self-heal (2026-07, iteration 26)
+- PROBLEM: After deploy, production (tipjarglobal.com) showed 0 hq-auto tips. Root cause:
+  the deployed container ships the playwright PYTHON package (in requirements.txt) but NOT the
+  chromium BROWSER BINARY (I had installed it manually into /pw-browsers in the PREVIEW pod only;
+  that fs is ephemeral & not part of the image). Both predictz & forebet block plain HTTP (403
+  Cloudflare) even with rich headers / cloudscraper — a real browser is mandatory.
+- FIX: added ensure_chromium() self-heal in server.py. On first scrape (loops + admin triggers)
+  it verifies chromium launches; if not, picks a writable browsers path (PLAYWRIGHT_BROWSERS_PATH
+  or falls back to /tmp/pw-browsers) and runs `python -m playwright install chromium` at runtime,
+  then re-checks. Guarded by asyncio.Lock + _chromium_ready flag (one-time). Loops skip the run
+  gracefully if chromium stays unavailable. Verified in preview (still posts fine).
+- UNVERIFIABLE IN PROD by agent: works only if the prod container allows outbound to the
+  playwright CDN AND has chromium system libs. If it still fails after redeploy → platform
+  limitation → user must contact Emergent Support to enable Playwright/chromium in the deploy image.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

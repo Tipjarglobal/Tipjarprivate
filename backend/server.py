@@ -170,11 +170,15 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 @api_router.post("/admin/forebet/run")
 async def admin_forebet_run(admin: dict = Depends(require_admin)):
+    if not await ensure_chromium():
+        return {"posted": 0, "reason": "chromium unavailable in this environment"}
     return await forebet_autopost()
 
 
 @api_router.post("/admin/predictz/run")
 async def admin_predictz_run(admin: dict = Depends(require_admin)):
+    if not await ensure_chromium():
+        return {"posted": 0, "reason": "chromium unavailable in this environment"}
     return await predictz_autopost()
 
 
@@ -1286,6 +1290,61 @@ FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
 FOREBET_TIME_INDEX: dict[str, str] = {}
 
 
+# --- Self-healing chromium: deployed containers may not ship the browser binary.
+# On first scrape we verify chromium launches; if not, install it at runtime. ---
+_chromium_ready = False
+_chromium_lock = asyncio.Lock()
+
+
+async def _chromium_launchable() -> bool:
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            b = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            await b.close()
+        return True
+    except Exception as e:
+        logger.warning(f"Chromium not launchable yet: {str(e)[:200]}")
+        return False
+
+
+async def ensure_chromium() -> bool:
+    global _chromium_ready
+    if _chromium_ready:
+        return True
+    async with _chromium_lock:
+        if _chromium_ready:
+            return True
+        import sys
+        path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "/root/.cache/ms-playwright"
+        try:
+            os.makedirs(path, exist_ok=True)
+            t = os.path.join(path, ".wtest"); open(t, "w").close(); os.remove(t)
+        except Exception:
+            path = "/tmp/pw-browsers"
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = path
+            os.makedirs(path, exist_ok=True)
+        if await _chromium_launchable():
+            _chromium_ready = True
+            return True
+        logger.info(f"Chromium missing — installing into {path} (one-time, ~30s)...")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "chromium",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": path})
+            out, _ = await proc.communicate()
+            logger.info(f"playwright install rc={proc.returncode}: {(out or b'')[-300:]}")
+        except Exception as e:
+            logger.error(f"Chromium install failed: {e}")
+            return False
+        _chromium_ready = await _chromium_launchable()
+        if not _chromium_ready:
+            logger.error("Chromium still unavailable after install (missing system libs?).")
+        return _chromium_ready
+
+
+
 def _norm_team(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
@@ -1413,8 +1472,11 @@ async def forebet_loop():
     await asyncio.sleep(30)  # let startup settle
     while True:
         try:
-            res = await forebet_autopost()
-            logger.info(f"HQ loop A: {res}")
+            if await ensure_chromium():
+                res = await forebet_autopost()
+                logger.info(f"HQ loop A: {res}")
+            else:
+                logger.error("HQ loop A skipped: chromium unavailable")
         except Exception as e:
             logger.error(f"HQ loop A error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours
@@ -1535,8 +1597,11 @@ async def predictz_loop():
     await asyncio.sleep(90)  # let startup + forebet (fills time index) settle first
     while True:
         try:
-            res = await predictz_autopost()
-            logger.info(f"HQ loop B: {res}")
+            if await ensure_chromium():
+                res = await predictz_autopost()
+                logger.info(f"HQ loop B: {res}")
+            else:
+                logger.error("HQ loop B skipped: chromium unavailable")
         except Exception as e:
             logger.error(f"HQ loop B error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours
