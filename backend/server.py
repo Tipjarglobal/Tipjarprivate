@@ -1276,6 +1276,15 @@ async def hall_of_fame():
     return docs
 
 
+@api_router.get("/wins/mine")
+async def my_wins(user: dict = Depends(get_current_user)):
+    docs = await db.win_claims.find(
+        {"user_id": user["id"]}, {"_id": 0, "sig": 0, "user_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    total = sum(d.get("credits", 0) for d in docs)
+    return {"claims": docs, "total_credits": total, "count": len(docs)}
+
+
 
 # ------------------------------------------------------------------ notifications (no signup)
 @api_router.post("/notifications/subscribe")

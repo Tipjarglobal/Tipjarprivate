@@ -13,6 +13,31 @@ export const LANGUAGES = [
 
 export const RTL_LANGS = ["ar"];
 
+// Localize the German bet-market strings produced by the backend (systems + tips).
+// Keeps dynamic parts (team names, scores). Order matters: combos before singles.
+export function localizeMarket(market, t) {
+  if (!market || typeof market !== "string") return market;
+  let m = market;
+  const combos = [
+    ["Doppelte Chance 1X + Beide treffen", `${t("mkt.dc1x")} + ${t("mkt.btts")}`],
+    ["Doppelte Chance X2 + Beide treffen", `${t("mkt.dcx2")} + ${t("mkt.btts")}`],
+    ["Doppelte Chance 1X + Über 1.5 Tore", `${t("mkt.dc1x")} + ${t("mkt.over15")}`],
+    ["Doppelte Chance X2 + Über 1.5 Tore", `${t("mkt.dcx2")} + ${t("mkt.over15")}`],
+    ["Doppelte Chance 1X", t("mkt.dc1x")],
+    ["Doppelte Chance X2", t("mkt.dcx2")],
+    ["(Draw No Bet)", `(${t("mkt.dnb")})`],
+    ["Beide Teams treffen (BTTS)", t("mkt.btts")],
+    ["Über 0.5 Tore", t("mkt.over05")],
+    ["Über 1.5 Tore", t("mkt.over15")],
+    ["Über 2.5 Tore", t("mkt.over25")],
+    ["Genaues Ergebnis", t("mkt.cs")],
+    ["Unentschieden (X)", t("mkt.draw")],
+  ];
+  for (const [de, loc] of combos) m = m.split(de).join(loc);
+  return m;
+}
+
+
 const T = {
   en: {
     "nav.submit": "Submit a Tip",
@@ -254,6 +279,18 @@ const T = {
     "sys.sub.smartvalue": "Goal value: BTTS & Over 2.5 · medium odds",
     "sys.sub.risk": "Double Chance + Both Teams Score · higher odds",
     "sys.sub.gamble": "Jackpot hunt for the big odds (70x+)",
+    "mkt.over05": "Over 0.5 Goals",
+    "mkt.over15": "Over 1.5 Goals",
+    "mkt.over25": "Over 2.5 Goals",
+    "mkt.btts": "Both Teams to Score (BTTS)",
+    "mkt.dnb": "Draw No Bet",
+    "mkt.dc1x": "Double Chance 1X",
+    "mkt.dcx2": "Double Chance X2",
+    "mkt.cs": "Correct Score",
+    "mkt.draw": "Draw (X)",
+    "win.mine": "Your recent wins",
+    "win.mine.empty": "No wins claimed yet.",
+    "win.mine.credits": "credits earned",
   },
   es: {
     "nav.submit": "Enviar un pronóstico",
@@ -494,6 +531,18 @@ const T = {
     "sys.sub.smartvalue": "Valor de goles: BTTS y Más de 2.5 · cuota media",
     "sys.sub.risk": "Doble Oportunidad + Ambos marcan · cuota mayor",
     "sys.sub.gamble": "Caza del jackpot con cuota alta (70x+)",
+    "mkt.over05": "Más de 0.5 goles",
+    "mkt.over15": "Más de 1.5 goles",
+    "mkt.over25": "Más de 2.5 goles",
+    "mkt.btts": "Ambos marcan (BTTS)",
+    "mkt.dnb": "Empate no válido (DNB)",
+    "mkt.dc1x": "Doble oportunidad 1X",
+    "mkt.dcx2": "Doble oportunidad X2",
+    "mkt.cs": "Resultado exacto",
+    "mkt.draw": "Empate (X)",
+    "win.mine": "Tus últimas ganancias",
+    "win.mine.empty": "Aún no has reclamado ganancias.",
+    "win.mine.credits": "créditos ganados",
   },
 
   de: {
@@ -733,6 +782,18 @@ const T = {
     "sys.sub.smartvalue": "Tor-Value: BTTS & Über 2.5 · mittlere Quote",
     "sys.sub.risk": "Doppelte Chance + Beide treffen · höhere Quote",
     "sys.sub.gamble": "Jackpot-Jagd auf die große Quote (70x+)",
+    "mkt.over05": "Über 0.5 Tore",
+    "mkt.over15": "Über 1.5 Tore",
+    "mkt.over25": "Über 2.5 Tore",
+    "mkt.btts": "Beide Teams treffen (BTTS)",
+    "mkt.dnb": "Draw No Bet",
+    "mkt.dc1x": "Doppelte Chance 1X",
+    "mkt.dcx2": "Doppelte Chance X2",
+    "mkt.cs": "Genaues Ergebnis",
+    "mkt.draw": "Unentschieden (X)",
+    "win.mine": "Deine letzten Gewinne",
+    "win.mine.empty": "Noch keine Gewinne eingereicht.",
+    "win.mine.credits": "Credits verdient",
   },
   el: {
     "nav.submit": "Υπόβαλε πρόγνωση",
@@ -973,6 +1034,18 @@ const T = {
     "sys.sub.smartvalue": "Value γκολ: BTTS & Over 2.5 · μεσαία απόδοση",
     "sys.sub.risk": "Διπλή Ευκαιρία + Να σκοράρουν και οι δύο · μεγαλύτερη απόδοση",
     "sys.sub.gamble": "Κυνήγι jackpot για τη μεγάλη απόδοση (70x+)",
+    "mkt.over05": "Over 0.5 γκολ",
+    "mkt.over15": "Over 1.5 γκολ",
+    "mkt.over25": "Over 2.5 γκολ",
+    "mkt.btts": "Να σκοράρουν και οι δύο (BTTS)",
+    "mkt.dnb": "Draw No Bet",
+    "mkt.dc1x": "Διπλή ευκαιρία 1X",
+    "mkt.dcx2": "Διπλή ευκαιρία X2",
+    "mkt.cs": "Ακριβές σκορ",
+    "mkt.draw": "Ισοπαλία (X)",
+    "win.mine": "Τα πρόσφατα κέρδη σου",
+    "win.mine.empty": "Δεν έχεις καταχωρίσει κέρδη ακόμη.",
+    "win.mine.credits": "credits κερδισμένα",
   },
   fr: {
     "nav.submit": "Proposer un pronostic",
@@ -1202,6 +1275,18 @@ const T = {
     "sys.sub.smartvalue": "Value buts : BTTS & Plus de 2,5 · cote moyenne",
     "sys.sub.risk": "Double Chance + Les deux marquent · cote plus élevée",
     "sys.sub.gamble": "Chasse au jackpot pour la grosse cote (70x+)",
+    "mkt.over05": "Plus de 0,5 but",
+    "mkt.over15": "Plus de 1,5 but",
+    "mkt.over25": "Plus de 2,5 buts",
+    "mkt.btts": "Les deux marquent (BTTS)",
+    "mkt.dnb": "Remboursé si nul (DNB)",
+    "mkt.dc1x": "Double chance 1X",
+    "mkt.dcx2": "Double chance X2",
+    "mkt.cs": "Score exact",
+    "mkt.draw": "Match nul (X)",
+    "win.mine": "Tes derniers gains",
+    "win.mine.empty": "Aucun gain réclamé pour l'instant.",
+    "win.mine.credits": "crédits gagnés",
   },
   it: {
     "nav.submit": "Proponi un pronostico",
@@ -1431,6 +1516,18 @@ const T = {
     "sys.sub.smartvalue": "Value gol: BTTS e Over 2.5 · quota media",
     "sys.sub.risk": "Doppia Chance + Entrambe segnano · quota più alta",
     "sys.sub.gamble": "Caccia al jackpot per la grande quota (70x+)",
+    "mkt.over05": "Over 0.5 gol",
+    "mkt.over15": "Over 1.5 gol",
+    "mkt.over25": "Over 2.5 gol",
+    "mkt.btts": "Entrambe segnano (BTTS)",
+    "mkt.dnb": "Draw No Bet",
+    "mkt.dc1x": "Doppia chance 1X",
+    "mkt.dcx2": "Doppia chance X2",
+    "mkt.cs": "Risultato esatto",
+    "mkt.draw": "Pareggio (X)",
+    "win.mine": "Le tue ultime vincite",
+    "win.mine.empty": "Nessuna vincita richiesta ancora.",
+    "win.mine.credits": "crediti guadagnati",
   },
   ar: {
     "nav.submit": "أضف توقعاً",
@@ -1659,6 +1756,18 @@ const T = {
     "sys.sub.smartvalue": "قيمة الأهداف: كلا الفريقين يسجل و أكثر من 2.5 · أودز متوسط",
     "sys.sub.risk": "فرصة مزدوجة + كلا الفريقين يسجل · أودز أعلى",
     "sys.sub.gamble": "مطاردة الجاكبوت للأودز الكبير (70x+)",
+    "mkt.over05": "أكثر من 0.5 هدف",
+    "mkt.over15": "أكثر من 1.5 هدف",
+    "mkt.over25": "أكثر من 2.5 هدف",
+    "mkt.btts": "كلا الفريقين يسجل (BTTS)",
+    "mkt.dnb": "بدون تعادل (DNB)",
+    "mkt.dc1x": "فرصة مزدوجة 1X",
+    "mkt.dcx2": "فرصة مزدوجة X2",
+    "mkt.cs": "النتيجة الصحيحة",
+    "mkt.draw": "تعادل (X)",
+    "win.mine": "أحدث أرباحك",
+    "win.mine.empty": "لم تطالب بأي أرباح بعد.",
+    "win.mine.credits": "رصيد مكتسب",
   },
   tr: {
     "nav.submit": "Tahmin gönder",
@@ -1887,6 +1996,18 @@ const T = {
     "sys.sub.smartvalue": "Gol value: KG Var & 2.5 Üst · orta oran",
     "sys.sub.risk": "Çifte Şans + Karşılıklı gol · daha yüksek oran",
     "sys.sub.gamble": "Büyük oran için jackpot avı (70x+)",
+    "mkt.over05": "0.5 Üst gol",
+    "mkt.over15": "1.5 Üst gol",
+    "mkt.over25": "2.5 Üst gol",
+    "mkt.btts": "Karşılıklı gol (KG Var)",
+    "mkt.dnb": "Beraberlikte iade (DNB)",
+    "mkt.dc1x": "Çifte şans 1X",
+    "mkt.dcx2": "Çifte şans X2",
+    "mkt.cs": "Kesin skor",
+    "mkt.draw": "Beraberlik (X)",
+    "win.mine": "Son kazançların",
+    "win.mine.empty": "Henüz kazanç talep edilmedi.",
+    "win.mine.credits": "kredi kazanıldı",
   },
 };
 

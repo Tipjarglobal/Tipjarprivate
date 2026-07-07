@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Upload, Trophy, Coins, Radio, Users, Loader2 } from "lucide-react";
+import { X, Upload, Trophy, Coins, Radio, Users, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
@@ -19,13 +19,22 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [mine, setMine] = useState(null);
   const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open && user) {
+      api.get("/wins/mine").then(({ data }) => setMine(data)).catch(() => setMine({ claims: [], total_credits: 0 }));
+    }
+  }, [open, user]);
 
   if (!open) return null;
   if (!user) {
     requireLogin?.();
     return null;
   }
+
+  const refreshMine = () => api.get("/wins/mine").then(({ data }) => setMine(data)).catch(() => {});
 
   const pick = (f) => {
     if (!f) return;
@@ -49,9 +58,9 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
       if (data.user) setUser(data.user);
       toast.success(`${t("win.success")} +${data.credits_awarded} ${t("wallet.credits")} 🎉`);
       onClaimed?.();
+      refreshMine();
       setFile(null);
       setPreview(null);
-      onClose();
     } catch (e) {
       toast.error(apiErr(e, t("win.failed")));
     } finally {
@@ -130,6 +139,26 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
             {loading ? <><Loader2 size={18} className="animate-spin" /> {t("submit.analyzing")}</> : <><Coins size={18} /> {t("win.submit")}</>}
           </button>
           <p className="text-[11px] text-zinc-600 mt-3 text-center leading-snug">{t("win.rules")}</p>
+
+          {mine && mine.claims && mine.claims.length > 0 && (
+            <div className="mt-6 border-t border-elevated pt-4" data-testid="win-mine-list">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold text-white">{t("win.mine")}</h4>
+                <span className="text-xs text-volt font-bold">+{mine.total_credits} {t("win.mine.credits")}</span>
+              </div>
+              <div className="space-y-2">
+                {mine.claims.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between rounded-xl bg-void border border-elevated px-3 py-2 text-sm">
+                    <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold">
+                      <CheckCircle2 size={14} /> {t(`win.type.${c.type}`)}
+                    </span>
+                    <span className="text-zinc-400 text-xs">{c.legs_count} Legs · @{c.total_odds?.toFixed(2)}</span>
+                    <span className="text-volt font-bold">+{c.credits}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>

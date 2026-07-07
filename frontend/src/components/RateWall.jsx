@@ -6,7 +6,7 @@ import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, localizeMarket } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -330,7 +330,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             {tip.home_team || "—"} <span className="text-zinc-600 text-sm">vs</span> {tip.away_team || "—"}
           </h4>
           <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
-            <span className="text-white font-semibold text-sm truncate">{tip.market || "—"}</span>
+            <span className="text-white font-semibold text-sm truncate">{localizeMarket(tip.market, t) || "—"}</span>
             {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0 ml-2" />}
           </div>
           {(tip.stake || tip.potential_return) && (

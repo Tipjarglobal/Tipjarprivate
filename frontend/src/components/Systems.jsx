@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers } from "lucide-react";
 import { OddsValue } from "./OddsValue";
-import { useI18n } from "../i18n";
+import { useI18n, localizeMarket } from "../i18n";
 import api from "../api";
 
 const RISK = {
@@ -90,7 +90,7 @@ const SystemCard = ({ system }) => {
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5 leading-snug break-words">
-                {s.market}{s.match_time ? ` · ${s.match_time}` : ""}
+                {localizeMarket(s.market, t)}{s.match_time ? ` · ${s.match_time}` : ""}
               </p>
             </div>
             <div className="text-right shrink-0 pt-0.5">
