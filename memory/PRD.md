@@ -196,6 +196,28 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - NEXT: add more sources (oddspedia incl. YouTube, betarades.gr, kingbet.gr, matchmoney.com.gr,
   foxbet.gr, predictz BTTS/Over2.5 pages); optional "Sunday priority"; player-prop / HT-FT tips.
 
+## Auto-tips overhaul: DNB + kickoff time + source-anonymised (2026-07, iteration 25)
+- USER REQUEST: (1) favourite-win picks → Draw No Bet (never plain "gewinnt"); (2) kickoff
+  TIME on every tip (was date-only); (3) HQ publishes automatically w/o manual deploy;
+  (4) DO NOT name sources publicly (legal fear).
+- SOURCE ANONYMISATION: removed all public source names. tip ids now neutral hqtip-a-*
+  (forebet-derived) / hqtip-b-* (predictz-derived); source field = "hq-auto"; league label
+  "TipJarHQ Pick"; analysis text "TipJarHQ-Analyse…" (no Forebet/Predictz). Purge regex now
+  preserves ^hqtip-. Old forebet-*/predictz-* tips deleted.
+- FOREBET is now the PRIMARY engine (it provides kickoff datetime + predicted score + 1X2):
+  emits DNB picks for strong favourites (win%>=55, DNB odds from win/(win+loss)) AND safe
+  goals bankers from predicted score (total>=3→Über1.5@10★; ==2→Über1.5@9; ==1→Über0.5@9),
+  all with real kickoff time (DD/MM/YYYY HH:MM). DNB quota=8/run so DNB always surfaces
+  (else 10★ goals crowd them out). Cap 20/run, loop every 3h.
+- PREDICTZ stays supplementary (BTTS/Über2.5/goals from tomorrow+day-after incl. sub-pages);
+  attaches kickoff time via FOREBET_TIME_INDEX (normalised team-name match), else date label.
+  Loop every 3h (starts 90s after forebet so index is filled).
+- Verified (preview, curl + screenshot): DNB tips render ("Argentina (Draw No Bet) 1.19"),
+  kickoff time on every card, goals bankers, ZERO source names visible.
+- AUTO-PUBLISH NOTE: loops run automatically on startup + every 3h in the live backend — after
+  the ONE-TIME code deploy to production, no further deploys are needed; it self-publishes.
+  Production still needs chromium in the container for Playwright.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

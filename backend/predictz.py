@@ -1,6 +1,7 @@
-"""Predictz.com scraper — renders the (bot-protected) predictions page with
-Playwright and extracts upcoming matches with a predicted score. Used to derive
-safe "10-star" goals markets (Over 0.5 / Over 1.5) up to ~50h before kickoff."""
+"""Predictz.com scraper — renders the (bot-protected) predictions pages with
+Playwright and extracts upcoming matches with a predicted score, plus the
+Over/Under 2.5 and BTTS tips. Used to derive safe "10-star" goals-market
+bankers (Über 0.5 / Über 1.5 / Über 2.5 / BTTS) up to ~50h before kickoff."""
 import logging
 import re
 
@@ -11,41 +12,44 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 BASE = "https://www.predictz.com"
 
-
-async def _scrape_page(page, url: str) -> list[dict]:
-    await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-    await page.wait_for_timeout(3500)
-    rows = await page.evaluate("""() => {
-        const out = [];
-        for (const r of Array.from(document.querySelectorAll('.pttr'))) {
-            const home = (r.querySelector('.ptmobh')?.textContent || '').trim();
-            const away = (r.querySelector('.ptmoba')?.textContent || '').trim();
-            const predEl = r.querySelector('.ptprd .ptpredboxsml');
-            const pred = (predEl?.textContent || '').trim();
-            let conf = 'nyellow';
-            if (predEl) {
-                if (predEl.classList.contains('ngreen')) conf = 'ngreen';
-                else if (predEl.classList.contains('nred')) conf = 'nred';
-            }
-            const link = r.querySelector('a[href*="/predictions/"]');
-            const href = link ? link.getAttribute('href') : '';
-            let matchid = null, league = '';
-            if (href) {
-                const m = href.match(/\\/(\\d+)\\/?$/);
-                if (m) matchid = m[1];
-                const parts = href.replace(/^https?:\\/\\/[^/]+/, '').split('/').filter(Boolean);
-                // parts: ['predictions', country, league, id]
-                if (parts.length >= 3) league = parts.slice(1, -1).join(' ').replace(/-/g, ' ');
-            }
-            if (home && away && pred) out.push({ home, away, pred, conf, matchid, league });
+# JS that reads every match row's prediction box + match id on any predictz page.
+_ROW_JS = """() => {
+    const out = [];
+    for (const r of Array.from(document.querySelectorAll('.pttr'))) {
+        const home = (r.querySelector('.ptmobh')?.textContent || '').trim();
+        const away = (r.querySelector('.ptmoba')?.textContent || '').trim();
+        const predEl = r.querySelector('.ptprd .ptpredboxsml');
+        const pred = (predEl?.textContent || '').trim();
+        let conf = 'nyellow';
+        if (predEl) {
+            if (predEl.classList.contains('ngreen')) conf = 'ngreen';
+            else if (predEl.classList.contains('nred')) conf = 'nred';
         }
-        return out;
-    }""")
-    return rows
+        const link = r.querySelector('a[href*="/predictions/"]');
+        const href = link ? link.getAttribute('href') : '';
+        let matchid = null, league = '';
+        if (href) {
+            const m = href.match(/\\/(\\d+)\\/?$/);
+            if (m) matchid = m[1];
+            const parts = href.replace(/^https?:\\/\\/[^/]+/, '').split('/').filter(Boolean);
+            if (parts.length >= 3) league = parts.slice(1, -1).join(' ').replace(/-/g, ' ');
+        }
+        if (matchid) out.push({ home, away, pred, conf, matchid, league });
+    }
+    return out;
+}"""
+
+
+async def _rows(page, url: str) -> list[dict]:
+    await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    await page.wait_for_timeout(3200)
+    return await page.evaluate(_ROW_JS)
 
 
 async def scrape_predictz(date_paths: list[str]) -> list[dict]:
-    """date_paths e.g. ['/predictions/tomorrow/', '/predictions/20260710/']."""
+    """For each date page, also read its Over/Under 2.5 and BTTS sub-pages and
+    merge the tips onto each match (keyed by matchid). date_paths e.g.
+    ['/predictions/tomorrow/', '/predictions/20260710/']."""
     from playwright.async_api import async_playwright
     all_rows = []
     async with async_playwright() as p:
@@ -56,11 +60,15 @@ async def scrape_predictz(date_paths: list[str]) -> list[dict]:
             page = await ctx.new_page()
             for i, path in enumerate(date_paths):
                 try:
-                    rows = await _scrape_page(page, BASE + path)
-                    for r in rows:
+                    main = await _rows(page, BASE + path)
+                    ou = {r["matchid"]: r["pred"] for r in await _rows(page, BASE + path + "over-under-25-goals/")}
+                    btts = {r["matchid"]: r["pred"] for r in await _rows(page, BASE + path + "both-teams-to-score/")}
+                    for r in main:
+                        r["ou_tip"] = ou.get(r["matchid"], "")
+                        r["btts_tip"] = btts.get(r["matchid"], "")
                         r["date_path"] = path
                         r["day_offset"] = i + 1  # 1 = tomorrow, 2 = day after
-                    all_rows.extend(rows)
+                    all_rows.extend(main)
                 except Exception as e:
                     logger.error(f"Predictz page {path} failed: {e}")
         finally:

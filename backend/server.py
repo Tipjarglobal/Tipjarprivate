@@ -1188,7 +1188,7 @@ async def seed_showcase():
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
-        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(forebet|predictz)-"}},
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^hqtip-"}},
     })
 
     # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
@@ -1279,8 +1279,15 @@ async def seed_showcase():
 # ---------------------------------------------------------------------------
 # Forebet auto-tips: TipJarHQ reads forebet.com daily and auto-posts strong picks
 # ---------------------------------------------------------------------------
-FOREBET_MIN_PROB = 58      # only publish picks where the predicted outcome prob >= this
-FOREBET_MAX_PER_RUN = 3    # cap new tips per run to avoid flooding the wall
+FOREBET_MIN_PROB = 55      # DNB: only when the favoured side is at least this likely
+FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
+
+# team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
+FOREBET_TIME_INDEX: dict[str, str] = {}
+
+
+def _norm_team(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
 def _forebet_rating(prob: int) -> float:
@@ -1304,69 +1311,101 @@ def _forebet_datetime(raw: Optional[str]) -> str:
         return raw.strip()
 
 
+def _forebet_candidates(r: dict) -> list[dict]:
+    """From one forebet row derive: a Draw-No-Bet pick for a strong favourite
+    (never a plain 'gewinnt'), plus a safe goals banker from the predicted score.
+    Each dict: {sfx, market, odds, rating}."""
+    out = []
+    probs = r.get("probs") or []
+    pred = (r.get("pred") or "").strip()
+    home, away = r.get("home"), r.get("away")
+    # 1) Draw No Bet for the favoured side
+    if pred in ("1", "2") and len(probs) >= 3:
+        if pred == "1":
+            win, loss, team = probs[0], probs[2], home
+        else:
+            win, loss, team = probs[2], probs[0], away
+        if win >= FOREBET_MIN_PROB:
+            dnb_prob = win / max(win + loss, 1)
+            odds = round(1.0 / max(dnb_prob, 0.01), 2)
+            dnb_rating = 9.5 if win >= 72 else 9.0 if win >= 64 else 8.5 if win >= 58 else 8.0
+            out.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
+                        "odds": str(odds), "rating": dnb_rating})
+    # 2) Safe goals banker from predicted correct score
+    sc = parse_pred_score(r.get("score"))
+    avg = 0.0
+    try:
+        avg = float((r.get("avg") or "0").replace(",", "."))
+    except Exception:
+        avg = 0.0
+    if sc:
+        total = sc[0] + sc[1]
+        if total >= 3:
+            rating = 10.0 if avg >= 3.0 else 9.5
+            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.25", "rating": rating})
+        elif total == 2:
+            out.append({"sfx": "-g", "market": "Über 1.5 Tore", "odds": "1.35", "rating": 9.0})
+        elif total == 1:
+            out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.10", "rating": 9.0})
+    return out
+
+
 async def forebet_autopost() -> dict:
-    """Scrape forebet, pick the strongest predictions and publish them as TipJarHQ."""
+    """Scrape forebet, publish DNB + safe goals bankers (with kickoff time) as TipJarHQ."""
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
     try:
-        rows = await scrape_forebet_today(40)
+        rows = await scrape_forebet_today(60)
     except Exception as e:
         logger.error(f"Forebet scrape failed: {e}")
         return {"posted": 0, "reason": f"scrape error: {e}"}
 
-    idx = {"1": 0, "X": 1, "2": 2}
     candidates = []
     for r in rows:
-        pred = (r.get("pred") or "").strip()
-        if pred not in idx:
-            continue
-        probs = r.get("probs") or []
-        if len(probs) < 3:
-            continue
-        prob = probs[idx[pred]]
-        if prob < FOREBET_MIN_PROB:
-            continue
-        candidates.append((prob, r, pred))
-    candidates.sort(key=lambda x: x[0], reverse=True)
+        kickoff = _forebet_datetime(r.get("datetime"))
+        # remember kickoff time for predictz to reuse
+        if r.get("home") and r.get("away"):
+            FOREBET_TIME_INDEX[f"{_norm_team(r['home'])}|{_norm_team(r['away'])}"] = kickoff
+        for c in _forebet_candidates(r):
+            candidates.append((round(c["rating"], 1), r, c, kickoff))
+    # Split into DNB vs goals so DNB (favourite) picks always get a fair share
+    dnb = sorted([x for x in candidates if x[2]["sfx"] == "-dnb"], key=lambda x: x[0], reverse=True)
+    goals = sorted([x for x in candidates if x[2]["sfx"] != "-dnb"], key=lambda x: x[0], reverse=True)
+    DNB_QUOTA = 8
+    ordered = dnb[:DNB_QUOTA] + goals + dnb[DNB_QUOTA:]
 
     posted = 0
     now = datetime.now(timezone.utc).isoformat()
-    for prob, r, pred in candidates:
+    for rating, r, c, kickoff in ordered:
         if posted >= FOREBET_MAX_PER_RUN:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
-        tip_id = f"forebet-{matchid}"
+        tip_id = f"hqtip-a-{matchid}{c['sfx']}"
         if await db.tips.find_one({"id": tip_id}):
             continue
         home, away = r["home"], r["away"]
-        if pred == "1":
-            market = f"{home} gewinnt"
-        elif pred == "2":
-            market = f"{away} gewinnt"
-        else:
-            market = "Unentschieden"
-        odds = round(100.0 / max(prob, 1), 2)
+        market, odds = c["market"], c["odds"]
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
         analysis = (
-            f"Forebet-Mathematikmodell: {market} mit {prob}% Wahrscheinlichkeit. "
-            f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Datenbasierter Pick — automatisch von TipJarHQ."
+            f"TipJarHQ-Analyse: {market}. Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+            f"Anstoß {kickoff}. Datenbasierter Pick — automatisch von TipJarHQ."
         )
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
             "home_team": home, "away_team": away,
-            "match_time": _forebet_datetime(r.get("datetime")),
-            "country": "", "league": "Forebet Pick", "market": market,
-            "odds": str(odds), "ai_rating": _forebet_rating(prob), "ai_analysis": analysis,
+            "match_time": kickoff,
+            "country": "", "league": "TipJarHQ Pick", "market": market,
+            "odds": str(odds), "ai_rating": rating, "ai_analysis": analysis,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-            "source": "forebet", "created_at": now,
+            "source": "hq-auto", "created_at": now,
         }
         await db.tips.insert_one(tip)
         posted += 1
-        logger.info(f"Forebet auto-posted: {home} vs {away} — {market} ({prob}%)")
+        logger.info(f"HQ auto-posted (A): {home} vs {away} — {market} ({rating})")
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
 
@@ -1375,10 +1414,11 @@ async def forebet_loop():
     while True:
         try:
             res = await forebet_autopost()
-            logger.info(f"Forebet loop: {res}")
+            logger.info(f"HQ loop A: {res}")
         except Exception as e:
-            logger.error(f"Forebet loop error: {e}")
-        await asyncio.sleep(6 * 3600)  # every 6 hours
+            logger.error(f"HQ loop A error: {e}")
+        await asyncio.sleep(3 * 3600)  # every 3 hours
+
 
 
 # ---------------------------------------------------------------------------
@@ -1387,7 +1427,7 @@ async def forebet_loop():
 # the user has ~50h lead time to build their system bets. Posts to the normal
 # Rate Wall (no separate tab). German market labels.
 # ---------------------------------------------------------------------------
-PREDICTZ_MAX_PER_RUN = 10   # cap new safe picks per run
+PREDICTZ_MAX_PER_RUN = 15   # cap new safe picks per run
 _MONTHS = {1: "Jan", 2: "Feb", 3: "Mär", 4: "Apr", 5: "Mai", 6: "Jun",
            7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
 
@@ -1399,29 +1439,40 @@ def _predictz_date_paths() -> list[str]:
     return ["/predictions/tomorrow/", f"/predictions/{d2.strftime('%Y%m%d')}/"]
 
 
-def _predictz_pick(pred_score, conf: str):
-    """Derive the safest strong goals market from a predicted score.
-    Returns (market, odds, rating) or None if no safe goals bet."""
-    if not pred_score:
-        return None
-    total = pred_score[0] + pred_score[1]
-    if total >= 3:
-        market, odds, rating = "Über 1.5 Tore", "1.25", 10.0
-    elif total == 2:
-        market, odds, rating = "Über 1.5 Tore", "1.35", 9.0
-    elif total == 1:
-        market, odds, rating = "Über 0.5 Tore", "1.10", 9.0
-    else:
-        return None  # 0-0 predicted → no safe goals pick
+def _conf_adj(rating: float, conf: str) -> float:
     if conf == "ngreen":
-        rating = min(10.0, rating + 0.5)
-    elif conf == "nred":
-        rating -= 1.5
-    return market, odds, round(rating, 1)
+        return min(10.0, rating + 0.5)
+    if conf == "nred":
+        return rating - 1.5
+    return rating
+
+
+def _predictz_candidates(r: dict) -> list[dict]:
+    """From one match row, derive all safe goals-market bankers (may be several:
+    a score-based Über line, plus Über 2.5 and/or BTTS when predicted)."""
+    conf = r.get("conf")
+    out = []
+    # 1) Score-based Über line (safest)
+    ps = parse_pred_score(r.get("pred"))
+    if ps:
+        total = ps[0] + ps[1]
+        if total >= 3:
+            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.25", "rating": _conf_adj(10.0, conf)})
+        elif total == 2:
+            out.append({"sfx": "", "market": "Über 1.5 Tore", "odds": "1.35", "rating": _conf_adj(9.0, conf)})
+        elif total == 1:
+            out.append({"sfx": "", "market": "Über 0.5 Tore", "odds": "1.10", "rating": _conf_adj(9.0, conf)})
+    # 2) Over 2.5 tip (predictz O/U page)
+    if (r.get("ou_tip") or "").strip().lower() == "over 2.5":
+        out.append({"sfx": "-o25", "market": "Über 2.5 Tore", "odds": "1.55", "rating": _conf_adj(8.5, conf)})
+    # 3) BTTS Yes tip (predictz BTTS page)
+    if (r.get("btts_tip") or "").strip().lower() == "btts yes":
+        out.append({"sfx": "-btts", "market": "Beide Teams treffen (BTTS)", "odds": "1.70", "rating": _conf_adj(8.5, conf)})
+    return [c for c in out if round(c["rating"], 1) >= 8.5]
 
 
 async def predictz_autopost() -> dict:
-    """Scrape predictz upcoming days, publish safe goals markets as TipJarHQ."""
+    """Scrape predictz upcoming days, publish safe goals-market bankers as TipJarHQ."""
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
@@ -1433,31 +1484,33 @@ async def predictz_autopost() -> dict:
 
     candidates = []
     for r in rows:
-        pick = _predictz_pick(parse_pred_score(r.get("pred")), r.get("conf"))
-        if not pick or pick[2] < 8.5:  # only strong "10-star" bankers
-            continue
-        candidates.append((pick[2], r, pick))
+        for c in _predictz_candidates(r):
+            candidates.append((round(c["rating"], 1), r, c))
     candidates.sort(key=lambda x: x[0], reverse=True)
 
     posted = 0
     now = datetime.now(timezone.utc).isoformat()
     d = datetime.now(timezone.utc).date()
-    for rating, r, pick in candidates:
+    for rating, r, c in candidates:
         if posted >= PREDICTZ_MAX_PER_RUN:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
-        tip_id = f"predictz-{matchid}"
+        tip_id = f"hqtip-b-{matchid}{c['sfx']}"
         if await db.tips.find_one({"id": tip_id}):
             continue
-        market, odds, _ = pick
+        market, odds = c["market"], c["odds"]
         home, away = r["home"], r["away"]
-        offset = r.get("day_offset", 1)
-        md = d + timedelta(days=offset)
-        match_time = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
-        league = (r.get("league") or "").title() or "Predictz Pick"
+        matched = FOREBET_TIME_INDEX.get(f"{_norm_team(home)}|{_norm_team(away)}")
+        if matched:
+            match_time = matched
+        else:
+            offset = r.get("day_offset", 1)
+            md = d + timedelta(days=offset)
+            match_time = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+        league = (r.get("league") or "").title() or "TipJarHQ Pick"
         analysis = (
-            f"Sicherer Tor-Banker (Predictz): erwartetes Ergebnis {r.get('pred')}. "
-            f"{market} ist bei diesem Spielbild ein 10-Sterne-Pick. "
+            f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
+            f"{market} ist bei diesem Spielbild ein starker Pick. "
             f"Rechtzeitig gepostet, damit du dein Systemwette-Programm aufbauen kannst — "
             f"automatisch von TipJarHQ."
         )
@@ -1470,23 +1523,23 @@ async def predictz_autopost() -> dict:
             "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-            "source": "predictz", "created_at": now,
+            "source": "hq-auto", "created_at": now,
         }
         await db.tips.insert_one(tip)
         posted += 1
-        logger.info(f"Predictz auto-posted: {home} vs {away} — {market} ({rating})")
+        logger.info(f"HQ auto-posted (B): {home} vs {away} — {market} ({rating})")
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
 
 async def predictz_loop():
-    await asyncio.sleep(45)  # let startup settle (after forebet)
+    await asyncio.sleep(90)  # let startup + forebet (fills time index) settle first
     while True:
         try:
             res = await predictz_autopost()
-            logger.info(f"Predictz loop: {res}")
+            logger.info(f"HQ loop B: {res}")
         except Exception as e:
-            logger.error(f"Predictz loop error: {e}")
-        await asyncio.sleep(6 * 3600)  # every 6 hours
+            logger.error(f"HQ loop B error: {e}")
+        await asyncio.sleep(3 * 3600)  # every 3 hours
 
 
 @app.on_event("startup")
