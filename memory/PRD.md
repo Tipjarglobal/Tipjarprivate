@@ -276,6 +276,19 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Verified: insult tip → 422 ("direct insults and abusive language"); clean tip → 200. Image
   moderation is LLM-based (Gemini vision) — strong but not 100%.
 
+## Auto-Settlement aktiviert — API-Football Pro (Jul 2026)
+- API_FOOTBALL_KEY in backend/.env hinterlegt; Plan: **Pro** (7500 req/Tag, aktuelle Saison).
+- Free-Plan war unbrauchbar (nur Saisons 2022–2024) → User auf Fußball-Pro (19$/Mon) umgestiegen.
+- settle_pending_tips optimiert: nur BEENDETE Spiele (kickoff < now-2h) werden geprüft,
+  settle_attempts-Cap (4) + gecachte Team-IDs = quota-sicher. Batch 50/Lauf, Loop alle 15 Min.
+- FIX: Pro-Plan verlangt `season`-Param bei /fixtures → season=Jahr (+Vorjahr-Fallback) ergänzt.
+- FIX: resolve_team_id mit Fallbacks (Bindestrich→Space, erstes Wort) für Namen wie "Ararat-Armenia".
+- Beendete Tipps werden NICHT mehr gelöscht (36h Karenz bei aktivem Key); gewonnen/verloren
+  bleiben dauerhaft unter Status-Filter sichtbar (Trefferquote/Track-Record).
+- Verifiziert: Lincoln Red Imps 3:1 → gewonnen ✅, Argentina 3:2 Egypt → gewonnen ✅ (settled_by=auto).
+- Zeitfenster-Filter greift nur bei status=pending (nicht bei won/lost).
+- OFFEN/Idee: Spieler-Prop „Smart System" (Schüsse/Fouls via /fixtures/players) möglich auf Pro-Plan.
+
 ## 4 Systeme + Bereichs-Navigation + Bereichs-Alerts (Jul 2026)
 - match_predictions Collection: Forebet & Predictz speichern jetzt volle Match-Prognosen
   (pred score, fav+fav_prob, btts, over25, league_code, kickoff) → Basis für alle Systeme.

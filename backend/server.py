@@ -858,7 +858,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     else:
         cursor = db.tips.find(q, {"_id": 0}).sort("created_at", -1).limit(fetch)
     tips = await cursor.to_list(fetch)
-    if window in ("24", "48", "48plus"):
+    if window in ("24", "48", "48plus") and status in (None, "pending"):
         now = datetime.now(timezone.utc)
         tips = [t for t in tips if _in_kickoff_window(t.get("match_time"), window, now)][:limit]
     return tips
@@ -1197,9 +1197,17 @@ async def resolve_team_id(name: str):
     if cached:
         return cached.get("team_id")
     resp = _apifootball("/teams", {"search": name.strip()})
+    # fallbacks for name mismatches (hyphens, city suffixes)
+    if not resp:
+        simplified = re.sub(r"[-_]", " ", name).strip()
+        if simplified.lower() != name.strip().lower():
+            resp = _apifootball("/teams", {"search": simplified})
+    if not resp:
+        first = re.sub(r"[^A-Za-z0-9 ]", " ", name).split()
+        if first and len(first[0]) >= 4:
+            resp = _apifootball("/teams", {"search": first[0]})
     team_id = None
     if resp:
-        # prefer an exact-ish name match, else first result
         for item in resp:
             if _teams_match(item.get("team", {}).get("name", ""), name):
                 team_id = item["team"]["id"]
@@ -1212,21 +1220,27 @@ async def resolve_team_id(name: str):
 
 def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
     for date in dates:
-        fixtures = _apifootball("/fixtures", {"team": team_id, "date": date})
-        if not fixtures:
+        try:
+            yr = int(date[:4])
+        except (ValueError, TypeError):
             continue
-        for fx in fixtures:
-            th = fx.get("teams", {}).get("home", {}).get("name", "")
-            ta = fx.get("teams", {}).get("away", {}).get("name", "")
-            if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
-                status = fx.get("fixture", {}).get("status", {}).get("short")
-                if status in FINISHED_STATUSES:
-                    return {
-                        "home_name": th, "away_name": ta,
-                        "home_goals": fx.get("goals", {}).get("home"),
-                        "away_goals": fx.get("goals", {}).get("away"),
-                        "status": status,
-                    }
+        for season in (yr, yr - 1):  # July matches = new season(yr); Jan = prev season(yr-1)
+            fixtures = _apifootball("/fixtures", {"team": team_id, "date": date, "season": season})
+            if not fixtures:
+                continue
+            for fx in fixtures:
+                th = fx.get("teams", {}).get("home", {}).get("name", "")
+                ta = fx.get("teams", {}).get("away", {}).get("name", "")
+                if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
+                    status = fx.get("fixture", {}).get("status", {}).get("short")
+                    if status in FINISHED_STATUSES:
+                        return {
+                            "home_name": th, "away_name": ta,
+                            "home_goals": fx.get("goals", {}).get("home"),
+                            "away_goals": fx.get("goals", {}).get("away"),
+                            "status": status,
+                        }
+            break  # this season had data for the date; no need to probe the other season
     return None
 
 
