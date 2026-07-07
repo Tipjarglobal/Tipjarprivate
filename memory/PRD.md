@@ -173,6 +173,29 @@ Object storage: Emergent object store for slip screenshots. Auth: JWT Bearer (lo
 - Verified iteration-23: frontend 4/4 (bell enable → new tip via API → toast appears within ~7s,
   unseen badge increments, action opens tips-window). PASS.
 
+## Predictz safe "10-star" auto-tips + notification popup fix (2026-07, iteration 23-24)
+- **Notification popup fix (iter 23)**: NotificationBell now shows an in-app sonner toast
+  (top-center, 10s, "View Today's Tips" action → tj-open-tips event opens tips window) IN
+  ADDITION to browser push (which silently failed without OS permission). Verified 4/4.
+- **Predictz auto-tips (iter 24)**: New backend/predictz.py (Playwright, chromium reinstalled
+  to build 1228 to match updated Playwright — Forebet was also broken by the version mismatch).
+  scrape_predictz() reads predictz.com tomorrow + day-after pages (bot-protected → needs browser),
+  parses predicted score per match. predictz_autopost() derives SAFE goals-market "10-star"
+  bankers (predicted total>=3 → Über 1.5 @10★; ==2 → Über 1.5 @9★; ==1 → Über 0.5 @9★;
+  0-0 skipped; ngreen +0.5 / nred -1.5; only rating>=8.5 posted, max 10/run). Posts as TipJarHQ
+  to the NORMAL Rate Wall (source='predictz', id predictz-<matchid>), match_time = kickoff day
+  (~24-72h ahead = user's "50h before" lead time to build system bets). Loop every 6h + admin
+  trigger POST /api/admin/predictz/run. seed_showcase purge now preserves ^(forebet|predictz)- ids.
+  Verified: curl posted 9 picks, rendered correctly on preview Rate Wall (safe markets, ratings,
+  German analysis, flags, dates). NOTE: PRODUCTION needs redeploy + chromium in container.
+- User's betting strategy studied extensively (goals>result, safe Over/BTTS/team-goals/1st-half/
+  player-props/DNB/handicap bankers, system bets w/ loss-tolerance, HT/FT & correct-score spread,
+  cash-out discipline, context-driven markets). Sunday disappointments = "Match Result favorite"
+  legs failing (Olympiacos draws) → avoid result bets, favor goals markets. THIS is why predictz
+  auto-tips focus on Over/goals markets only.
+- NEXT: add more sources (oddspedia incl. YouTube, betarades.gr, kingbet.gr, matchmoney.com.gr,
+  foxbet.gr, predictz BTTS/Over2.5 pages); optional "Sunday priority"; player-prop / HT-FT tips.
+
 ## Deferred by user
 - PayPal payouts + paid credits monetization: ON HOLD until 1,000 members (features exist, dormant).
 

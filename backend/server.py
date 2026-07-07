@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
+from predictz import scrape_predictz, parse_pred_score
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest,
 )
@@ -170,6 +171,11 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 @api_router.post("/admin/forebet/run")
 async def admin_forebet_run(admin: dict = Depends(require_admin)):
     return await forebet_autopost()
+
+
+@api_router.post("/admin/predictz/run")
+async def admin_predictz_run(admin: dict = Depends(require_admin)):
+    return await predictz_autopost()
 
 
 
@@ -1182,7 +1188,7 @@ async def seed_showcase():
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
-        "id": {"$nin": allowed_ids, "$not": {"$regex": "^forebet-"}},
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(forebet|predictz)-"}},
     })
 
     # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
@@ -1375,6 +1381,113 @@ async def forebet_loop():
         await asyncio.sleep(6 * 3600)  # every 6 hours
 
 
+# ---------------------------------------------------------------------------
+# Predictz auto-tips: TipJarHQ reads predictz.com and auto-posts SAFE goals
+# markets ("10-star" bankers: Over 0.5 / Over 1.5) ~24-72h before kickoff, so
+# the user has ~50h lead time to build their system bets. Posts to the normal
+# Rate Wall (no separate tab). German market labels.
+# ---------------------------------------------------------------------------
+PREDICTZ_MAX_PER_RUN = 10   # cap new safe picks per run
+_MONTHS = {1: "Jan", 2: "Feb", 3: "Mär", 4: "Apr", 5: "Mai", 6: "Jun",
+           7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
+
+
+def _predictz_date_paths() -> list[str]:
+    """Tomorrow + day-after-tomorrow pages (covers the ~50h look-ahead window)."""
+    today = datetime.now(timezone.utc).date()
+    d2 = today + timedelta(days=2)
+    return ["/predictions/tomorrow/", f"/predictions/{d2.strftime('%Y%m%d')}/"]
+
+
+def _predictz_pick(pred_score, conf: str):
+    """Derive the safest strong goals market from a predicted score.
+    Returns (market, odds, rating) or None if no safe goals bet."""
+    if not pred_score:
+        return None
+    total = pred_score[0] + pred_score[1]
+    if total >= 3:
+        market, odds, rating = "Über 1.5 Tore", "1.25", 10.0
+    elif total == 2:
+        market, odds, rating = "Über 1.5 Tore", "1.35", 9.0
+    elif total == 1:
+        market, odds, rating = "Über 0.5 Tore", "1.10", 9.0
+    else:
+        return None  # 0-0 predicted → no safe goals pick
+    if conf == "ngreen":
+        rating = min(10.0, rating + 0.5)
+    elif conf == "nred":
+        rating -= 1.5
+    return market, odds, round(rating, 1)
+
+
+async def predictz_autopost() -> dict:
+    """Scrape predictz upcoming days, publish safe goals markets as TipJarHQ."""
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    try:
+        rows = await scrape_predictz(_predictz_date_paths())
+    except Exception as e:
+        logger.error(f"Predictz scrape failed: {e}")
+        return {"posted": 0, "reason": f"scrape error: {e}"}
+
+    candidates = []
+    for r in rows:
+        pick = _predictz_pick(parse_pred_score(r.get("pred")), r.get("conf"))
+        if not pick or pick[2] < 8.5:  # only strong "10-star" bankers
+            continue
+        candidates.append((pick[2], r, pick))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    posted = 0
+    now = datetime.now(timezone.utc).isoformat()
+    d = datetime.now(timezone.utc).date()
+    for rating, r, pick in candidates:
+        if posted >= PREDICTZ_MAX_PER_RUN:
+            break
+        matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
+        tip_id = f"predictz-{matchid}"
+        if await db.tips.find_one({"id": tip_id}):
+            continue
+        market, odds, _ = pick
+        home, away = r["home"], r["away"]
+        offset = r.get("day_offset", 1)
+        md = d + timedelta(days=offset)
+        match_time = f"{md.day}. {_MONTHS.get(md.month, '')} {md.year}"
+        league = (r.get("league") or "").title() or "Predictz Pick"
+        analysis = (
+            f"Sicherer Tor-Banker (Predictz): erwartetes Ergebnis {r.get('pred')}. "
+            f"{market} ist bei diesem Spielbild ein 10-Sterne-Pick. "
+            f"Rechtzeitig gepostet, damit du dein Systemwette-Programm aufbauen kannst — "
+            f"automatisch von TipJarHQ."
+        )
+        tip = {
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away,
+            "match_time": match_time,
+            "country": "", "league": league, "market": market,
+            "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "predictz", "created_at": now,
+        }
+        await db.tips.insert_one(tip)
+        posted += 1
+        logger.info(f"Predictz auto-posted: {home} vs {away} — {market} ({rating})")
+    return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
+
+
+async def predictz_loop():
+    await asyncio.sleep(45)  # let startup settle (after forebet)
+    while True:
+        try:
+            res = await predictz_autopost()
+            logger.info(f"Predictz loop: {res}")
+        except Exception as e:
+            logger.error(f"Predictz loop error: {e}")
+        await asyncio.sleep(6 * 3600)  # every 6 hours
+
 
 @app.on_event("startup")
 async def startup():
@@ -1410,6 +1523,7 @@ async def startup():
     asyncio.create_task(_startup_seed())
     asyncio.create_task(settlement_loop())
     asyncio.create_task(forebet_loop())
+    asyncio.create_task(predictz_loop())
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:
