@@ -250,9 +250,15 @@ async def systems():
 
 @api_router.get("/tips/counts")
 async def tips_counts():
-    """Post counts per picks area — powers the homepage badges & area alerts."""
+    """Post counts per picks area — powers the homepage badges & area alerts.
+    The AI badge reflects the next-24h picks (the default view) so it stays realistic."""
     await purge_expired_autotips()
-    ai = await db.tips.count_documents({"source": "hq-auto", "status": "pending"})
+    now = datetime.now(timezone.utc)
+    ai_docs = await db.tips.find(
+        {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
+        {"match_time": 1}).to_list(500)
+    ai = sum(1 for d in ai_docs if _in_kickoff_window(d.get("match_time"), "24", now))
+    ai_total = len(ai_docs)
     members = await db.tips.count_documents({"source": {"$ne": "hq-auto"}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
     try:
@@ -260,7 +266,7 @@ async def tips_counts():
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
-    return {"ai": ai, "members": members, "live": live, "systems": systems_n}
+    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n}
 
 
 
@@ -834,7 +840,8 @@ async def purge_demo_tips() -> int:
 
 @api_router.get("/tips")
 async def list_tips(status: Optional[str] = None, sort: str = "new",
-                    source: Optional[str] = None, limit: int = 50):
+                    source: Optional[str] = None, window: Optional[str] = None,
+                    limit: int = 50):
     q = {}
     if status:
         q["status"] = status
@@ -843,14 +850,30 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     elif source == "members":
         q["source"] = {"$ne": "hq-auto"}
     limit = max(1, min(limit, 100))
+    fetch = 300 if window in ("24", "48", "48plus") else limit
     if sort == "top":
-        cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(limit)
+        cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(fetch)
     elif sort == "hype":
-        cursor = db.tips.find(q, {"_id": 0}).sort("ai_rating", -1).limit(limit)
+        cursor = db.tips.find(q, {"_id": 0}).sort("ai_rating", -1).limit(fetch)
     else:
-        cursor = db.tips.find(q, {"_id": 0}).sort("created_at", -1).limit(limit)
-    tips = await cursor.to_list(limit)
+        cursor = db.tips.find(q, {"_id": 0}).sort("created_at", -1).limit(fetch)
+    tips = await cursor.to_list(fetch)
+    if window in ("24", "48", "48plus"):
+        now = datetime.now(timezone.utc)
+        tips = [t for t in tips if _in_kickoff_window(t.get("match_time"), window, now)][:limit]
     return tips
+
+
+def _in_kickoff_window(match_time: str, window: str, now) -> bool:
+    ko = _parse_kickoff(match_time)
+    if not ko:
+        return True  # no parseable time → always show, never hide a tip
+    hours = (ko - now).total_seconds() / 3600
+    if window == "24":
+        return hours < 24
+    if window == "48":
+        return 24 <= hours < 48
+    return hours >= 48  # "48plus"
 
 
 @api_router.get("/tips/mine")

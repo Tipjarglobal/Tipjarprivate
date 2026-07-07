@@ -31,6 +31,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
   const [tips, setTips] = useState([]);
   const [sort, setSort] = useState("new");
   const [status, setStatus] = useState(view === "live" ? "live" : "pending");
+  const [win, setWin] = useState("24");
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -45,12 +46,12 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
       const params = { sort };
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
-      if (view === "ai") params.source = "ai";
+      if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; }
       else if (view === "members") params.source = "members";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
-  }, [sort, status, view]);
+  }, [sort, status, view, win]);
 
   useEffect(() => {
     load();
@@ -157,6 +158,18 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
           </button>
         ))}
       </div>
+
+      {view === "ai" && (
+        <div className="flex flex-wrap gap-2 mb-6" data-testid="window-filter">
+          <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-zinc-500 mr-1 self-center"><Clock size={13} /> Anstoß</span>
+          {[["24", "wall.win.24"], ["48", "wall.win.48"], ["48plus", "wall.win.48plus"], ["all", "wall.win.all"]].map(([v, lbl]) => (
+            <button key={v} data-testid={`window-${v}`} onClick={() => setWin(v)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${win === v ? "bg-volt text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
+              {t(lbl)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-zinc-500 text-center py-16">{t("common.loading")}</p>
