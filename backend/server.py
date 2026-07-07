@@ -251,6 +251,7 @@ async def systems():
 @api_router.get("/tips/counts")
 async def tips_counts():
     """Post counts per picks area — powers the homepage badges & area alerts."""
+    await purge_expired_autotips()
     ai = await db.tips.count_documents({"source": "hq-auto", "status": "pending"})
     members = await db.tips.count_documents({"source": {"$ne": "hq-auto"}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
@@ -1435,7 +1436,7 @@ FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
 
 # Leagues TipJar must NEVER touch (amateur / not offered by bookmakers).
 # Forebet league short-codes (lowercased): Us4 = USA USL League Two, Fi3 = Finland 3rd tier.
-FOREBET_BLOCKED_CODES = {"us4", "fi3"}
+FOREBET_BLOCKED_CODES = {"us4", "fi3", "sl1"}
 # Predictz league-string substrings to block (predictz has no short-code).
 PREDICTZ_BLOCKED_KW = ("usl league two", "league two usa", "kakkonen")
 
@@ -1528,6 +1529,54 @@ def _match_key(home: str, away: str) -> str:
                 if t and t not in _CLUB_NOISE]
         return "".join(sorted(toks)) or (n or "").lower().replace(" ", "")
     return f"{core(home)}|{core(away)}"
+
+
+# ---------------------------------------------------------------------------
+# Expiry: auto-tips whose kickoff has passed must drop off the wall & counts
+# (no live results engine yet, so pending picks would otherwise pile up forever)
+# ---------------------------------------------------------------------------
+_MONTH_ABBR = {"jan": 1, "feb": 2, "mär": 3, "mar": 3, "apr": 4, "mai": 5,
+               "jun": 6, "jul": 7, "aug": 8, "sep": 9, "okt": 10, "oct": 10,
+               "nov": 11, "dez": 12, "dec": 12}
+
+
+def _parse_kickoff(mt: str):
+    s = (mt or "").strip()
+    if not s or "&" in s or "multibet" in s.lower():
+        return None  # multibet / unknown → never auto-expire
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})\s+(\d{1,2}):(\d{2})", s)
+    if m:
+        d, mo, y, h, mi = map(int, m.groups())
+        try:
+            return datetime(y, mo, d, h, mi, tzinfo=timezone.utc)
+        except Exception:
+            return None
+    m = re.match(r"^(\d{1,2})\.\s*([A-Za-zäöü]+)\.?\s+(\d{4})", s)
+    if m:
+        mon = _MONTH_ABBR.get(m.group(2).lower()[:3])
+        if mon:
+            try:
+                return datetime(int(m.group(3)), mon, int(m.group(1)), 23, 59, tzinfo=timezone.utc)
+            except Exception:
+                return None
+    return None
+
+
+async def purge_expired_autotips() -> int:
+    """Delete pending HQ auto-tips (and their predictions) whose kickoff is in the past."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+    docs = await db.tips.find(
+        {"source": "hq-auto", "status": "pending"}, {"id": 1, "match_time": 1}).to_list(1000)
+    stale = [d["id"] for d in docs
+             if (ko := _parse_kickoff(d.get("match_time"))) and ko < cutoff]
+    if stale:
+        await db.tips.delete_many({"id": {"$in": stale}})
+    preds = await db.match_predictions.find({}, {"id": 1, "kickoff": 1}).to_list(1000)
+    stale_p = [p["id"] for p in preds
+               if (ko := _parse_kickoff(p.get("kickoff"))) and ko < cutoff]
+    if stale_p:
+        await db.match_predictions.delete_many({"id": {"$in": stale_p}})
+    return len(stale)
 
 
 # ---------------------------------------------------------------------------
@@ -1639,6 +1688,9 @@ async def build_systems() -> dict:
     raw = await db.match_predictions.find(
         {"status": "pending", "updated_at": {"$gte": cutoff}}).to_list(500)
     preds = [p for p in raw if _pred_whitelisted(p)]
+    _ko_cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+    preds = [p for p in preds
+             if not ((ko := _parse_kickoff(p.get("kickoff"))) and ko < _ko_cutoff)]
 
     # de-duplicate the same match across sources; merge complementary fields
     by_key = {}
@@ -1970,6 +2022,7 @@ async def forebet_loop():
             if await ensure_chromium():
                 res = await forebet_autopost()
                 logger.info(f"HQ loop A: {res}")
+                logger.info(f"Expired auto-tips purged: {await purge_expired_autotips()}")
             else:
                 logger.error("HQ loop A skipped: chromium unavailable — retrying in 20 min")
                 await asyncio.sleep(20 * 60)
