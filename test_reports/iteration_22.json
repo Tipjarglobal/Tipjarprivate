@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only i18n testing for TipJar. Verified 7-language selector (en/de/el/fr/it/ar/tr), full UI text switching for French/Italian/Turkish/Arabic, Arabic RTL flipping (document.documentElement.dir='rtl', lang='ar'), reversion to LTR when switching back to English, localStorage persistence (tj_lang), and absence of raw translation keys in the DOM. All acceptance criteria PASSED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_evidence": {
+    "languages_in_dropdown": "en:🇬🇧 English, de:🇩🇪 Deutsch, el:🇬🇷 Ελληνικά, fr:🇫🇷 Français, it:🇮🇹 Italiano, ar:🇸🇦 العربية, tr:🇹🇷 Türkçe (all 7 visible)",
+    "fr": "nav-ratewall='Mur de notes', nav-invite='Inviter', nav-leaderboard='Classement', view-tips-btn='Voir les pronostics du jour', localStorage tj_lang='fr', doc.lang='fr', doc.dir='ltr'",
+    "tr": "nav-ratewall='Puan Duvarı', nav-invite='Davet et', nav-leaderboard='Sıralama', view-tips-btn='Bugünün tahminlerini gör', tj_lang='tr', doc.dir='ltr'",
+    "ar": "nav-ratewall='جدار التقييم', nav-invite='دعوة', nav-leaderboard='المتصدرون', view-tips-btn='عرض توقعات اليوم', tj_lang='ar', doc.lang='ar', doc.dir='rtl' (RTL layout confirmed visually in screenshot)",
+    "it": "nav-ratewall='Muro dei voti', nav-invite='Invita', tj_lang='it', doc.dir='ltr'",
+    "en_after_ar": "nav-ratewall='Rate Wall', doc.dir='ltr' (correctly reverted), doc.lang='en', tj_lang='en'",
+    "raw_keys_scan": "No raw i18n keys (nav.ratewall, nav.invite, hero.title, wall.title, submit.title, invite.title, wallet.title, auth.login) found in body text for any tested language"
+  },
+  "test_report_links": ["/app/test_reports/i18n_fr.png", "/app/test_reports/i18n_ar.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/app/frontend/src/i18n.js is 1267 lines (>700 line guideline). Consider splitting per-language dictionaries into separate files (e.g. src/i18n/en.js, src/i18n/fr.js) with a small provider that imports them. Purely a maintainability improvement — not a functional bug.",
+    "I18nProvider applies dir on mount via useEffect AND again inside setLang; slight duplication but harmless (idempotent).",
+    "Fallback chain in t() falls back to English if a key is missing in the target locale — good, guarantees no raw keys leak to UI (verified)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100%"},
+  "test_credentials": "not applicable — no login required for i18n tests",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "i18n additions (fr/it/ar/tr) fully verified end-to-end via the Header language switcher on the deployed preview. Selectors used: [data-testid='language-switcher'], [data-testid='lang-{code}'], [data-testid='nav-ratewall'|'nav-invite'|'nav-leaderboard'|'view-tips-btn']. RTL is applied only for 'ar' (RTL_LANGS=['ar'] in /app/frontend/src/i18n.js) and reverts to ltr on any other language.",
+  "rca of the issue": "No issue — feature works as specified."
+}
