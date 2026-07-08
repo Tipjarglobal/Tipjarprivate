@@ -19,15 +19,17 @@ stats: API-Football Pro (api-sports.io, 7500 req/day, season stats available).
 Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 
 ## Current areas (tips window tabs + header quick-views)
-1. AI Picks (source=hq-auto) — Forebet/Predictz-derived DNB + safe goals bankers, kickoff-window filter.
-2. AI System Picks (GET /api/systems) — 4 systems: lock / value / risk / gamble (whitelist leagues).
-3. Smart Bets (source=smart) — NEW, player props from API-Football season stats.
-4. Members Picks (source NOT in [hq-auto, smart]).
-5. Live Picks (status=live).
+Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets (smart) 3) KI-System-Picks (systems) 4) Community (members) 5) Live 6) Abgerechnet (settled).
+1. KI Single-Game-Picks (source=hq-auto) — Forebet/Predictz bankers/value + dynamic single-game multi-leg Bet-Builders (both teams score + nested Über-lines, 1-goal safety buffer).
+2. Smart Bets (source=smart) — player props from API-Football season stats.
+3. KI-System-Picks (GET /api/systems) — 4 systems: lock / value / risk / gamble.
+4. Community Picks (source NOT in [hq-auto, smart]).
+5. Live Picks (status=live) — realistic Poisson-priced live odds (goals-needed + time-remaining).
+6. Abgerechnet/Settled — checkered-flag tab; Won(left)/Lost(right) clickable toggles reveal slips on click; settled slips auto-deleted after 24h.
 
 ## Key backend endpoints
 - GET /api/tips?source=ai|smart|members&status=pending|won|lost|live&window=24|48|48plus&sort
-- GET /api/tips/counts -> {ai, ai_total, members, live, systems, smart}
+- GET /api/tips/counts -> {ai, ai_total, members, live, systems, smart, settled}
 - GET /api/systems, GET /api/system-slip
 - POST /api/admin/settle-now, /api/admin/forebet/run, /api/admin/predictz/run,
   /api/admin/autotips/reset, /api/admin/smart/run, /api/admin/smart/reset
@@ -44,6 +46,23 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   (won/lost visible under status filter). Verified won/lost render in UI.
 - Navigation: 4 (now 5) green quick-view buttons w/ live counts; tab switcher inside tips window;
   per-area notification toggles.
+
+## Session 2026-07-08 (fork continued)
+- Blacklists: Blumenau + code `brc`; Canadian Championship (`forge`, `saint-laurent`); ~30 obscure
+  Brazilian leagues (Série C/D, all A1/A2/A3 state tiers, Paulista/Carioca/Mineiro/Catarinense/etc.).
+  Only Brazil Série A/B kept. Owner shorthand: "#<team> @blacklist" = delete tip + blacklist league.
+- Dynamic single-game Bet-Builder: both teams score + nested Über-lines (1-goal safety buffer,
+  up to 5 legs). Generic Über-line settlement (parse "über N.5"). Combo odds cap raised to 25.0.
+- Multi-match parlay auto-settlement: settle_multimatch_parlays() grades each leg via API-Football +
+  judge_market; lost if any leg loses, won if all win; writes per-leg status. In loop + /admin/settle-now.
+- Settled area "Abgerechnet": new tab (checkered-flag), Won(left)/Lost(right) toggles reveal slips on
+  click; purge_settled_tips() deletes non-seed won/lost tips >24h; set_status stamps settled_at.
+  counts now include `settled`. Tested iteration_31 (columns) + iteration_32 (toggles) — PASS.
+- Renamed AI Picks -> "KI Single-Game-Picks"; tab order: ai, smart, systems, members, live, settled.
+- Removed fake `seed-community-pending` showcase (used real UPCOMING fixtures w/ fabricated results).
+- LIVE odds fix: _live_odd now Poisson-based on goals-needed + time-left (Über 1.5 @45'/0:0 = ~2.21,
+  was 3.75). Callers pass current total goals.
+
 
 ## Session 2026-07-07 (this fork)
 ### Bug fix — scraper robustness (verified)
