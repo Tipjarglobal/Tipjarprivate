@@ -167,8 +167,15 @@ function Home() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.15 }} className="flex justify-center">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.15 }} className="flex flex-col items-center gap-3">
             <AnimatedJar />
+            <a
+              href="https://tipjarglobal.com"
+              data-testid="hero-logo-url"
+              className="font-heading font-black text-lg sm:text-xl tracking-tight text-volt hover:text-volt-hover transition-colors drop-shadow-[0_0_12px_rgba(225,255,0,0.45)]"
+            >
+              Tipjarglobal.com
+            </a>
           </motion.div>
         </div>
       </section>
