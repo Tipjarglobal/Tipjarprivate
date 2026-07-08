@@ -213,29 +213,55 @@ class SmartIdeaInput(BaseModel):
 
 
 @api_router.post("/smart/idea")
-async def submit_smart_idea(inp: SmartIdeaInput, user: dict = Depends(get_current_user)):
-    text = (inp.text or "").strip()
-    if len(text) < 6:
-        raise HTTPException(status_code=400, detail="Idee ist zu kurz.")
+async def submit_smart_idea(
+    text: str = Form(default=""),
+    files: List[UploadFile] = File(default=[]),
+    user: dict = Depends(get_current_user),
+):
+    text = (text or "").strip()
+    uploads = [f for f in (files or []) if f is not None and getattr(f, "filename", None)][:3]
+    images_b64 = []
+    for f in uploads:
+        rb = await f.read()
+        images_b64.append(base64.b64encode(rb).decode("utf-8"))
+    if len(text) < 6 and not images_b64:
+        raise HTTPException(status_code=400, detail="Idee ist zu kurz — schreib etwas mehr oder lade ein Bild hoch.")
     if len(text) > 600:
         text = text[:600]
     now = datetime.now(timezone.utc)
     idea_id = str(uuid.uuid4())
-    idea_doc = {
+    await db.smart_ideas.insert_one({
         "id": idea_id, "user_id": user["id"], "username": user.get("username", "anon"),
-        "text": text, "status": "pending", "created_at": now.isoformat(), "tip_id": None,
-    }
-    await db.smart_ideas.insert_one(idea_doc)
+        "text": text, "images": len(images_b64), "status": "pending",
+        "created_at": now.isoformat(), "tip_id": None,
+    })
 
-    data = await generate_smart_from_idea(text)
+    data = await generate_smart_from_idea(text, images_b64)
     if not data:
         await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
-        return {"ok": True, "created": False}
+        return {"ok": True, "created": False, "reason": "not_actionable"}
+
+    # REQUIRED: never post a tip without a real date & time — look up the fixture.
+    home_in = (data.get("home_team") or "").strip()
+    away_in = (data.get("away_team") or "").strip()
+    tid = await resolve_team_id(home_in)
+    fx = find_upcoming_fixture(tid, away_in) if tid else None
+    if not fx:
+        tid2 = await resolve_team_id(away_in)
+        fx = find_upcoming_fixture(tid2, home_in) if tid2 else None
+    if not fx or not fx.get("date_iso"):
+        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "no_fixture"}})
+        return {"ok": True, "created": False, "reason": "no_fixture"}
+
+    try:
+        ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
+        kickoff = ko_dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "no_fixture"}})
+        return {"ok": True, "created": False, "reason": "no_fixture"}
 
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     tip_id = f"smart-idea-{idea_id[:8]}"
-    home = (data.get("home_team") or "").strip()
-    away = (data.get("away_team") or "").strip()
     try:
         rating = max(1.0, min(10.0, float(data.get("rating") or 7.0)))
     except Exception:
@@ -245,9 +271,10 @@ async def submit_smart_idea(inp: SmartIdeaInput, user: dict = Depends(get_curren
     tip = {
         "id": tip_id, "user_id": (hq or user)["id"], "username": "TipJarHQ",
         "raw_text": "", "image_path": None,
-        "home_team": home, "away_team": away,
-        "match_time": "", "country": "", "league": "TipJarHQ Smart Bet",
-        "league_code": "", "market": (data.get("market") or "").strip(),
+        "home_team": fx["home_name"] or home_in, "away_team": fx["away_name"] or away_in,
+        "match_time": kickoff, "country": fx.get("country") or "",
+        "league": "TipJarHQ Smart Bet", "league_code": "",
+        "market": (data.get("market") or "").strip(),
         "odds": str(data.get("odds") or "").strip(), "ai_rating": rating, "ai_analysis": analysis,
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
@@ -3980,11 +4007,11 @@ async def smart_autopost() -> dict:
     return {"posted": posted, "matches": scanned, "candidates": candidates}
 
 
-async def generate_smart_from_idea(text: str) -> dict | None:
-    """Turn a fan's free-text insider hint into a clever 'Smart Bet'. The KI decides
-    the teams, a smart low/mid-risk market, a rating and a short German analysis.
-    Returns None when the idea isn't actionable enough to build a pick."""
-    if not text or not EMERGENT_LLM_KEY:
+async def generate_smart_from_idea(text: str, images_b64: list | None = None) -> dict | None:
+    """Turn a fan's free-text insider hint (optionally with stat/table screenshots) into
+    a clever 'Smart Bet'. The KI decides the teams, a smart low/mid-risk market, a rating
+    and a short German analysis. Returns None when the idea isn't actionable enough."""
+    if (not text and not images_b64) or not EMERGENT_LLM_KEY:
         return None
     try:
         chat = LlmChat(
@@ -3992,28 +4019,50 @@ async def generate_smart_from_idea(text: str) -> dict | None:
             session_id=f"smartidea-{uuid.uuid4()}",
             system_message=(
                 "You are TipJar's Smart Bet strategist. A football fan sends an insider hint "
-                "about an upcoming or live match (e.g. 'many fouls expected', 'the keeper will make "
-                "lots of saves', 'both wingers will score'). Turn it into ONE clever, low-to-mid risk "
-                "'smart bet' — ideally a nuanced or combined market (e.g. 'goal in 1st half AND home "
-                "team not to lose', 'player X to score AND over 1.5 goals'). "
+                "about an UPCOMING match (e.g. 'many fouls expected', 'the keeper will make lots of "
+                "saves', 'both wingers will score'), optionally with screenshots of stats, tables or "
+                "standings. Turn it into ONE clever, low-to-mid risk 'smart bet' — ideally a nuanced or "
+                "combined market (e.g. 'goal in 1st half AND home team not to lose', 'player X to score "
+                "AND over 1.5 goals'). Identify the two REAL teams involved (full club names). "
                 "Respond with ONLY a compact JSON object, no markdown, with keys: "
-                "actionable (bool), home_team (str), away_team (str), league (str), market (str, in German), "
+                "actionable (bool), home_team (str), away_team (str), market (str, in German), "
                 "rating (number 1-10), odds (string like '1.85'), analysis (str, 1-2 sentences in German). "
-                "Set actionable=false if the hint has no usable football signal."
+                "Set actionable=false if you cannot identify both teams or there is no usable signal."
             ),
         ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
-        resp = await chat.send_message(UserMessage(text=f"Fan hint: {text[:600]}"))
+        kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
+        if images_b64:
+            kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64[:3]]
+        resp = await chat.send_message(UserMessage(**kwargs))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
         if s == -1 or e == -1:
             return None
         data = json.loads(raw[s:e + 1])
-        if not data.get("actionable") or not data.get("market"):
+        if not data.get("actionable") or not data.get("market") \
+                or not data.get("home_team") or not data.get("away_team"):
             return None
         return data
     except Exception as ex:
         logger.error(f"generate_smart_from_idea failed: {ex}")
         return None
+
+
+def find_upcoming_fixture(team_id: int, opponent_name: str):
+    """Find the team's next scheduled fixture vs the given opponent — used to attach a
+    REAL kickoff date/time to KI-generated smart picks (we never post without a time)."""
+    resp = _apifootball("/fixtures", {"team": team_id, "next": 15})
+    if not resp:
+        return None
+    for fx in resp:
+        th = (fx.get("teams", {}).get("home", {}) or {}).get("name", "")
+        ta = (fx.get("teams", {}).get("away", {}) or {}).get("name", "")
+        if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
+            lg = fx.get("league") or {}
+            return {"home_name": th, "away_name": ta,
+                    "date_iso": (fx.get("fixture") or {}).get("date"),
+                    "league": lg.get("name", ""), "country": lg.get("country", "")}
+    return None
 
 
 async def smart_loop():

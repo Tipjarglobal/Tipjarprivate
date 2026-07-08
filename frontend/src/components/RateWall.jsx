@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus } from "lucide-react";
 import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
@@ -356,16 +356,28 @@ function tipFlags(tip) {
 
 function SmartLab({ t, user, onCreated }) {
   const [text, setText] = useState("");
+  const [images, setImages] = useState([]);
   const [sending, setSending] = useState(false);
+  const fileRef = useRef(null);
+  const addImages = (e) => {
+    const picked = Array.from(e.target.files || []);
+    setImages((prev) => [...prev, ...picked].slice(0, 3));
+    if (fileRef.current) fileRef.current.value = "";
+  };
+  const removeImage = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx));
   const send = async () => {
     if (!user) { toast.error(t("smart.chat.login")); return; }
     const v = text.trim();
-    if (v.length < 6) return;
+    if (v.length < 6 && images.length === 0) return;
     setSending(true);
     try {
-      const { data } = await api.post("/smart/idea", { text: v });
-      setText("");
+      const fd = new FormData();
+      fd.append("text", v);
+      images.forEach((img) => fd.append("files", img));
+      const { data } = await api.post("/smart/idea", fd);
+      setText(""); setImages([]);
       if (data.created) { toast.success(t("smart.chat.created")); onCreated?.(); }
+      else if (data.reason === "no_fixture") toast.info(t("smart.chat.nofixture"));
       else toast.success(t("smart.chat.stored"));
     } catch (e) {
       toast.error(t("smart.chat.error"));
@@ -387,7 +399,7 @@ function SmartLab({ t, user, onCreated }) {
         <p className="text-zinc-400 text-sm md:text-base mt-3 leading-relaxed">{t("smart.intro")}</p>
       </div>
 
-      {/* RIGHT — chatbox */}
+      {/* RIGHT — chatbox with optional image upload */}
       <div className="flex flex-col justify-center">
         <div className="flex items-center gap-2 mb-2 text-zinc-300">
           <Lightbulb size={16} className="text-volt" />
@@ -404,13 +416,37 @@ function SmartLab({ t, user, onCreated }) {
             maxLength={600}
             className="w-full resize-none bg-transparent text-void placeholder:text-zinc-500 text-sm px-2 py-1.5 focus:outline-none"
           />
+          {images.length > 0 && (
+            <div className="flex gap-2 px-2 pb-1 flex-wrap" data-testid="smart-idea-thumbs">
+              {images.map((img, idx) => (
+                <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-zinc-300">
+                  <img src={URL.createObjectURL(img)} alt="" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => removeImage(idx)}
+                    className="absolute top-0 right-0 bg-lost text-white w-4 h-4 flex items-center justify-center text-[10px] leading-none">×</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center justify-between pl-2">
-            <span className="text-[11px] text-zinc-500 font-mono">{text.length}/600</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                data-testid="smart-idea-attach"
+                onClick={() => fileRef.current?.click()}
+                disabled={images.length >= 3}
+                title={t("smart.chat.attach")}
+                className="flex items-center gap-1 text-zinc-500 hover:text-void text-xs font-semibold disabled:opacity-40"
+              >
+                <ImagePlus size={16} /> {images.length}/3
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" multiple onChange={addImages} className="hidden" data-testid="smart-idea-file" />
+              <span className="text-[11px] text-zinc-500 font-mono">{text.length}/600</span>
+            </div>
             <button
               type="button"
               data-testid="smart-idea-send"
               onClick={send}
-              disabled={sending || text.trim().length < 6}
+              disabled={sending || (text.trim().length < 6 && images.length === 0)}
               className="flex items-center gap-2 rounded-xl bg-volt text-void font-bold text-sm px-4 py-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {sending ? <span className="animate-pulse">{t("smart.chat.sending")}</span> : (<><Send size={15} /> {t("smart.chat.send")}</>)}

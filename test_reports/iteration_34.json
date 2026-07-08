@@ -1,0 +1,53 @@
+{
+  "summary": "Full-stack verification of the Smart Bets follow-up (spoiler badge + multipart image chatbox + REAL fixture lookup with non-empty match_time). ALL 7 review criteria PASS. Backend: 5/5 pytest cases pass — POST /api/smart/idea is now multipart (text form + optional files), unauth is 403, <6-char text with no files → 400, real KI flow with 'Real Madrid gegen Barcelona: beide Teams treffen und über 2.5 Tore' created a tip with match_time='25/10/2026 16:00' (real DD/MM/YYYY HH:MM), tip.source='smart' & smart_idea=true & id='smart-idea-<uuid8>' & no _id leaked, tip persists in GET /api/tips?source=smart&status=pending with same match_time. Nonsense-team hint returned {ok:true, created:false, reason:'no_fixture'/'not_actionable'} without creating any tip. Frontend: Homepage QuickView row shows the View Smart Bets button (data-testid=view-smart-btn) with a small pulsing spoiler badge (data-testid=view-smart-btn-spoiler) with MessageCircle icon reading 'Talk to the AI' (EN — DE 'Mit der KI reden' verified in i18n.js key smart.spoiler). Clicking the spoiler opens the smart view and reveals data-testid=smart-lab with textarea (smart-idea-input), attach button (smart-idea-attach showing '0/3' → '1/3' → '2/3' → '1/3' after remove), hidden file input (smart-idea-file, accept image/*, multiple), thumbnails container (smart-idea-thumbs with 14x14 preview + red × remove button per image), 600-char counter, and Send button (smart-idea-send). Admin login (admin@tipjar.com / TipJarAdmin2026!) worked via auth-username field. Smart feed below the panel still shows tip cards (verified: 3 Barcelona vs Real Madrid @ 25/10/2026 16:00 smart-idea cards created by the backend tests). No console errors, no PAGE errors. Regression: SmartLab still renders correctly, tip cards below the panel are intact.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "backend_unauth_multipart_rejected": "PASS — 403 without Authorization on multipart POST",
+    "backend_too_short_text_no_files_400": "PASS — text 'hi' + no files → 400",
+    "backend_empty_text_no_files_400": "PASS — text '' + no files → 400",
+    "backend_creates_tip_with_real_match_time": "PASS — 'Real Madrid gegen Barcelona: beide Teams treffen und über 2.5 Tore' → created:true, tip.id=smart-idea-c6b99a60, match_time='25/10/2026 16:00', market='Beide Teams treffen UND Über 2.5 Tore', odds=1.85, source='smart', smart_idea=true, persisted in GET /api/tips?source=smart&status=pending",
+    "backend_no_fixture_returns_created_false": "PASS — nonsense fixture ('Zorkforfnia FC gegen Blurbville United') → created:false with reason='no_fixture'/'not_actionable', no tip inserted",
+    "backend_never_posts_without_datetime": "PASS — when created:true, tip.match_time is a non-empty DD/MM/YYYY HH:MM string; when no fixture, no tip is created",
+    "frontend_spoiler_badge_present": "PASS — data-testid=view-smart-btn-spoiler is rendered next to view-smart-btn with text 'Talk to the AI' (EN); i18n.js has DE 'Mit der KI reden'",
+    "frontend_spoiler_click_opens_smart_view": "PASS — clicking the spoiler badge opens the smart view and shows smart-lab",
+    "frontend_chatbox_elements": "PASS — smart-idea-input, smart-idea-attach (initial '0/3'), smart-idea-file (hidden, accept=image/*, multiple), smart-idea-send all present",
+    "frontend_image_upload_thumb_and_counter": "PASS — attach counter goes 0/3 → 1/3 → 2/3; smart-idea-thumbs container renders 14x14 previews with red × remove buttons",
+    "frontend_thumb_removal_decrements": "PASS — clicking × removes the thumb and counter goes 2/3 → 1/3",
+    "frontend_admin_login_works": "PASS — /auth/login with admin@tipjar.com / TipJarAdmin2026! succeeded via [data-testid=auth-username]",
+    "regression_smart_feed_below_panel": "PASS — tip cards continue to render below the SmartLab panel (3 Barcelona vs Real Madrid @ 25/10/2026 16:00 smart-idea cards visible in Fresh/Pending filter)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smart_idea_v2.py",
+    "/app/test_reports/pytest/iter34_smart_idea_v2.xml",
+    "/app/test_reports/iter34_homepage_spoiler.png",
+    "/app/test_reports/iter34_authed_smartlab.png"
+  ],
+  "action_items": [
+    "Cleanup: several 'smart-idea-*' tips were created during backend testing (e.g. smart-idea-c6b99a60 and up to 3 Barcelona vs Real Madrid tips visible in the smart feed). Main agent should purge them if desired (as noted in the review request)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L215-286 submit_smart_idea now correctly uses `text: str = Form(...)` + `files: List[UploadFile] = File(default=[])`. Base64-encodes uploaded images (capped at 3) and passes to generate_smart_from_idea for Gemini vision. Good.",
+    "server.py L244-261 enforces the 'never post without date/time' guarantee: if find_upcoming_fixture returns nothing OR strftime fails, the idea is marked status='no_fixture' and the response is {ok:true, created:false, reason:'no_fixture'} — no tip inserted. This is the exact spec requirement.",
+    "server.py L246-251 tries BOTH team_id → opponent AND reverse (opponent → team_id) before giving up. Good resilience.",
+    "server.py L257-258 uses strftime '%d/%m/%Y %H:%M' (matches the rest of the codebase's match_time format).",
+    "RateWall.jsx L357-459 SmartLab now uses FormData with 'text' + repeated 'files' entries — matches FastAPI's Form/UploadFile signature. Handles data.reason==='no_fixture' with toast.info(t('smart.chat.nofixture')). Handles data.created with toast.success + onCreated(). Image thumbs use URL.createObjectURL — remember to revokeObjectURL on unmount for hygiene (minor memory leak, not blocking).",
+    "Header.jsx L153 passes spoiler={t('smart.spoiler')} — the QuickView wraps the button with a relative container and puts the badge with data-testid=`${testId}-spoiler` right-aligned, absolute-bottom-2.5, animate-pulse, clickable — great UX.",
+    "i18n.js has smart.spoiler in EN/DE/EL (verified EN='Talk to the AI', DE='Mit der KI reden'). smart.chat.nofixture is present in all three locales.",
+    "Minor: with 1 image and empty text, send should probably show a helper hint about what will be analyzed — currently it will just submit '(see images)' to Gemini vision. Not a bug, just consider surfacing to the user."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_smart_idea_v2.py (new — replaces JSON-body tests with multipart contract + match_time assertions)"
+  ],
+  "success_rate": { "backend": "5/5 (100%)", "frontend": "13/13 (100%)" },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (login via [data-testid=auth-username])",
+  "seed_data_creation": "Backend test created 1 real smart-idea tip (smart-idea-c6b99a60 — Barcelona vs Real Madrid, market 'Beide Teams treffen UND Über 2.5 Tore', odds 1.85, match_time '25/10/2026 16:00'). Screenshot shows 3 similar smart-idea tips in the feed — main agent may clean them up per review-request note.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New multipart contract for /api/smart/idea: use requests.post(url, headers=admin_headers, data={'text': '…'}, files=[('files', ('a.png', b'…', 'image/png'))]) — DO NOT use json={}, that would send Content-Type: application/json and FastAPI's Form(...) would reject it. The endpoint accepts EITHER text (>=6 chars) OR files (>=1) OR both. When created:false, check data['reason'] ∈ {'no_fixture','not_actionable'} — never expect a tip without match_time. Frontend spoiler badge is at data-testid=view-smart-btn-spoiler (positioned absolute-bottom next to the smart button). Login modal uses [data-testid=auth-username] (accepts email or username). Splash screen requires ~5s wait after page.goto.",
+  "rca of the issue": "No issues found. The feature works exactly as specified: (A) real kickoff date/time enforced (tip.match_time='25/10/2026 16:00' verified), (B) spoiler badge with 'Mit der KI reden' / 'Talk to the AI' present and clickable, (C) optional image upload up to 3 with thumb preview, counter, and remove — all working end-to-end."
+}
