@@ -1992,16 +1992,18 @@ async def settle_hq_combos() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
+        total_g = hg + ag
         all_won, ok = True, True
         for lg in (tip.get("combo_legs") or tip.get("legs", [])):
             kind = lg.get("kind") or ""
             m = (lg.get("market") or "").lower()
-            if kind == "o15" or ("über 1.5" in m and not lg.get("team")):
-                res = (hg + ag) >= 2
-            elif kind == "o25" or ("über 2.5" in m and not lg.get("team")):
-                res = (hg + ag) >= 3
+            team = lg.get("team") or ""
+            gm = re.search(r"über\s+(\d+)\.5", m)
+            if gm and not team:
+                line = int(gm.group(1))
+                # 'Über N.5 Tore' wins when total goals >= N+1
+                res = total_g >= (line + 1)
             elif kind == "team_o05" or "über 0.5" in m:
-                team = lg.get("team") or ""
                 if _teams_match(fx["home_name"], team):
                     res = hg >= 1
                 elif _teams_match(fx["away_name"], team):
@@ -2940,39 +2942,29 @@ def _forebet_candidates(r: dict) -> list[dict]:
         elif pred == "2" and ph >= 1:
             opts.append({"sfx": "-utg", "market": f"{home} Über 0.5 Tore",
                          "odds": "1.45", "rating": 8.0, "winprob": 0.66})
-        # 2-LEG bet-builder (owner idea): the weak/underdog team to score (Über 0.5)
-        # + match Über 1.5 Tore. Higher risk & odds — a distinct 'combo' pick type
-        # that intentionally bypasses the single-market value gate.
-        if pred in ("1", "2") and total >= 3:
-            weak = away if pred == "1" else home
-            weak_scores = (pa >= 1) if pred == "1" else (ph >= 1)
-            if weak_scores:
-                opts.append({
-                    "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": 0.60,
-                    "market": f"{weak} Über 0.5 Tore + Über 1.5 Tore",
-                    "legs": [
-                        {"market": f"{weak} Über 0.5 Tore", "base_odd": 1.45, "kind": "team_o05", "team": weak},
-                        {"market": "Über 1.5 Tore", "base_odd": 1.60, "kind": "o15"},
-                    ],
-                })
-        # 3-LEG bet-builder from ONE game (owner request): both teams score + a
-        # match goals line. Only settleable kinds (team_o05, o15/o25) are used so the
-        # combo can be auto-graded from the final score. Higher risk & odds.
-        if pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
-            if total >= 4 and avg >= 3.0:
-                third = {"market": "Über 2.5 Tore", "base_odd": 1.75, "kind": "o25"}
-                third_lbl, wp3, rt3 = "Über 2.5 Tore", 0.50, 7.0
-            else:
-                third = {"market": "Über 1.5 Tore", "base_odd": 1.45, "kind": "o15"}
-                third_lbl, wp3, rt3 = "Über 1.5 Tore", 0.55, 7.0
+        # DYNAMIC single-game bet-builder (owner: "as many legs from one game as you
+        # want — just win"). We stack correlated, high-probability goal markets from
+        # ONE fixture: both teams to score + nested Über-lines. Every over-line is kept
+        # ONE goal BELOW the predicted total (safety buffer), and the lines are nested
+        # (if the top line hits, all lower lines hit too) — so extra legs mostly add
+        # odds without adding real risk. Only settleable kinds are used.
+        if sc and pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
+            clegs = [
+                {"market": f"{home} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": home},
+                {"market": f"{away} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": away},
+            ]
+            goals_base = {1: 1.40, 2: 2.00, 3: 3.20}
+            max_line = min(total - 2, 3)   # 1-goal buffer under predicted total, max 3 lines
+            for k in range(1, max_line + 1):
+                clegs.append({"market": f"Über {k}.5 Tore",
+                              "base_odd": goals_base.get(k, 3.20), "kind": f"o{k}5"})
+            n = len(clegs)
+            # confidence drops slightly with more legs, but nested over-lines keep it high
+            wp = max(0.45, 0.62 - 0.03 * (n - 3))
             opts.append({
-                "sfx": "-combo3", "combo": True, "rating": rt3, "winprob": wp3,
-                "market": f"Beide Teams treffen + {third_lbl} (3er-Bet-Builder)",
-                "legs": [
-                    {"market": f"{home} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": home},
-                    {"market": f"{away} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": away},
-                    third,
-                ],
+                "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": wp,
+                "market": f"Beide Teams treffen + Über {max_line}.5 Tore ({n}er-Bet-Builder)",
+                "legs": clegs,
             })
         # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
         if total >= 5 and avg >= 3.5:
@@ -3074,7 +3066,7 @@ async def forebet_autopost() -> dict:
                     prod *= od
                     legs.append({"home": home, "away": away, "market": lg["market"],
                                  "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
-                if 1.80 <= prod <= 8.0:
+                if 1.80 <= prod <= 25.0:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
