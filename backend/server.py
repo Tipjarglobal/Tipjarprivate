@@ -208,6 +208,63 @@ async def admin_smart_reset(admin: dict = Depends(require_admin)):
     return {"deleted": deleted, **res}
 
 
+class SmartIdeaInput(BaseModel):
+    text: str
+
+
+@api_router.post("/smart/idea")
+async def submit_smart_idea(inp: SmartIdeaInput, user: dict = Depends(get_current_user)):
+    text = (inp.text or "").strip()
+    if len(text) < 6:
+        raise HTTPException(status_code=400, detail="Idee ist zu kurz.")
+    if len(text) > 600:
+        text = text[:600]
+    now = datetime.now(timezone.utc)
+    idea_id = str(uuid.uuid4())
+    idea_doc = {
+        "id": idea_id, "user_id": user["id"], "username": user.get("username", "anon"),
+        "text": text, "status": "pending", "created_at": now.isoformat(), "tip_id": None,
+    }
+    await db.smart_ideas.insert_one(idea_doc)
+
+    data = await generate_smart_from_idea(text)
+    if not data:
+        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+        return {"ok": True, "created": False}
+
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    tip_id = f"smart-idea-{idea_id[:8]}"
+    home = (data.get("home_team") or "").strip()
+    away = (data.get("away_team") or "").strip()
+    try:
+        rating = max(1.0, min(10.0, float(data.get("rating") or 7.0)))
+    except Exception:
+        rating = 7.0
+    analysis = (data.get("analysis") or "").strip()
+    analysis = f"{analysis} 💡 Community-Insider von @{user.get('username','anon')} — von der KI zu einem Smart-Pick verarbeitet."
+    tip = {
+        "id": tip_id, "user_id": (hq or user)["id"], "username": "TipJarHQ",
+        "raw_text": "", "image_path": None,
+        "home_team": home, "away_team": away,
+        "match_time": "", "country": "", "league": "TipJarHQ Smart Bet",
+        "league_code": "", "market": (data.get("market") or "").strip(),
+        "odds": str(data.get("odds") or "").strip(), "ai_rating": rating, "ai_analysis": analysis,
+        "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "smart", "smart_idea": True, "idea_by": user.get("username", "anon"),
+        "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "used", "tip_id": tip_id}})
+    return {"ok": True, "created": True, "tip": {k: v for k, v in tip.items() if k != "_id"}}
+
+
+@api_router.get("/admin/smart/ideas")
+async def list_smart_ideas(admin: dict = Depends(require_admin)):
+    docs = await db.smart_ideas.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
 @api_router.get("/system-slip")
 async def system_slip():
     """Curated 'System-Schein der Woche': bundles the safest current HQ bankers
@@ -3921,6 +3978,42 @@ async def smart_autopost() -> dict:
             posted += 1
     logger.info(f"Smart Bet run: posted {posted}, matches {scanned}, candidates {candidates}")
     return {"posted": posted, "matches": scanned, "candidates": candidates}
+
+
+async def generate_smart_from_idea(text: str) -> dict | None:
+    """Turn a fan's free-text insider hint into a clever 'Smart Bet'. The KI decides
+    the teams, a smart low/mid-risk market, a rating and a short German analysis.
+    Returns None when the idea isn't actionable enough to build a pick."""
+    if not text or not EMERGENT_LLM_KEY:
+        return None
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"smartidea-{uuid.uuid4()}",
+            system_message=(
+                "You are TipJar's Smart Bet strategist. A football fan sends an insider hint "
+                "about an upcoming or live match (e.g. 'many fouls expected', 'the keeper will make "
+                "lots of saves', 'both wingers will score'). Turn it into ONE clever, low-to-mid risk "
+                "'smart bet' — ideally a nuanced or combined market (e.g. 'goal in 1st half AND home "
+                "team not to lose', 'player X to score AND over 1.5 goals'). "
+                "Respond with ONLY a compact JSON object, no markdown, with keys: "
+                "actionable (bool), home_team (str), away_team (str), league (str), market (str, in German), "
+                "rating (number 1-10), odds (string like '1.85'), analysis (str, 1-2 sentences in German). "
+                "Set actionable=false if the hint has no usable football signal."
+            ),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=f"Fan hint: {text[:600]}"))
+        raw = (resp if isinstance(resp, str) else str(resp)).strip()
+        s, e = raw.find("{"), raw.rfind("}")
+        if s == -1 or e == -1:
+            return None
+        data = json.loads(raw[s:e + 1])
+        if not data.get("actionable") or not data.get("market"):
+            return None
+        return data
+    except Exception as ex:
+        logger.error(f"generate_smart_from_idea failed: {ex}")
+        return None
 
 
 async def smart_loop():

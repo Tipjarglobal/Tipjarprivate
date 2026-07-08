@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2 } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb } from "lucide-react";
 import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
@@ -261,6 +261,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
       {view !== "systems" && view !== "settled" && (
         <>
+      {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {/* filters */}
       <div className="flex flex-wrap gap-2 mb-6">
         {FILTERS.map((f) => (
@@ -351,6 +352,75 @@ function tipFlags(tip) {
   Object.entries(LEAGUE_FLAGS).forEach(([k, f]) => { if (hay.includes(k)) flags.add(f); });
   if (flags.size === 0 && GLOBAL_KEYS.some((k) => hay.includes(k))) flags.add("🌍");
   return [...flags].slice(0, 5);
+}
+
+function SmartLab({ t, user, onCreated }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const send = async () => {
+    if (!user) { toast.error(t("smart.chat.login")); return; }
+    const v = text.trim();
+    if (v.length < 6) return;
+    setSending(true);
+    try {
+      const { data } = await api.post("/smart/idea", { text: v });
+      setText("");
+      if (data.created) { toast.success(t("smart.chat.created")); onCreated?.(); }
+      else toast.success(t("smart.chat.stored"));
+    } catch (e) {
+      toast.error(t("smart.chat.error"));
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <div
+      data-testid="smart-lab"
+      className="mb-10 rounded-2xl border border-volt/25 bg-gradient-to-br from-surface to-void p-5 md:p-7 grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-6 lg:gap-8"
+    >
+      {/* LEFT — explanation, text pushed left */}
+      <div className="text-left">
+        <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-volt">
+          <Brain size={15} /> Smart Bets
+        </span>
+        <h3 className="font-heading text-2xl md:text-3xl font-black text-white tracking-tight mt-2">{t("smart.title")}</h3>
+        <p className="text-zinc-400 text-sm md:text-base mt-3 leading-relaxed">{t("smart.intro")}</p>
+      </div>
+
+      {/* RIGHT — chatbox */}
+      <div className="flex flex-col justify-center">
+        <div className="flex items-center gap-2 mb-2 text-zinc-300">
+          <Lightbulb size={16} className="text-volt" />
+          <span className="text-sm font-semibold">{t("smart.chat.title")}</span>
+        </div>
+        <div className="rounded-2xl bg-white/95 border border-white/20 p-2.5 shadow-lg">
+          <textarea
+            data-testid="smart-idea-input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }}
+            placeholder={t("smart.chat.placeholder")}
+            rows={3}
+            maxLength={600}
+            className="w-full resize-none bg-transparent text-void placeholder:text-zinc-500 text-sm px-2 py-1.5 focus:outline-none"
+          />
+          <div className="flex items-center justify-between pl-2">
+            <span className="text-[11px] text-zinc-500 font-mono">{text.length}/600</span>
+            <button
+              type="button"
+              data-testid="smart-idea-send"
+              onClick={send}
+              disabled={sending || text.trim().length < 6}
+              className="flex items-center gap-2 rounded-xl bg-volt text-void font-bold text-sm px-4 py-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {sending ? <span className="animate-pulse">{t("smart.chat.sending")}</span> : (<><Send size={15} /> {t("smart.chat.send")}</>)}
+            </button>
+          </div>
+        </div>
+        {!user && <p className="text-xs text-zinc-500 mt-2">{t("smart.chat.login")}</p>}
+      </div>
+    </div>
+  );
 }
 
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
