@@ -225,6 +225,13 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Slip-Redesign, Community-Rename, Dedup, Live-Fixes)
+- SLIP-BILD komplett neu (_render_slip_image): Liberation Sans (behebt Tofu-Kästchen bei €/ö/–), viel größere Schrift, TipJar-Crest als dezentes Hintergrund-Wasserzeichen, 1080px breit, sauberes Layout. Visuell verifiziert (Community + Live).
+- BEREICHS-PILL auf geteilten Scheinen: "COMMUNITY PICK" (pending) / "LIVE PICK" (live). Bugfix: Live-Community-Schein wurde fälschlich als "WON"/grün gerendert → jetzt ctype "live_pending" (OFFEN/volt). tip_share_image rendert immer frisch (kein Cache) und setzt ctype nach Status.
+- UMBENENNUNG "Mitglieder-Picks" → "Community Picks" (nav.viewmembers + bell.* in allen 8 Sprachen). Frontend verifiziert.
+- DEDUP robuster (_dedupe_hq_tips): erkennt dasselbe Spiel auch bei Namensvariante (gleicher Anstoß + gleiches Heim ODER Auswärts, z.B. "Orange County SC" vs "Blues"), behält den HÖCHSTEN RISIKO-Pick (Value > Quote). Neuer Helper _team_core. Getestet: Hartford-Fall → Über 1.5 @1.20 bleibt, Über 0.5 @1.10 entfernt.
+- LIVE-KLASSIFIZIERUNG nur noch beim Posten (create_tip: _looks_live_now + API-Football-Live-Check). Hintergrund-Promotion-Loop ENTFERNT → pregame-Scheine (z.B. 7er-Kombi) bleiben in Community. Settle-Engine deckt jetzt auch Live-Einzeltipps von Mitgliedern ab.
+
 ## Changelog — 2026-07-08 (Live-Erkennung robust via API-Football)
 - ROOT CAUSE: Slip-Kickoff-Strings tragen keine Zeitzone ("18:00" als UTC gelesen → Spiel wirkt zukünftig). member_live_sync verschob CEST-Live-Spiele daher nicht.
 - FIX: member_live_sync konsultiert jetzt zusätzlich API-Football (/fixtures?live=all) via _find_live_fixture → zuverlässige Live-Erkennung unabhängig von der Slip-Uhrzeit. Nur vom Loop selbst verschobene Tipps (live_auto=True) werden je auto-zurückgesetzt; manuell (Admin) verschobene bleiben live. Getestet: TZ-verschobenes Live-Spiel → korrekt nach Live (live_auto); manueller Live-Tipp bleibt.

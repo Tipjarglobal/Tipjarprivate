@@ -811,6 +811,17 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     })
     if dup:
         raise HTTPException(status_code=409, detail="You already posted this tip — duplicates aren't allowed.")
+    # LIVE at post time: a bet counts as live only if its match is IN-PLAY when posted
+    # (kickoff window OR — reliably, ignoring slip-timezone quirks — API-Football live list).
+    now_dt = datetime.now(timezone.utc)
+    is_live_post = _looks_live_now(match_time, legs, now_dt)
+    if not is_live_post and API_FOOTBALL_KEY and inp.home_team and inp.away_team:
+        try:
+            live_fx = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"})
+            if live_fx and _find_live_fixture(live_fx, inp.home_team, inp.away_team):
+                is_live_post = True
+        except Exception:
+            pass
     tip = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -1350,19 +1361,31 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     elegant black-green TipJar slip listing the picks. Used for the Best-Wins gallery."""
     from PIL import Image, ImageDraw, ImageFont
     import io
-    FB = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
-    FR = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+    # Liberation Sans has full glyph coverage (umlauts ä/ö/ü, €, dashes) — FreeSans
+    # was rendering tofu boxes for € and ö. Bold + Regular.
+    FB = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+    FR = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+    CREST = "/app/frontend/public/tipjar-crest.png"
 
     def font(path, sz):
         try:
             return ImageFont.truetype(path, sz)
         except Exception:
             return ImageFont.load_default()
-    f_logo, f_h, f_m, f_o = font(FB, 54), font(FB, 40), font(FR, 36), font(FB, 38)
-    f_s, f_big, f_lbl = font(FR, 30), font(FB, 64), font(FR, 27)
-    f_sub = font(FR, 26)
-    W, pad, head_h, foot_h = 900, 46, 148, 262
-    won = ctype != "pending"
+    f_logo = font(FB, 96)
+    f_tag = font(FR, 34)
+    f_badge = font(FB, 54)
+    f_match = font(FB, 58)
+    f_sub = font(FR, 36)
+    f_market = font(FR, 48)
+    f_odds = font(FB, 52)
+    f_big = font(FB, 108)
+    f_label = font(FB, 54)
+    f_lbl = font(FR, 40)
+    f_user = font(FB, 44)
+    f_win = font(FB, 50)
+    W, pad, head_h, foot_h = 1080, 64, 244, 380
+    won = ctype not in ("pending", "live_pending")
     legs = legs[:10]
     # group legs by match so the same fixture is only titled ONCE
     groups, gidx = [], {}
@@ -1377,16 +1400,28 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
 
     def _subline(g):
         parts = [p for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p]
-        return "  ·  ".join(parts)
-    hdr_h, mrow_h, gap, sub_h = 62, 66, 20, 38
+        return "   ·   ".join(parts)
+    hdr_h, mrow_h, gap, sub_h = 88, 86, 34, 52
     H = head_h + sum(hdr_h + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
                      for g in groups) + foot_h
-    VOID, CARD, GREEN = (9, 9, 11), (20, 21, 24), (46, 204, 87)
-    WHITE, GREY, LINE = (240, 240, 242), (150, 152, 158), (38, 40, 45)
+    VOID, CARD, GREEN = (9, 9, 11), (22, 23, 27), (46, 204, 87)
+    WHITE, GREY, LINE = (244, 244, 246), (156, 158, 164), (40, 42, 48)
     VOLT = (225, 255, 0)
     ACCENT = GREEN if won else VOLT
     img = Image.new("RGB", (W, H), VOID)
     d = ImageDraw.Draw(img)
+
+    # faint TipJar crest watermark in the background
+    try:
+        crest = Image.open(CREST).convert("RGBA")
+        cw = int(W * 0.86)
+        ch = int(cw * crest.height / crest.width)
+        crest = crest.resize((cw, ch))
+        alpha = crest.split()[3].point(lambda a: int(a * 0.09))
+        crest.putalpha(alpha)
+        img.paste(crest, ((W - cw) // 2, (H - ch) // 2), crest)
+    except Exception:
+        pass
 
     def trunc(txt, fnt, maxw):
         txt = txt or ""
@@ -1397,62 +1432,71 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
         return txt + "…"
 
     def check(cx, cy, sz, col):
-        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=4)
-        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=4)
+        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=6)
+        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=6)
     # header: TipJar logo (Tip white / Jar green) + tagline top-left
-    d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
+    d.text((pad, 40), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 2, 100), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
+    d.text((pad + tw, 40), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + 4, 158), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
     badge = "WON" if won else "OFFEN"
-    bw = d.textlength(badge, font=f_h)
-    lead = 46 if won else 24
-    bx0 = W - pad - bw - lead - 22
-    d.rounded_rectangle([bx0, 44, W - pad, 102], 14, fill=ACCENT)
+    bw = d.textlength(badge, font=f_badge)
+    bx0 = W - pad - bw - 52
+    d.rounded_rectangle([bx0, 52, W - pad, 128], 18, fill=ACCENT)
+    tx = bx0 + 26
     if won:
-        check(bx0 + 20, 76, 16, VOID)
-    d.text((bx0 + lead, 56), badge, font=f_h, fill=VOID)
-    d.line([pad, head_h - 14, W - pad, head_h - 14], fill=LINE, width=2)
+        check(bx0 + 22, 92, 22, VOID)
+        tx = bx0 + 58
+    d.text((tx, 68), badge, font=f_badge, fill=VOID)
+    # area pill (which channel the slip comes from) — top-right under the badge
+    area = {"pending": "COMMUNITY PICK", "live_pending": "LIVE PICK"}.get(ctype)
+    if area:
+        aw = d.textlength(area, font=f_tag)
+        ax0 = W - pad - aw - 40
+        d.rounded_rectangle([ax0, 148, W - pad, 202], 15, outline=ACCENT, width=3)
+        d.text((ax0 + 20, 156), area, font=f_tag, fill=ACCENT)
+    d.line([pad, head_h - 18, W - pad, head_h - 18], fill=LINE, width=3)
     # legs grouped by match
     y = head_h
     for g in groups:
-        d.text((pad, y + 4), trunc(f"{g['home']}  –  {g['away']}", f_h, W - 2 * pad), font=f_h, fill=WHITE)
+        d.text((pad, y + 6), trunc(f"{g['home']}  vs  {g['away']}", f_match, W - 2 * pad), font=f_match, fill=WHITE)
         y += hdr_h
         sub = _subline(g)
         if sub:
-            d.text((pad, y - 2), trunc(sub, f_sub, W - 2 * pad), font=f_sub, fill=GREY)
+            d.text((pad, y - 4), trunc(sub, f_sub, W - 2 * pad), font=f_sub, fill=GREY)
             y += sub_h
         for l in g["mkts"]:
             od = l.get("odds") or 0
             odt = f"{od:.2f}" if od else ("gewonnen" if won else "offen")
-            ow = d.textlength(odt, font=f_o)
-            d.text((pad + 24, y + 6), trunc(l.get("market", "") or "", f_m, W - 2 * pad - ow - 100), font=f_m, fill=GREY)
-            d.text((W - pad - ow, y + 4), odt, font=f_o, fill=ACCENT)
+            ow = d.textlength(odt, font=f_odds)
+            mkx = pad + 30
+            d.text((mkx, y + 8), trunc(l.get("market", "") or "", f_market, W - pad - mkx - ow - 70), font=f_market, fill=(210, 212, 216))
+            d.text((W - pad - ow, y + 6), odt, font=f_odds, fill=ACCENT)
             if won:
-                check(W - pad - ow - 36, y + 22, 18, GREEN)
+                check(W - pad - ow - 48, y + 30, 24, GREEN)
             y += mrow_h
-        d.line([pad, y + 2, W - pad, y + 2], fill=LINE, width=1)
+        d.line([pad, y + 4, W - pad, y + 4], fill=LINE, width=2)
         y += gap
     # footer card
-    fy = y + 14
-    d.rounded_rectangle([pad, fy, W - pad, H - 28], 20, fill=CARD)
+    fy = y + 20
+    d.rounded_rectangle([pad, fy, W - pad, H - 36], 26, fill=CARD)
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
-             "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + 26, fy + 24), label, font=f_h, fill=ACCENT)
-    d.text((pad + 26, fy + 74), "Gesamtquote", font=f_lbl, fill=GREY)
+             "live_pending": "Live-Pick", "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
+    d.text((pad + 36, fy + 34), label, font=f_label, fill=ACCENT)
+    d.text((pad + 36, fy + 108), "Gesamtquote", font=f_lbl, fill=GREY)
     ot = f"{total_odds:.2f}" if total_odds else "—"
     otw = d.textlength(ot, font=f_big)
-    d.rounded_rectangle([W - pad - otw - 56, fy + 18, W - pad - 26, fy + 98], 14, fill=ACCENT)
-    d.text((W - pad - otw - 41, fy + 26), ot, font=f_big, fill=VOID)
-    d.text((pad + 26, fy + 116), f"@{username}", font=f_s, fill=WHITE)
+    d.rounded_rectangle([W - pad - otw - 76, fy + 26, W - pad - 36, fy + 150], 20, fill=ACCENT)
+    d.text((W - pad - otw - 56, fy + 34), ot, font=f_big, fill=VOID)
+    d.text((pad + 36, fy + 172), f"@{username}", font=f_user, fill=WHITE)
     if winnings:
         wt = f"Gewinn: {winnings}" if won else f"Möglicher Gewinn: {winnings}"
-        d.text((pad + 26, fy + 154), wt, font=f_o, fill=ACCENT)
+        d.text((pad + 36, fy + 232), wt, font=f_win, fill=ACCENT)
     if stake:
         stt = f"Einsatz: {stake}"
-        d.text((W - pad - d.textlength(stt, font=f_s) - 26, fy + 158), stt, font=f_s, fill=GREY)
+        d.text((W - pad - d.textlength(stt, font=f_lbl) - 36, fy + 238), stt, font=f_lbl, fill=GREY)
     out = io.BytesIO()
-    img.save(out, format="WEBP", quality=88)
+    img.save(out, format="WEBP", quality=90)
     return out.getvalue()
 
 
@@ -1626,17 +1670,17 @@ async def public_profile(username: str):
 
 @api_router.post("/tips/{tip_id}/share-image")
 async def tip_share_image(tip_id: str):
-    """Generate a TipJar-branded shareable slip image for a PENDING member pick."""
+    """Generate a TipJar-branded shareable slip image for a member pick, tagged with
+    the channel it comes from (COMMUNITY PICK for pending, LIVE PICK for live)."""
     tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
     if not tip:
         raise HTTPException(status_code=404, detail="Tip not found")
     if tip.get("source") in ("hq-auto", "smart"):
         raise HTTPException(status_code=400, detail="Only member tips can be shared")
-    if tip.get("share_image_path"):
-        return {"path": tip["share_image_path"]}
+    ctype = "live_pending" if tip.get("status") == "live" else "pending"
     rlegs = _tip_to_render_legs(tip)
     img = _render_slip_image(rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
-                             tip.get("potential_return", ""), tip.get("username", "TipJar"), "pending")
+                             tip.get("potential_return", ""), tip.get("username", "TipJar"), ctype)
     try:
         result = put_object(f"{APP_NAME}/shares/{tip_id}.webp", img, "image/webp")
         path = result["path"]
@@ -1781,16 +1825,26 @@ async def settle_pending_tips() -> dict:
         return {"ok": False, "reason": "API_FOOTBALL_KEY not configured", "checked": 0, "settled": 0}
     now = datetime.now(timezone.utc)
     raw = await db.tips.find(
-        {"status": "pending", "is_parlay": {"$ne": True}, "source": {"$ne": "smart"},
-         "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
+        {"is_parlay": {"$ne": True},
+         "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]},
+         "$or": [
+             {"status": "pending", "source": {"$ne": "smart"}},
+             {"status": "live", "source": {"$nin": ["smart", "hq-live", "hq-auto"]}},
+         ]},
         {"_id": 0},
     ).sort("created_at", 1).to_list(300)
-    # only spend API calls on matches that have actually finished (kickoff > 2h ago)
-    # and that we haven't already failed to resolve several times (quota protection)
+    # only spend API calls on matches that have actually finished (kickoff > 2h ago,
+    # or any live-status tip whose match may now be over) and that we haven't already
+    # failed to resolve several times (quota protection). find_finished_fixture only
+    # returns FT games, so an in-play live tip is never settled prematurely.
     finished = []
     for t in raw:
+        if t.get("settle_attempts", 0) >= 4:
+            continue
         ko = _parse_kickoff(t.get("match_time"))
-        if ko and ko < now - timedelta(hours=2) and t.get("settle_attempts", 0) < 4:
+        if t.get("status") == "live":
+            finished.append((ko or now, t))
+        elif ko and ko < now - timedelta(hours=2):
             finished.append((ko, t))
     finished.sort(key=lambda x: x[0])  # oldest finished first
     checked, settled, details = 0, 0, []
@@ -2142,15 +2196,18 @@ def _fold(n: str) -> str:
     return unicodedata.normalize("NFKD", (n or "").lower()).encode("ascii", "ignore").decode()
 
 
+def _team_core(n: str) -> str:
+    """Normalised core token-string for a team (accent/noise/alias-folded)."""
+    toks = [_TEAM_ALIASES.get(t, t)
+            for t in re.sub(r"[^a-z0-9 ]", " ", _fold(n)).split()
+            if t and t not in _CLUB_NOISE]
+    return "".join(sorted(toks)) or _fold(n).replace(" ", "")
+
+
 def _match_key(home: str, away: str) -> str:
     """Order-independent, prefix-insensitive, accent- & language-insensitive key
     so 'SD Aucas'=='Aucas' and 'Schweiz'=='Switzerland'=='Víkingur'→'vikingur'."""
-    def core(n: str) -> str:
-        toks = [_TEAM_ALIASES.get(t, t)
-                for t in re.sub(r"[^a-z0-9 ]", " ", _fold(n)).split()
-                if t and t not in _CLUB_NOISE]
-        return "".join(sorted(toks)) or _fold(n).replace(" ", "")
-    return f"{core(home)}|{core(away)}"
+    return f"{_team_core(home)}|{_team_core(away)}"
 
 
 # ---------------------------------------------------------------------------
@@ -2206,12 +2263,15 @@ async def purge_expired_autotips() -> int:
 
 async def _dedupe_hq_tips() -> int:
     """One pick per match across ALL pending HQ auto-tips (forebet + predictz).
-    When a game surfaces twice (e.g. Über 0.5 AND Über 1.5), keep the single most
-    valuable pick (VALUE preferred over banker, then highest odds) and delete the
-    lower-risk duplicates — owner rule: never show the same match twice."""
+    When a game surfaces twice (e.g. Über 0.5 AND Über 1.5, or the same fixture with
+    a slightly different team spelling like 'Orange County SC' vs 'Orange County
+    Blues'), keep the single HIGHEST-RISK pick (VALUE preferred, then highest odds)
+    and delete the rest — owner rule: never show the same match twice, always take
+    the bigger risk."""
     docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1, "pick_type": 1}
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1,
+         "pick_type": 1, "match_time": 1}
     ).to_list(4000)
 
     def _odd(d):
@@ -2219,18 +2279,37 @@ async def _dedupe_hq_tips() -> int:
             return float(str(d.get("odds") or "0").replace(",", "."))
         except Exception:
             return 0.0
-    groups: dict[str, list] = {}
-    for d in docs:
-        groups.setdefault(_match_key(d.get("home_team"), d.get("away_team")), []).append(d)
-    to_delete = []
-    for arr in groups.values():
-        if len(arr) < 2:
-            continue
-        arr.sort(key=lambda d: (d.get("pick_type") == "value", _odd(d)), reverse=True)
-        to_delete.extend(d["id"] for d in arr[1:])
+    survivors = {d["id"]: d for d in docs}
+    to_delete: set = set()
+
+    def dedup_by(keyfn):
+        groups: dict = {}
+        for d in survivors.values():
+            if d["id"] in to_delete:
+                continue
+            k = keyfn(d)
+            if not k:
+                continue
+            groups.setdefault(k, []).append(d)
+        for arr in groups.values():
+            if len(arr) < 2:
+                continue
+            # keep highest risk: VALUE first, then highest odds
+            arr.sort(key=lambda d: (d.get("pick_type") == "value", _odd(d)), reverse=True)
+            for d in arr[1:]:
+                to_delete.add(d["id"])
+
+    def _mt(d):
+        return (d.get("match_time") or "").strip()
+
+    # 1) exact both-team key  2) same kickoff + same home  3) same kickoff + same away
+    dedup_by(lambda d: _match_key(d.get("home_team"), d.get("away_team")))
+    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}" if _mt(d) and d.get("home_team") else None)
+    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}" if _mt(d) and d.get("away_team") else None)
+
     if to_delete:
-        await db.tips.delete_many({"id": {"$in": to_delete}})
-        logger.info(f"Dedup: removed {len(to_delete)} duplicate HQ picks (one per match)")
+        await db.tips.delete_many({"id": {"$in": list(to_delete)}})
+        logger.info(f"Dedup: removed {len(to_delete)} duplicate HQ picks (one per match, highest risk kept)")
     return len(to_delete)
 
 
@@ -3832,55 +3911,11 @@ async def live_loop():
         await asyncio.sleep(LIVE_POLL_SECONDS)
 
 
-MEMBER_LIVE_POLL_SECONDS = 3 * 60
-_MEMBER_LIVE_SRC_EXCLUDE = ["hq-auto", "hq-live", "smart"]
-
-
-async def member_live_sync() -> dict:
-    """Auto-move member-submitted tips into the Live channel while their match is
-    in-play, and back to pending once it has finished (so the settle engine can
-    resolve them). Kickoff strings on slips carry no timezone, so we ALSO consult
-    API-Football's live fixtures — the reliable signal that a match is really live.
-    Only tips the loop itself moved (live_auto) are ever auto-reverted; an admin
-    manual move stays put."""
-    now = datetime.now(timezone.utc)
-    moved = reverted = 0
-    live_fixtures = _apifootball("/fixtures", {"live": "all"}) if API_FOOTBALL_KEY else []
-
-    def is_live(t) -> bool:
-        if _looks_live_now(t.get("match_time"), t.get("legs"), now):
-            return True
-        home, away = t.get("home_team"), t.get("away_team")
-        if live_fixtures and home and away:
-            return _find_live_fixture(live_fixtures, home, away) is not None
-        return False
-
-    pend = await db.tips.find(
-        {"status": "pending", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
-    for t in pend:
-        if is_live(t):
-            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "live", "live_auto": True}})
-            moved += 1
-    liv = await db.tips.find(
-        {"status": "live", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}, "live_auto": True},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
-    for t in liv:
-        if not is_live(t):
-            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "pending"}, "$unset": {"live_auto": ""}})
-            reverted += 1
-    return {"moved_to_live": moved, "reverted": reverted}
-
-
-async def member_live_loop():
-    while True:
-        try:
-            res = await member_live_sync()
-            if res["moved_to_live"] or res["reverted"]:
-                logger.info(f"Member live sync: {res}")
-        except Exception as e:
-            logger.error(f"member_live_loop error: {e}")
-        await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)
+# NOTE: A member tip's LIVE status is decided ONCE, at post time (see create_tip:
+# is_live_post). We deliberately do NOT run a background loop that reclassifies
+# already-posted tips based on the current match state — a pre-game slip must stay
+# in the Community channel even while its matches are being played. Live member
+# singles are resolved by the settle engine (which also scans status="live").
 
 
 
@@ -3961,7 +3996,6 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
-    _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
