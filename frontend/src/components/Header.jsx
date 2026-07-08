@@ -187,7 +187,7 @@ function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = 
       {spoiler && (
         <span
           data-testid={`${testId}-spoiler`}
-          className="flex items-center gap-1 rounded-full bg-black/20 border border-black/10 px-2 py-1 text-[10px] font-bold whitespace-nowrap shrink-0"
+          className="flex items-center gap-1 rounded-full bg-void text-volt border border-volt/60 px-2 py-1 text-[10px] font-bold whitespace-nowrap shrink-0 shadow-[0_0_12px_rgba(225,255,0,0.4)] animate-pulse"
         >
           <MessageCircle size={11} /> {spoiler}
         </span>
