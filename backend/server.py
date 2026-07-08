@@ -2220,6 +2220,10 @@ async def settle_now(admin: dict = Depends(require_admin)):
     res = await settle_pending_tips()
     res["combos"] = await settle_hq_combos()
     res["parlays"] = await settle_multimatch_parlays()
+    try:
+        res["live"] = await live_autopost()
+    except Exception as e:
+        res["live"] = {"error": str(e)}
     return res
 
 
@@ -4243,28 +4247,48 @@ async def live_autopost() -> dict:
     live_by_id = {str((f.get("fixture") or {}).get("id")): f for f in live}
     now = datetime.now(timezone.utc).isoformat()
 
-    # 1) settle/close live tips whose match has ended
+    # 1) settle/close live tips whose match has ended. A live pick is graded the moment
+    #    its fixture reports a finished status (FT/AET/PEN) — even if the match still
+    #    lingers in the live=all feed for a few minutes. Stale, unresolvable and clearly
+    #    over (>3.5h since kickoff) tips are settled via a team lookup or dropped, so a
+    #    live pick never stays "open" once the game is over.
     closed = 0
     existing = await db.tips.find({"source": "hq-live", "status": "live"}, {"_id": 0}).to_list(200)
     for lt in existing:
         fid = str(lt.get("fixture_id") or "")
-        if fid and fid in live_by_id:
-            continue  # still in play
-        fxs = _apifootball("/fixtures", {"id": fid}) if fid else None
-        if fxs:
-            f0 = fxs[0]
+        f0 = live_by_id.get(fid)
+        if not f0 and fid:
+            fxs = _apifootball("/fixtures", {"id": fid})
+            f0 = fxs[0] if fxs else None
+        short = None
+        if f0:
             short = ((f0.get("fixture") or {}).get("status") or {}).get("short")
-            hg, ag = _align_goals(f0, lt["home_team"])
             if short in FINISHED_STATUSES:
+                hg, ag = _align_goals(f0, lt["home_team"])
                 res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])
                 new_status = "won" if res else ("lost" if res is False else "void")
                 await db.tips.update_one({"id": lt["id"]}, {"$set": {
                     "status": new_status, "final_home": hg, "final_away": ag,
                     "settled_by": "auto-live", "settled_at": now}})
                 closed += 1
-                continue
-        await db.tips.delete_one({"id": lt["id"]})  # unknown/stale → drop
-        closed += 1
+            continue  # either settled, or still genuinely in-play → keep
+        # No fixture data. If the match is clearly over (kickoff > 3.5h ago), try a
+        # team-based finished lookup so it still settles; otherwise leave it for now.
+        ko = _parse_kickoff(lt.get("match_time"))
+        if ko and ko < datetime.now(timezone.utc) - timedelta(hours=3.5):
+            dates = [ko.date().isoformat(), (ko + timedelta(days=1)).date().isoformat()]
+            tid = await resolve_team_id(lt["home_team"])
+            fx = find_finished_fixture(tid, lt["away_team"], dates) if tid else None
+            if fx:
+                hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
+                res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])
+                new_status = "won" if res else ("lost" if res is False else "void")
+                await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                    "status": new_status, "final_home": hg, "final_away": ag,
+                    "settled_by": "auto-live", "settled_at": now}})
+            else:
+                await db.tips.delete_one({"id": lt["id"]})  # truly unresolvable & old → drop
+            closed += 1
 
     if not live:
         return {"posted": 0, "closed": closed, "live": 0}
