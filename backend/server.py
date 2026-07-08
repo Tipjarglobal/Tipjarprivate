@@ -50,6 +50,11 @@ API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
 SETTLE_INTERVAL_SECONDS = 15 * 60
 SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 req/day)
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
+# statuses that mean the game is genuinely running right now
+LIVE_STATUSES = {"1H", "2H", "HT", "ET", "BT", "P", "SUSP", "INT", "LIVE"}
+# how long a live pick may stay open before it is force-settled no matter what the
+# feed says (covers postponed/abandoned games and fixtures that never report FT)
+LIVE_MAX_OPEN_HOURS = 3.5
 
 APP_NAME = "tipjar"
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
@@ -2565,6 +2570,12 @@ def _parse_kickoff(mt: str):
     s = (mt or "").strip()
     if not s or "&" in s or "multibet" in s.lower():
         return None  # multibet / unknown → never auto-expire
+    # ISO 8601 (e.g. "2026-07-08T22:00:00+00:00" / "...Z") — used by hq-live/smart tips
+    try:
+        iso = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return iso if iso.tzinfo else iso.replace(tzinfo=timezone.utc)
+    except Exception:
+        pass
     m = re.match(r"^(\d{2})/(\d{2})/(\d{4})\s+(\d{1,2}):(\d{2})", s)
     if m:
         d, mo, y, h, mi = map(int, m.groups())
@@ -4260,13 +4271,16 @@ async def live_autopost() -> dict:
     #    live pick never stays "open" once the game is over.
     closed = 0
     existing = await db.tips.find({"source": "hq-live", "status": "live"}, {"_id": 0}).to_list(200)
+    now_dt = datetime.now(timezone.utc)
     for lt in existing:
         fid = str(lt.get("fixture_id") or "")
         f0 = live_by_id.get(fid)
         if not f0 and fid:
             fxs = _apifootball("/fixtures", {"id": fid})
             f0 = fxs[0] if fxs else None
-        short = None
+        ko = _parse_kickoff(lt.get("match_time"))
+        stale = bool(ko and ko < now_dt - timedelta(hours=LIVE_MAX_OPEN_HOURS))
+        # 1) finished fixture in feed → grade from its final score (most accurate)
         if f0:
             short = ((f0.get("fixture") or {}).get("status") or {}).get("short")
             if short in FINISHED_STATUSES:
@@ -4277,26 +4291,36 @@ async def live_autopost() -> dict:
                     "status": new_status, "final_home": hg, "final_away": ag,
                     "settled_by": "auto-live", "settled_at": now}})
                 closed += 1
-            continue  # either settled, or still genuinely in-play → keep
-        # No fixture data. If the match is clearly over (kickoff > 3.5h ago), try a
-        # team-based finished lookup so it still settles; otherwise leave it for now.
-        ko = _parse_kickoff(lt.get("match_time"))
-        if ko and ko < datetime.now(timezone.utc) - timedelta(hours=3.5):
-            dates = [ko.date().isoformat(), (ko + timedelta(days=1)).date().isoformat()]
-            tid = await resolve_team_id(lt["home_team"])
-            fx = find_finished_fixture(tid, lt["away_team"], dates) if tid else None
-            if fx:
-                hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
-                res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])
-                new_status = "won" if res else ("lost" if res is False else "void")
-                await db.tips.update_one({"id": lt["id"]}, {"$set": {
-                    "status": new_status, "final_home": hg, "final_away": ag,
-                    "settled_by": "auto-live", "settled_at": now}})
-            else:
-                # never delete — settle as void so it lands in the settled box, not vanish
-                await db.tips.update_one({"id": lt["id"]}, {"$set": {
-                    "status": "void", "settled_by": "auto-live", "settled_at": now}})
-            closed += 1
+                continue
+            # still genuinely in-play and not overdue → keep it open
+            if short in LIVE_STATUSES and not stale:
+                continue
+            # otherwise (postponed/cancelled/abandoned, or an in-play game that never
+            # closes) fall through to the force-settle sweep below
+        elif not stale:
+            # no fixture data yet and not overdue → give it more time
+            continue
+        # 2) force-settle sweep: the pick is overdue or its fixture is in a terminal
+        #    non-finished state. Try a team-based finished lookup; if none, void it so
+        #    it always leaves the Live area and lands in Abgerechnet — never lingers.
+        dates = None
+        if ko:
+            dates = [ko.date().isoformat(),
+                     (ko + timedelta(days=1)).date().isoformat(),
+                     (ko - timedelta(days=1)).date().isoformat()]
+        tid = await resolve_team_id(lt["home_team"]) if dates else None
+        fx = find_finished_fixture(tid, lt["away_team"], dates) if (tid and dates) else None
+        if fx:
+            hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
+            res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])
+            new_status = "won" if res else ("lost" if res is False else "void")
+            await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                "status": new_status, "final_home": hg, "final_away": ag,
+                "settled_by": "auto-live", "settled_at": now}})
+        else:
+            await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                "status": "void", "settled_by": "auto-live", "settled_at": now}})
+        closed += 1
 
     if not live:
         return {"posted": 0, "closed": closed, "live": 0}
