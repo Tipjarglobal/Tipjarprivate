@@ -2218,7 +2218,7 @@ FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
 
 # Leagues TipJar must NEVER touch (amateur / not offered by bookmakers).
 # Forebet league short-codes (lowercased): Us4 = USA USL League Two, Fi3 = Finland 3rd tier.
-FOREBET_BLOCKED_CODES = {"us4", "fi3", "sl1", "cn3"}
+FOREBET_BLOCKED_CODES = {"us4", "fi3", "sl1", "cn3", "brc"}
 # Predictz league-string substrings to block (predictz has no short-code).
 PREDICTZ_BLOCKED_KW = ("usl league two", "league two usa", "kakkonen")
 
@@ -2235,7 +2235,7 @@ def _league_blocked_predictz(league: str) -> bool:
 # Owner blacklist: teams/leagues to ALWAYS exclude from AI picks & systems
 # (keyword match on home team, away team OR league name). Extend as the owner flags
 # obscure/untrustworthy fixtures.
-TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah")
+TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
