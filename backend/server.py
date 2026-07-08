@@ -1162,6 +1162,11 @@ async def extract_win_slip(image_b64: str) -> dict:
             "goals over/under => 'Über 2.5 Tore' / 'Unter 3.5 Tore'; "
             "TEAM total goals => include the team name, e.g. 'Víkingur Über 0.5 Tore', 'Marokko Unter 2.5 Tore'; "
             "player shots on target => '<Spieler> Über 0.5 Torschüsse' (e.g. 'Mbappé Über 0.5 Torschüsse'); "
+            "HANDICAP: a leg shown as a team name followed only by a number (e.g. 'Sutjeska 3.5', "
+            "\"Connah's Quay Nomads 2.5\") is a HANDICAP on that team — output it as "
+            "'<Team> Handicap +X.5' (the team gets a +X.5 head-start; use '-X.5' if the favourite "
+            "gives a start). A bare team+number is ALWAYS a handicap, never a goals line; only "
+            "'Total OVER/UNDER x.5' is a goals line (=> 'Über/Unter x.5 Tore'). "
             "double chance => '1X' or 'X2'; both teams to score => 'Beide Teams treffen'. "
             "Keep 'home' and 'away' as the two teams of the match the leg belongs to."
         )
@@ -1828,6 +1833,17 @@ def _league_blocked_predictz(league: str) -> bool:
     return any(kw in lg for kw in PREDICTZ_BLOCKED_KW)
 
 
+# Owner blacklist: teams/leagues to ALWAYS exclude from AI picks & systems
+# (keyword match on home team, away team OR league name). Extend as the owner flags
+# obscure/untrustworthy fixtures.
+TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah")
+
+
+def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
+    hay = f" {(home or '').lower()} {(away or '').lower()} {(league or '').lower()} "
+    return any(kw in hay for kw in TEAM_LEAGUE_BLACKLIST)
+
+
 # ---------------------------------------------------------------------------
 # System-Schein whitelist: the weekly system bet must ONLY bundle matches that
 # mainstream bookmakers actually offer. We use a strict WHITELIST (not blacklist).
@@ -1884,6 +1900,8 @@ def _is_women_or_youth(name: str) -> bool:
 def _slip_eligible(tip: dict) -> bool:
     """True only if this HQ tip is a bookmaker-available, top-competition match."""
     if _is_women_or_youth(tip.get("home_team")) or _is_women_or_youth(tip.get("away_team")):
+        return False
+    if _team_or_league_blocked(tip.get("home_team"), tip.get("away_team"), tip.get("league")):
         return False
     league = (tip.get("league") or "").lower()
     if any(b in f" {league} " for b in SLIP_BLOCK_KEYWORDS):
@@ -1983,6 +2001,36 @@ async def purge_expired_autotips() -> int:
     if stale_p:
         await db.match_predictions.delete_many({"id": {"$in": stale_p}})
     return len(stale)
+
+
+async def _dedupe_hq_tips() -> int:
+    """One pick per match across ALL pending HQ auto-tips (forebet + predictz).
+    When a game surfaces twice (e.g. Über 0.5 AND Über 1.5), keep the single most
+    valuable pick (VALUE preferred over banker, then highest odds) and delete the
+    lower-risk duplicates — owner rule: never show the same match twice."""
+    docs = await db.tips.find(
+        {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1, "pick_type": 1}
+    ).to_list(4000)
+
+    def _odd(d):
+        try:
+            return float(str(d.get("odds") or "0").replace(",", "."))
+        except Exception:
+            return 0.0
+    groups: dict[str, list] = {}
+    for d in docs:
+        groups.setdefault(_match_key(d.get("home_team"), d.get("away_team")), []).append(d)
+    to_delete = []
+    for arr in groups.values():
+        if len(arr) < 2:
+            continue
+        arr.sort(key=lambda d: (d.get("pick_type") == "value", _odd(d)), reverse=True)
+        to_delete.extend(d["id"] for d in arr[1:])
+    if to_delete:
+        await db.tips.delete_many({"id": {"$in": to_delete}})
+        logger.info(f"Dedup: removed {len(to_delete)} duplicate HQ picks (one per match)")
+    return len(to_delete)
 
 
 # ---------------------------------------------------------------------------
@@ -2349,6 +2397,8 @@ MARKET_MIN_WINRATE = 0.55    # families below this observed win-rate get disable
 
 def _market_family(market: str) -> str:
     m = (market or "").lower().strip()
+    if "handicap" in m:
+        return "handicap"
     if "draw no bet" in m:
         return "dnb"
     if "doppelte chance" in m and "beide" not in m and "treffen" not in m:
@@ -2420,6 +2470,16 @@ def _forebet_candidates(r: dict) -> list[dict]:
                          "odds": f"{max(1.05, 1 / max(dnb_wp, 0.01)):.2f}",
                          "rating": 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5,
                          "winprob": dnb_wp})
+        # Underdog handicap (owner: safer than Unter X.5 — it survives high-scoring
+        # games as long as the weak side isn't thrashed). Offered for ANY favourite,
+        # not just strong ones, since +3.5/+2.5 rarely lose. +3.5/+2.5 = bankers.
+        und = away if pred == "1" else home
+        opts.append({"sfx": "-hcp35", "market": f"{und} Handicap +3.5",
+                     "odds": "1.15", "rating": 8.5, "winprob": 0.92})
+        opts.append({"sfx": "-hcp25", "market": f"{und} Handicap +2.5",
+                     "odds": "1.30", "rating": 8.0, "winprob": 0.87})
+        opts.append({"sfx": "-hcp15", "market": f"{und} Handicap +1.5",
+                     "odds": "1.55", "rating": 7.5, "winprob": 0.73})
     # Doppelte Chance 12 (Heim ODER Auswärts, kein Remis) — value when a draw is
     # unlikely; the real bookmaker odd decides if it passes the 1.60 value gate.
     if len(probs) >= 3:
@@ -2437,6 +2497,14 @@ def _forebet_candidates(r: dict) -> list[dict]:
     if sc:
         ph, pa = sc
         total = ph + pa
+        # Favourite handicap -1.5 (must win by 2+) — value on a strong favourite the
+        # book expects to win clearly.
+        if pred in ("1", "2"):
+            fav = home if pred == "1" else away
+            margin = (ph - pa) if pred == "1" else (pa - ph)
+            if margin >= 2:
+                opts.append({"sfx": "-hcpf15", "market": f"{fav} Handicap -1.5",
+                             "odds": "1.80", "rating": 7.0, "winprob": 0.72})
         # underdog team-to-score (owner idea) — passes the gate only if the book
         # prices it >= 1.60 while our winprob is high enough.
         if pred == "1" and pa >= 1:
@@ -2522,6 +2590,8 @@ async def forebet_autopost() -> dict:
             continue
         if _is_women_or_youth(home) or _is_women_or_youth(away):
             continue  # owner: only recognised, bettable men's competitions
+        if _team_or_league_blocked(home, away, r.get("league") or r.get("lcode")):
+            continue  # owner blacklist (teams/leagues)
         # owner: only give picks from recognised, bookmaker-available leagues (same
         # whitelist as the system slips) — no Somalia/obscure lower divisions.
         if (r.get("lcode") or "").strip().lower() not in FOREBET_SLIP_CODES:
@@ -2617,6 +2687,7 @@ async def forebet_autopost() -> dict:
         posted += 1
         logger.info(f"HQ auto-posted (A/{ptype}): {home} vs {away} — {market} "
                     f"({round(winprob*100)}% @ {odds:.2f})")
+    await _dedupe_hq_tips()
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
 
@@ -2804,6 +2875,8 @@ async def predictz_autopost() -> dict:
         if _is_women_or_youth(home) or _is_women_or_youth(away) or \
            not any(k in _lg for k in SLIP_LEAGUE_KEYWORDS):
             continue
+        if _team_or_league_blocked(home, away, r.get("league")):
+            continue  # owner blacklist (teams/leagues)
         # Owner rule: only trust Predictz when Forebet agrees on the same match.
         if not _forebet_agrees(market, fb_map.get(_match_key(home, away))):
             continue
@@ -2847,6 +2920,7 @@ async def predictz_autopost() -> dict:
         await db.tips.insert_one(tip)
         posted += 1
         logger.info(f"HQ auto-posted (B): {home} vs {away} — {market} ({rating})")
+    await _dedupe_hq_tips()
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
 

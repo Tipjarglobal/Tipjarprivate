@@ -210,3 +210,10 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - Best-Wins Vollansicht: Klick auf ein gewonnenes Slip-Bild öffnet einen Vollbild-Viewer (Lightbox) mit dem Username des Besitzers unten links (ebenfalls klickbar zum Verschenken). Kein Zoom, nur Vollansicht.
 - Frühere Slip-Bild-Verbesserungen (Titel/Liga/Datum/Uhrzeit) + KI-Märkte (Doppelte Chance 12, Unter 2.5/3.5 mit echten Quoten) bereits in diesem Zyklus umgesetzt.
 - Getestet: testing_agent iteration_27.json — 3/3 Flows bestanden, keine Fehler.
+
+## Changelog — 2026-07-08 (Handicaps, Dedup, Blacklist, Button-Farben)
+- KI-Tipps nutzen jetzt HANDICAPS: Außenseiter +3.5/+2.5/+1.5 (sicher, schlägt "Unter X.5"), Favorit -1.5 (Value). Korrekte Schreibweise "<Team> Handicap +X.5" auch beim Auslesen hochgeladener Scheine (Vision). Verifiziert: Kairat–Sutjeska → "Sutjeska Niksic Handicap +3.5".
+- DEDUP: _dedupe_hq_tips() erzwingt EIN Pick pro Spiel (forebet+predictz), löscht risikoärmste Duplikate. Verifiziert: 8 einzigartige Spiele.
+- BLACKLIST: TEAM_LEAGUE_BLACKLIST = golden, mogadishu, kahibah (in beiden Autopostern + Systemen).
+- Doppelte Chance 12 + Unter 2.5/3.5 mit echten Quoten.
+- UI: Header/Tab-Button "Member Picks" = GOLD, "Live" = blinkend BLAU.

@@ -134,3 +134,20 @@ live market per match, same one-pick-per-match discipline as the pre-match engin
 - AI picks: added "Doppelte Chance 12" (home OR away, no draw) — offered when draw is
   unlikely; real dc_12 bookmaker odd from API-Football decides the value gate. Unter 2.5 /
   Unter 3.5 Tore now use REAL bookmaker odds too (under25/under35 parsed from /odds).
+
+## Handicaps + Blacklist + Dedup (owner voice notes, 2026-07-08)
+- HANDICAP theory (owner): Außenseiter-Handicap +3.5 ist SICHERER als "Unter 3.5 Tore".
+  Beispiel Kairat–Sutjeska: Sutjeska +3.5 verliert NUR bei 4+ Toren Unterschied (0:4 verloren,
+  1:4 GEWONNEN), während "Unter 3.5" bei 1:4 (5 Tore) verliert. → Handicap überlebt torreiche Spiele.
+- Engine: bei jedem Favoriten (pred 1/2) werden jetzt Underdog-Handicaps angeboten:
+  +3.5 (wp 0.92, Banker), +2.5 (0.87, Banker), +1.5 (0.73, Value wenn Quote≥1.60).
+  Favorit -1.5 (wp 0.72) nur wenn erwartete Tordifferenz ≥2. Handicap schlägt "Unter X.5" im
+  Banker-Tie-Break (0.92 > 0.90). Echte Asian-Handicap-Quoten noch nicht gemappt → Schätzquote.
+- Korrekte Schreibweise beim Auslesen: "Sutjeska 3.5" → "Sutjeska Handicap +3.5" (Vision-Prompt).
+- Doppelte Chance 12 + Unter 2.5/3.5 mit echten Quoten (früher ergänzt).
+- BLACKLIST (Teams/Ligen, Keyword-Match auf home/away/league): "golden", "mogadishu", "kahibah".
+  In forebet + predictz Autopostern und in _slip_eligible (Systeme) durchgesetzt. Erweiterbar in
+  TEAM_LEAGUE_BLACKLIST.
+- DEDUP: _dedupe_hq_tips() erzwingt EIN Pick pro Spiel über alle pending hq-auto (forebet+predictz).
+  Bei Duplikaten (z.B. Über 0.5 + Über 1.5) bleibt der wertvollste (value>banker, dann höchste Quote),
+  die risikoärmsten Duplikate werden gelöscht. Läuft am Ende beider Autoposter.

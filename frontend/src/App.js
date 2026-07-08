@@ -188,20 +188,31 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => (
+              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => {
+                const active = tipsView === v;
+                let cls;
+                if (v === "members") {
+                  cls = active ? "bg-[#FFC02E] text-black shadow-[0_0_14px_rgba(255,192,46,0.45)]" : "bg-[#FFC02E]/15 border border-[#FFC02E]/40 text-[#FFC02E] hover:bg-[#FFC02E]/25";
+                } else if (v === "live") {
+                  cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
+                } else {
+                  cls = active ? "bg-[#2ECC57] text-black" : "bg-surface border border-elevated text-zinc-300 hover:text-white";
+                }
+                return (
                 <button
                   key={v}
                   data-testid={`tabview-${v}`}
                   onClick={() => openTipsView(v)}
-                  className={`whitespace-nowrap flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${tipsView === v ? "bg-[#2ECC57] text-black" : "bg-surface border border-elevated text-zinc-300 hover:text-white"}`}
+                  className={`whitespace-nowrap flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${cls}`}
                 >
-                  {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${tipsView === v ? "bg-black" : "bg-live"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
+                  {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : "bg-blue-400"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
                   {t(lbl)}
                   {counts[v] != null && (
-                    <span className={`text-[10px] font-mono rounded-full px-1.5 ${tipsView === v ? "bg-black/20" : "bg-void/60 text-zinc-400"}`}>{counts[v]}</span>
+                    <span className={`text-[10px] font-mono rounded-full px-1.5 ${active ? "bg-black/20" : "bg-void/60 text-zinc-400"}`}>{counts[v]}</span>
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
           <DisclaimerBar />

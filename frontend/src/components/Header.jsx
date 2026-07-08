@@ -152,23 +152,28 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} />
           <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} />
           <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} />
-          <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} />
-          <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} live />
+          <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} variant="gold" />
+          <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} live variant="blue" />
         </div>
       </div>
     </header>
   );
 }
 
-function QuickView({ onClick, icon: Icon, label, testId, count, live }) {
+function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = "green" }) {
+  const variants = {
+    green: "bg-[#2ECC57] text-black hover:bg-[#26b64c] shadow-[0_0_16px_rgba(46,204,87,0.3)]",
+    gold: "bg-[#FFC02E] text-black hover:bg-[#e6ac1f] shadow-[0_0_16px_rgba(255,192,46,0.4)]",
+    blue: "bg-[#2563eb] text-white hover:bg-[#1d4fd8] shadow-[0_0_18px_rgba(37,99,235,0.55)] animate-pulse",
+  };
   return (
     <button
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className="flex items-center justify-center gap-2 w-full rounded-full bg-[#2ECC57] text-black font-heading font-black text-sm py-2.5 active:scale-[0.98] hover:bg-[#26b64c] transition-all shadow-[0_0_16px_rgba(46,204,87,0.3)]"
+      className={`flex items-center justify-center gap-2 w-full rounded-full font-heading font-black text-sm py-2.5 active:scale-[0.98] transition-all ${variants[variant] || variants.green}`}
     >
-      {live && count > 0 ? <span className="w-2 h-2 rounded-full bg-red-700 animate-pulse" /> : <Icon size={16} strokeWidth={2.5} />}
+      {live && count > 0 ? <span className={`w-2 h-2 rounded-full animate-pulse ${variant === "blue" ? "bg-white" : "bg-red-700"}`} /> : <Icon size={16} strokeWidth={2.5} />}
       {label}
       {count != null && (
         <span data-testid={`${testId}-count`} className="min-w-[20px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">
