@@ -1321,10 +1321,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
             return ImageFont.truetype(path, sz)
         except Exception:
             return ImageFont.load_default()
-    f_logo, f_h, f_m, f_o = font(FB, 50), font(FB, 34), font(FR, 31), font(FB, 33)
-    f_s, f_big, f_lbl = font(FR, 27), font(FB, 58), font(FR, 25)
-    f_sub = font(FR, 23)
-    W, pad, head_h, foot_h = 860, 44, 132, 236
+    f_logo, f_h, f_m, f_o = font(FB, 54), font(FB, 40), font(FR, 36), font(FB, 38)
+    f_s, f_big, f_lbl = font(FR, 30), font(FB, 64), font(FR, 27)
+    f_sub = font(FR, 26)
+    W, pad, head_h, foot_h = 900, 46, 148, 262
     won = ctype != "pending"
     legs = legs[:10]
     # group legs by match so the same fixture is only titled ONCE
@@ -1341,7 +1341,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     def _subline(g):
         parts = [p for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p]
         return "  ·  ".join(parts)
-    hdr_h, mrow_h, gap, sub_h = 54, 58, 18, 34
+    hdr_h, mrow_h, gap, sub_h = 62, 66, 20, 38
     H = head_h + sum(hdr_h + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
                      for g in groups) + foot_h
     VOID, CARD, GREEN = (9, 9, 11), (20, 21, 24), (46, 204, 87)
@@ -1366,7 +1366,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
     d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 2, 92), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
+    d.text((pad + 2, 100), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
     badge = "WON" if won else "OFFEN"
     bw = d.textlength(badge, font=f_h)
     lead = 46 if won else 24

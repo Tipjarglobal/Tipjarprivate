@@ -41,6 +41,26 @@ export default function SplashScreen() {
             transition={{ duration: 0.4 }}
             draggable={false}
           />
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <motion.path
+              d="M50 1.5 H98.5 V98.5 H1.5 V1.5 Z"
+              fill="none"
+              stroke="#E1FF00"
+              strokeWidth={5}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              pathLength={1}
+              initial={{ strokeDasharray: 1, strokeDashoffset: 1 }}
+              animate={{ strokeDashoffset: 0 }}
+              transition={{ duration: 2.5, ease: "linear" }}
+              style={{ filter: "drop-shadow(0 0 6px #E1FF00)" }}
+            />
+          </svg>
         </motion.div>
       )}
     </AnimatePresence>

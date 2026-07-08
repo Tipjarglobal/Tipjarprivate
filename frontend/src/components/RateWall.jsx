@@ -152,9 +152,9 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {streakBubble && (
                 <div
                   data-testid="streak-bubble"
-                  className="absolute right-0 top-full mt-2 z-30 w-64 rounded-2xl bg-void border border-bell/40 p-4 shadow-[0_0_30px_rgba(255,106,0,0.25)]"
+                  className="absolute left-0 top-full mt-2 z-30 w-64 rounded-2xl bg-void border border-bell/40 p-4 shadow-[0_0_30px_rgba(255,106,0,0.25)]"
                 >
-                  <div className="absolute -top-1.5 right-8 w-3 h-3 rotate-45 bg-void border-l border-t border-bell/40" />
+                  <div className="absolute -top-1.5 left-10 w-3 h-3 rotate-45 bg-void border-l border-t border-bell/40" />
                   <p className="text-sm text-zinc-200 leading-snug">
                     🔥 {t("wall.streakGoal1")} <span className="font-black text-bell">{Math.max(0, 30 - (user.streak || 0))}</span> {t("wall.streakGoal2")}
                   </p>
