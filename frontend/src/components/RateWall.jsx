@@ -329,6 +329,16 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <h4 className="font-heading font-bold text-white text-lg leading-tight">
             {tip.home_team || "—"} <span className="text-zinc-600 text-sm">vs</span> {tip.away_team || "—"}
           </h4>
+          {tip.pick_type && (
+            <div className="flex items-center gap-2 mt-1.5" data-testid={`pick-type-${tip.pick_type}`}>
+              <span className={`text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 ${tip.pick_type === "value" ? "bg-volt/15 text-volt" : "bg-cyan-400/15 text-cyan-300"}`}>
+                {tip.pick_type === "value" ? "VALUE" : "BANKER"}
+              </span>
+              {tip.win_prob != null && (
+                <span className="text-[11px] text-zinc-400 font-mono">≈{Math.round(tip.win_prob * 100)}%</span>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
             <span className="text-white font-semibold text-sm truncate">{localizeMarket(tip.market, t) || "—"}</span>
             {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0 ml-2" />}

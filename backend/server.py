@@ -2161,7 +2161,8 @@ def _forebet_datetime(raw: Optional[str]) -> str:
 # odds > 1.60 (genuine value). No 50/50 markets. Markets that lose too often over
 # time are auto-disabled (self-learning). ---
 VALUE_MIN_ODDS = 1.60
-WIN_PROB_MIN = 0.78          # ~80% win chance (allow small rounding headroom)
+WIN_PROB_MIN = 0.72          # value pick: ≥72% win chance (owner) — clearly no coin-flip
+BANKER_WIN_PROB = 0.85       # separate safe "banker" category (low odds, ~85%+), for combos
 MARKET_MIN_SAMPLE = 8        # min settled tips before a market family can be judged
 MARKET_MIN_WINRATE = 0.55    # families below this observed win-rate get disabled
 
@@ -2318,29 +2319,41 @@ async def forebet_autopost() -> dict:
             continue
         if _is_women_or_youth(home) or _is_women_or_youth(away):
             continue  # owner: only recognised, bettable men's competitions
-        # VALUE GATE (owner rule): apply real bookmaker odds, then keep only options
-        # with ~80% win prob AND odd >= 1.60; drop self-learning-disabled families.
+        # owner: only give picks from recognised, bookmaker-available leagues (same
+        # whitelist as the system slips) — no Somalia/obscure lower divisions.
+        if (r.get("lcode") or "").strip().lower() not in FOREBET_SLIP_CODES:
+            continue
+        # VALUE + BANKER gate (owner): apply real bookmaker odds; keep VALUE picks
+        # (≥72% win AND odd≥1.60) or, as a separate safe category, BANKER picks (≥85%
+        # win, any odd — great for combos). Drop self-learning-disabled families.
         try:
             odds_map = await ensure_match_odds(home, away, kickoff)
         except Exception:
             odds_map = {}
-        qualified = []
+        value_opts, banker_opts = [], []
         for o in _forebet_candidates(r):
             if _market_family(o["market"]) in banned:
                 continue
             ro = _real_odd_for(o["market"], odds_map, home, away)
             final_odd = float(ro) if ro else float(o["odds"])
+            o2 = dict(o)
+            o2["_odd"], o2["_real"] = round(final_odd, 2), bool(ro)
             if o["winprob"] >= WIN_PROB_MIN and final_odd >= VALUE_MIN_ODDS:
-                o2 = dict(o)
-                o2["_odd"], o2["_real"] = round(final_odd, 2), bool(ro)
-                qualified.append(o2)
-        if not qualified:
+                o2["_ptype"] = "value"
+                value_opts.append(o2)
+            elif o["winprob"] >= BANKER_WIN_PROB:
+                o2["_ptype"] = "banker"
+                banker_opts.append(o2)
+        # prefer a real VALUE pick; else fall back to the safest BANKER
+        if value_opts:
+            best = max(value_opts, key=lambda o: (o["winprob"], o["_odd"]))
+        elif banker_opts:
+            best = max(banker_opts, key=lambda o: (o["winprob"], o["_odd"]))
+        else:
             continue
-        # smartest value pick = highest win prob, tie-break the higher odd
-        best = max(qualified, key=lambda o: (o["winprob"], o["_odd"]))
         candidates.append((best["winprob"], r, best, kickoff))
-    # safest value first
-    candidates.sort(key=lambda x: (x[0], x[2]["_odd"]), reverse=True)
+    # value picks first (they carry higher odds), then safest bankers
+    candidates.sort(key=lambda x: (x[2].get("_ptype") == "value", x[0], x[2]["_odd"]), reverse=True)
     ordered = candidates
 
     posted = 0
@@ -2366,15 +2379,24 @@ async def forebet_autopost() -> dict:
         home, away = r["home"], r["away"]
         market = c["market"]
         odds, real = c["_odd"], c["_real"]
+        ptype = c.get("_ptype", "value")
         rating = round(c["rating"], 1)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
-        analysis = (
-            f"TipJarHQ-Analyse: {market} — ca. {round(winprob * 100)}% Trefferchance bei "
-            f"Quote {odds:.2f} (Value ≥ 1,60). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
-            f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
-            f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
-        )
+        if ptype == "banker":
+            analysis = (
+                f"TipJarHQ-Banker: {market} — ca. {round(winprob * 100)}% Trefferchance "
+                f"(sicherer Banker, Quote {odds:.2f}). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+                f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
+                f"Ideal für Kombi- & Systemwetten — automatisch von TipJarHQ."
+            )
+        else:
+            analysis = (
+                f"TipJarHQ-Value: {market} — ca. {round(winprob * 100)}% Trefferchance bei "
+                f"Quote {odds:.2f} (Value ≥ 1,60). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+                f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
+                f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
+            )
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -2383,14 +2405,14 @@ async def forebet_autopost() -> dict:
             "country": cc, "league": "TipJarHQ Pick", "league_code": lcode,
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
-            "win_prob": round(winprob, 3),
+            "win_prob": round(winprob, 3), "pick_type": ptype,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
         }
         await db.tips.insert_one(tip)
         posted += 1
-        logger.info(f"HQ auto-posted (A): {home} vs {away} — {market} "
+        logger.info(f"HQ auto-posted (A/{ptype}): {home} vs {away} — {market} "
                     f"({round(winprob*100)}% @ {odds:.2f})")
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
@@ -2574,6 +2596,11 @@ async def predictz_autopost() -> dict:
         tip_id = f"hqtip-b-{matchid}{c['sfx']}"
         market = c["market"]
         home, away = r["home"], r["away"]
+        # owner: recognised, bettable leagues only (+ no women/youth)
+        _lg = (r.get("league") or "").lower()
+        if _is_women_or_youth(home) or _is_women_or_youth(away) or \
+           not any(k in _lg for k in SLIP_LEAGUE_KEYWORDS):
+            continue
         # Owner rule: only trust Predictz when Forebet agrees on the same match.
         if not _forebet_agrees(market, fb_map.get(_match_key(home, away))):
             continue
@@ -2585,13 +2612,15 @@ async def predictz_autopost() -> dict:
                 await db.tips.update_one({"id": tip_id}, {"$set": {"match_time": match_time}})
             continue
         odds, real = await apply_real_odds(market, c["odds"], home, away, match_time)
-        # Owner value rule: no coin-flip markets, and odds must be >= 1.60.
+        # Owner rule: never post coin-flip markets. Low-odd safe goals ARE allowed as
+        # bankers (useful for combos). Tag value (odd≥1.60) vs banker.
         try:
             _od = float(odds)
         except Exception:
             _od = 0.0
-        if _market_family(market) in {"btts", "o25", "o25_btts", "gamble"} or _od < VALUE_MIN_ODDS:
+        if _market_family(market) in {"btts", "o25", "o25_btts", "gamble"}:
             continue
+        ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         analysis = (
             f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
@@ -2607,6 +2636,7 @@ async def predictz_autopost() -> dict:
             "match_time": match_time,
             "country": "", "league": league, "market": market,
             "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
+            "pick_type": ptype,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,

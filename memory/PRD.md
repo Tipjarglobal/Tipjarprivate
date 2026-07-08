@@ -70,6 +70,20 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Session 2026-07-08 (fork)
+### Value 72% + separate Banker + league whitelist on AI picks (verified: unit + real scrape + screenshot)
+- Owner refined: min win-prob 72% for VALUE (odds ≥1.60), PLUS a separate safe BANKER
+  category (winprob ≥0.85, low odds, for combos). Forebet picks one per match: prefer a
+  VALUE pick, else the safest BANKER. Tips carry `pick_type` (value|banker) + `win_prob`.
+- AI picks (Forebet + Predictz) now restricted to the recognised-league WHITELIST
+  (FOREBET_SLIP_CODES / SLIP_LEAGUE_KEYWORDS) + women/youth blocked → removed Somalia (so1),
+  Kyrgyzstan, Bolivia, Canada, Australia NPL, China L2 (cn3 blacklisted). Kept UCL/UEL/ECL
+  qualifiers etc.
+- Frontend: VALUE (volt) / BANKER (cyan) badge + "≈NN%" on each AI-pick card (RateWall.jsx),
+  data-testid pick-type-{type}. Verified via screenshot.
+- NOTE: July off-season → only European qualifiers whitelisted are live, so volume is low
+  (4 bankers, 0 value right now). Value picks appear when book prices ≥1.60 at ≥72%.
+
+
 ### VALUE-ONLY rule (owner) — verified (unit + real Forebet scrape)
 - Owner: stop 50/50 bets; only give ~80% win chance AT odds ≥ 1.60 (genuine value);
   auto-disable market families that lose too often (self-learning).
