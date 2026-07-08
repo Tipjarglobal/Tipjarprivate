@@ -68,8 +68,9 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-        <a href="#top" className="flex items-center shrink-0" data-testid="logo">
+        <a href="#top" className="flex flex-col shrink-0 leading-none select-none" data-testid="logo">
           <span className="font-heading font-black text-xl tracking-tighter text-white">Tip<span className="text-volt">Jar</span></span>
+          <span className="font-heading font-black text-[0.6rem] uppercase tracking-[0.25em] text-orange-500 -mt-0.5 self-start pl-0.5">global</span>
         </a>
 
         <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-zinc-300">
