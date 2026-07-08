@@ -1637,17 +1637,18 @@ async def seed_showcase():
             "odds": "1.86", "ai_rating": 10.0,
             "ai_analysis": "Volles Vertrauen. Víkingur Reykjavík: wichtiges CL-Qualifikationsspiel, müssen zuhause gewinnen — wir wollen nur, dass sie treffen (Over 0,5, Quote 1,17). Kolumbien soll sich qualifizieren: keine Tore nötig, einfach nicht in regulärer Zeit verlieren (X2). Luis Díaz ist in absoluter Topform → Über 0,5 Torschüsse aufs Tor (1,59). Sauber abgesicherter Kombi bei 1,86 — Apex 10/10.",
             "legs": [
-                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "pending", "selections": ["Víkingur Reykjavík Total Über 0,5"]},
-                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "pending", "selections": ["Doppelte Chance X2 (Kolumbien)"]},
-                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "pending", "selections": ["Luis Díaz: Über 0,5 Torschüsse aufs Tor"]},
+                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "won", "selections": ["Víkingur Reykjavík Total Über 0,5"]},
+                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Doppelte Chance X2 (Kolumbien)"]},
+                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Luis Díaz: Über 0,5 Torschüsse aufs Tor"]},
             ],
             "is_parlay": True, "stake": "", "potential_return": "",
+            "status": "won", "settled_by": "manual", "settled_at": now,
         },
-         "$setOnInsert": {"raw_text": "", "status": "pending", "sum_stars": 0,
+         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
                           "ratings_count": 0, "avg_rating": 0, "created_at": now}},
         upsert=True,
     )
-    logger.info("Seeded/updated showcase tip: Swiss-Colombia multibet (10 stars)")
+    logger.info("Seeded/updated showcase tip: Swiss-Colombia multibet (settled: won)")
 
 
 # ---------------------------------------------------------------------------
