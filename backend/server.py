@@ -1658,7 +1658,7 @@ FOREBET_MAX_PER_RUN = 20   # cap new tips per run to avoid flooding the wall
 
 # Leagues TipJar must NEVER touch (amateur / not offered by bookmakers).
 # Forebet league short-codes (lowercased): Us4 = USA USL League Two, Fi3 = Finland 3rd tier.
-FOREBET_BLOCKED_CODES = {"us4", "fi3", "sl1"}
+FOREBET_BLOCKED_CODES = {"us4", "fi3", "sl1", "cn3"}
 # Predictz league-string substrings to block (predictz has no short-code).
 PREDICTZ_BLOCKED_KW = ("usl league two", "league two usa", "kakkonen")
 
