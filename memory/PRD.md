@@ -225,6 +225,9 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Splash Snake-Border verifiziert)
+- Splash Screen: statischer mint/grüner Rand aus allen 8 Lokal-PNGs entfernt (bestätigt: splash-de.png sauber). SVG-„Snake"-Rahmen (Volt #E1FF00, 2,5s, im Uhrzeigersinn, non-scaling-stroke, glow) läuft über den Viewport. Visuell per Screenshot verifiziert.
+
 ## Changelog — 2026-07-08 (Apex-Flamme + Slip-Korrektur)
 - NEU "Apex-Flamme" 🔥: Bewertungsserie-Kachel ist anklickbar → Sprechblase mit Fortschritt zur 30-Tage-Serie. Bei 30 Tagen wird der kosmetische Orden vergeben (erscheint auf eigenem + öffentlichem Profil), und die Serie-Kachel verschwindet von der Startseite. Backend: _maybe_award_apex_flame (Schwelle APEX_FLAME_STREAK=30), rate-Response liefert apex_flame/apex_flame_new; public profile + user-Objekt tragen apex_flame. Rein optisch.
 - Seed 'seed-community-pending' auf den ECHTEN BetScore-Schein korrigiert: 7 Legs (Sutjeska Hcp +3.5, mehrere Über 1.5, Connah's Quay Hcp +2.5, Unter 3.5), Gesamtquote 4.15, Einsatz 12 €, möglicher Gewinn 49,81 €.
