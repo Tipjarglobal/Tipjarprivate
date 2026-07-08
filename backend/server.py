@@ -250,7 +250,7 @@ async def system_slip():
     return {
         "selections": picks, "count": n, "banker_count": banker_n,
         "total_odds": round(total, 2), "system_label": system_label,
-        "week": datetime.now(timezone.utc).strftime("KW %V"),
+        "week": datetime.now(timezone.utc).strftime("%d.%m.%Y"),
     }
 
 
@@ -2085,7 +2085,7 @@ def _finalize_system(sels, bankers, key, title, subtitle, risk):
         "selections": sels, "count": n,
         "banker_count": sum(1 for s in sels if s["banker"]),
         "total_odds": round(total, 2), "system_label": label,
-        "week": datetime.now(timezone.utc).strftime("KW %V"),
+        "week": datetime.now(timezone.utc).strftime("%d.%m.%Y"),
     }
 
 
@@ -2212,17 +2212,17 @@ async def build_systems() -> dict:
     for s in vals:
         _apply_real(s)
     return {
-        "week": datetime.now(timezone.utc).strftime("KW %V"),
+        "week": datetime.now(timezone.utc).strftime("%d.%m.%Y"),
         "systems": [
-            _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi der Woche",
+            _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
                              "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
-            _finalize_system(bankers, len(bankers), "value", "Banker-Kombi der Woche",
+            _finalize_system(bankers, len(bankers), "value", "Banker-Kombi des Tages",
                              "5 stärkste Favoriten · Doppelte Chance · echte Quoten", "value"),
-            _finalize_system(vals, 2, "smartvalue", "Value-Kombi der Woche",
+            _finalize_system(vals, 2, "smartvalue", "Value-Kombi des Tages",
                              "Tor-Value: BTTS & Über 2.5 · mittlere Quote", "value"),
-            _finalize_system(risks, 0, "risk", "Risk-Kombi der Woche",
+            _finalize_system(risks, 0, "risk", "Risk-Kombi des Tages",
                              "Doppelte Chance + Beide treffen · höhere Quote", "risk"),
-            _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi der Woche",
+            _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi des Tages",
                              "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
         ],
     }
