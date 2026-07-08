@@ -203,3 +203,10 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - Admin: admin@tipjar.com / TipJarAdmin2026!  (login field "email" or "username")
 - HQ: hq@tipjar.com / TipJarHQ2026!
 - See /app/memory/test_credentials.md
+
+## Changelog — 2026-06 (Best-Wins & Community-Gifting)
+- Hall-of-Fame-Button umbenannt: "Credits verdienen" → "Zeig, was du mit TipJar gewonnen hast" (i18n key `win.showWin`, alle 8 Sprachen). Der Hero-Button oben bleibt "Credits verdienen".
+- Klickbare Usernames: In den Tip-Cards (Rate Wall) und in der Hall of Fame sind Benutzernamen jetzt anklickbar. Klick öffnet das Wallet-Modal auf dem "Gift"-Tab mit vorausgefülltem Empfänger (nutzt bestehendes POST /api/credits/gift). Ohne Login öffnet sich das Login-Modal. Self-Gift wird geblockt.
+- Best-Wins Vollansicht: Klick auf ein gewonnenes Slip-Bild öffnet einen Vollbild-Viewer (Lightbox) mit dem Username des Besitzers unten links (ebenfalls klickbar zum Verschenken). Kein Zoom, nur Vollansicht.
+- Frühere Slip-Bild-Verbesserungen (Titel/Liga/Datum/Uhrzeit) + KI-Märkte (Doppelte Chance 12, Unter 2.5/3.5 mit echten Quoten) bereits in diesem Zyklus umgesetzt.
+- Getestet: testing_agent iteration_27.json — 3/3 Flows bestanden, keine Fehler.
