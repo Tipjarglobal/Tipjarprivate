@@ -173,30 +173,28 @@ function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = 
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`flex items-center justify-center gap-2 w-full rounded-full font-heading font-black text-sm py-2.5 active:scale-[0.98] transition-all ${variants[variant] || variants.green}`}
+      className={`flex items-center ${spoiler ? "justify-between pl-4 pr-2" : "justify-center"} gap-2 w-full rounded-full font-heading font-black text-sm py-2.5 active:scale-[0.98] transition-all ${variants[variant] || variants.green}`}
     >
-      {live && count > 0 ? <span className={`w-2 h-2 rounded-full animate-pulse ${variant === "blue" ? "bg-white" : "bg-red-700"}`} /> : <Icon size={16} strokeWidth={2.5} />}
-      {label}
-      {count != null && (
-        <span data-testid={`${testId}-count`} className="min-w-[20px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">
-          {count}
+      <span className="flex items-center gap-2 min-w-0">
+        {live && count > 0 ? <span className={`w-2 h-2 rounded-full animate-pulse ${variant === "blue" ? "bg-white" : "bg-red-700"}`} /> : <Icon size={16} strokeWidth={2.5} />}
+        <span className="truncate">{label}</span>
+        {count != null && (
+          <span data-testid={`${testId}-count`} className="min-w-[20px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">
+            {count}
+          </span>
+        )}
+      </span>
+      {spoiler && (
+        <span
+          data-testid={`${testId}-spoiler`}
+          className="flex items-center gap-1 rounded-full bg-black/20 border border-black/10 px-2 py-1 text-[10px] font-bold whitespace-nowrap shrink-0"
+        >
+          <MessageCircle size={11} /> {spoiler}
         </span>
       )}
     </button>
   );
-  if (!spoiler) return btn;
-  return (
-    <div className="relative">
-      {btn}
-      <span
-        data-testid={`${testId}-spoiler`}
-        onClick={onClick}
-        className="absolute -bottom-2.5 right-1 z-10 flex items-center gap-1 cursor-pointer rounded-full bg-void border border-volt/60 text-volt text-[10px] font-bold px-2 py-0.5 shadow-[0_0_12px_rgba(225,255,0,0.35)] whitespace-nowrap animate-pulse"
-      >
-        <MessageCircle size={11} /> {spoiler}
-      </span>
-    </div>
-  );
+  return btn;
 }
 
 function MenuItem({ icon: Icon, label, onClick, testId }) {
