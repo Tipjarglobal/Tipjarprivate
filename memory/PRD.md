@@ -217,3 +217,10 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - BLACKLIST: TEAM_LEAGUE_BLACKLIST = golden, mogadishu, kahibah (in beiden Autopostern + Systemen).
 - Doppelte Chance 12 + Unter 2.5/3.5 mit echten Quoten.
 - UI: Header/Tab-Button "Member Picks" = GOLD, "Live" = blinkend BLAU.
+
+## Changelog — 2026-07-08 (Profil, größere Slip-Schrift, Einzelquoten, Telegram-Teilen)
+- (1) Klick auf @Username (Tip-Cards + HOF-Viewer) öffnet öffentliches PROFIL-Modal (Avatar, "Mitglied seit", Stats Tips/Gewinne/Erhalten, Button "Credits verschenken" → Gift-Flow). Neuer Endpoint GET /api/users/public/{username}.
+- (2) Slip-Bild (Hall of Fame) mit deutlich größerer Schrift; Renderer unterstützt "pending"-Modus (OFFEN, Community-Tipp).
+- (3) Einzelquoten je Leg: Vision extrahiert sel_odds; Anzeige als @-Chip. Auto-Backfill (background task) füllt Einzelquoten bei bestehenden Member-Parlays per gespeichertem Bild nach.
+- (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
+- Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
