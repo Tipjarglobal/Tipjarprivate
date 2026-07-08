@@ -70,6 +70,21 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Session 2026-07-08 (fork)
+### VALUE-ONLY rule (owner) — verified (unit + real Forebet scrape)
+- Owner: stop 50/50 bets; only give ~80% win chance AT odds ≥ 1.60 (genuine value);
+  auto-disable market families that lose too often (self-learning).
+- Impl: `_forebet_candidates` now returns ALL options each with `winprob`; forebet_autopost
+  applies REAL bookmaker odds (ensure_match_odds/_real_odd_for) and keeps only
+  winprob≥0.78 AND odd≥1.60, one per match, ordered by winprob. `_banned_market_families()`
+  disables any family with settled win-rate<0.55 over ≥8 samples. Constants VALUE_MIN_ODDS,
+  WIN_PROB_MIN, MARKET_MIN_SAMPLE/WINRATE. Same odds/coin-flip gate added to Predictz.
+- Coin-flip families (BTTS/Über2.5/O2.5+BTTS/correct-score) never posted; plain Über 0.5
+  (1.08) filtered by 1.60 rule; prime value = Über 1.5 in high-scoring games + DC/DNB on
+  solid favourites when book prices ≥1.60. Women/youth now blocked from AI picks too.
+- TRADE-OFF (owner accepted): volume drops hard (~1 pick / 42 scanned). Relax WIN_PROB_MIN→0.72
+  for more volume. Cleared 37 legacy non-value pending picks.
+
+
 ### AI Pick dedup + smartest-selection (verified: python unit + curl)
 - ROOT CAUSE of "multiple overlapping tips per match": `_forebet_candidates` returned
   several markets per game and `forebet_autopost` posted each. FIX: it now returns exactly

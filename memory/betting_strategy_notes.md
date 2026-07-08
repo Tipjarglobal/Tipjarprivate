@@ -108,3 +108,19 @@ live market per match, same one-pick-per-match discipline as the pre-match engin
   chances), especially late.
 - Live tips auto-settle (won/lost) from the final score once the match ends.
 
+## VALUE-ONLY rule (owner voice note, 2026-07-08) — OVERRIDES everything above
+- STOP giving 50/50 (coin-flip) bets. Only give bets we win ~80% of the time (80/20),
+  AND the odds must be > 1.60. I.e. give ~80% win chance at odd ≥ 1.60 = genuine value
+  (bookmaker mispricing). If a market can't meet BOTH, don't post it.
+- If a market family loses too often over time, STOP giving that family (self-learning).
+- Engine mapping (Forebet + Predictz, source hq-auto): each candidate carries an
+  estimated winprob; we apply the REAL bookmaker odd (API-Football) and keep only
+  winprob ≥ 0.78 AND odd ≥ 1.60. `_banned_market_families()` disables any family whose
+  settled win-rate < 0.55 over ≥ 8 samples. Coin-flip families (BTTS, Über 2.5,
+  Über 2.5+BTTS, correct-score) are never posted; plain Über 0.5 (odds ~1.08) is filtered
+  out by the 1.60 rule. Result: far FEWER but higher-quality picks. The prime value market
+  is "Über 1.5 Tore" in clearly high-scoring games and DC/DNB on solid favourites when the
+  book prices them ≥ 1.60.
+- Trade-off the owner accepted: volume drops sharply (e.g. 1 pick out of 42 scanned).
+  Threshold WIN_PROB_MIN can be relaxed toward 0.72 if more volume is wanted.
+

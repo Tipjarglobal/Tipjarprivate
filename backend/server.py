@@ -2157,31 +2157,82 @@ def _forebet_datetime(raw: Optional[str]) -> str:
         return raw.strip()
 
 
-def _forebet_candidates(r: dict) -> list[dict]:
-    """Return EXACTLY ONE 'smartest' pick per match (or none).
+# --- Owner value rule (2026-07-08): only give bets we win ~80% of the time AND at
+# odds > 1.60 (genuine value). No 50/50 markets. Markets that lose too often over
+# time are auto-disabled (self-learning). ---
+VALUE_MIN_ODDS = 1.60
+WIN_PROB_MIN = 0.78          # ~80% win chance (allow small rounding headroom)
+MARKET_MIN_SAMPLE = 8        # min settled tips before a market family can be judged
+MARKET_MIN_WINRATE = 0.55    # families below this observed win-rate get disabled
 
-    Owner rule: never post several overlapping markets for the same game
-    (e.g. Über 0.5 AND Über 2.5+BTTS). We evaluate every sensible market for
-    THIS match and keep only the single smartest one — the best trade-off of
-    confidence (rating) and ambition (odds), scored as rating × odds. So a
-    genuinely high-scoring both-teams-score game yields 'Über 2.5 + Beide
-    treffen', a boring favourite game yields Draw-No-Bet / Über 0.5."""
+
+def _market_family(market: str) -> str:
+    m = (market or "").lower().strip()
+    if "draw no bet" in m:
+        return "dnb"
+    if "doppelte chance" in m and "beide" not in m and "treffen" not in m:
+        return "dc"
+    if "über 2.5" in m and ("beide" in m or "btts" in m):
+        return "o25_btts"
+    if "beide teams treffen" in m or "btts" in m:
+        return "btts"
+    if "über 2.5" in m:
+        return "o25"
+    if "über 1.5" in m:
+        return "o15"
+    if "über 0.5" in m:
+        return "o05" if m.startswith("über") else "team_o05"
+    if "genaues ergebnis" in m or "unentschieden" in m:
+        return "gamble"
+    return "other"
+
+
+async def _banned_market_families() -> set:
+    """Self-learning: disable market families that have lost too often historically."""
+    docs = await db.tips.find(
+        {"status": {"$in": ["won", "lost"]}, "source": {"$in": ["hq-auto", "hq-live"]}},
+        {"_id": 0, "market": 1, "status": 1}).to_list(3000)
+    agg: dict[str, list] = {}
+    for d in docs:
+        fam = _market_family(d.get("market"))
+        cell = agg.setdefault(fam, [0, 0])  # [wins, total]
+        cell[0] += 1 if d.get("status") == "won" else 0
+        cell[1] += 1
+    banned = set()
+    for fam, (w, n) in agg.items():
+        if n >= MARKET_MIN_SAMPLE and (w / n) < MARKET_MIN_WINRATE:
+            banned.add(fam)
+            logger.info(f"Market family disabled (self-learning): {fam} — {w}/{n} won")
+    return banned
+
+
+
+def _forebet_candidates(r: dict) -> list[dict]:
+    """Return ALL viable market options for a match, each with an estimated win
+    probability ('winprob'). forebet_autopost then applies REAL bookmaker odds and
+    keeps only genuine VALUE picks (owner rule): winprob >= WIN_PROB_MIN (~80%) AND
+    odd >= VALUE_MIN_ODDS (1.60). Coin-flip markets never pass and are not posted."""
     opts = []
     probs = r.get("probs") or []
     pred = (r.get("pred") or "").strip()
     home, away = r.get("home"), r.get("away")
-    # Draw No Bet for a strong favourite (never a plain 'gewinnt')
+    draw = probs[1] if len(probs) >= 2 else 0
+    # Favourite markets: Double Chance (draw counts as win) + Draw No Bet
     if pred in ("1", "2") and len(probs) >= 3:
         if pred == "1":
-            win, loss, team = probs[0], probs[2], home
+            win, loss, team, dc = probs[0], probs[2], home, "1X"
         else:
-            win, loss, team = probs[2], probs[0], away
+            win, loss, team, dc = probs[2], probs[0], away, "X2"
         if win >= FOREBET_MIN_PROB:
-            dnb_prob = win / max(win + loss, 1)
-            odds = round(1.0 / max(dnb_prob, 0.01), 2)
-            dnb_rating = 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5
+            dc_wp = min(0.97, (win + draw) / 100.0)
+            opts.append({"sfx": "-dc", "market": f"{team} Doppelte Chance {dc}",
+                         "odds": f"{max(1.05, 1 / max(dc_wp, 0.01)):.2f}",
+                         "rating": 8.5, "winprob": dc_wp})
+            dnb_wp = win / max(win + loss, 1)
             opts.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
-                         "odds": str(odds), "rating": dnb_rating})
+                         "odds": f"{max(1.05, 1 / max(dnb_wp, 0.01)):.2f}",
+                         "rating": 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5,
+                         "winprob": dnb_wp})
     # Goals markets derived from the predicted correct score.
     sc = parse_pred_score(r.get("score"))
     try:
@@ -2191,49 +2242,32 @@ def _forebet_candidates(r: dict) -> list[dict]:
     if sc:
         ph, pa = sc
         total = ph + pa
-        both = ph >= 1 and pa >= 1
-        # OWNER RULE (smartest): the weaker side that STILL scores. In a clear
-        # favourite game (e.g. Real – Atlético) the underdog usually finds the net
-        # and often scores early → "<Underdog> Über 0.5 Tore" (team-to-score) is the
-        # smartest banker: it wins even when the underdog loses the match. We flag it
-        # with priority so it beats plain totals when both are available.
-        if pred in ("1", "2"):
-            if pred == "1" and pa >= 1:          # home favourite, away underdog scores
-                under, uprob = away, (probs[2] if len(probs) >= 3 else 0)
-                opts.append({"sfx": "-utg", "market": f"{under} Über 0.5 Tore",
-                             "odds": "1.45", "rating": 8.5, "priority": True})
-            elif pred == "2" and ph >= 1:        # away favourite, home underdog scores
-                under, uprob = home, (probs[0] if len(probs) >= 1 else 0)
-                opts.append({"sfx": "-utg", "market": f"{under} Über 0.5 Tore",
-                             "odds": "1.45", "rating": 8.5, "priority": True})
-        # Most ambitious: torreiches Spiel, beide treffen klar erwartet
-        if both and total >= 4 and avg >= 3.2:
-            opts.append({"sfx": "-o25btts", "market": "Über 2.5 Tore + Beide treffen",
-                         "odds": "2.80", "rating": 8.5})
-        if both and total >= 3:
-            opts.append({"sfx": "-btts", "market": "Beide Teams treffen (BTTS)",
-                         "odds": "1.70", "rating": 8.0})
-        if total >= 4 and avg >= 3.2:
-            opts.append({"sfx": "-o25", "market": "Über 2.5 Tore",
-                         "odds": "1.55", "rating": 8.0})
-        if total >= 3:
-            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore",
-                         "odds": "1.30", "rating": 8.5})
+        # underdog team-to-score (owner idea) — passes the gate only if the book
+        # prices it >= 1.60 while our winprob is high enough.
+        if pred == "1" and pa >= 1:
+            opts.append({"sfx": "-utg", "market": f"{away} Über 0.5 Tore",
+                         "odds": "1.45", "rating": 8.0, "winprob": 0.66})
+        elif pred == "2" and ph >= 1:
+            opts.append({"sfx": "-utg", "market": f"{home} Über 0.5 Tore",
+                         "odds": "1.45", "rating": 8.0, "winprob": 0.66})
+        # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
+        if total >= 5 and avg >= 3.5:
+            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
+                         "rating": 8.0, "winprob": 0.84})
+        elif total >= 4 and avg >= 3.2:
+            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.50",
+                         "rating": 8.0, "winprob": 0.80})
+        elif total >= 3:
+            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.35",
+                         "rating": 7.5, "winprob": 0.72})
+        # Über 0.5 (very safe but low odds — usually filtered out by the 1.60 rule).
         if total >= 2:
             opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
-                         "rating": 9.0 if (total >= 3 and avg >= 3.0) else 8.5})
+                         "rating": 8.5, "winprob": 0.90 if total >= 3 else 0.85})
         elif total == 1:
-            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05", "rating": 8.0})
-    if not opts:
-        return []
-    # smartest = priority (underdog-to-score) first, then best rating × odds (EV),
-    # tie-break the more ambitious (higher-odds) one.
-    best = max(opts, key=lambda o: (
-        1 if o.get("priority") else 0,
-        round(o["rating"] * float(o["odds"]), 3),
-        float(o["odds"]),
-    ))
-    return [best]
+            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05",
+                         "rating": 8.0, "winprob": 0.80})
+    return opts
 
 
 async def forebet_autopost() -> dict:
@@ -2250,6 +2284,7 @@ async def forebet_autopost() -> dict:
         logger.error(f"Forebet scrape failed: {e}")
         return {"posted": 0, "reason": f"scrape error: {e}"}
 
+    banned = await _banned_market_families()
     candidates = []
     for r in rows:
         if _league_blocked_forebet(r):
@@ -2278,53 +2313,67 @@ async def forebet_autopost() -> dict:
                 btts, over25, None, league_code=r.get("lcode"), country=r.get("cc"))
         except Exception as e:
             logger.warning(f"forebet prediction store failed: {e}")
-        for c in _forebet_candidates(r):
-            candidates.append((round(c["rating"], 1), r, c, kickoff))
-    # Split into DNB vs goals so DNB (favourite) picks always get a fair share.
-    # Owner rule: bevorzuge torreiche Spiele (früh + genug Tore → Wette wird sicher
-    # grün). We therefore rank goals-picks by rating AND predicted goal expectancy.
-    def _avg_goals(x):
+        home, away = r.get("home"), r.get("away")
+        if not home or not away:
+            continue
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue  # owner: only recognised, bettable men's competitions
+        # VALUE GATE (owner rule): apply real bookmaker odds, then keep only options
+        # with ~80% win prob AND odd >= 1.60; drop self-learning-disabled families.
         try:
-            return float((x[1].get("avg") or "0").replace(",", "."))
+            odds_map = await ensure_match_odds(home, away, kickoff)
         except Exception:
-            return 0.0
-    dnb = sorted([x for x in candidates if x[2]["sfx"] == "-dnb"], key=lambda x: x[0], reverse=True)
-    goals = sorted([x for x in candidates if x[2]["sfx"] != "-dnb"],
-                   key=lambda x: (x[0], _avg_goals(x)), reverse=True)
-    DNB_QUOTA = 8
-    ordered = dnb[:DNB_QUOTA] + goals + dnb[DNB_QUOTA:]
+            odds_map = {}
+        qualified = []
+        for o in _forebet_candidates(r):
+            if _market_family(o["market"]) in banned:
+                continue
+            ro = _real_odd_for(o["market"], odds_map, home, away)
+            final_odd = float(ro) if ro else float(o["odds"])
+            if o["winprob"] >= WIN_PROB_MIN and final_odd >= VALUE_MIN_ODDS:
+                o2 = dict(o)
+                o2["_odd"], o2["_real"] = round(final_odd, 2), bool(ro)
+                qualified.append(o2)
+        if not qualified:
+            continue
+        # smartest value pick = highest win prob, tie-break the higher odd
+        best = max(qualified, key=lambda o: (o["winprob"], o["_odd"]))
+        candidates.append((best["winprob"], r, best, kickoff))
+    # safest value first
+    candidates.sort(key=lambda x: (x[0], x[2]["_odd"]), reverse=True)
+    ordered = candidates
 
     posted = 0
     now = datetime.now(timezone.utc).isoformat()
-    for rating, r, c, kickoff in ordered:
+    for winprob, r, c, kickoff in ordered:
         if posted >= FOREBET_MAX_PER_RUN:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
         tip_id = f"hqtip-a-{matchid}{c['sfx']}"
         lcode = (r.get("lcode") or "").strip().lower()
         cc = (r.get("cc") or "").strip().lower()
-        # Enforce ONE pick per match: drop any other pending hq-auto tip for this
-        # exact game (e.g. an older Über 0.5 when we now post Über 2.5+BTTS).
+        # Enforce ONE pick per match: drop any other pending hq-auto tip for this game.
         await db.tips.delete_many({
             "source": "hq-auto", "status": "pending",
             "home_team": r["home"], "away_team": r["away"], "match_time": kickoff,
             "id": {"$ne": tip_id}})
         existing = await db.tips.find_one({"id": tip_id})
         if existing:
-            # backfill league metadata on tips created before whitelist existed
             if existing.get("league_code") != lcode:
                 await db.tips.update_one(
                     {"id": tip_id}, {"$set": {"league_code": lcode, "country": cc}})
             continue
         home, away = r["home"], r["away"]
         market = c["market"]
-        odds, real = await apply_real_odds(market, c["odds"], home, away, kickoff)
+        odds, real = c["_odd"], c["_real"]
+        rating = round(c["rating"], 1)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
         analysis = (
-            f"TipJarHQ-Analyse: {market}. Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+            f"TipJarHQ-Analyse: {market} — ca. {round(winprob * 100)}% Trefferchance bei "
+            f"Quote {odds:.2f} (Value ≥ 1,60). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
             f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
-            f"Datenbasierter Pick — automatisch von TipJarHQ."
+            f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
         )
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
@@ -2333,14 +2382,16 @@ async def forebet_autopost() -> dict:
             "match_time": kickoff,
             "country": cc, "league": "TipJarHQ Pick", "league_code": lcode,
             "market": market,
-            "odds": str(odds), "ai_rating": rating, "ai_analysis": analysis,
+            "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
+            "win_prob": round(winprob, 3),
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
         }
         await db.tips.insert_one(tip)
         posted += 1
-        logger.info(f"HQ auto-posted (A): {home} vs {away} — {market} ({rating})")
+        logger.info(f"HQ auto-posted (A): {home} vs {away} — {market} "
+                    f"({round(winprob*100)}% @ {odds:.2f})")
     return {"posted": posted, "scanned": len(rows), "candidates": len(candidates)}
 
 
@@ -2534,6 +2585,13 @@ async def predictz_autopost() -> dict:
                 await db.tips.update_one({"id": tip_id}, {"$set": {"match_time": match_time}})
             continue
         odds, real = await apply_real_odds(market, c["odds"], home, away, match_time)
+        # Owner value rule: no coin-flip markets, and odds must be >= 1.60.
+        try:
+            _od = float(odds)
+        except Exception:
+            _od = 0.0
+        if _market_family(market) in {"btts", "o25", "o25_btts", "gamble"} or _od < VALUE_MIN_ODDS:
+            continue
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         analysis = (
             f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
