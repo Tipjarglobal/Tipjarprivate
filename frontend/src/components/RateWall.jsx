@@ -6,7 +6,7 @@ import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
-import { useI18n, localizeMarket } from "../i18n";
+import { useI18n, localizeMarket, formatSelection } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -317,7 +317,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {(leg.selections || []).map((s, si) => (
-                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">{s}</span>
+                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">{formatSelection(s, t)}</span>
                 ))}
               </div>
             </div>
@@ -346,7 +346,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             </div>
           )}
           <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
-            <span className="text-white font-semibold text-sm truncate">{localizeMarket(tip.market, t) || "—"}</span>
+            <span className="text-white font-semibold text-sm truncate">{formatSelection(tip.market, t) || "—"}</span>
             {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0 ml-2" />}
           </div>
           {(tip.stake || tip.potential_return) && (

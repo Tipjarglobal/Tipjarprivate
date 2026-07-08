@@ -38,6 +38,35 @@ export function localizeMarket(market, t) {
 }
 
 
+// Normalize a single bet-slip "selection" string (bookmaker raw text or German
+// market) into a clean, correctly-worded label. Handles legacy posted slips too.
+//  - "Total OVER 1.5" / "Total Over 1,5"  -> "Über 1.5 Tore"
+//  - "Total UNDER 3.5"                    -> "Unter 3.5 Tore"
+//  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
+//  - already-correct German markets pass through localizeMarket unchanged.
+export function formatSelection(sel, t) {
+  if (!sel || typeof sel !== "string") return sel;
+  const s = sel.trim();
+  const dec = (x) => x.replace(",", ".");
+  let m = s.match(/^total\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Über ${dec(m[1])} Tore`, t);
+  m = s.match(/^total\s+(?:under|unter)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Unter ${dec(m[1])} Tore`, t);
+  // leave already-worded markets to localizeMarket
+  if (/handicap|über|unter|\btore\b|torsch|chance|treffen|draw no bet|ergebnis|btts|\bover\b|\bunder\b/i.test(s)) {
+    return localizeMarket(s, t);
+  }
+  // bare "<Team> ±X.5" => handicap (positive if no sign)
+  m = s.match(/^(.+?)\s([+-]?\d+(?:[.,]\d+)?)$/);
+  if (m) {
+    let n = dec(m[2]);
+    if (!/^[+-]/.test(n)) n = "+" + n;
+    return `${m[1].trim()} Handicap ${n}`;
+  }
+  return localizeMarket(s, t);
+}
+
+
 const T = {
   en: {
     "nav.submit": "Submit a Tip",
