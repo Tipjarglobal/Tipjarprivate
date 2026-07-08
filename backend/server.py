@@ -3141,7 +3141,7 @@ def _live_stat_totals(stats):
 def _live_pressure_ok(stats, minute: int) -> bool:
     """Owner's 'be careful' guard: only re-offer if the game is still live-dangerous."""
     if not stats:
-        return minute < 70  # no data → trust only early/mid game
+        return minute < 60  # no live stats (obscure league) → only early, plenty of time
     sog, corners, shots = _live_stat_totals(stats)
     if minute >= 80:
         return sog >= 4 or corners >= 8
@@ -3233,9 +3233,13 @@ async def live_autopost() -> dict:
         sog, corners, _ = _live_stat_totals(stats)
         odd = _live_odd(t.get("market"), minute)
         live_id = f"hqlive-{fid}-{t['id']}"
+        if (sog + corners) > 0:
+            press_txt = f"{sog} Schüsse aufs Tor · {corners} Ecken — Druck vorhanden."
+        else:
+            press_txt = f"Noch {max(90 - minute, 0)} Min. Spielzeit."
         analysis = (
-            f"LIVE nachgereicht ({minute}'): {t.get('market')} — Stand {hg}:{ag}, "
-            f"{sog} Schüsse aufs Tor · {corners} Ecken. Noch nicht gefallen, aber Druck da. "
+            f"LIVE nachgereicht ({minute}'): {t.get('market')} — Stand {hg}:{ag}. "
+            f"Noch nicht gefallen. {press_txt} "
             f"Ursprünglich {t.get('ai_rating')}★ Vor-Spiel-Pick — jetzt live zu {odd}."
         )
         await db.tips.update_one({"id": live_id}, {
