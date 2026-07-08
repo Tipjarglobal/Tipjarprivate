@@ -10,7 +10,7 @@ const TYPE_META = {
   live: { icon: Radio, label: "win.type.live", color: "text-live" },
 };
 
-export default function HallOfFame({ refreshKey, onEarn, onGiftUser }) {
+export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
   const { t } = useI18n();
   const [items, setItems] = useState([]);
   const [viewer, setViewer] = useState(null);
@@ -79,7 +79,7 @@ export default function HallOfFame({ refreshKey, onEarn, onGiftUser }) {
                       <span className="font-mono font-black text-2xl text-volt">{w.total_odds?.toFixed(2)}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-sm">
-                      <button type="button" onClick={() => onGiftUser?.(w.username)} data-testid={`hof-gift-user-${i}`}
+                      <button type="button" onClick={() => onUserClick?.(w.username)} data-testid={`hof-gift-user-${i}`}
                         className="text-white font-semibold truncate hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">@{w.username}</button>
                       <span className="text-zinc-400">{w.legs_count} Legs</span>
                     </div>
@@ -117,7 +117,7 @@ export default function HallOfFame({ refreshKey, onEarn, onGiftUser }) {
             )}
             <button
               type="button"
-              onClick={() => { setViewer(null); onGiftUser?.(viewer.username); }}
+              onClick={() => { setViewer(null); onUserClick?.(viewer.username); }}
               data-testid="hof-viewer-user"
               title={t("wall.giftUser")}
               className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/70 backdrop-blur px-3 py-1.5 text-sm font-semibold text-white hover:text-volt transition-colors"

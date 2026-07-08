@@ -396,7 +396,9 @@ AI_SYSTEM = (
     "legs (array with ONE object per MATCH, each: {\"match\": \"Home - Away\", "
     "\"league\": \"competition/league name, e.g. 'Allsvenskan', 'La Liga', 'UEFA Nations League'\", "
     "\"kickoff\": \"HH:MM or ''\", \"selections\": [\"exact market lines, e.g. 'Total Over 1.5', "
-    "'Djurgarden Total Over 0.5', 'Fouls Over 21.5'\"]}), "
+    "'Djurgaren Total Over 0.5', 'Fouls Over 21.5'\"], "
+    "\"sel_odds\": [\"the decimal odd for EACH selection in the SAME order, e.g. '1.24'; use '' if a "
+    "selection's odd is not shown\"]}), "
     "home_team, away_team, match_time, country, league, "
     "market (a short human summary of all selections), odds (total/combined odds as a string), "
     "stake (string, '' if unknown), "
@@ -420,11 +422,13 @@ def _sanitize_legs(legs) -> list:
         for lg in legs:
             if isinstance(lg, dict):
                 sels = lg.get("selections") or []
+                sodds = lg.get("sel_odds") or []
                 out.append({
                     "match": str(lg.get("match", "") or ""),
                     "league": str(lg.get("league", "") or ""),
                     "kickoff": str(lg.get("kickoff", "") or ""),
                     "selections": [str(s) for s in sels if s][:10],
+                    "sel_odds": [str(o or "") for o in sodds][:10],
                 })
     return out[:12]
 
@@ -1227,6 +1231,62 @@ async def _system_match_keys() -> set:
     return keys
 
 
+def _fmt_selection(sel: str) -> str:
+    """Mirror of the frontend formatSelection: clean bookmaker raw text into proper labels."""
+    s = (sel or "").strip()
+    if not s:
+        return s
+    m = re.match(r"^total\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)", s, re.I)
+    if m:
+        return f"Über {m.group(1).replace(',', '.')} Tore"
+    m = re.match(r"^total\s+(?:under|unter)\s+(\d+(?:[.,]\d+)?)", s, re.I)
+    if m:
+        return f"Unter {m.group(1).replace(',', '.')} Tore"
+    if re.search(r"handicap|über|unter|\btore\b|torsch|chance|treffen|draw no bet|ergebnis|btts|\bover\b|\bunder\b", s, re.I):
+        return s
+    m = re.match(r"^(.+?)\s([+-]?\d+(?:[.,]\d+)?)$", s)
+    if m:
+        n = m.group(2).replace(",", ".")
+        if not n.startswith(("+", "-")):
+            n = "+" + n
+        return f"{m.group(1).strip()} Handicap {n}"
+    return s
+
+
+def _to_float(v) -> float:
+    try:
+        return float(str(v or "0").replace(",", ".").replace("€", "").strip())
+    except Exception:
+        return 0.0
+
+
+def _split_match(match: str):
+    parts = re.split(r"\s[–-]\s|\svs\.?\s", match or "", maxsplit=1)
+    home = parts[0].strip() if parts else (match or "")
+    away = parts[1].strip() if len(parts) > 1 else ""
+    return home, away
+
+
+def _tip_to_render_legs(tip: dict) -> list:
+    """Convert a stored member tip into _render_slip_image legs (one per selection)."""
+    rlegs = []
+    for lg in (tip.get("legs") or []):
+        home, away = _split_match(lg.get("match") or "")
+        sels = lg.get("selections") or []
+        sodds = lg.get("sel_odds") or []
+        for i, sel in enumerate(sels):
+            od = _to_float(sodds[i]) if i < len(sodds) else 0.0
+            rlegs.append({"home": home, "away": away, "market": _fmt_selection(sel),
+                          "odds": od, "result": "open",
+                          "league": lg.get("league", ""), "date": "", "time": lg.get("kickoff", "")})
+    if not rlegs:
+        rlegs.append({"home": tip.get("home_team", ""), "away": tip.get("away_team", ""),
+                      "market": _fmt_selection(tip.get("market", "")), "odds": _to_float(tip.get("odds")),
+                      "result": "open", "league": tip.get("league", ""), "date": "",
+                      "time": tip.get("match_time", "")})
+    return rlegs
+
+
 def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> bytes:
     """Render a standardised, TipJar-branded 'won' bet slip from the extracted data —
     so we NEVER show a random bookmaker screenshot (Betano/Tipwin/…), only our own
@@ -1241,10 +1301,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
             return ImageFont.truetype(path, sz)
         except Exception:
             return ImageFont.load_default()
-    f_logo, f_h, f_m, f_o = font(FB, 46), font(FB, 28), font(FR, 23), font(FB, 27)
-    f_s, f_big, f_lbl = font(FR, 22), font(FB, 52), font(FR, 21)
-    f_sub = font(FR, 19)
-    W, pad, head_h, foot_h = 860, 44, 128, 210
+    f_logo, f_h, f_m, f_o = font(FB, 50), font(FB, 34), font(FR, 31), font(FB, 33)
+    f_s, f_big, f_lbl = font(FR, 27), font(FB, 58), font(FR, 25)
+    f_sub = font(FR, 23)
+    W, pad, head_h, foot_h = 860, 44, 132, 236
+    won = ctype != "pending"
     legs = legs[:10]
     # group legs by match so the same fixture is only titled ONCE
     groups, gidx = [], {}
@@ -1260,11 +1321,13 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     def _subline(g):
         parts = [p for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p]
         return "  ·  ".join(parts)
-    hdr_h, mrow_h, gap, sub_h = 44, 44, 16, 26
+    hdr_h, mrow_h, gap, sub_h = 54, 58, 18, 34
     H = head_h + sum(hdr_h + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
                      for g in groups) + foot_h
     VOID, CARD, GREEN = (9, 9, 11), (20, 21, 24), (46, 204, 87)
     WHITE, GREY, LINE = (240, 240, 242), (150, 152, 158), (38, 40, 45)
+    VOLT = (225, 255, 0)
+    ACCENT = GREEN if won else VOLT
     img = Image.new("RGB", (W, H), VOID)
     d = ImageDraw.Draw(img)
 
@@ -1283,13 +1346,15 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
     d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 2, 90), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
-    badge = "WON"
+    d.text((pad + 2, 92), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
+    badge = "WON" if won else "OFFEN"
     bw = d.textlength(badge, font=f_h)
-    bx0 = W - pad - bw - 66
-    d.rounded_rectangle([bx0, 46, W - pad, 96], 14, fill=GREEN)
-    check(bx0 + 20, 74, 18, VOID)
-    d.text((bx0 + 48, 54), badge, font=f_h, fill=VOID)
+    lead = 46 if won else 24
+    bx0 = W - pad - bw - lead - 22
+    d.rounded_rectangle([bx0, 44, W - pad, 102], 14, fill=ACCENT)
+    if won:
+        check(bx0 + 20, 76, 16, VOID)
+    d.text((bx0 + lead, 56), badge, font=f_h, fill=VOID)
     d.line([pad, head_h - 14, W - pad, head_h - 14], fill=LINE, width=2)
     # legs grouped by match
     y = head_h
@@ -1302,30 +1367,33 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
             y += sub_h
         for l in g["mkts"]:
             od = l.get("odds") or 0
-            odt = f"{od:.2f}" if od else "gewonnen"
+            odt = f"{od:.2f}" if od else ("gewonnen" if won else "offen")
             ow = d.textlength(odt, font=f_o)
-            d.text((pad + 22, y + 4), trunc(l.get("market", "") or "", f_m, W - 2 * pad - ow - 90), font=f_m, fill=GREY)
-            d.text((W - pad - ow, y + 2), odt, font=f_o, fill=GREEN)
-            check(W - pad - ow - 34, y + 18, 18, GREEN)
+            d.text((pad + 24, y + 6), trunc(l.get("market", "") or "", f_m, W - 2 * pad - ow - 100), font=f_m, fill=GREY)
+            d.text((W - pad - ow, y + 4), odt, font=f_o, fill=ACCENT)
+            if won:
+                check(W - pad - ow - 36, y + 22, 18, GREEN)
             y += mrow_h
         d.line([pad, y + 2, W - pad, y + 2], fill=LINE, width=1)
         y += gap
     # footer card
     fy = y + 14
     d.rounded_rectangle([pad, fy, W - pad, H - 28], 20, fill=CARD)
-    label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie"}.get(ctype, "Gewonnen")
-    d.text((pad + 26, fy + 22), label, font=f_h, fill=GREEN)
-    d.text((pad + 26, fy + 66), "Gesamtquote", font=f_lbl, fill=GREY)
+    label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
+             "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
+    d.text((pad + 26, fy + 24), label, font=f_h, fill=ACCENT)
+    d.text((pad + 26, fy + 74), "Gesamtquote", font=f_lbl, fill=GREY)
     ot = f"{total_odds:.2f}" if total_odds else "—"
     otw = d.textlength(ot, font=f_big)
-    d.rounded_rectangle([W - pad - otw - 52, fy + 18, W - pad - 26, fy + 90], 14, fill=GREEN)
-    d.text((W - pad - otw - 39, fy + 24), ot, font=f_big, fill=VOID)
-    d.text((pad + 26, fy + 104), f"@{username}", font=f_s, fill=WHITE)
+    d.rounded_rectangle([W - pad - otw - 56, fy + 18, W - pad - 26, fy + 98], 14, fill=ACCENT)
+    d.text((W - pad - otw - 41, fy + 26), ot, font=f_big, fill=VOID)
+    d.text((pad + 26, fy + 116), f"@{username}", font=f_s, fill=WHITE)
     if winnings:
-        d.text((pad + 26, fy + 140), f"Gewinn: {winnings}", font=f_o, fill=GREEN)
+        wt = f"Gewinn: {winnings}" if won else f"Möglicher Gewinn: {winnings}"
+        d.text((pad + 26, fy + 154), wt, font=f_o, fill=ACCENT)
     if stake:
         stt = f"Einsatz: {stake}"
-        d.text((W - pad - d.textlength(stt, font=f_s) - 26, fy + 144), stt, font=f_s, fill=GREY)
+        d.text((W - pad - d.textlength(stt, font=f_s) - 26, fy + 158), stt, font=f_s, fill=GREY)
     out = io.BytesIO()
     img.save(out, format="WEBP", quality=88)
     return out.getvalue()
@@ -1481,6 +1549,52 @@ async def notif_stats():
 
 
 # ------------------------------------------------------------------ files
+@api_router.get("/users/public/{username}")
+async def public_profile(username: str):
+    u = await db.users.find_one({"username": username})
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    tips_count = await db.tips.count_documents({"user_id": u["id"]})
+    wins_count = await db.win_claims.count_documents({"user_id": u["id"]})
+    return {
+        "username": u.get("username"),
+        "created_at": u.get("created_at"),
+        "received_credits": u.get("received_credits", 0),
+        "streak": u.get("streak", 0),
+        "tips_count": tips_count,
+        "wins_count": wins_count,
+    }
+
+
+@api_router.post("/tips/{tip_id}/share-image")
+async def tip_share_image(tip_id: str):
+    """Generate a TipJar-branded shareable slip image for a PENDING member pick."""
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    if tip.get("source") in ("hq-auto", "smart"):
+        raise HTTPException(status_code=400, detail="Only member tips can be shared")
+    if tip.get("share_image_path"):
+        return {"path": tip["share_image_path"]}
+    rlegs = _tip_to_render_legs(tip)
+    img = _render_slip_image(rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
+                             tip.get("potential_return", ""), tip.get("username", "TipJar"), "pending")
+    try:
+        result = put_object(f"{APP_NAME}/shares/{tip_id}.webp", img, "image/webp")
+        path = result["path"]
+        await db.files.insert_one({
+            "id": str(uuid.uuid4()), "storage_path": path,
+            "original_filename": "tipjar-share.webp", "content_type": "image/webp",
+            "owner": tip.get("user_id"), "is_deleted": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.tips.update_one({"id": tip_id}, {"$set": {"share_image_path": path}})
+    except Exception as ex:
+        logger.error(f"share image upload failed: {ex}")
+        raise HTTPException(status_code=500, detail="Image generation failed")
+    return {"path": path}
+
+
 @api_router.get("/files/{path:path}")
 async def download_file(path: str):
     record = await db.files.find_one({"storage_path": path, "is_deleted": False})
@@ -1772,9 +1886,9 @@ async def seed_showcase():
             "odds": "2.47", "ai_rating": 7.0,
             "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hing am Fouls-Over-21,5-Leg — das kam, aber Portugal–Spanien Over 1,5 fiel nicht. Kombi damit verloren. Apex 7/10.",
             "legs": [
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "lost", "selections": ["Total Über 1,5"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "won", "selections": ["Fouls Über 21,5"]},
+                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"], "sel_odds": ["1.22", "1.35"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "lost", "selections": ["Total Über 1,5"], "sel_odds": ["1.20"]},
+                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "won", "selections": ["Fouls Über 21,5"], "sel_odds": ["1.85"]},
             ],
             "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
             "status": "lost",
@@ -1797,9 +1911,9 @@ async def seed_showcase():
             "odds": "1.86", "ai_rating": 10.0,
             "ai_analysis": "Volles Vertrauen. Víkingur Reykjavík: wichtiges CL-Qualifikationsspiel, müssen zuhause gewinnen — wir wollen nur, dass sie treffen (Over 0,5, Quote 1,17). Kolumbien soll sich qualifizieren: keine Tore nötig, einfach nicht in regulärer Zeit verlieren (X2). Luis Díaz ist in absoluter Topform → Über 0,5 Torschüsse aufs Tor (1,59). Sauber abgesicherter Kombi bei 1,86 — Apex 10/10.",
             "legs": [
-                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "won", "selections": ["Víkingur Reykjavík Über 0.5 Tore"]},
-                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Doppelte Chance X2 (Kolumbien)"]},
-                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Luis Díaz Über 0.5 Torschüsse"]},
+                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "won", "selections": ["Víkingur Reykjavík Über 0.5 Tore"], "sel_odds": ["1.17"]},
+                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Doppelte Chance X2 (Kolumbien)"], "sel_odds": ["1.53"]},
+                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Luis Díaz Über 0.5 Torschüsse"], "sel_odds": ["1.59"]},
             ],
             "is_parlay": True, "stake": "", "potential_return": "",
             "status": "won", "settled_by": "manual", "settled_at": now,
@@ -1809,6 +1923,31 @@ async def seed_showcase():
         upsert=True,
     )
     logger.info("Seeded/updated showcase tip: Swiss-Colombia multibet (settled: won)")
+
+    # Pending community parlay (member-posted) — showcases handicaps, per-leg odds
+    # and the Telegram share button.
+    await db.tips.update_one(
+        {"id": "seed-community-pending"},
+        {"$set": {
+            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
+            "home_team": "", "away_team": "",
+            "match_time": "08/07/2026 19:00", "country": "International",
+            "league": "Champions-League-Quali", "market": "",
+            "odds": "6.42", "ai_rating": 8.0, "source": "member",
+            "ai_analysis": "Sicherer Community-Kombi mit Außenseiter-Handicaps — verliert nur bei klaren Niederlagen der schwachen Teams. Apex 8/10.",
+            "legs": [
+                {"match": "Kairat Almaty – Sutjeska Nikšić", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "pending", "selections": ["Sutjeska Nikšić 3.5"], "sel_odds": ["1.20"]},
+                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "pending", "selections": ["Connah's Quay Nomads 2.5", "Total OVER 1.5"], "sel_odds": ["1.22", "1.24"]},
+                {"match": "Petrocub – Egnatia Rrogozhinë", "league": "Champions-League-Quali", "kickoff": "08/07 20:00", "status": "pending", "selections": ["Petrocub -1.5", "Total UNDER 3.5"], "sel_odds": ["2.10", "1.30"]},
+            ],
+            "is_parlay": True, "stake": "10 €", "potential_return": "64,20 €",
+            "status": "pending",
+        },
+         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
+                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
+        upsert=True,
+    )
+    logger.info("Seeded/updated showcase tip: pending community parlay")
 
 
 # ---------------------------------------------------------------------------
@@ -3574,6 +3713,43 @@ async def live_loop():
 
 
 
+async def backfill_leg_odds_once():
+    """One-time-ish: fill missing per-leg odds on existing member parlay tips by
+    re-reading their stored slip image (idempotent — skips tips that already have odds)."""
+    await asyncio.sleep(25)
+    try:
+        tips = await db.tips.find({
+            "source": {"$nin": ["hq-auto", "smart"]},
+            "is_parlay": True,
+            "image_path": {"$nin": [None, ""]},
+        }, {"_id": 0, "id": 1, "image_path": 1, "legs": 1}).limit(15).to_list(15)
+        done = 0
+        for t in tips:
+            legs = t.get("legs") or []
+            if not legs or any(l.get("sel_odds") for l in legs):
+                continue
+            try:
+                raw, _ct = get_object(t["image_path"])
+                parsed = await analyze_tip(base64.b64encode(raw).decode("utf-8"), "")
+            except Exception as ex:
+                logger.error(f"backfill parse failed {t['id']}: {ex}")
+                continue
+            new_legs = parsed.get("legs") or []
+            by_key = {_match_key(*_split_match(l.get("match", ""))): l for l in new_legs}
+            for i, l in enumerate(legs):
+                src = by_key.get(_match_key(*_split_match(l.get("match", ""))))
+                if not src and i < len(new_legs):
+                    src = new_legs[i]
+                if src and src.get("sel_odds"):
+                    l["sel_odds"] = src["sel_odds"]
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"legs": legs}})
+            done += 1
+        if done:
+            logger.info(f"Backfilled per-leg odds on {done} member tips")
+    except Exception as e:
+        logger.error(f"backfill_leg_odds_once failed: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
@@ -3611,6 +3787,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
+    _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

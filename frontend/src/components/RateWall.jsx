@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2 } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2 } from "lucide-react";
 import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
+import { shareSlip } from "../shareSlip";
 import { useI18n, localizeMarket, formatSelection } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
@@ -26,7 +27,7 @@ const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
 ];
 
-export default function RateWall({ refreshKey, requireLogin, view = "ai", onGiftUser }) {
+export default function RateWall({ refreshKey, requireLogin, view = "ai", onUserClick }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [tips, setTips] = useState([]);
@@ -183,7 +184,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onGift
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {tips.map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onGiftUser={onGiftUser} />
+            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
           ))}
         </div>
       )}
@@ -236,8 +237,21 @@ function tipFlags(tip) {
   return [...flags].slice(0, 5);
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onGiftUser }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
   const flags = tipFlags(tip);
+  const [sharing, setSharing] = useState(false);
+  const isMemberPending = tip.status === "pending" && !["hq-auto", "smart"].includes(tip.source);
+  const doShare = async () => {
+    setSharing(true);
+    try {
+      const { data } = await api.post(`/tips/${tip.id}/share-image`);
+      await shareSlip({ imageUrl: fileUrl(data.path), username: tip.username, odds: tip.odds });
+    } catch (e) {
+      toast.error(t("wall.shareErr"));
+    } finally {
+      setSharing(false);
+    }
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
@@ -248,7 +262,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       <div className="flex items-center justify-between mb-3">
         <button
           type="button"
-          onClick={() => onGiftUser?.(tip.username)}
+          onClick={() => onUserClick?.(tip.username)}
           data-testid={`gift-user-btn-${tip.id}`}
           title={t("wall.giftUser")}
           className="flex items-center gap-2 min-w-0 group"
@@ -259,6 +273,17 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{tip.username}</span></span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
+          {isMemberPending && (
+            <button
+              onClick={doShare}
+              disabled={sharing}
+              data-testid={`share-tip-${tip.id}`}
+              title={t("wall.share")}
+              className="flex items-center gap-1 text-[11px] font-bold text-volt hover:text-volt-hover disabled:opacity-50 transition-colors"
+            >
+              <Share2 size={13} /> {t("wall.share")}
+            </button>
+          )}
           {flags.length > 0 && (
             <span className="text-base leading-none tracking-tight" data-testid="tip-flags">{flags.join(" ")}</span>
           )}
@@ -316,9 +341,14 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {(leg.selections || []).map((s, si) => (
-                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">{formatSelection(s, t)}</span>
-                ))}
+                {(leg.selections || []).map((s, si) => {
+                  const od = (leg.sel_odds || [])[si];
+                  return (
+                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">
+                    {formatSelection(s, t)}{od ? <span className="ml-1 font-mono font-bold text-volt">@{od}</span> : null}
+                  </span>
+                  );
+                })}
               </div>
             </div>
           );})}

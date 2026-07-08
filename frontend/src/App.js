@@ -17,6 +17,7 @@ import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
+import PublicProfileModal from "./components/PublicProfileModal";
 import InviteSection from "./components/InviteSection";
 import HallOfFame from "./components/HallOfFame";
 import WinClaimModal from "./components/WinClaimModal";
@@ -37,6 +38,7 @@ function Home() {
   const [tipsOpen, setTipsOpen] = useState(false);
   const [tipsView, setTipsView] = useState("ai");
   const [giftTarget, setGiftTarget] = useState("");
+  const [profileUser, setProfileUser] = useState("");
   const [counts, setCounts] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -73,6 +75,10 @@ function Home() {
     setGiftTarget(username);
     setWalletOpen(true);
   }, [user, requireLogin]);
+
+  const openProfile = useCallback((username) => {
+    if (username) setProfileUser(username);
+  }, []);
 
   const openTipsView = (view) => {
     setTipsView(view);
@@ -162,7 +168,7 @@ function Home() {
 
       <InviteSection />
       <div id="best-wins">
-        <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} onGiftUser={openGiftTo} />
+        <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} onUserClick={openProfile} />
       </div>
 
       <footer className="border-t border-elevated py-10 text-center px-4">
@@ -216,7 +222,7 @@ function Home() {
             </div>
           </div>
           <DisclaimerBar />
-          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onGiftUser={openGiftTo} />
+          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onUserClick={openProfile} />
         </div>
       )}
 
@@ -224,6 +230,12 @@ function Home() {
       <SubmitTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
       <WalletModal open={walletOpen} onClose={() => { setWalletOpen(false); setGiftTarget(""); }}
         initialTab={giftTarget ? "gift" : "buy"} initialGiftTo={giftTarget} />
+      <PublicProfileModal
+        open={!!profileUser}
+        username={profileUser}
+        onClose={() => setProfileUser("")}
+        onGift={(u) => { setProfileUser(""); openGiftTo(u); }}
+      />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
         requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished}
