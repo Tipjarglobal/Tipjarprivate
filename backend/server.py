@@ -138,6 +138,7 @@ def public_user(user: dict) -> dict:
         "credits": user.get("credits", 0),
         "received_credits": user.get("received_credits", 0),
         "streak": user.get("streak", 0),
+        "apex_flame": user.get("apex_flame", False),
         "ratings_given": user.get("ratings_given", 0),
         "email_verified": user.get("email_verified", False),
         "referral_code": user.get("referral_code"),
@@ -826,6 +827,21 @@ async def is_trusted_rater(user: dict) -> bool:
     return r.get("n", 0) >= TRUSTED_MIN_TIPS and (r.get("avg") or 0) >= TRUSTED_REPUTATION
 
 
+APEX_FLAME_STREAK = 30  # rating-streak days needed to unlock the cosmetic Apex-Flamme badge
+
+
+async def _maybe_award_apex_flame(user_id: str, streak: int, now: datetime) -> bool:
+    """Grant the cosmetic Apex-Flamme badge at a 30-day rating streak.
+    Returns True only the first time it is granted."""
+    if streak < APEX_FLAME_STREAK:
+        return False
+    res = await db.users.update_one(
+        {"id": user_id, "apex_flame": {"$ne": True}},
+        {"$set": {"apex_flame": True, "apex_flame_at": now.isoformat()}},
+    )
+    return res.modified_count > 0
+
+
 async def _bump_rating_streak(user: dict, now: datetime) -> int:
     today = now.date().isoformat()
     streak = user.get("streak", 0)
@@ -838,6 +854,7 @@ async def _bump_rating_streak(user: dict, now: datetime) -> int:
                                    "$inc": {"ratings_given": 1}})
     else:
         await db.users.update_one({"id": user["id"]}, {"$inc": {"ratings_given": 1}})
+    await _maybe_award_apex_flame(user["id"], streak, now)
     return streak
 
 
@@ -960,8 +977,11 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
     elif not existing:
         await db.users.update_one({"id": user["id"]}, {"$inc": {"ratings_given": 1}})
 
+    flame_new = await _maybe_award_apex_flame(user["id"], streak, now)
     fresh = await db.tips.find_one({"id": tip_id}, {"_id": 0})
-    return {"tip": fresh, "streak": streak, "your_stars": inp.stars}
+    return {"tip": fresh, "streak": streak, "your_stars": inp.stars,
+            "apex_flame": bool(streak >= APEX_FLAME_STREAK or user.get("apex_flame", False)),
+            "apex_flame_new": flame_new}
 
 
 @api_router.put("/tips/{tip_id}/status")
@@ -1561,6 +1581,7 @@ async def public_profile(username: str):
         "created_at": u.get("created_at"),
         "received_credits": u.get("received_credits", 0),
         "streak": u.get("streak", 0),
+        "apex_flame": u.get("apex_flame", False),
         "tips_count": tips_count,
         "wins_count": wins_count,
     }
@@ -1931,16 +1952,20 @@ async def seed_showcase():
         {"$set": {
             "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
             "home_team": "", "away_team": "",
-            "match_time": "08/07/2026 19:00", "country": "International",
-            "league": "Champions-League-Quali", "market": "",
-            "odds": "6.42", "ai_rating": 8.0, "source": "member",
-            "ai_analysis": "Sicherer Community-Kombi mit Außenseiter-Handicaps — verliert nur bei klaren Niederlagen der schwachen Teams. Apex 8/10.",
+            "match_time": "08/07/2026 17:00", "country": "International",
+            "league": "Diverse", "market": "",
+            "odds": "4.15", "ai_rating": 8.0, "source": "member",
+            "ai_analysis": "Sicherer Community-Kombi: Außenseiter-Handicap Sutjeska +3.5, dazu mehrere Über-1.5-Tore-Legs und ein Unter-3.5. Breit gestreut bei fairer Gesamtquote. Apex 8/10.",
             "legs": [
-                {"match": "Kairat Almaty – Sutjeska Nikšić", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "pending", "selections": ["Sutjeska Nikšić 3.5"], "sel_odds": ["1.20"]},
-                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "pending", "selections": ["Connah's Quay Nomads 2.5", "Total OVER 1.5"], "sel_odds": ["1.22", "1.24"]},
-                {"match": "Petrocub – Egnatia Rrogozhinë", "league": "Champions-League-Quali", "kickoff": "08/07 20:00", "status": "pending", "selections": ["Petrocub -1.5", "Total UNDER 3.5"], "sel_odds": ["2.10", "1.30"]},
+                {"match": "Kairat Almaty – Sutjeska", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "pending", "selections": ["Sutjeska 3.5"], "sel_odds": ["1.20"]},
+                {"match": "EBK – HPS", "league": "Kakkonen", "kickoff": "08/07 18:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.15"]},
+                {"match": "CS Petrocub – FK Egnatia", "league": "Champions-League-Quali", "kickoff": "08/07 19:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.32"]},
+                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "pending", "selections": ["Connah's Quay Nomads 2.5"], "sel_odds": ["1.22"]},
+                {"match": "Ponte Preta – Criciúma", "league": "Série B", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total UNDER 3.5"], "sel_odds": ["1.24"]},
+                {"match": "Hartford Athletic – Orange County SC", "league": "USL Championship", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.27"]},
+                {"match": "Supra du Quebec – Atlético Ottawa", "league": "CPL", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.18"]},
             ],
-            "is_parlay": True, "stake": "10 €", "potential_return": "64,20 €",
+            "is_parlay": True, "stake": "12 €", "potential_return": "49,81 €",
             "status": "pending",
         },
          "$setOnInsert": {"raw_text": "", "sum_stars": 0,

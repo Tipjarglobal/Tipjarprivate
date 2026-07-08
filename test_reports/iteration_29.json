@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only verification for the Bewertungsserie (streak) widget/bubble, Apex-Flamme badge visibility (public and own profile), corrected 7-leg community parlay with per-leg odds, and share button. All primary flows PASS with zero console errors. One minor i18n issue found: streakGoal/apexFlame/flameUnlocked strings are only translated in German locale.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Streak bubble + Apex-Flamme badge + toast", "issues": ["i18n keys wall.streakGoal1, wall.streakGoal2, profile.apexFlame and wall.flameUnlocked are only defined for the German locale (i18n.js lines 687-691). In English/ES/EL/FR/IT/AR/TR the bubble renders raw keys, e.g. '🔥 wall.streakGoal1 25 wall.streakGoal2', and the profile badge label reads 'profile.apexFlame' instead of a translated string. Admin login initially loads with saved user.language (EN in our test), which surfaced this. Verified working correctly after switching UI to DE."]}
+    ]
+  },
+  "verified_flows": {
+    "streak_widget": "data-testid='streak-widget' visible in tips window (admin streak=5, badge not earned). Clicking toggles data-testid='streak-bubble' — 1st click shows, 2nd click hides. Bubble (DE): '🔥 Nur noch 25 Tage bis zur Apex-Flamme 🔥 — bewerte täglich weiter!' with progress bar width 5/30.",
+    "public_profile_badge_tipjarhq": "Opening data-testid='public-profile' via gift-user-btn-seed-community-pending shows data-testid='profile-apex-flame' with text 'Apex-Flamme' (DE) — TipJarHQ has earned it.",
+    "own_profile_badge_admin_absent": "Header user-menu → menu-profile opens data-testid='profile-modal'; data-testid='own-apex-flame' is NOT present (admin has not earned the badge).",
+    "corrected_slip_7_legs": "Community parlay seed-community-pending renders 7 legs with per-leg odds chips: @1.20 (Sutjeska Handicap +3.5, Kairat Almaty – Sutjeska), @1.15 (Over 1.5 Goals, EBK – HPS), @1.32 (Over 1.5 Goals, CS Petrocub – FK Egnatia), @1.22 (Connah's Quay Nomads Handicap +2.5), @1.24 (Unter 3.5 Tore, Ponte Preta), @1.27 (Over 1.5 Goals, Hartford), @1.18 (Over 1.5 Goals, Supra du Quebec). Gesamtquote 4.15 chip present. Über 1.5 Tore/Unter 3.5 Tore render in DE.",
+    "share_button": "data-testid='share-tip-seed-community-pending' POSTs to /api/tips/seed-community-pending/share-image (200 OK). With navigator.share undefined (headless Chromium), shareSlip falls back to window.open('https://t.me/share/url?url=...&text=...'). Button not stuck (disabled resets to false). No console errors.",
+    "console_errors": "0 across all flows (streak click, tab switch, profile open, share click, own profile open)."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: Add translations for wall.streakGoal1, wall.streakGoal2, wall.flameUnlocked, profile.apexFlame in EN/ES/EL/FR/IT/AR/TR locales in /app/frontend/src/i18n.js so non-German admins see localized copy in the streak bubble, unlock toast, and profile badge label."
+  ],
+  "critical_code_review_comments": [
+    "shareSlip.js correctly falls through navigator.canShare -> navigator.share -> window.open Telegram fallback; behaves correctly in headless.",
+    "RateWall streak widget properly hides via `user && !user.apex_flame` guard; safe.",
+    "PublicProfileModal fetches profile lazily via /api/users/public/{username}; tests must wait for API resolution before asserting apex_flame badge presence."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (all 6 review-request items verified)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (from review request)",
+  "seed_data_creation": "None — used existing seed-community-pending seeded parlay.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login uses data-testid='auth-username' (accepts email or username). To enter the tips window use data-testid='nav-ratewall' or view-tips-btn. Streak widget only appears when user is logged in AND !user.apex_flame. The AuthContext auto-restores the saved user.language on login, so if you want DE UI you need to set language after login via language-switcher > lang-de. All streak/apex/share flows work; only i18n gap remains for non-DE locales.",
+  "rca of the issue": "During first share attempt no /api/tips/*/share-image request fired because navigator.share was defined but never resolved in headless — shareSlip awaited it and swallowed the abort silently. Deleting navigator.share via page.evaluate causes shareSlip to hit the Telegram window.open fallback immediately. This is expected headless behavior, not a product bug."
+}

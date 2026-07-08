@@ -37,6 +37,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [streakBubble, setStreakBubble] = useState(false);
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -74,9 +75,14 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       }
       setMyRatings((m) => ({ ...m, [tip.id]: stars }));
       setTips((ts) => ts.map((x) => (x.id === tip.id ? data.tip : x)));
-      if (user) setUser({ ...user, streak: data.streak, ratings_given: (user.ratings_given || 0) + 1 });
+      if (user) setUser({ ...user, streak: data.streak, apex_flame: data.apex_flame ?? user.apex_flame, ratings_given: (user.ratings_given || 0) + 1 });
       confetti({ particleCount: 45, spread: 60, origin: { y: 0.7 }, colors: ["#E1FF00", "#00FF94", "#FFFFFF"] });
-      toast.success(t("wall.thanks"));
+      if (data.apex_flame_new) {
+        confetti({ particleCount: 160, spread: 100, origin: { y: 0.5 }, colors: ["#E1FF00", "#FF6A00", "#FFFFFF"] });
+        toast.success(t("wall.flameUnlocked"), { duration: 6000 });
+      } else {
+        toast.success(t("wall.thanks"));
+      }
     } catch (err) {
       toast.error(apiErr(err));
     }
@@ -129,13 +135,36 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
                 <span className="text-sm">{syncing ? t("wall.syncing") : t("wall.sync")}</span>
               </button>
             )}
-            <div className="flex items-center gap-3 rounded-2xl bg-surface border border-elevated px-4 py-3" data-testid="streak-widget">
-              <Flame className="text-bell" size={28} />
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("wall.streak")}</p>
-                <p className="font-mono font-black text-2xl text-white">{user.streak || 0} <span className="text-sm text-zinc-500">{t("wall.days")}</span></p>
-              </div>
+            {user && !user.apex_flame && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStreakBubble((v) => !v)}
+                data-testid="streak-widget"
+                className="flex items-center gap-3 rounded-2xl bg-surface border border-elevated px-4 py-3 hover:border-bell/50 transition-colors"
+              >
+                <Flame className="text-bell" size={28} />
+                <div className="text-left">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("wall.streak")}</p>
+                  <p className="font-mono font-black text-2xl text-white">{user.streak || 0} <span className="text-sm text-zinc-500">{t("wall.days")}</span></p>
+                </div>
+              </button>
+              {streakBubble && (
+                <div
+                  data-testid="streak-bubble"
+                  className="absolute right-0 top-full mt-2 z-30 w-64 rounded-2xl bg-void border border-bell/40 p-4 shadow-[0_0_30px_rgba(255,106,0,0.25)]"
+                >
+                  <div className="absolute -top-1.5 right-8 w-3 h-3 rotate-45 bg-void border-l border-t border-bell/40" />
+                  <p className="text-sm text-zinc-200 leading-snug">
+                    🔥 {t("wall.streakGoal1")} <span className="font-black text-bell">{Math.max(0, 30 - (user.streak || 0))}</span> {t("wall.streakGoal2")}
+                  </p>
+                  <div className="mt-3 h-2 rounded-full bg-elevated overflow-hidden">
+                    <div className="h-full bg-bell" style={{ width: `${Math.min(100, ((user.streak || 0) / 30) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
+            )}
           </div>
         )}
       </div>

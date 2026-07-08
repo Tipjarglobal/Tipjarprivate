@@ -4,6 +4,7 @@ import api, { apiErr } from "../api";
 import { useI18n, LANGUAGES } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
+import { Flame } from "lucide-react";
 
 const TIMEZONES = [
   "UTC", "Europe/London", "Europe/Berlin", "Europe/Athens", "Europe/Madrid",
@@ -42,6 +43,11 @@ export default function ProfileModal({ open, onClose }) {
 
   return (
     <Modal open={open} onClose={onClose} title={t("profile.title")} testId="profile-modal">
+      {user?.apex_flame && (
+        <div data-testid="own-apex-flame" className="mb-4 flex items-center gap-2 rounded-xl bg-bell/15 border border-bell/40 px-3 py-2 text-sm font-black text-bell">
+          <Flame size={16} /> {t("profile.apexFlame")}
+        </div>
+      )}
       <Field label={t("profile.username")}>
         <input data-testid="profile-username" className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} minLength={2} maxLength={24} />
       </Field>
