@@ -2408,7 +2408,8 @@ def _league_blocked_predictz(league: str) -> bool:
 # (keyword match on home team, away team OR league name). Extend as the owner flags
 # obscure/untrustworthy fixtures.
 TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
-                         "forge", "saint-laurent", "saint laurent")
+                         "forge", "saint-laurent", "saint laurent",
+                         "delaware", "eagle fc")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
@@ -4338,6 +4339,8 @@ async def live_autopost() -> dict:
         home = ((teams.get("home") or {}).get("name")) or ""
         away = ((teams.get("away") or {}).get("name")) or ""
         if not home or not away:
+            continue
+        if _team_or_league_blocked(home, away, ""):
             continue
         goals = fx.get("goals") or {}
         total = (goals.get("home") or 0) + (goals.get("away") or 0)
