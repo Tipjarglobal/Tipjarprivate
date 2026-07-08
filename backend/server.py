@@ -1999,8 +1999,8 @@ async def settle_pending_tips() -> dict:
         {"is_parlay": {"$ne": True},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]},
          "$or": [
-             {"status": "pending", "source": {"$ne": "smart"}},
-             {"status": "live", "source": {"$nin": ["smart", "hq-live", "hq-auto"]}},
+             {"status": "pending"},
+             {"status": "live", "source": {"$nin": ["hq-live", "hq-auto"]}},
          ]},
         {"_id": 0},
     ).sort("created_at", 1).to_list(300)
@@ -2130,7 +2130,7 @@ async def purge_settled_tips() -> int:
     'Abgerechnet' area only ever shows the last day. Seed showcase tips are kept."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     docs = await db.tips.find(
-        {"status": {"$in": ["won", "lost"]}, "id": {"$not": {"$regex": "^seed-"}}},
+        {"status": {"$in": ["won", "lost", "void"]}, "id": {"$not": {"$regex": "^seed-"}}},
         {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1}).to_list(5000)
     stale = [d["id"] for d in docs if (d.get("settled_at") or d.get("created_at") or "") < cutoff]
     if not stale:
@@ -2287,12 +2287,15 @@ async def seed_showcase():
         await db.tips.delete_one({"id": old_id})
         await db.tip_ratings.delete_many({"tip_id": old_id})
 
-    # Authoritative: TipJarHQ owns the 2 showcase tips + any auto-posted Forebet picks (id forebet-*).
-    # Delete any OTHER TipJarHQ-authored tips (e.g. old/ugly duplicate slips) in every env on startup.
+    # Authoritative: TipJarHQ owns the showcase seeds + all auto-posted picks
+    # (hqtip-* singles/combos, hqlive-* live picks, smart-* smart bets). Only remove
+    # OTHER TipJarHQ-authored junk, and NEVER delete a settled/live pick — settled KI
+    # single picks must stay in the 'Abgerechnet' box (they leave via the 24h purge).
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
-        "id": {"$nin": allowed_ids, "$not": {"$regex": "^hqtip-"}},
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-)"}},
+        "status": {"$nin": ["won", "lost", "live"]},
     })
 
     # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
@@ -4287,7 +4290,9 @@ async def live_autopost() -> dict:
                     "status": new_status, "final_home": hg, "final_away": ag,
                     "settled_by": "auto-live", "settled_at": now}})
             else:
-                await db.tips.delete_one({"id": lt["id"]})  # truly unresolvable & old → drop
+                # never delete — settle as void so it lands in the settled box, not vanish
+                await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                    "status": "void", "settled_by": "auto-live", "settled_at": now}})
             closed += 1
 
     if not live:
