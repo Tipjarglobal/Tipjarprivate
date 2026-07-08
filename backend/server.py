@@ -298,28 +298,6 @@ async def list_smart_ideas(admin: dict = Depends(require_admin)):
     return docs
 
 
-class GrantCreditsInput(BaseModel):
-    username: str
-    amount: int
-
-
-@api_router.post("/admin/credits/grant")
-async def admin_grant_credits(inp: GrantCreditsInput, admin: dict = Depends(require_admin)):
-    """Admin credits an account (compensation, promos). Positive amount adds credits."""
-    u = await db.users.find_one({"username": inp.username})
-    if not u:
-        raise HTTPException(status_code=404, detail="User not found")
-    if inp.amount == 0:
-        raise HTTPException(status_code=400, detail="Amount must be non-zero")
-    await db.users.update_one({"id": u["id"]}, {"$inc": {"credits": inp.amount}})
-    await db.credit_txns.insert_one({
-        "id": str(uuid.uuid4()), "type": "admin_grant", "user_id": u["id"],
-        "username": u["username"], "amount": inp.amount, "by": admin["username"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    fresh = await db.users.find_one({"id": u["id"]})
-    return {"ok": True, "username": u["username"], "granted": inp.amount,
-            "new_balance": fresh.get("credits", 0)}
 
 
 
