@@ -41,6 +41,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [streakBubble, setStreakBubble] = useState(false);
   const [wonTips, setWonTips] = useState([]);
   const [lostTips, setLostTips] = useState([]);
+  const [settledTab, setSettledTab] = useState(null);
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -190,45 +191,68 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
         )}
       </div>
 
-      {/* Abgerechnet — two columns: won / lost. Auto-deleted after 24h. */}
+      {/* Abgerechnet — Won (left) / Lost (right) as clickable toggles.
+          Slips are shown only AFTER a category is selected. Auto-deleted after 24h. */}
       {view === "settled" && (
         <div data-testid="settled-area">
           <div className="flex items-center gap-2 mb-6 rounded-xl border border-white/15 bg-white/5 px-4 py-3">
             <Clock size={16} className="text-zinc-400 shrink-0" />
             <p className="text-sm text-zinc-300">{t("settled.note")}</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div data-testid="settled-won-col">
-              <h3 className="flex items-center gap-2 font-heading font-black text-xl text-won mb-4">
-                <CheckCircle2 size={20} /> {t("wall.filter.won")}
-                <span className="text-xs font-mono text-zinc-500">{wonTips.length}</span>
-              </h3>
-              {wonTips.length === 0 ? (
-                <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
-              ) : (
-                <div className="space-y-5">
-                  {wonTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
-                  ))}
-                </div>
-              )}
-            </div>
-            <div data-testid="settled-lost-col">
-              <h3 className="flex items-center gap-2 font-heading font-black text-xl text-lost mb-4">
-                <XCircle size={20} /> {t("wall.filter.lost")}
-                <span className="text-xs font-mono text-zinc-500">{lostTips.length}</span>
-              </h3>
-              {lostTips.length === 0 ? (
-                <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
-              ) : (
-                <div className="space-y-5">
-                  {lostTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <button
+              type="button"
+              data-testid="settled-won-toggle"
+              onClick={() => setSettledTab((v) => (v === "won" ? null : "won"))}
+              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-4 font-heading font-black text-lg transition-all ${
+                settledTab === "won"
+                  ? "bg-won text-void border-won shadow-[0_0_18px_rgba(46,204,87,0.45)]"
+                  : "bg-won/10 border-won/40 text-won hover:bg-won/20"
+              }`}
+            >
+              <CheckCircle2 size={22} /> {t("wall.filter.won")}
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "won" ? "bg-black/20" : "bg-void/60"}`}>{wonTips.length}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="settled-lost-toggle"
+              onClick={() => setSettledTab((v) => (v === "lost" ? null : "lost"))}
+              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-4 font-heading font-black text-lg transition-all ${
+                settledTab === "lost"
+                  ? "bg-lost text-white border-lost shadow-[0_0_18px_rgba(239,68,68,0.45)]"
+                  : "bg-lost/10 border-lost/40 text-lost hover:bg-lost/20"
+              }`}
+            >
+              <XCircle size={22} /> {t("wall.filter.lost")}
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{lostTips.length}</span>
+            </button>
           </div>
+
+          {settledTab === null && (
+            <p data-testid="settled-hint" className="text-zinc-500 text-sm py-10 text-center rounded-xl border border-dashed border-elevated">
+              {t("settled.choose")}
+            </p>
+          )}
+
+          {settledTab === "won" && (
+            <div data-testid="settled-won-col" className="space-y-5">
+              {wonTips.length === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
+                : wonTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+            </div>
+          )}
+
+          {settledTab === "lost" && (
+            <div data-testid="settled-lost-col" className="space-y-5">
+              {lostTips.length === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
+                : lostTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+            </div>
+          )}
         </div>
       )}
 

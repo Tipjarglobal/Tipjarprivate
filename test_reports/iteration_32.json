@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only verification of the redesigned 'Abgerechnet' (Settled) area. ALL 6 requested acceptance criteria PASS. The Settled view (data-testid=settled-area) now initially shows only: (1) the 24h auto-delete note, (2) two toggle buttons — settled-won-toggle (LEFT, x=344, green, label 'Won' + count '5') and settled-lost-toggle (RIGHT, x=968, red, label 'Lost' + count '4'), and (3) settled-hint (dashed border, text 'Choose Won or Lost to see the settled slips.'). No tip cards are visible before a toggle is clicked. Clicking settled-won-toggle reveals settled-won-col with exactly 5 tip cards; settled-lost-col is NOT in the DOM at the same time and the hint disappears. Clicking settled-lost-toggle reveals settled-lost-col with exactly 4 tip cards; settled-won-col is NOT in the DOM. Clicking the already-active toggle a second time toggles it OFF and restores the hint (settledTab back to null). Won is confirmed left of Lost (344 < 968). Regression: tab order preserved — tabview-ai(24) < tabview-smart(201) < tabview-systems(352) < tabview-members(529) < tabview-live(717) < tabview-settled(871). First tab label reads 'AI Single-Game Picks' in EN (DE equivalent 'KI Single-Game-Picks' confirmed in prior iteration and i18n.js line 610). No console errors, no runtime warnings during interactions. Screenshots saved at /app/test_reports/iter32_initial.png and /app/test_reports/iter32_won.png.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "settled_initial_state_no_slips": "PASS — settled-area shown; settled-won-toggle + settled-lost-toggle + settled-hint present; NEITHER settled-won-col NOR settled-lost-col in DOM initially.",
+    "won_toggle_reveals_only_won": "PASS — after click: settled-won-col visible with 5 tip cards; settled-lost-col not rendered; settled-hint hidden.",
+    "lost_toggle_reveals_only_lost": "PASS — after click: settled-lost-col visible with 4 tip cards; settled-won-col not rendered; settled-hint hidden.",
+    "left_right_positioning": "PASS — settled-won-toggle x=344 (LEFT), settled-lost-toggle x=968 (RIGHT). Layout uses grid-cols-2 gap-4.",
+    "toggle_off_returns_to_null": "PASS — clicking the active toggle a second time collapses the column and re-shows settled-hint.",
+    "count_badges_on_toggles": "PASS — Won button shows '5' badge, Lost button shows '4' badge (matches wonTips.length and lostTips.length).",
+    "hint_i18n_text": "PASS — EN hint reads 'Choose Won or Lost to see the settled slips.' (t('settled.choose')). DE key configured in i18n.js as 'Wähle Gewonnen oder Verloren...'.",
+    "tab_order_regression": "PASS — ai(24) → smart(201) → systems(352) → members(529) → live(717) → settled(871).",
+    "first_tab_label_regression": "PASS — 'AI Single-Game Picks' in EN (DE: 'KI Single-Game-Picks' per i18n.js:610)."
+  },
+  "test_report_links": [
+    "/app/test_reports/iter32_initial.png",
+    "/app/test_reports/iter32_won.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RateWall.jsx L194-257 implements the new click-to-reveal pattern cleanly: settledTab state is null|'won'|'lost'; clicking a toggle uses functional setter `setSettledTab((v) => (v === 'won' ? null : 'won'))` giving proper toggle-off behavior.",
+    "Conditional rendering is correct: `{settledTab === null && <hint/>}`, `{settledTab === 'won' && <won-col/>}`, `{settledTab === 'lost' && <lost-col/>}` — mutually exclusive, so only the selected category shows.",
+    "Active-state styling on the toggles is strong (bg-won/bg-lost + shadow glow) making the selected category obvious. Good UX signal.",
+    "Won button uses green (bg-won) and is placed first in the grid (LEFT); Lost button uses red (bg-lost) and is second (RIGHT) — matches spec.",
+    "Data fetching still done in the existing effect for wonTips/lostTips when view==='settled'; no wasteful refetch on toggle click."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped per request)", "frontend": "6/6 (100%)" },
+  "test_credentials": "Not required — settled view is public.",
+  "seed_data_creation": "None — used existing seeded won (5) / lost (4) tips.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "SplashScreen ([data-testid=splash-screen]) shows for ~2.5s. DO NOT forcibly remove it via document.querySelectorAll('[data-testid=splash-screen]').forEach(e=>e.remove()) — this breaks React reconciliation and produces 'Failed to execute removeChild on Node' errors. Instead simply wait ~4-5s. Open Settled view directly via window.dispatchEvent(new CustomEvent('tj-open-view',{detail:'settled'})). The Settled area now uses click-to-reveal toggles (settled-won-toggle / settled-lost-toggle) with settledTab state (null|'won'|'lost'); columns settled-won-col / settled-lost-col only mount when their toggle is active; settled-hint mounts only when settledTab===null. Clicking the active toggle again resets to null. All working as specified.",
+  "rca of the issue": "No issues found in this iteration."
+}

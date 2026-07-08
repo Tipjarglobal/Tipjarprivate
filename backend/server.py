@@ -2286,34 +2286,10 @@ async def seed_showcase():
     )
     logger.info("Seeded/updated showcase tip: Swiss-Colombia multibet (settled: won)")
 
-    # Settled community parlay showcase (member-posted) — a WON multibet demonstrating
-    # handicaps, per-leg odds and the share button. Kept fully SETTLED (no open legs).
-    await db.tips.update_one(
-        {"id": "seed-community-pending"},
-        {"$set": {
-            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
-            "home_team": "", "away_team": "",
-            "match_time": "08/07/2026 17:00", "country": "International",
-            "league": "Diverse", "market": "",
-            "odds": "4.15", "ai_rating": 8.0, "source": "member",
-            "ai_analysis": "Voll aufgegangen: Außenseiter-Handicap Sutjeska +3.5, mehrere Über-1.5-Tore-Legs und ein Unter-3.5 — breit gestreut bei fairer Gesamtquote. Apex 8/10.",
-            "legs": [
-                {"match": "Kairat Almaty – Sutjeska", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "won", "selections": ["Sutjeska 3.5"], "sel_odds": ["1.20"], "final": "2:1"},
-                {"match": "EBK – HPS", "league": "Kakkonen", "kickoff": "08/07 18:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.15"], "final": "2:2"},
-                {"match": "CS Petrocub – FK Egnatia", "league": "Champions-League-Quali", "kickoff": "08/07 19:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.32"], "final": "3:1"},
-                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "won", "selections": ["Connah's Quay Nomads 2.5"], "sel_odds": ["1.22"], "final": "1:2"},
-                {"match": "Ponte Preta – Criciúma", "league": "Série B", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total UNDER 3.5"], "sel_odds": ["1.24"], "final": "1:1"},
-                {"match": "Hartford Athletic – Orange County SC", "league": "USL Championship", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.27"], "final": "2:2"},
-                {"match": "Supra du Quebec – Atlético Ottawa", "league": "CPL", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.18"], "final": "0:3"},
-            ],
-            "is_parlay": True, "stake": "12 €", "potential_return": "49,81 €",
-            "status": "won",
-        },
-         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
-                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
-        upsert=True,
-    )
-    logger.info("Seeded/updated showcase tip: settled community parlay (won)")
+    # NOTE: The former 'seed-community-pending' showcase parlay was removed — it used
+    # real UPCOMING fixtures (e.g. Ottawa, Criciúma) with fabricated results, which
+    # wrongly showed as settled. Real settled slips now populate the Abgerechnet area.
+    await db.tips.delete_one({"id": "seed-community-pending"})
 
 
 # ---------------------------------------------------------------------------
@@ -4011,20 +3987,40 @@ def _live_bet_landed(market: str, hg, ag, home: str, away: str):
     return None
 
 
-def _live_odd(market: str, minute: int) -> float:
+def _poisson_at_least(k: int, lam: float) -> float:
+    """P(X >= k) for a Poisson(lam) variable — used to price live goal markets."""
+    if k <= 0:
+        return 1.0
+    cum, term = 0.0, math.exp(-lam)
+    for i in range(0, k):
+        if i > 0:
+            term *= lam / i
+        cum += term
+    return max(0.0, min(1.0, 1.0 - cum))
+
+
+def _live_odd(market: str, minute: int, total_goals: int = 0) -> float:
+    """Realistic live odds derived from goals STILL needed + time remaining (not just
+    the minute). Prevents the inflated odds we used to show (e.g. Über 1.5 at 45'/0:0
+    was 3.75 vs a real ~2.15)."""
     m = (market or "").lower()
-    frac = min(max(minute, 0), 90) / 90.0
-    if "über 2.5" in m and ("beide" in m or "btts" in m):
-        base, top = 2.5, 12.0
-    elif "über 2.5" in m:
-        base, top = 1.9, 8.0
+    rem = max(90 - min(max(minute, 0), 90), 1)
+    RATE_TOTAL = 0.034   # total goals per minute in a live, pressure-checked game
+    RATE_TEAM = 0.018    # a single specific team scoring, per minute
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and "über 0.5" not in m and "beide" not in m and "btts" not in m:
+        line = int(gm.group(1))
+        needed = (line + 1) - int(total_goals or 0)
+        p = _poisson_at_least(needed, RATE_TOTAL * rem)
     elif "beide teams treffen" in m or "btts" in m:
-        base, top = 1.8, 7.0
-    elif "über 1.5" in m:
-        base, top = 1.5, 6.0
-    else:  # Über 0.5 (match or team)
-        base, top = 1.25, 4.5
-    return round(base + (top - base) * frac, 2)
+        pe = _poisson_at_least(1, RATE_TEAM * rem)
+        p = pe * pe
+    elif "über 0.5" in m:
+        p = _poisson_at_least(1, RATE_TEAM * rem)
+    else:
+        p = _poisson_at_least(1, RATE_TOTAL * rem)
+    p = max(0.04, min(0.96, p))
+    return round(max(1.05, min(1.0 / p, 15.0)), 2)
 
 
 def _live_stat_totals(stats):
@@ -4143,7 +4139,7 @@ async def live_autopost() -> dict:
         if not _live_pressure_ok(stats, minute):
             continue  # dead/flat game → be careful, skip
         sog, corners, _ = _live_stat_totals(stats)
-        odd = _live_odd(t.get("market"), minute)
+        odd = _live_odd(t.get("market"), minute, hg + ag)
         live_id = f"hqlive-{fid}-{t['id']}"
         if (sog + corners) > 0:
             press_txt = f"{sog} Schüsse aufs Tor · {corners} Ecken — Druck vorhanden."
@@ -4206,7 +4202,7 @@ async def live_autopost() -> dict:
             continue
         sog, corners, _ = _live_stat_totals(stats)
         market = f"Über {line} Tore"
-        odd = _live_odd(market, minute)
+        odd = _live_odd(market, minute, total)
         analysis = (
             f"LIVE-Pick ({minute}'): {market} — Stand {goals.get('home') or 0}:{goals.get('away') or 0}. "
             f"Druck vorhanden: {sog} Schüsse aufs Tor · {corners} Ecken. "
