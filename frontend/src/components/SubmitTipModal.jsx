@@ -3,6 +3,7 @@ import Modal, { Field, inputCls, btnPrimary } from "./Modal";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw } from "lucide-react";
 import api, { apiErr } from "../api";
+import StarRating from "./StarRating";
 import { useI18n, formatSelection } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
@@ -51,35 +52,45 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   const { user } = useAuth();
   const [tab, setTab] = useState("upload");
   const [tutStep, setTutStep] = useState(0);
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [text, setText] = useState("");
   const [scanning, setScanning] = useState(false);
   const [detected, setDetected] = useState(null);
+  const [selfStars, setSelfStars] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const inputRef = useRef();
 
   const reset = () => {
-    setFile(null); setPreview(null); setText(""); setDetected(null);
+    setFiles([]); setPreviews([]); setText(""); setDetected(null); setSelfStars(0);
     setScanning(false); setPublishing(false); setTutStep(0); setTab("upload");
   };
   const close = () => { reset(); onClose(); };
 
-  const pick = async (f) => {
-    if (!f) return;
-    const optimized = await compressImage(f);
-    setFile(optimized);
-    setPreview(URL.createObjectURL(optimized));
+  const pick = async (list) => {
+    const incoming = Array.from(list || []);
+    if (!incoming.length) return;
+    const room = Math.max(0, 4 - files.length);
+    const chosen = incoming.slice(0, room);
+    if (!chosen.length) { toast.error("Maximal 4 Bilder."); return; }
+    const optimized = await Promise.all(chosen.map((f) => compressImage(f)));
+    setFiles((f) => [...f, ...optimized].slice(0, 4));
+    setPreviews((p) => [...p, ...optimized.map((f) => URL.createObjectURL(f))].slice(0, 4));
+    setDetected(null);
+  };
+  const removeAt = (i) => {
+    setFiles((f) => f.filter((_, x) => x !== i));
+    setPreviews((p) => p.filter((_, x) => x !== i));
     setDetected(null);
   };
 
   const scan = async () => {
     if (!user) { requireLogin(); return; }
-    if (!file && !text.trim()) { toast.error("Add a screenshot or write your tip."); return; }
+    if (!files.length && !text.trim()) { toast.error("Add a screenshot or write your tip."); return; }
     setScanning(true);
     try {
       const fd = new FormData();
-      if (file) fd.append("file", file);
+      files.forEach((f) => fd.append("files", f));
       fd.append("text", text);
       const { data } = await api.post("/tips/analyze", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setDetected(data);
@@ -92,17 +103,20 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
 
   const publish = async () => {
     if (!user) { requireLogin(); return; }
+    if (!selfStars) { toast.error(t("submit.needStars")); return; }
     setPublishing(true);
     try {
       const { data } = await api.post("/tips", {
         raw_text: text,
         image_path: detected.image_path,
+        image_paths: detected.image_paths,
         home_team: detected.home_team, away_team: detected.away_team,
         match_time: detected.match_time, country: detected.country,
         league: detected.league, market: detected.market, odds: detected.odds,
         ai_rating: detected.rating, ai_analysis: detected.analysis,
         legs: detected.legs, is_parlay: detected.is_parlay,
         stake: detected.stake, potential_return: detected.potential_return,
+        self_rating: selfStars,
       });
       toast.success(t("submit.published"));
       onPublished && onPublished(data);
@@ -179,12 +193,25 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 data-testid="upload-dropzone"
                 onClick={() => inputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files?.[0]); }}
+                onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files); }}
                 className="relative cursor-pointer rounded-xl border-2 border-dashed border-elevated hover:border-volt/60 transition-colors bg-void p-6 text-center overflow-hidden"
               >
-                {preview ? (
+                {previews.length ? (
                   <div className="relative">
-                    <img src={preview} alt="slip" className="max-h-52 mx-auto rounded-lg" />
+                    <div className="grid grid-cols-2 gap-2">
+                      {previews.map((src, i) => (
+                        <div key={i} className="relative rounded-lg overflow-hidden border border-elevated">
+                          <img src={src} alt={`slip-${i}`} className="w-full h-28 object-cover" />
+                          <button
+                            type="button"
+                            data-testid={`remove-image-${i}`}
+                            onClick={(e) => { e.stopPropagation(); removeAt(i); }}
+                            className="absolute top-1 right-1 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-lost"
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-2">{previews.length}/4 {t("submit.imagesHint")}</p>
                     <AnimatePresence>
                       {scanning && (
                         <motion.div
@@ -201,9 +228,10 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                     <Upload className="mx-auto text-zinc-500 mb-3" size={34} />
                     <p className="text-white font-semibold">{t("submit.drop")}</p>
                     <p className="text-xs text-zinc-500 mt-1">{t("submit.dropHint")}</p>
+                    <p className="text-[11px] text-volt/70 mt-1">{t("submit.imagesHint")}</p>
                   </div>
                 )}
-                <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} data-testid="upload-input" />
+                <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => pick(e.target.files)} data-testid="upload-input" />
               </div>
 
               <Field label={t("submit.text")}>
@@ -267,11 +295,19 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                   <div className="rounded-lg bg-surface px-3 py-2 text-sm text-zinc-300 border-l-2 border-volt">{detected.analysis}</div>
                 )}
               </div>
+
+              <div className="mt-4 rounded-xl border border-volt/30 bg-volt/5 p-4" data-testid="self-rating-block">
+                <p className="text-sm font-bold text-white">{t("submit.rateTitle")}</p>
+                <p className="text-xs text-zinc-400 mb-3">{t("submit.rateHint")}</p>
+                <StarRating value={selfStars} onRate={setSelfStars} size={26} />
+                {!selfStars && <p className="text-[11px] text-lost mt-2" data-testid="stars-required">{t("submit.needStars")}</p>}
+              </div>
+
               <div className="flex gap-3 mt-4">
                 <button data-testid="rescan-button" onClick={() => setDetected(null)} className="flex items-center justify-center gap-1.5 rounded-lg border border-elevated px-4 py-3 text-sm font-semibold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
                   <RefreshCw size={15} />
                 </button>
-                <button data-testid="publish-button" onClick={publish} disabled={publishing} className={btnPrimary}>
+                <button data-testid="publish-button" onClick={publish} disabled={publishing || !selfStars} className={btnPrimary + (!selfStars ? " opacity-50 cursor-not-allowed" : "")}>
                   {publishing ? t("common.loading") : t("submit.publish")}
                 </button>
               </div>
