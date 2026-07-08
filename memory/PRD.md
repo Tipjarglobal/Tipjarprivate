@@ -225,6 +225,14 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Slip v2, Sterne-Pflicht, 4 Bilder, LIVE-Badge, KI-Sort)
+- SLIP v2: volle Team-Namen (Auto-Shrink + 2-zeiliger Umbruch statt "…"), größere Schrift, Wasserzeichen gedeckelt (kein Clipping), roter LIVE-Kasten mit Minute+Ergebnis. Bugfix: Live-Community-Schein zeigte "WON" → jetzt OFFEN (ctype live_pending).
+- LIVE-BADGE ÜBERALL: neuer live_annotate_loop (90s) setzt live_state{minute,score} auf jeden nicht-beendeten Einzeltipp, dessen Spiel laut API-Football läuft (sonst clear). RateWall-Karte zeigt roten LIVE-Kasten. KEINE Kanal-Verschiebung mehr — Live-Kanal = beim Posten bestimmt (create_tip, is_live_post via API-Football, alias-fähig Deutschland=Germany).
+- STERNE-PFLICHT: create_tip verlangt self_rating 1–10 (sonst 400), speichert es als Eigen-Rating (tip_ratings + avg). SubmitTipModal: StarRating-Block, Publish gesperrt ohne Sterne.
+- 4 BILDER: /tips/analyze nimmt bis zu 4 Files (analyze_tip mit mehreren ImageContent), speichert image_paths. Modal: Vorschau-Grid, entfernen, "Up to 4 images".
+- KI-SORT: Single-KI-Bereich (source=ai) nach Anstoßzeit sortiert (nächstes Spiel zuerst), außer bei sort=top/hype. Verifiziert.
+- Settle-Engine deckt Live-Einzeltipps ab. Dedup behält höchstes Risiko (Alias/gleicher Anstoß).
+
 ## Changelog — 2026-07-08 (Auto-Live für Einzel-Tipps zurück + Alias-Match)
 - SOFORT: Ukraine (U-19) vs Germany (U-19)-Member-Schein auf Produktion nach Live verschoben (Admin-API).
 - ROOT CAUSE: Auto-Live-Loop war komplett entfernt → einzelne live gepostete Scheine blieben in Community. Zusätzlich matchte _find_live_fixture keine Aliase (Deutschland≠Germany).

@@ -955,7 +955,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     elif source == "members":
         q["source"] = {"$nin": ["hq-auto", "smart"]}
     limit = max(1, min(limit, 100))
-    fetch = 300 if window in ("24", "48", "48plus") else limit
+    fetch = 300 if window in ("24", "48", "48plus") else (200 if source == "ai" else limit)
     if sort == "top":
         cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(fetch)
     elif sort == "hype":
@@ -965,8 +965,13 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     tips = await cursor.to_list(fetch)
     if window in ("24", "48", "48plus") and status in (None, "pending"):
         now = datetime.now(timezone.utc)
-        tips = [t for t in tips if _in_kickoff_window(t.get("match_time"), window, now)][:limit]
-    return tips
+        tips = [t for t in tips if _in_kickoff_window(t.get("match_time"), window, now)]
+    # Single AI picks (top area) are ordered by KICKOFF time — next match first —
+    # unless the user explicitly sorts by rating/hype.
+    if source == "ai" and sort not in ("top", "hype"):
+        far = datetime.max.replace(tzinfo=timezone.utc)
+        tips.sort(key=lambda t: _kickoff_dt(t.get("match_time")) or far)
+    return tips[:limit]
 
 
 def _in_kickoff_window(match_time: str, window: str, now) -> bool:
