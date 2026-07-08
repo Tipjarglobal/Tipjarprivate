@@ -1993,11 +1993,13 @@ async def settle_hq_combos() -> dict:
             continue
         hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
         all_won, ok = True, True
-        for lg in tip.get("legs", []):
+        for lg in (tip.get("combo_legs") or tip.get("legs", [])):
             kind = lg.get("kind") or ""
             m = (lg.get("market") or "").lower()
             if kind == "o15" or ("über 1.5" in m and not lg.get("team")):
                 res = (hg + ag) >= 2
+            elif kind == "o25" or ("über 2.5" in m and not lg.get("team")):
+                res = (hg + ag) >= 3
             elif kind == "team_o05" or "über 0.5" in m:
                 team = lg.get("team") or ""
                 if _teams_match(fx["home_name"], team):
@@ -2235,7 +2237,8 @@ def _league_blocked_predictz(league: str) -> bool:
 # Owner blacklist: teams/leagues to ALWAYS exclude from AI picks & systems
 # (keyword match on home team, away team OR league name). Extend as the owner flags
 # obscure/untrustworthy fixtures.
-TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc")
+TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
+                         "forge", "saint-laurent", "saint laurent")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
@@ -2952,6 +2955,25 @@ def _forebet_candidates(r: dict) -> list[dict]:
                         {"market": "Über 1.5 Tore", "base_odd": 1.60, "kind": "o15"},
                     ],
                 })
+        # 3-LEG bet-builder from ONE game (owner request): both teams score + a
+        # match goals line. Only settleable kinds (team_o05, o15/o25) are used so the
+        # combo can be auto-graded from the final score. Higher risk & odds.
+        if pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
+            if total >= 4 and avg >= 3.0:
+                third = {"market": "Über 2.5 Tore", "base_odd": 1.75, "kind": "o25"}
+                third_lbl, wp3, rt3 = "Über 2.5 Tore", 0.50, 7.0
+            else:
+                third = {"market": "Über 1.5 Tore", "base_odd": 1.45, "kind": "o15"}
+                third_lbl, wp3, rt3 = "Über 1.5 Tore", 0.55, 7.0
+            opts.append({
+                "sfx": "-combo3", "combo": True, "rating": rt3, "winprob": wp3,
+                "market": f"Beide Teams treffen + {third_lbl} (3er-Bet-Builder)",
+                "legs": [
+                    {"market": f"{home} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": home},
+                    {"market": f"{away} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": away},
+                    third,
+                ],
+            })
         # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
         if total >= 5 and avg >= 3.5:
             opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
@@ -3052,7 +3074,7 @@ async def forebet_autopost() -> dict:
                     prod *= od
                     legs.append({"home": home, "away": away, "market": lg["market"],
                                  "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
-                if 1.80 <= prod <= 6.0:
+                if 1.80 <= prod <= 8.0:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
@@ -3113,11 +3135,15 @@ async def forebet_autopost() -> dict:
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
         is_combo = ptype == "combo"
+        n_legs = len(c.get("_legs", []))
         if is_combo:
+            builder = ("Bet-Builder: beide Teams treffen + Torlinie aus EINEM Spiel"
+                       if n_legs >= 3 else
+                       "Bet-Builder: schwaches Team trifft + Über 1.5 Tore")
             analysis = (
-                f"TipJarHQ-Kombi (2er-Leg): {market} — höheres Risiko, Quote {odds:.2f}. "
+                f"TipJarHQ-Kombi ({n_legs}er-Leg): {market} — höheres Risiko, Quote {odds:.2f}. "
                 f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Anstoß {kickoff}. "
-                f"Bet-Builder: schwaches Team trifft + Über 1.5 Tore — automatisch von TipJarHQ."
+                f"{builder} — automatisch von TipJarHQ."
             )
         elif ptype == "banker":
             analysis = (
@@ -3133,6 +3159,18 @@ async def forebet_autopost() -> dict:
                 f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
                 f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
             )
+        combo_legs = c.get("_legs", []) if is_combo else []
+        # Frontend-friendly single-match display: one fixture row with all selection
+        # chips (settlement uses the separate `combo_legs` with kind/team info).
+        display_legs = []
+        if is_combo:
+            display_legs = [{
+                "match": f"{home} – {away}",
+                "league": r.get("league") or (lcode.upper() if lcode else ""),
+                "kickoff": kickoff,
+                "selections": [lg["market"] for lg in combo_legs],
+                "sel_odds": [f"{lg['odds']:.2f}" for lg in combo_legs],
+            }]
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -3142,7 +3180,7 @@ async def forebet_autopost() -> dict:
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
             "win_prob": round(winprob, 3), "pick_type": ptype,
-            "legs": c.get("_legs", []) if is_combo else [], "is_parlay": is_combo,
+            "legs": display_legs, "combo_legs": combo_legs, "is_parlay": is_combo,
             "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
