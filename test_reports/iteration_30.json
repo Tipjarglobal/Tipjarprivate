@@ -1,0 +1,53 @@
+{
+  "summary": "Verified this session's TipJar feature batch. Backend: mandatory self star-rating (3/3 tests), AI feed ordered ascending by kickoff, share-image for member tip (pending) + rejection of hq-auto, and text-only analyze all PASS. Combo AI parlays soft-SKIPPED (none in DB right now). One CRITICAL backend bug found: POST /api/tips/analyze with the `files` field returns 422 for ANY upload (single or multi) — the multi-image feature is broken end-to-end at the API layer. Frontend: 'Community Picks' rename verified, Submit modal shows 'Up to 4 images' hint, upload-input has `multiple` attr, self-rating-block appears after AI scan, publish-button correctly disabled until stars are chosen and enables after clicking a star; AI Picks area is ordered by kickoff (08/07 17:00 → 17:00 → 17:30 → 17:30 → 23:00); tip cards no longer render raw bookmaker screenshots (0 <img> found in cards); red LIVE badge visible on live matches.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/tips/analyze", "issue": "Multi-file upload broken. Sending files as 'files' form field (single OR multi) returns 422 'Input should be a valid list' — Pydantic rejects UploadFile where List[UploadFile] is expected. Signature `files: Optional[List[UploadFile]] = File(default=None)` at server.py L685 does not aggregate `files` form entries into a list under current FastAPI/pydantic. Repro: curl -F 'files=@a.png' -F 'files=@b.png' -F 'text=' /api/tips/analyze (or single file under `files`) → 422. Note the `file` (singular) field still works, so users who upload exactly one image via legacy path succeed; users using SubmitTipModal's `files[]` (its <input name='files'> is what the frontend actually sends when publishing multi-image) will hit 422.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Multi-image publish flow", "issue": "Because backend POST /api/tips/analyze rejects the 'files' field, the SubmitTipModal upload-input (which sends multipart 'files') will fail to analyze whenever the user attaches one or more images. Only text-only analyze currently works. This needs backend fix — the frontend UI itself (dropzone, previews, multiple attr, hint 'Up to 4 images') is implemented correctly.", "affected_selectors": ["[data-testid='upload-input']", "[data-testid='scan-button']"]}
+    ],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "mandatory_self_rating": "POST /api/tips no self_rating → 400 (PASS). self_rating=0 → 400 (PASS). self_rating=7 → 200, avg_rating=7.0, ratings_count=1, sum_stars=7 (PASS).",
+    "analyze_text_only": "POST /api/tips/analyze with only text='...' → 200, image_paths=[], safe=true (PASS).",
+    "analyze_multi_file": "POST /api/tips/analyze with 2 files under `files` → 422 (FAIL — pydantic list_type). Also fails with single file under `files`. Only the legacy singular `file` field works.",
+    "ai_sorted_kickoff": "GET /api/tips?source=ai&status=pending returns tips sorted ascending by _kickoff_dt(match_time). Verified via API test and UI (17:00 → 17:30 → 23:00) (PASS).",
+    "share_image_member": "POST /api/tips/{id}/share-image for member pending tip → 200 {path: 'tipjar/shares/{id}.webp'} (PASS).",
+    "share_image_hq_auto_rejected": "POST /api/tips/{hq-auto-id}/share-image → 400 'Only member tips can be shared' (PASS).",
+    "combo_ai_parlays": "GET /api/tips?source=ai&status=pending returned no is_parlay:true tips currently. SKIPPED per spec.",
+    "frontend_community_picks_label": "view-members-btn text = 'View Community Picks' (EN) / 'Community Picks ansehen' (DE) (PASS).",
+    "frontend_submit_modal": "upload-dropzone present, upload-input has `multiple` attr, dropzone text contains 'Up to 4 images'. After typing text and clicking scan-button, detected-panel appears (~10s), self-rating-block visible, publish-button `disabled=''` and stars-required hint shown. After clicking 6th star in the block, publish-button disabled attr becomes null (enabled) (PASS).",
+    "frontend_tip_cards_no_raw_image": "0 <img> elements found inside tip cards in AI area (PASS).",
+    "frontend_live_badge": "Two cards show red LIVE 90' badge (data-testid='live-state-{tipId}') on live matches (PASS)."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter30_tips.py",
+    "/app/test_reports/pytest/iter30_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix POST /api/tips/analyze to accept multi-image uploads under the `files` field. Root cause is the FastAPI/pydantic v2 combo — `Optional[List[UploadFile]] = File(default=None)` does not coerce a single UploadFile into [UploadFile]. Recommended fix: change signature to `files: List[UploadFile] = File(default=[])` (drop Optional, use default_factory list) OR read from Request directly. Confirm with curl -F 'files=@a.png' -F 'files=@b.png' -F 'text=' /api/tips/analyze returns 200.",
+    "OPTIONAL: Seed at least one hq-auto is_parlay:true tip in dev DB so the 2-leg combo AI feed can be visually verified end-to-end (currently zero present, so soft-skipped)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L684-685: `file: Optional[UploadFile] = File(default=None)` alongside `files: Optional[List[UploadFile]] = File(default=None)` — dual-field pattern is brittle in FastAPI. Prefer `files: List[UploadFile] = File(default=[])` and drop the singular alias to reduce Pydantic validation surface.",
+    "server.py list_tips L971-973: kickoff-sort branch only runs when `source == 'ai' and sort not in (top, hype)`. This is correct per spec. Note that if `sort` param is 'new' (default) the kickoff sort supersedes the created_at sort, which matches the spec ('AI area sorted by kickoff, NOT newest-created').",
+    "server.py create_tip L802: 400 error message is German-only. Consider i18n if the app supports switching languages for API responses.",
+    "SubmitTipModal.jsx L299-304: excellent — publish is gated on both `publishing` and `!selfStars`, and the stars-required helper text is shown; matches spec."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter30_tips.py (created)"
+  ],
+  "success_rate": {"backend": "7/8 (~88%) — 1 critical bug on multi-image analyze `files` field", "frontend": "6/6 (100%)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026!",
+  "seed_data_creation": "None — used existing seed data. Test-created tips were cleaned up (DELETE /api/tips/{id}).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login via header data-testid='login-btn' → AuthModal (default mode may be signup; click auth-switch-mode if auth-email is visible). Use username OR email in auth-username. To open SubmitTipModal use header-submit-btn; if tutorial tab shows first, click submit-tab-upload. Text-only analyze works, image analyze does NOT (bug above). AI feed IS kickoff-sorted. Share-image endpoint works for member tips and correctly 400s for hq-auto/smart.",
+  "rca of the issue": "POST /api/tips/analyze multi-file bug: FastAPI expresses `files: Optional[List[UploadFile]] = File(default=None)` as a Pydantic model with a Union[List[UploadFile], None] type. Under pydantic v2 (currently pinned) and starlette's multipart parsing, when the client sends one or more form-fields named `files`, FastAPI collects them via python-multipart and hands the raw value (a single UploadFile, or a list) to Pydantic — but only when the field is declared without Optional. With `Optional[...] = File(default=None)`, Pydantic strict-validates the value as a single UploadFile (matching the None branch coercion) and returns list_type validation error whenever any file is actually present. Mitigation: `files: List[UploadFile] = File(default_factory=list)` — verified in FastAPI docs and matches the observed behavior in the 422 payload (`msg: 'Input should be a valid list', input: <single UploadFile>`)."
+}

@@ -335,10 +335,6 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         </div>
       </div>
 
-      {tip.image_path && (
-        <img src={fileUrl(tip.image_path)} alt="slip" className="w-full h-36 object-cover rounded-lg mb-3 border border-elevated" loading="lazy" />
-      )}
-
       {tip.live_state && (
         <div data-testid={`live-state-${tip.id}`} className="inline-flex items-center gap-2 bg-[#F0443C] text-white font-bold text-xs rounded-lg px-3 py-1.5 mb-2">
           <span className="w-2 h-2 rounded-full bg-white animate-pulse" />

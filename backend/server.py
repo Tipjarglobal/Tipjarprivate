@@ -1958,9 +1958,76 @@ async def settle_pending_tips() -> dict:
     return {"ok": True, "checked": checked, "settled": settled, "details": details}
 
 
+async def settle_hq_combos() -> dict:
+    """Settle the TipJarHQ 2-leg bet-builders (source=hq-auto, is_parlay). Both legs
+    are goal markets on the SAME match, so we judge them deterministically from the
+    final score: 'o15' → total goals >= 2; 'team_o05' → that team scored >= 1."""
+    if not API_FOOTBALL_KEY:
+        return {"ok": False, "settled": 0}
+    now = datetime.now(timezone.utc)
+    combos = await db.tips.find(
+        {"source": "hq-auto", "status": "pending", "is_parlay": True},
+        {"_id": 0}).sort("created_at", 1).to_list(200)
+    settled = 0
+    for tip in combos:
+        if tip.get("settle_attempts", 0) >= 4:
+            continue
+        ko = _parse_kickoff(tip.get("match_time"))
+        if not (ko and ko < now - timedelta(hours=2)):
+            continue
+        dates = [ko.date().isoformat(),
+                 (ko + timedelta(days=1)).date().isoformat(),
+                 (ko - timedelta(days=1)).date().isoformat()]
+        home, away = tip["home_team"], tip["away_team"]
+        team_id = await resolve_team_id(home)
+        opponent = away
+        if not team_id:
+            team_id = await resolve_team_id(away)
+            opponent = home
+        if not team_id:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+            continue
+        fx = find_finished_fixture(team_id, opponent, dates)
+        if not fx:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+            continue
+        hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
+        all_won, ok = True, True
+        for lg in tip.get("legs", []):
+            kind = lg.get("kind") or ""
+            m = (lg.get("market") or "").lower()
+            if kind == "o15" or ("über 1.5" in m and not lg.get("team")):
+                res = (hg + ag) >= 2
+            elif kind == "team_o05" or "über 0.5" in m:
+                team = lg.get("team") or ""
+                if _teams_match(fx["home_name"], team):
+                    res = hg >= 1
+                elif _teams_match(fx["away_name"], team):
+                    res = ag >= 1
+                else:
+                    res = (hg >= 1 or ag >= 1)
+            else:
+                ok = False
+                break
+            if not res:
+                all_won = False
+        if not ok:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+            continue
+        await db.tips.update_one({"id": tip["id"]}, {"$set": {
+            "status": "won" if all_won else "lost",
+            "final_home": hg, "final_away": ag,
+            "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
+        }})
+        settled += 1
+    return {"ok": True, "settled": settled}
+
+
 @api_router.post("/admin/settle-now")
 async def settle_now(admin: dict = Depends(require_admin)):
-    return await settle_pending_tips()
+    res = await settle_pending_tips()
+    res["combos"] = await settle_hq_combos()
+    return res
 
 
 @api_router.post("/admin/live-run")
@@ -1974,7 +2041,8 @@ async def settlement_loop():
         try:
             if API_FOOTBALL_KEY:
                 result = await settle_pending_tips()
-                logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked")
+                combos = await settle_hq_combos()
+                logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; combos {combos.get('settled')}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")
 
@@ -2869,6 +2937,21 @@ def _forebet_candidates(r: dict) -> list[dict]:
         elif pred == "2" and ph >= 1:
             opts.append({"sfx": "-utg", "market": f"{home} Über 0.5 Tore",
                          "odds": "1.45", "rating": 8.0, "winprob": 0.66})
+        # 2-LEG bet-builder (owner idea): the weak/underdog team to score (Über 0.5)
+        # + match Über 1.5 Tore. Higher risk & odds — a distinct 'combo' pick type
+        # that intentionally bypasses the single-market value gate.
+        if pred in ("1", "2") and total >= 3:
+            weak = away if pred == "1" else home
+            weak_scores = (pa >= 1) if pred == "1" else (ph >= 1)
+            if weak_scores:
+                opts.append({
+                    "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": 0.60,
+                    "market": f"{weak} Über 0.5 Tore + Über 1.5 Tore",
+                    "legs": [
+                        {"market": f"{weak} Über 0.5 Tore", "base_odd": 1.45, "kind": "team_o05", "team": weak},
+                        {"market": "Über 1.5 Tore", "base_odd": 1.60, "kind": "o15"},
+                    ],
+                })
         # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
         if total >= 5 and avg >= 3.5:
             opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
@@ -2959,8 +3042,22 @@ async def forebet_autopost() -> dict:
             odds_map = await ensure_match_odds(home, away, kickoff)
         except Exception:
             odds_map = {}
-        value_opts, banker_opts = [], []
+        value_opts, banker_opts, combo_opts = [], [], []
         for o in _forebet_candidates(r):
+            if o.get("combo"):
+                legs, prod = [], 1.0
+                for lg in o["legs"]:
+                    ro = _real_odd_for(lg["market"], odds_map, home, away)
+                    od = round(float(ro) if ro else float(lg["base_odd"]), 2)
+                    prod *= od
+                    legs.append({"home": home, "away": away, "market": lg["market"],
+                                 "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
+                if 1.80 <= prod <= 6.0:
+                    o2 = dict(o)
+                    o2["_odd"], o2["_legs"] = round(prod, 2), legs
+                    o2["_ptype"], o2["_real"] = "combo", True
+                    combo_opts.append(o2)
+                continue
             if _market_family(o["market"]) in banned:
                 continue
             ro = _real_odd_for(o["market"], odds_map, home, away)
@@ -2973,16 +3070,19 @@ async def forebet_autopost() -> dict:
             elif o["winprob"] >= BANKER_WIN_PROB:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
-        # prefer a real VALUE pick; else fall back to the safest BANKER
-        if value_opts:
+        # owner: prefer the higher-risk 2-leg builder when the pattern exists,
+        # else a real VALUE pick, else the safest BANKER.
+        if combo_opts:
+            best = max(combo_opts, key=lambda o: o["_odd"])
+        elif value_opts:
             best = max(value_opts, key=lambda o: (o["winprob"], o["_odd"]))
         elif banker_opts:
             best = max(banker_opts, key=lambda o: (o["winprob"], o["_odd"]))
         else:
             continue
         candidates.append((best["winprob"], r, best, kickoff))
-    # value picks first (they carry higher odds), then safest bankers
-    candidates.sort(key=lambda x: (x[2].get("_ptype") == "value", x[0], x[2]["_odd"]), reverse=True)
+    # value + combo picks first (higher odds), then safest bankers
+    candidates.sort(key=lambda x: (x[2].get("_ptype") in ("value", "combo"), x[0], x[2]["_odd"]), reverse=True)
     ordered = candidates
 
     posted = 0
@@ -3012,7 +3112,14 @@ async def forebet_autopost() -> dict:
         rating = round(c["rating"], 1)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
-        if ptype == "banker":
+        is_combo = ptype == "combo"
+        if is_combo:
+            analysis = (
+                f"TipJarHQ-Kombi (2er-Leg): {market} — höheres Risiko, Quote {odds:.2f}. "
+                f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Anstoß {kickoff}. "
+                f"Bet-Builder: schwaches Team trifft + Über 1.5 Tore — automatisch von TipJarHQ."
+            )
+        elif ptype == "banker":
             analysis = (
                 f"TipJarHQ-Banker: {market} — ca. {round(winprob * 100)}% Trefferchance "
                 f"(sicherer Banker, Quote {odds:.2f}). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
@@ -3031,11 +3138,12 @@ async def forebet_autopost() -> dict:
             "raw_text": "", "image_path": None,
             "home_team": home, "away_team": away,
             "match_time": kickoff,
-            "country": cc, "league": "TipJarHQ Pick", "league_code": lcode,
+            "country": cc, "league": "TipJarHQ Kombi" if is_combo else "TipJarHQ Pick", "league_code": lcode,
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
             "win_prob": round(winprob, 3), "pick_type": ptype,
-            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "legs": c.get("_legs", []) if is_combo else [], "is_parlay": is_combo,
+            "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
         }
