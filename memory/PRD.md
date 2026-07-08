@@ -225,6 +225,11 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (SEO-Fixes nach Audit)
+- robots.txt (echte Textdatei, Allow + Sitemap-Verweis), sitemap.xml, llms.txt (korrektes Format) in /app/frontend/public/ angelegt.
+- index.html: Open-Graph-/Twitter-Meta-Tags, Canonical-URL, sichtbarer #seo-fallback-Textblock (H1/H2/Listen) für Crawler → verbessert Text/HTML-Verhältnis. React ersetzt den Fallback beim Mount (verifiziert).
+- Nicht behebbar: emergent-main.js unminified + blockierte externe Fonts (Plattform-Ressourcen). Muss neu deployt werden.
+
 ## Changelog — 2026-07-08 (Splash Snake-Border verifiziert)
 - Splash Screen: statischer mint/grüner Rand aus allen 8 Lokal-PNGs entfernt (bestätigt: splash-de.png sauber). SVG-„Snake"-Rahmen (Volt #E1FF00, 2,5s, im Uhrzeigersinn, non-scaling-stroke, glow) läuft über den Viewport. Visuell per Screenshot verifiziert.
 

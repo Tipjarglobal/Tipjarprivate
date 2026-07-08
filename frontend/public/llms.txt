@@ -1,0 +1,20 @@
+# TipJar
+
+> TipJar is a global community platform for football betting tips. Users post tips, an AI rates each tip from 1 to 10, the community rates them too, results auto-settle as Won or Lost, and winning tipsters cash out for real money.
+
+## About
+
+- [TipJar Home](https://tipjarglobal.com/): Post football tips, get AI ratings, rate community tips, track auto-settled results, and earn credits redeemable for real money.
+
+## Features
+
+- AI Picks: Automated tips derived from data sources, filtered for genuine value.
+- System Picks: Curated multi-leg combination bets updated daily.
+- Smart Bets: Player-prop tips computed from season statistics.
+- Members Picks: Tips posted by the community.
+- Live Picks: In-play tips offered during matches.
+- Hall of Fame: Verified winning slips rendered as branded TipJar slips.
+
+## Languages
+
+- Available in English, German, Greek, French, Italian, Spanish, Arabic, and Turkish.
