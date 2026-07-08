@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only verification of TipJar 'Abgerechnet' (Settled) feature batch. ALL 7 requested acceptance criteria PASS. Tab bar renders in the exact requested order (ai, smart, systems, members, live, settled) verified by left-to-right X positions and by data-testid tabview-<v>. First tab label reads 'KI Single-Game-Picks' in DE (i18n.js line 610) and its equivalent 'AI Single-Game Picks' in EN — NO longer 'KI-Picks' / 'AI Picks'. Clicking tabview-settled opens data-testid=settled-area which shows the 24h auto-delete note ('Abgerechnete Scheine werden nach 24 Stunden automatisch gelöscht.' in DE / 'Settled slips are automatically deleted after 24 hours.' in EN) and the TWO columns settled-won-col (Gewonnen, 6 tips) + settled-lost-col (Verloren, 4 tips). Column contents match status: backend confirms /api/tips?status=won returns 6 tips all status='won' and /api/tips?status=lost returns 4 tips all status='lost'. Header quick-view row (view-tips-btn, view-smart-btn, view-systems-btn, view-members-btn, view-live-btn, view-settled-btn) all present; clicking view-settled-btn opens the tips window directly on the settled view. Checkered-flag icon (CheckeredFlag component, App.js L30) renders on both the tabview-settled tab and the view-settled-btn quick-view button. GET /api/tips/counts returns settled:10 as required. No regression on the other 5 tabs — ai/smart/systems/members/live all load their respective feeds (ai=2 cards, live=1 card, others empty-state as expected from counts).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "tab_order": "PASS — tabview-ai(x=24) < tabview-smart(199) < tabview-systems(350) < tabview-members(527) < tabview-live(715) < tabview-settled(869). Order confirmed both in DOM and visually.",
+    "first_tab_rename": "PASS — DE label='KI Single-Game-Picks' (i18n.js:610), EN label='AI Single-Game Picks' (i18n.js:74). Renamed away from generic 'KI-Picks'/'AI Picks'.",
+    "settled_area_and_columns": "PASS — clicking tabview-settled reveals data-testid=settled-area with 24h note, settled-won-col (h3='Gewonnen 6', 6 TipCards), settled-lost-col (h3='Verloren 4', 4 TipCards). Uses CSS grid grid-cols-1 lg:grid-cols-2.",
+    "status_filtering": "PASS — Won column contains only won tips; Lost column contains only lost tips. Backend /api/tips?status=won returns 6 items (all status=won) and /api/tips?status=lost returns 4 items (all status=lost). RateWall.jsx useEffect fetches both when view==='settled'.",
+    "header_quickview_and_view_settled_btn": "PASS — all 6 view-*-btn testids exist; clicking view-settled-btn opens the tips window on the settled view (settled-area visible after click).",
+    "checkered_flag_visual": "PASS — <CheckeredFlag/> icon renders on tabview-settled and Flag icon (variant='checkered') renders on view-settled-btn.",
+    "counts_settled_field": "PASS — /api/tips/counts returns {ai:2, ai_total:2, members:0, live:1, systems:4, smart:0, settled:10}.",
+    "no_regression_other_tabs": "PASS — ai (2 cards visible), live (1 card, red LIVE badge), smart/systems/members show their empty-state or systems layout as appropriate. No console errors observed during tab navigation."
+  },
+  "test_report_links": [
+    "/app/test_reports/iter31_settled.png",
+    "/app/test_reports/iter31_settled_de_confirmed.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "App.js L212: tab-bar array is declared inline as [ai, smart, systems, members, live, settled] — order is authoritative and matches spec. Good.",
+    "RateWall.jsx L238: `view !== 'systems' && view !== 'settled'` correctly hides the main feed/filters block when settled area is showing, preventing double rendering.",
+    "i18n.js: DE keys 'nav.viewtips'/'nav.viewsettled'/'settled.note'/'wall.filter.won'/'wall.filter.lost' are all present. EN mirror keys also present. No missing-key fallbacks needed.",
+    "Header.jsx L157: view-settled-btn uses variant='checkered' + Flag icon and passes counts.settled — matches spec. QuickView grid is md:grid-cols-6 preserving the same 6-column ordering as the tab bar.",
+    "Backend purge_settled_tips() cadence not tested here (frontend-only run per request) but /api/tips/counts.settled and status filtering endpoints work end-to-end."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped per request; spot-checked 3 endpoints via curl — all PASS)", "frontend": "7/7 (100%)" },
+  "test_credentials": "Not required — settled view is public.",
+  "seed_data_creation": "None — used existing seeded won/lost tips (10 total).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The app has a 2.5s splash overlay ([data-testid=splash-screen]) that blocks interaction. Wait ≥4s or JS-remove it: document.querySelectorAll('[data-testid=splash-screen]').forEach(e=>e.remove()). To open tips window: window.dispatchEvent(new CustomEvent('tj-open-tips')) or 'tj-open-view' with detail='settled'. Language switcher opens a dropdown — click [data-testid='language-switcher'] then [data-testid='lang-de'] (or 'lang-en'). Both DE and EN i18n verified. Header quick-view buttons use view-*-btn testids and the intra-tips-window tab bar uses tabview-<v> testids. Backend endpoints /api/tips/counts, /api/tips?status=won, /api/tips?status=lost all working.",
+  "rca of the issue": "No issues found in this iteration."
+}

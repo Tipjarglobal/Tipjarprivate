@@ -277,12 +277,13 @@ async def tips_counts():
     members = await db.tips.count_documents({"source": {"$nin": ["hq-auto", "smart"]}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
+    settled = await db.tips.count_documents({"status": {"$in": ["won", "lost"]}})
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
-    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n, "smart": smart}
+    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n, "smart": smart, "settled": settled}
 
 
 
@@ -1060,7 +1061,11 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
 async def set_status(tip_id: str, inp: StatusInput, admin: dict = Depends(require_admin)):
     if inp.status not in ("won", "lost", "pending", "live"):
         raise HTTPException(status_code=400, detail="Invalid status")
-    res = await db.tips.update_one({"id": tip_id}, {"$set": {"status": inp.status}})
+    upd = {"status": inp.status}
+    if inp.status in ("won", "lost"):
+        upd["settled_at"] = datetime.now(timezone.utc).isoformat()
+        upd["settled_by"] = "admin"
+    res = await db.tips.update_one({"id": tip_id}, {"$set": upd})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Tip not found")
     tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
@@ -2030,6 +2035,22 @@ async def settle_hq_combos() -> dict:
 PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota guard)
 
 
+async def purge_settled_tips() -> int:
+    """Settled slips (won/lost) are auto-removed 24h after they were settled — the
+    'Abgerechnet' area only ever shows the last day. Seed showcase tips are kept."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    docs = await db.tips.find(
+        {"status": {"$in": ["won", "lost"]}, "id": {"$not": {"$regex": "^seed-"}}},
+        {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1}).to_list(5000)
+    stale = [d["id"] for d in docs if (d.get("settled_at") or d.get("created_at") or "") < cutoff]
+    if not stale:
+        return 0
+    await db.tips.delete_many({"id": {"$in": stale}})
+    await db.tip_ratings.delete_many({"tip_id": {"$in": stale}})
+    logger.info(f"Purged {len(stale)} settled tips older than 24h")
+    return len(stale)
+
+
 async def settle_multimatch_parlays() -> dict:
     """Settle multi-match parlays (member + AI system tips) leg-by-leg from the final
     scores. A parlay is LOST the moment any leg loses, and WON only when every leg is
@@ -2125,8 +2146,9 @@ async def settlement_loop():
                 result = await settle_pending_tips()
                 combos = await settle_hq_combos()
                 parlays = await settle_multimatch_parlays()
+                purged = await purge_settled_tips()
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
-                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}")
+                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; purged24h {purged}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")
 

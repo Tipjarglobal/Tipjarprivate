@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain } from "lucide-react";
+import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import { useI18n, LANGUAGES } from "../i18n";
@@ -46,7 +46,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, counts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewSettled, counts = {} }) {
   const { t, lang, setLang } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -148,12 +148,13 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
 
       {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
       <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-5 gap-2">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 gap-2">
           <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} />
-          <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} />
           <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} />
+          <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} />
           <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} variant="gold" />
           <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} live variant="blue" />
+          <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} variant="checkered" />
         </div>
       </div>
     </header>
@@ -165,6 +166,7 @@ function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = 
     green: "bg-[#2ECC57] text-black hover:bg-[#26b64c] shadow-[0_0_16px_rgba(46,204,87,0.3)]",
     gold: "bg-[#FFC02E] text-black hover:bg-[#e6ac1f] shadow-[0_0_16px_rgba(255,192,46,0.4)]",
     blue: "bg-[#2563eb] text-white hover:bg-[#1d4fd8] shadow-[0_0_18px_rgba(37,99,235,0.55)] animate-pulse",
+    checkered: "bg-white text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(255,255,255,0.25)]",
   };
   return (
     <button

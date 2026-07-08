@@ -26,6 +26,20 @@ import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
+// Small black & white checkered "finish flag" marker for the Settled area.
+function CheckeredFlag({ size = 14 }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size, height: size, display: "inline-block", borderRadius: 3,
+        border: "1px solid rgba(0,0,0,0.35)",
+        background: "conic-gradient(#000 0 25%, #fff 0 50%, #000 0 75%, #fff 0) 0 0 / 7px 7px",
+      }}
+    />
+  );
+}
+
 function Home() {
   const { t, setLang } = useI18n();
   const { user } = useAuth();
@@ -117,6 +131,7 @@ function Home() {
         onViewMembers={() => openTipsView("members")}
         onViewLive={() => openTipsView("live")}
         onViewSmart={() => openTipsView("smart")}
+        onViewSettled={() => openTipsView("settled")}
         counts={counts}
       />
       {user && !user.email_verified && <VerifyBanner />}
@@ -194,13 +209,15 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "members") {
                   cls = active ? "bg-[#FFC02E] text-black shadow-[0_0_14px_rgba(255,192,46,0.45)]" : "bg-[#FFC02E]/15 border border-[#FFC02E]/40 text-[#FFC02E] hover:bg-[#FFC02E]/25";
                 } else if (v === "live") {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
+                } else if (v === "settled") {
+                  cls = active ? "bg-white text-black shadow-[0_0_14px_rgba(255,255,255,0.35)]" : "bg-surface border border-white/40 text-white hover:bg-white/10";
                 } else {
                   cls = active ? "bg-[#2ECC57] text-black" : "bg-surface border border-elevated text-zinc-300 hover:text-white";
                 }
@@ -212,6 +229,7 @@ function Home() {
                   className={`whitespace-nowrap flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${cls}`}
                 >
                   {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : "bg-blue-400"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
+                  {v === "settled" && <CheckeredFlag />}
                   {t(lbl)}
                   {counts[v] != null && (
                     <span className={`text-[10px] font-mono rounded-full px-1.5 ${active ? "bg-black/20" : "bg-void/60 text-zinc-400"}`}>{counts[v]}</span>

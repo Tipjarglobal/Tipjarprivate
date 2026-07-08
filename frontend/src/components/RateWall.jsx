@@ -22,6 +22,7 @@ const VIEW_TITLE_KEY = {
   members: "nav.viewmembers",
   live: "nav.viewlive",
   smart: "nav.viewsmart",
+  settled: "nav.viewsettled",
 };
 const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
@@ -38,12 +39,15 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [streakBubble, setStreakBubble] = useState(false);
+  const [wonTips, setWonTips] = useState([]);
+  const [lostTips, setLostTips] = useState([]);
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
   }, [view]);
 
   const load = useCallback(async (silent) => {
+    if (view === "settled") return;
     if (!silent) setLoading(true);
     try {
       const params = { sort };
@@ -62,6 +66,23 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     const iv = setInterval(() => load(true), 20000);
     return () => clearInterval(iv);
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    if (view !== "settled") return;
+    let alive = true;
+    const loadSettled = async () => {
+      try {
+        const [w, l] = await Promise.all([
+          api.get("/tips", { params: { status: "won", sort: "new", limit: 50 } }),
+          api.get("/tips", { params: { status: "lost", sort: "new", limit: 50 } }),
+        ]);
+        if (alive) { setWonTips(w.data); setLostTips(l.data); }
+      } catch { /* ignore */ }
+    };
+    loadSettled();
+    const iv = setInterval(loadSettled, 20000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [view, refreshKey]);
 
   const rate = async (tip, stars) => {
     if (!user) { requireLogin(); return; }
@@ -169,10 +190,52 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
         )}
       </div>
 
+      {/* Abgerechnet — two columns: won / lost. Auto-deleted after 24h. */}
+      {view === "settled" && (
+        <div data-testid="settled-area">
+          <div className="flex items-center gap-2 mb-6 rounded-xl border border-white/15 bg-white/5 px-4 py-3">
+            <Clock size={16} className="text-zinc-400 shrink-0" />
+            <p className="text-sm text-zinc-300">{t("settled.note")}</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div data-testid="settled-won-col">
+              <h3 className="flex items-center gap-2 font-heading font-black text-xl text-won mb-4">
+                <CheckCircle2 size={20} /> {t("wall.filter.won")}
+                <span className="text-xs font-mono text-zinc-500">{wonTips.length}</span>
+              </h3>
+              {wonTips.length === 0 ? (
+                <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
+              ) : (
+                <div className="space-y-5">
+                  {wonTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div data-testid="settled-lost-col">
+              <h3 className="flex items-center gap-2 font-heading font-black text-xl text-lost mb-4">
+                <XCircle size={20} /> {t("wall.filter.lost")}
+                <span className="text-xs font-mono text-zinc-500">{lostTips.length}</span>
+              </h3>
+              {lostTips.length === 0 ? (
+                <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
+              ) : (
+                <div className="space-y-5">
+                  {lostTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Systeme der Woche (Lock Bet / Value / Risk / Gamble) */}
       {view === "systems" && <Systems />}
 
-      {view !== "systems" && (
+      {view !== "systems" && view !== "settled" && (
         <>
       {/* filters */}
       <div className="flex flex-wrap gap-2 mb-6">
