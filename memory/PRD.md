@@ -225,6 +225,12 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Auto-Live für Einzel-Tipps zurück + Alias-Match)
+- SOFORT: Ukraine (U-19) vs Germany (U-19)-Member-Schein auf Produktion nach Live verschoben (Admin-API).
+- ROOT CAUSE: Auto-Live-Loop war komplett entfernt → einzelne live gepostete Scheine blieben in Community. Zusätzlich matchte _find_live_fixture keine Aliase (Deutschland≠Germany).
+- FIX: member_live_loop wieder aktiv, aber NUR für Einzel-Tipps (is_parlay != True) → laufende Einzelwetten gehen automatisch nach Live (via API-Football, zuverlässig), Parlays (7er-Kombi) bleiben in Community. _find_live_fixture jetzt alias/sprach-fähig (Deutschland==Germany, via _team_core). Getestet: Einzel→live, Parlay→pending PASS.
+- Braucht Redeploy für automatische Wirkung auf Produktion.
+
 ## Changelog — 2026-07-08 (Slip-Redesign, Community-Rename, Dedup, Live-Fixes)
 - SLIP-BILD komplett neu (_render_slip_image): Liberation Sans (behebt Tofu-Kästchen bei €/ö/–), viel größere Schrift, TipJar-Crest als dezentes Hintergrund-Wasserzeichen, 1080px breit, sauberes Layout. Visuell verifiziert (Community + Live).
 - BEREICHS-PILL auf geteilten Scheinen: "COMMUNITY PICK" (pending) / "LIVE PICK" (live). Bugfix: Live-Community-Schein wurde fälschlich als "WON"/grün gerendert → jetzt ctype "live_pending" (OFFEN/volt). tip_share_image rendert immer frisch (kein Cache) und setzt ctype nach Status.

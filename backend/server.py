@@ -3742,12 +3742,17 @@ def _align_goals(fx, home_team):
 
 
 def _find_live_fixture(live, home, away):
+    def amatch(a, b):
+        ca, cb = _team_core(a), _team_core(b)
+        if ca and cb and (ca == cb or ca in cb or cb in ca):
+            return True  # alias/accent/language-aware (Deutschland==Germany)
+        return _teams_match(a, b)
     for f in live:
         teams = f.get("teams") or {}
         th = (teams.get("home") or {}).get("name") or ""
         ta = (teams.get("away") or {}).get("name") or ""
-        if (_teams_match(th, home) and _teams_match(ta, away)) or \
-           (_teams_match(th, away) and _teams_match(ta, home)):
+        if (amatch(th, home) and amatch(ta, away)) or \
+           (amatch(th, away) and amatch(ta, home)):
             return f
     return None
 
@@ -3911,11 +3916,57 @@ async def live_loop():
         await asyncio.sleep(LIVE_POLL_SECONDS)
 
 
-# NOTE: A member tip's LIVE status is decided ONCE, at post time (see create_tip:
-# is_live_post). We deliberately do NOT run a background loop that reclassifies
-# already-posted tips based on the current match state — a pre-game slip must stay
-# in the Community channel even while its matches are being played. Live member
-# singles are resolved by the settle engine (which also scans status="live").
+# A member tip's LIVE status: SINGLE-match member tips are shown in the Live window
+# while their match is actually in-play (checked reliably via API-Football, so slip
+# timezones/team-name languages don't matter), and moved back to pending when the
+# match ends (so the settle engine resolves them). PARLAYS (multi-leg pre-game slips)
+# are NEVER touched — a pre-game combo stays in the Community window.
+MEMBER_LIVE_POLL_SECONDS = 3 * 60
+_MEMBER_LIVE_SRC_EXCLUDE = ["hq-auto", "hq-live", "smart"]
+
+
+async def member_live_sync() -> dict:
+    now = datetime.now(timezone.utc)
+    moved = reverted = 0
+    live_fixtures = _apifootball("/fixtures", {"live": "all"}) if API_FOOTBALL_KEY else []
+
+    def is_live(t) -> bool:
+        if _looks_live_now(t.get("match_time"), t.get("legs"), now):
+            return True
+        home, away = t.get("home_team"), t.get("away_team")
+        if live_fixtures and home and away:
+            return _find_live_fixture(live_fixtures, home, away) is not None
+        return False
+
+    # promote SINGLE (non-parlay) member tips whose match is in-play
+    pend = await db.tips.find(
+        {"status": "pending", "is_parlay": {"$ne": True}, "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
+    for t in pend:
+        if is_live(t):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "live", "live_auto": True}})
+            moved += 1
+    # revert auto-moved live singles once their match is over (settle engine takes over)
+    liv = await db.tips.find(
+        {"status": "live", "is_parlay": {"$ne": True},
+         "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}, "live_auto": True},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
+    for t in liv:
+        if not is_live(t):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "pending"}, "$unset": {"live_auto": ""}})
+            reverted += 1
+    return {"moved_to_live": moved, "reverted": reverted}
+
+
+async def member_live_loop():
+    while True:
+        try:
+            res = await member_live_sync()
+            if res["moved_to_live"] or res["reverted"]:
+                logger.info(f"Member live sync: {res}")
+        except Exception as e:
+            logger.error(f"member_live_loop error: {e}")
+        await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)
 
 
 
@@ -3996,6 +4047,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
+    _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
