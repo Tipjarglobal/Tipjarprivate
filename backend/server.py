@@ -1153,8 +1153,11 @@ async def extract_win_slip(image_b64: str) -> dict:
         prompt = (
             "Read this bet-slip screenshot. Return STRICT JSON: "
             '{"status":"won|lost|open","total_odds":<number>,"stake":"","winnings":"",'
-            '"legs":[{"home":"","away":"","market":"","odds":<number>,"result":"won|lost|open"}]}. '
+            '"legs":[{"home":"","away":"","league":"","date":"","time":"","market":"","odds":<number>,"result":"won|lost|open"}]}. '
             "status is the overall slip result. Extract every leg. If a value is missing use empty/0. "
+            "For EACH leg also read: 'league' = the competition/league name if shown (e.g. 'Champions-League-Quali', 'Premier League'); "
+            "'date' = the match date if shown (keep as printed, e.g. '07/07' or '07.07.'); "
+            "'time' = the kickoff time if shown (e.g. '21:00'). Leave these empty if not visible on the slip. "
             "IMPORTANT market naming — always in GERMAN, always spell the word 'Über' or 'Unter': "
             "goals over/under => 'Über 2.5 Tore' / 'Unter 3.5 Tore'; "
             "TEAM total goals => include the team name, e.g. 'Víkingur Über 0.5 Tore', 'Marokko Unter 2.5 Tore'; "
@@ -1179,6 +1182,8 @@ async def extract_win_slip(image_b64: str) -> dict:
             except Exception:
                 od = 0.0
             legs.append({"home": str(lg.get("home", "") or ""), "away": str(lg.get("away", "") or ""),
+                         "league": str(lg.get("league", "") or ""), "date": str(lg.get("date", "") or ""),
+                         "time": str(lg.get("time", "") or ""),
                          "market": str(lg.get("market", "") or ""), "odds": od,
                          "result": str(lg.get("result", "") or "").lower()})
         try:
@@ -1233,6 +1238,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
             return ImageFont.load_default()
     f_logo, f_h, f_m, f_o = font(FB, 46), font(FB, 28), font(FR, 23), font(FB, 27)
     f_s, f_big, f_lbl = font(FR, 22), font(FB, 52), font(FR, 21)
+    f_sub = font(FR, 19)
     W, pad, head_h, foot_h = 860, 44, 128, 210
     legs = legs[:10]
     # group legs by match so the same fixture is only titled ONCE
@@ -1241,10 +1247,17 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
         k = _match_key(l.get("home", ""), l.get("away", ""))
         if k not in gidx:
             gidx[k] = len(groups)
-            groups.append({"home": l.get("home", "?"), "away": l.get("away", "?"), "mkts": []})
+            groups.append({"home": l.get("home", "?"), "away": l.get("away", "?"),
+                           "league": l.get("league", ""), "date": l.get("date", ""),
+                           "time": l.get("time", ""), "mkts": []})
         groups[gidx[k]]["mkts"].append(l)
-    hdr_h, mrow_h, gap = 48, 44, 16
-    H = head_h + sum(hdr_h + len(g["mkts"]) * mrow_h + gap for g in groups) + foot_h
+
+    def _subline(g):
+        parts = [p for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p]
+        return "  ·  ".join(parts)
+    hdr_h, mrow_h, gap, sub_h = 44, 44, 16, 26
+    H = head_h + sum(hdr_h + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
+                     for g in groups) + foot_h
     VOID, CARD, GREEN = (9, 9, 11), (20, 21, 24), (46, 204, 87)
     WHITE, GREY, LINE = (240, 240, 242), (150, 152, 158), (38, 40, 45)
     img = Image.new("RGB", (W, H), VOID)
@@ -1261,10 +1274,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     def check(cx, cy, sz, col):
         d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=4)
         d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=4)
-    # header: TipJar logo (Tip white / Jar green)
-    d.text((pad, 40), "Tip", font=f_logo, fill=WHITE)
+    # header: TipJar logo (Tip white / Jar green) + tagline top-left
+    d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 40), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + 2, 90), "Post it. Rate it. Cash it.", font=f_sub, fill=GREY)
     badge = "WON"
     bw = d.textlength(badge, font=f_h)
     bx0 = W - pad - bw - 66
@@ -1277,6 +1291,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> by
     for g in groups:
         d.text((pad, y + 4), trunc(f"{g['home']}  –  {g['away']}", f_h, W - 2 * pad), font=f_h, fill=WHITE)
         y += hdr_h
+        sub = _subline(g)
+        if sub:
+            d.text((pad, y - 2), trunc(sub, f_sub, W - 2 * pad), font=f_sub, fill=GREY)
+            y += sub_h
         for l in g["mkts"]:
             od = l.get("odds") or 0
             odt = f"{od:.2f}" if od else "gewonnen"
@@ -2402,6 +2420,14 @@ def _forebet_candidates(r: dict) -> list[dict]:
                          "odds": f"{max(1.05, 1 / max(dnb_wp, 0.01)):.2f}",
                          "rating": 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5,
                          "winprob": dnb_wp})
+    # Doppelte Chance 12 (Heim ODER Auswärts, kein Remis) — value when a draw is
+    # unlikely; the real bookmaker odd decides if it passes the 1.60 value gate.
+    if len(probs) >= 3:
+        dc12_wp = min(0.97, (probs[0] + probs[2]) / 100.0)
+        if dc12_wp >= 0.60:
+            opts.append({"sfx": "-dc12", "market": "Doppelte Chance 12",
+                         "odds": f"{max(1.05, 1 / max(dc12_wp, 0.01)):.2f}",
+                         "rating": 8.0, "winprob": dc12_wp})
     # Goals markets derived from the predicted correct score.
     sc = parse_pred_score(r.get("score"))
     try:
@@ -2916,6 +2942,8 @@ def _parse_odds(resp) -> dict:
                     setd("over05", vals.get("Over 0.5"))
                     setd("over15", vals.get("Over 1.5"))
                     setd("over25", vals.get("Over 2.5"))
+                    setd("under25", vals.get("Under 2.5"))
+                    setd("under35", vals.get("Under 3.5"))
                 elif nm in ("Both Teams Score", "Both Teams To Score"):
                     setd("btts", vals.get("Yes"))
                 elif nm == "Home/Away":  # = Draw No Bet
@@ -2977,6 +3005,10 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
         return odds.get("over15")
     if "über 0.5 tore" in m:
         return odds.get("over05")
+    if "unter 2.5 tore" in m:
+        return odds.get("under25")
+    if "unter 3.5 tore" in m:
+        return odds.get("under35")
     if "beide teams treffen" in m or "btts" in m:
         return odds.get("btts")
     if "doppelte chance" in m and "+" not in m:
@@ -2984,6 +3016,8 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
             return odds.get("dc_1x")
         if "x2" in m:
             return odds.get("dc_x2")
+        if "12" in m:
+            return odds.get("dc_12")
     if "draw no bet" in m:
         if home and home.lower() in m:
             return odds.get("dnb_home")

@@ -124,3 +124,13 @@ live market per match, same one-pick-per-match discipline as the pre-match engin
 - Trade-off the owner accepted: volume drops sharply (e.g. 1 pick out of 42 scanned).
   Threshold WIN_PROB_MIN can be relaxed toward 0.72 if more volume is wanted.
 
+
+## Slip image + markets update (owner voice note, 2026-06)
+- Generated "Fantasy Slip" (Pillow, `_render_slip_image`) now shows: TipJar title top-left
+  + tagline, and per match a grey subline "Liga · Datum · Uhrzeit". These are read from
+  the uploaded slip via Gemini Vision (`extract_win_slip` now returns league/date/time per
+  leg). If any of the three is unreadable, that part is simply omitted. Word "Über"/"Unter"
+  always spelled out; team-specific markets keep the team name.
+- AI picks: added "Doppelte Chance 12" (home OR away, no draw) — offered when draw is
+  unlikely; real dc_12 bookmaker odd from API-Football decides the value gate. Unter 2.5 /
+  Unter 3.5 Tore now use REAL bookmaker odds too (under25/under35 parsed from /odds).
