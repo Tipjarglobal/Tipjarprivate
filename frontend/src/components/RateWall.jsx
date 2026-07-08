@@ -378,6 +378,7 @@ function SmartLab({ t, user, onCreated }) {
       setText(""); setImages([]);
       if (data.created) { toast.success(t("smart.chat.created")); onCreated?.(); }
       else if (data.reason === "no_fixture") toast.info(t("smart.chat.nofixture"));
+      else if (data.reason === "too_far") toast.info(t("smart.chat.toofar"));
       else toast.success(t("smart.chat.stored"));
     } catch (e) {
       toast.error(t("smart.chat.error"));

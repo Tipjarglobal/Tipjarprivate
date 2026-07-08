@@ -260,6 +260,12 @@ async def submit_smart_idea(
         await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "no_fixture"}})
         return {"ok": True, "created": False, "reason": "no_fixture"}
 
+    # Only post if the match starts within the next 48h (never months ahead).
+    hours_to_ko = (ko_dt - now).total_seconds() / 3600.0
+    if hours_to_ko > 48 or hours_to_ko < -3:
+        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "too_far"}})
+        return {"ok": True, "created": False, "reason": "too_far", "kickoff": kickoff}
+
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     tip_id = f"smart-idea-{idea_id[:8]}"
     try:

@@ -48,6 +48,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
   per-area notification toggles.
 
 ## Session 2026-07-08 (fork continued)
+- Smart Bets "idea chatbox" (SmartLab): logged-in users send an insider hint (text + up to 3
+  optional images) → POST /api/smart/idea (multipart) → Gemini turns it into a clever Smart Pick.
+  MUST have a real kickoff: find_upcoming_fixture() via API-Football; only posts if a fixture is
+  found AND kickoff is within 48h (else created:false, reason no_fixture/too_far/not_actionable).
+  Homepage SmartX quick-view button has a pulsing spoiler badge "Mit der KI reden". Tested
+  iteration_33/34 PASS + 48h window verified (El Clásico 25/10 → too_far).
 - Blacklists: Blumenau + code `brc`; Canadian Championship (`forge`, `saint-laurent`); ~30 obscure
   Brazilian leagues (Série C/D, all A1/A2/A3 state tiers, Paulista/Carioca/Mineiro/Catarinense/etc.).
   Only Brazil Série A/B kept. Owner shorthand: "#<team> @blacklist" = delete tip + blacklist league.
