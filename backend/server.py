@@ -2027,10 +2027,88 @@ async def settle_hq_combos() -> dict:
     return {"ok": True, "settled": settled}
 
 
+PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota guard)
+
+
+async def settle_multimatch_parlays() -> dict:
+    """Settle multi-match parlays (member + AI system tips) leg-by-leg from the final
+    scores. A parlay is LOST the moment any leg loses, and WON only when every leg is
+    won. Each leg's status is written back so no leg stays 'open' once its match is
+    over. Single-game HQ bet-builders (combo_legs) are handled by settle_hq_combos."""
+    if not API_FOOTBALL_KEY:
+        return {"ok": False, "settled": 0}
+    now = datetime.now(timezone.utc)
+    parlays = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
+         "combo_legs": {"$exists": False}, "legs.0": {"$exists": True}},
+        {"_id": 0}).sort("created_at", 1).to_list(200)
+    settled, judged = 0, 0
+    for tip in parlays:
+        if tip.get("settle_attempts", 0) >= 8:
+            continue
+        legs = tip.get("legs") or []
+        changed = any_lost = False
+        all_won = all_resolved = True
+        for leg in legs:
+            st = leg.get("status")
+            if st == "won":
+                continue
+            if st == "lost":
+                any_lost, all_won = True, False
+                continue
+            home, away = _split_match(leg.get("match") or "")
+            ko = _kickoff_dt(leg.get("kickoff")) or _kickoff_dt(tip.get("match_time"))
+            if not home or not away or not (ko and ko < now - timedelta(hours=2)):
+                all_resolved, all_won = False, False
+                continue
+            if judged >= PARLAY_JUDGE_CAP:
+                all_resolved, all_won = False, False
+                continue
+            dates = [ko.date().isoformat(),
+                     (ko + timedelta(days=1)).date().isoformat(),
+                     (ko - timedelta(days=1)).date().isoformat()]
+            team_id = await resolve_team_id(home)
+            opp = away
+            if not team_id:
+                team_id = await resolve_team_id(away)
+                opp = home
+            fx = find_finished_fixture(team_id, opp, dates) if team_id else None
+            if not fx:
+                all_resolved, all_won = False, False
+                continue
+            hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
+            leg_res = "won"
+            for sel in (leg.get("selections") or []):
+                judged += 1
+                o = await judge_market(_fmt_selection(sel), home, away, hg, ag)
+                if o == "lost":
+                    leg_res = "lost"
+                    break
+            leg["status"] = "lost" if leg_res == "lost" else "won"
+            leg["final"] = f"{hg}:{ag}"
+            changed = True
+            if leg["status"] == "lost":
+                any_lost, all_won = True, False
+        new_status = "lost" if any_lost else ("won" if (all_won and all_resolved) else None)
+        upd = {}
+        if changed:
+            upd["legs"] = legs
+        if new_status:
+            upd.update({"status": new_status, "settled_by": "auto", "settled_at": now.isoformat()})
+        if upd:
+            await db.tips.update_one({"id": tip["id"]}, {"$set": upd})
+        if new_status:
+            settled += 1
+        else:
+            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+    return {"ok": True, "settled": settled, "judged": judged}
+
+
 @api_router.post("/admin/settle-now")
 async def settle_now(admin: dict = Depends(require_admin)):
     res = await settle_pending_tips()
     res["combos"] = await settle_hq_combos()
+    res["parlays"] = await settle_multimatch_parlays()
     return res
 
 
@@ -2046,7 +2124,9 @@ async def settlement_loop():
             if API_FOOTBALL_KEY:
                 result = await settle_pending_tips()
                 combos = await settle_hq_combos()
-                logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; combos {combos.get('settled')}")
+                parlays = await settle_multimatch_parlays()
+                logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
+                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")
 
@@ -2184,8 +2264,8 @@ async def seed_showcase():
     )
     logger.info("Seeded/updated showcase tip: Swiss-Colombia multibet (settled: won)")
 
-    # Pending community parlay (member-posted) — showcases handicaps, per-leg odds
-    # and the Telegram share button.
+    # Settled community parlay showcase (member-posted) — a WON multibet demonstrating
+    # handicaps, per-leg odds and the share button. Kept fully SETTLED (no open legs).
     await db.tips.update_one(
         {"id": "seed-community-pending"},
         {"$set": {
@@ -2194,24 +2274,24 @@ async def seed_showcase():
             "match_time": "08/07/2026 17:00", "country": "International",
             "league": "Diverse", "market": "",
             "odds": "4.15", "ai_rating": 8.0, "source": "member",
-            "ai_analysis": "Sicherer Community-Kombi: Außenseiter-Handicap Sutjeska +3.5, dazu mehrere Über-1.5-Tore-Legs und ein Unter-3.5. Breit gestreut bei fairer Gesamtquote. Apex 8/10.",
+            "ai_analysis": "Voll aufgegangen: Außenseiter-Handicap Sutjeska +3.5, mehrere Über-1.5-Tore-Legs und ein Unter-3.5 — breit gestreut bei fairer Gesamtquote. Apex 8/10.",
             "legs": [
-                {"match": "Kairat Almaty – Sutjeska", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "pending", "selections": ["Sutjeska 3.5"], "sel_odds": ["1.20"]},
-                {"match": "EBK – HPS", "league": "Kakkonen", "kickoff": "08/07 18:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.15"]},
-                {"match": "CS Petrocub – FK Egnatia", "league": "Champions-League-Quali", "kickoff": "08/07 19:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.32"]},
-                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "pending", "selections": ["Connah's Quay Nomads 2.5"], "sel_odds": ["1.22"]},
-                {"match": "Ponte Preta – Criciúma", "league": "Série B", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total UNDER 3.5"], "sel_odds": ["1.24"]},
-                {"match": "Hartford Athletic – Orange County SC", "league": "USL Championship", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.27"]},
-                {"match": "Supra du Quebec – Atlético Ottawa", "league": "CPL", "kickoff": "09/07 01:00", "status": "pending", "selections": ["Total OVER 1.5"], "sel_odds": ["1.18"]},
+                {"match": "Kairat Almaty – Sutjeska", "league": "Champions-League-Quali", "kickoff": "08/07 17:00", "status": "won", "selections": ["Sutjeska 3.5"], "sel_odds": ["1.20"], "final": "2:1"},
+                {"match": "EBK – HPS", "league": "Kakkonen", "kickoff": "08/07 18:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.15"], "final": "2:2"},
+                {"match": "CS Petrocub – FK Egnatia", "league": "Champions-League-Quali", "kickoff": "08/07 19:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.32"], "final": "3:1"},
+                {"match": "Connah's Quay Nomads – Ballkani", "league": "Champions-League-Quali", "kickoff": "08/07 19:30", "status": "won", "selections": ["Connah's Quay Nomads 2.5"], "sel_odds": ["1.22"], "final": "1:2"},
+                {"match": "Ponte Preta – Criciúma", "league": "Série B", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total UNDER 3.5"], "sel_odds": ["1.24"], "final": "1:1"},
+                {"match": "Hartford Athletic – Orange County SC", "league": "USL Championship", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.27"], "final": "2:2"},
+                {"match": "Supra du Quebec – Atlético Ottawa", "league": "CPL", "kickoff": "09/07 01:00", "status": "won", "selections": ["Total OVER 1.5"], "sel_odds": ["1.18"], "final": "0:3"},
             ],
             "is_parlay": True, "stake": "12 €", "potential_return": "49,81 €",
-            "status": "pending",
+            "status": "won",
         },
          "$setOnInsert": {"raw_text": "", "sum_stars": 0,
                           "ratings_count": 0, "avg_rating": 0, "created_at": now}},
         upsert=True,
     )
-    logger.info("Seeded/updated showcase tip: pending community parlay")
+    logger.info("Seeded/updated showcase tip: settled community parlay (won)")
 
 
 # ---------------------------------------------------------------------------
