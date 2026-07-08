@@ -982,6 +982,8 @@ const T = {
     "wall.pending": "ΕΚΚΡΕΜΕΣ",
     "wall.won": "ΚΕΡΔΙΣΜΕΝΟ",
     "wall.lost": "ΧΑΜΕΝΟ",
+    "wall.toLive": "→ Σε Ζωντανά",
+    "wall.toPending": "→ Σε Εκκρεμή",
     "wall.mark": "Διευθέτηση",
     "wall.sync": "Ενημέρωση αποτελεσμάτων",
     "wall.syncing": "Έλεγχος τελειωμένων αγώνων…",
@@ -2115,6 +2117,4 @@ export function I18nProvider({ children }) {
 
 export function useI18n() {
   return useContext(I18nContext);
-}
-xt(I18nContext);
 }

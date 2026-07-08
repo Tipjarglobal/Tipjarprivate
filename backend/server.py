@@ -3557,6 +3557,7 @@ async def smart_loop():
 LIVE_INPLAY_STATUSES = {"1H", "2H", "ET", "BT", "P", "LIVE", "INT"}
 LIVE_MAX_TIPS = 12
 LIVE_POLL_SECONDS = 3 * 60
+LIVE_STAT_CALL_CAP = 20  # max /fixtures/statistics calls per live run (quota guard)
 
 
 def _market_team_side(market: str, home: str, away: str):
@@ -3757,6 +3758,66 @@ async def live_autopost() -> dict:
         }, upsert=True)
         posted += 1
         logger.info(f"LIVE re-offer: {t['home_team']} vs {t['away_team']} — {t.get('market')} @ {odd} ({minute}')")
+
+    # 3) NEW: generate FRESH live goal-picks for currently in-play games that show
+    #    real scoring pressure (so the KI always populates the Live channel, not just
+    #    re-offering our own pre-match picks). Quota-capped stat lookups.
+    have_fids = {str(x.get("fixture_id")) for x in
+                 await db.tips.find({"source": "hq-live", "status": "live"},
+                                    {"_id": 0, "fixture_id": 1}).to_list(400)}
+    stat_calls = 0
+    for fx in live:
+        if posted >= LIVE_MAX_TIPS or stat_calls >= LIVE_STAT_CALL_CAP:
+            break
+        fid = str((fx.get("fixture") or {}).get("id") or "")
+        if not fid or fid in have_fids:
+            continue
+        minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+        if minute < 10 or minute > 80:
+            continue  # too early = no signal, too late = little time to land
+        teams = fx.get("teams") or {}
+        home = ((teams.get("home") or {}).get("name")) or ""
+        away = ((teams.get("away") or {}).get("name")) or ""
+        if not home or not away:
+            continue
+        goals = fx.get("goals") or {}
+        total = (goals.get("home") or 0) + (goals.get("away") or 0)
+        if total > 1:
+            continue  # 0-0 or one goal → "Über 1.5/2.5" stays realistic & settleable
+        line = "1.5" if total == 0 else "2.5"
+        stats = _apifootball("/fixtures/statistics", {"fixture": fid})
+        stat_calls += 1
+        if not _live_pressure_ok(stats, minute):
+            continue
+        sog, corners, _ = _live_stat_totals(stats)
+        market = f"Über {line} Tore"
+        odd = _live_odd(market, minute)
+        analysis = (
+            f"LIVE-Pick ({minute}'): {market} — Stand {goals.get('home') or 0}:{goals.get('away') or 0}. "
+            f"Druck vorhanden: {sog} Schüsse aufs Tor · {corners} Ecken. "
+            f"Noch {max(90 - minute, 0)} Min. Spielzeit — live zu {odd}."
+        )
+        live_id = f"hqlive-fresh-{fid}"
+        await db.tips.update_one({"id": live_id}, {
+            "$set": {
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.5,
+                "ai_analysis": analysis, "status": "live",
+                "live_minute": minute, "live_score": f"{goals.get('home') or 0}:{goals.get('away') or 0}",
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None,
+                "home_team": home, "away_team": away,
+                "country": "", "league": "TipJarHQ Live", "league_code": "",
+                "match_time": ((fx.get("fixture") or {}).get("date") or ""),
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-live", "fixture_id": fid, "created_at": now,
+            },
+        }, upsert=True)
+        posted += 1
+        logger.info(f"LIVE fresh: {home} vs {away} — {market} @ {odd} ({minute}')")
     return {"posted": posted, "closed": closed, "live": len(live)}
 
 
@@ -3769,6 +3830,44 @@ async def live_loop():
         except Exception as e:
             logger.error(f"live_loop error: {e}")
         await asyncio.sleep(LIVE_POLL_SECONDS)
+
+
+MEMBER_LIVE_POLL_SECONDS = 3 * 60
+_MEMBER_LIVE_SRC_EXCLUDE = ["hq-auto", "hq-live", "smart"]
+
+
+async def member_live_sync() -> dict:
+    """Auto-move member-submitted tips into the Live channel while their match is
+    in-play, and back to pending once it has finished (so the settle engine can
+    resolve them). Keeps the Live channel populated automatically."""
+    now = datetime.now(timezone.utc)
+    moved = reverted = 0
+    pend = await db.tips.find(
+        {"status": "pending", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(500)
+    for t in pend:
+        if _looks_live_now(t.get("match_time"), t.get("legs"), now):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "live"}})
+            moved += 1
+    liv = await db.tips.find(
+        {"status": "live", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(500)
+    for t in liv:
+        if not _looks_live_now(t.get("match_time"), t.get("legs"), now):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "pending"}})
+            reverted += 1
+    return {"moved_to_live": moved, "reverted": reverted}
+
+
+async def member_live_loop():
+    while True:
+        try:
+            res = await member_live_sync()
+            if res["moved_to_live"] or res["reverted"]:
+                logger.info(f"Member live sync: {res}")
+        except Exception as e:
+            logger.error(f"member_live_loop error: {e}")
+        await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)
 
 
 
@@ -3849,6 +3948,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
+    _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")

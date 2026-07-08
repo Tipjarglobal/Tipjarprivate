@@ -225,6 +225,11 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Auto-Live-Loop + KI-Live-Picks)
+- MEMBER AUTO-LIVE: neuer member_live_loop (alle 3 Min) verschiebt eingereichte Member-Tipps automatisch nach Live, sobald ihr Spiel läuft (_looks_live_now), und nach Spielende zurück auf pending (damit die Auto-Abrechnung greift). Getestet (pending→live→pending PASS).
+- KI-LIVE-PICKS: live_autopost erzeugt jetzt zusätzlich FRISCHE Live-Goal-Picks (Über 1.5/2.5) für laufende Spiele (Minute 10–80, Stand 0-0/1 Tor) mit echter Torgefahr (_live_pressure_ok). Quota-Guard LIVE_STAT_CALL_CAP=20/Run. Verifiziert: 19 Live-Spiele → 8 Picks gepostet (u.a. Olympiakos vs Raków Über 1,5 @ 3,75), rendern korrekt im Live-Kanal mit LIVE-Badge + Teilen.
+- Admin "→ Nach Live"/"→ Nach Offen" Button (PUT status akzeptiert live). i18n wall.toLive/toPending in 8 Sprachen (Bugfix: fehlender el-Eintrag + verirrtes i18n.js-Fragment am Dateiende entfernt).
+
 ## Changelog — 2026-07-08 (Admin: Tip nach Live/Offen verschieben)
 - PUT /api/tips/{id}/status akzeptiert jetzt auch "live" (vorher nur won/lost/pending).
 - RateWall: Admin-Button "→ Nach Live" / "→ Nach Offen" auf Member-Tip-Karten (data-testid admin-tolive-{id}). i18n wall.toLive/wall.toPending in allen 8 Sprachen.
