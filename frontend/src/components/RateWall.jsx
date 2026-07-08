@@ -269,7 +269,7 @@ function tipFlags(tip) {
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
-  const isMemberPending = tip.status === "pending" && !["hq-auto", "smart"].includes(tip.source);
+  const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
   const doShare = async () => {
     setSharing(true);
     try {
@@ -302,7 +302,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{tip.username}</span></span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
-          {isMemberPending && (
+          {isShareable && (
             <button
               onClick={doShare}
               disabled={sharing}

@@ -747,6 +747,43 @@ def compute_return(stake, odds, fallback=""):
     return fallback
 
 
+LIVE_MATCH_MAX_MINUTES = 150  # a football match (incl. HT/stoppage) rarely runs past ~2.5h
+
+
+def _kickoff_dt(mt: str):
+    dt = _parse_kickoff(mt)
+    if dt:
+        return dt
+    s = (mt or "").strip()
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})", s)
+    if m:
+        y, mo, d, h, mi = map(int, m.groups())
+        try:
+            return datetime(y, mo, d, h, mi, tzinfo=timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
+def _looks_live_now(match_time: str, legs, now) -> bool:
+    """A user-submitted slip counts as LIVE if its match kicked off within the
+    last ~2.5h (or any leg of a parlay did) and hasn't obviously finished yet."""
+    candidates = []
+    ko = _kickoff_dt(match_time)
+    if ko:
+        candidates.append(ko)
+    for lg in (legs or []):
+        k = _kickoff_dt(lg.get("kickoff"))
+        if k:
+            candidates.append(k)
+    for ko in candidates:
+        mins = (now - ko).total_seconds() / 60.0
+        if -5 <= mins <= LIVE_MATCH_MAX_MINUTES:
+            return True
+    return False
+
+
+
 @api_router.post("/tips")
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     legs = _sanitize_legs(inp.legs)
@@ -793,7 +830,7 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "is_parlay": is_parlay,
         "stake": inp.stake,
         "potential_return": compute_return(inp.stake, inp.odds, inp.potential_return),
-        "status": "pending",
+        "status": "live" if _looks_live_now(match_time, legs, datetime.now(timezone.utc)) else "pending",
         "sum_stars": 0,
         "ratings_count": 0,
         "avg_rating": 0,

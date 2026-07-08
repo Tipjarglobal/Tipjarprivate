@@ -225,6 +225,10 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Auto-Live-Erkennung + Live teilbar)
+- Eingereichte Member-Tipps landen jetzt AUTOMATISCH im Live-Kanal (status="live"), wenn das Spiel gerade läuft: Anstoß liegt max. ~150 Min zurück (bzw. ein Parlay-Leg). Neu: _kickoff_dt (inkl. ISO-Format) + _looks_live_now in server.py, angewandt in POST /api/tips. Verifiziert per E2E-curl (live/pending/abgelaufen korrekt).
+- Teilen-Button (RateWall) jetzt auch für LIVE Member-Tipps (vorher nur pending): isShareable = status in [pending,live] & source nicht hq-auto/smart. share-image funktioniert für Live-Tipps (verifiziert).
+
 ## Changelog — 2026-07-08 (SEO-Fixes nach Audit)
 - robots.txt (echte Textdatei, Allow + Sitemap-Verweis), sitemap.xml, llms.txt (korrektes Format) in /app/frontend/public/ angelegt.
 - index.html: Open-Graph-/Twitter-Meta-Tags, Canonical-URL, sichtbarer #seo-fallback-Textblock (H1/H2/Listen) für Crawler → verbessert Text/HTML-Verhältnis. React ersetzt den Fallback beim Mount (verifiziert).
