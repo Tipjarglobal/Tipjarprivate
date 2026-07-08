@@ -69,6 +69,36 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   free-kicks, headed/long-range goals, corner-by-10th-minute, team-scores-first -> those props omitted.
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
+## Session 2026-07-08 (fork)
+### AI Pick dedup + smartest-selection (verified: python unit + curl)
+- ROOT CAUSE of "multiple overlapping tips per match": `_forebet_candidates` returned
+  several markets per game and `forebet_autopost` posted each. FIX: it now returns exactly
+  ONE "smartest" pick per match. Autopost also `delete_many`s any other pending hq-auto tip
+  for the same (home,away,match_time) → strict one-pick-per-match. Cleaned 6 legacy dups.
+- Selection priority (owner "den smartesten" + "Underdog trifft früh"): 1) UNDERDOG team-to-score
+  "<Underdog> Über 0.5 Tore" when there's a clear favourite (pred 1/2) and the underdog is
+  predicted to score (e.g. Real–Atlético → Atlético Über 0.5); else 2) best rating×odds
+  (torreiches game → "Über 2.5 + Beide treffen"). Goals-picks ranked by rating AND predicted
+  Ø goals so torreiche games surface first.
+- Settlement verified for new markets via judge_market (8/8 cases: team-to-score, O2.5+BTTS,
+  BTTS, DNB all correct won/lost).
+- Systems UI: team names in system legs now wrap instead of truncating (Systems.jsx break-words).
+
+### NEW Feature — LIVE engine (built; unit-tested; NOT yet seen E2E — no live games at build time)
+- `live_autopost()` + `live_loop()` (every 3 min). Re-offers our pending pre-match hq-auto
+  goal-picks (Über 0.5/1.5/2.5, BTTS, O2.5+BTTS, team-to-score) while the match is IN-PLAY and
+  the bet has NOT yet landed, at now-higher live odds (source="hq-live", status="live",
+  fixture_id, live_minute, live_score). Owner "nachreichen" rule.
+- "Be careful" guard `_live_pressure_ok`: only re-offer if real pressure (shots on goal/corners)
+  by minute band; dead/flat games (Schweiz–Kolumbien style) skipped, esp. late.
+- Deterministic helpers unit-tested: `_live_bet_landed`, `_market_team_side` (unique-token, handles
+  Real vs Atlético 'Madrid'), `_live_odd` (scales with minute), `_align_goals` (fixture orientation),
+  `_find_live_fixture`. Live tips auto-settle won/lost from final score when match ends.
+- Admin trigger: POST /api/admin/live-run. Frontend Live channel already fetches status=live.
+- TODO (future): general corner-edge tips ("Team X mehr Ecken" when trailing + many corners) and
+  half-based goal markets for ALL live whitelist games (currently only re-offers our own picks to
+  stay quota-safe). Verify E2E once live matches are available.
+
 ## Deferred by user
 - SESSION 2026-07-07 (part 3): Removed Leaderboard entirely. Redesigned Systems into 5
   winning-focused bundles (lock=Sicherheits-Kombi ~1.3x high win-rate, value=Banker-Kombi

@@ -98,3 +98,13 @@ Practical signals from live stats: shots on target, total shots, corners, ball
 possession, dangerous attacks, current minute + score. Use these to pick ONE smart
 live market per match, same one-pick-per-match discipline as the pre-match engine.
 
+## LIVE "nachreichen" rule (owner voice note, 2026-07-08) — CORE of the live engine
+- We already post ~37 pre-match AI picks at 8–9★ (Über 0.5 / BTTS / Über 2.5 etc.).
+- When one of those matches is LIVE and the bet has NOT yet landed (e.g. an Über 0.5
+  pick still 0-0), RE-OFFER it live at the (now higher) live odds. Second chance,
+  better value.
+- BUT be careful: only re-offer if there is still realistic pressure (shots on goal /
+  corners). Do NOT re-offer a dead, flat game (à la Schweiz–Kolumbien 0-0 with no
+  chances), especially late.
+- Live tips auto-settle (won/lost) from the final score once the match ends.
+

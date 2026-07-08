@@ -1501,6 +1501,11 @@ async def settle_now(admin: dict = Depends(require_admin)):
     return await settle_pending_tips()
 
 
+@api_router.post("/admin/live-run")
+async def admin_live_run(admin: dict = Depends(require_admin)):
+    return await live_autopost()
+
+
 async def settlement_loop():
     while True:
         await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
@@ -2953,6 +2958,227 @@ async def smart_loop():
         await asyncio.sleep(12 * 3600)  # every 12 hours (season stats change slowly)
 
 
+# ---------------------------------------------------------------------------
+# LIVE engine: re-offer our pending pre-match AI picks (8-9★ Über 0.5 / BTTS /
+# Über 2.5 …) while their match is IN-PLAY and the bet has not yet landed, at the
+# now-higher live odds — but ONLY when there is still real pressure (shots/corners).
+# Dead, flat games are skipped. Live tips auto-settle from the final score.
+# ---------------------------------------------------------------------------
+LIVE_INPLAY_STATUSES = {"1H", "2H", "ET", "BT", "P", "LIVE", "INT"}
+LIVE_MAX_TIPS = 12
+LIVE_POLL_SECONDS = 3 * 60
+
+
+def _market_team_side(market: str, home: str, away: str):
+    """Which side a team-specific market refers to ('home'/'away') using the team's
+    UNIQUE tokens, so 'Atletico Madrid Über 0.5' → away even in Real–Atlético."""
+    mt = _sig_tokens(market)
+    if not mt:
+        return None
+    ht, at = _sig_tokens(home), _sig_tokens(away)
+    h_only = (ht - at) & mt
+    a_only = (at - ht) & mt
+    if a_only and not h_only:
+        return "away"
+    if h_only and not a_only:
+        return "home"
+    return None
+
+
+def _live_bet_landed(market: str, hg, ag, home: str, away: str):
+    """True=won, False=not yet/lost, None=not a goal-progress market (skip)."""
+    m = (market or "").lower()
+    hg, ag = hg or 0, ag or 0
+    total = hg + ag
+    if any(k in m for k in ("draw no bet", "doppelte chance", "genaues ergebnis", "unentschieden")):
+        return None
+    if "über 2.5" in m and ("beide" in m or "btts" in m):
+        return total >= 3 and hg >= 1 and ag >= 1
+    if "beide teams treffen" in m or "btts" in m:
+        return hg >= 1 and ag >= 1
+    if "über 2.5" in m:
+        return total >= 3
+    if "über 1.5" in m:
+        return total >= 2
+    if "über 0.5" in m:
+        side = _market_team_side(market, home, away)
+        if side == "home":
+            return hg >= 1
+        if side == "away":
+            return ag >= 1
+        return total >= 1
+    return None
+
+
+def _live_odd(market: str, minute: int) -> float:
+    m = (market or "").lower()
+    frac = min(max(minute, 0), 90) / 90.0
+    if "über 2.5" in m and ("beide" in m or "btts" in m):
+        base, top = 2.5, 12.0
+    elif "über 2.5" in m:
+        base, top = 1.9, 8.0
+    elif "beide teams treffen" in m or "btts" in m:
+        base, top = 1.8, 7.0
+    elif "über 1.5" in m:
+        base, top = 1.5, 6.0
+    else:  # Über 0.5 (match or team)
+        base, top = 1.25, 4.5
+    return round(base + (top - base) * frac, 2)
+
+
+def _live_stat_totals(stats):
+    sog = corners = shots = 0
+    for team in (stats or []):
+        for s in (team.get("statistics") or []):
+            typ = (s.get("type") or "").lower()
+            val = s.get("value")
+            if isinstance(val, str):
+                val = int(re.sub(r"[^0-9]", "", val) or 0)
+            val = val or 0
+            if "shots on goal" in typ:
+                sog += val
+            elif "corner" in typ:
+                corners += val
+            elif "total shots" in typ:
+                shots += val
+    return sog, corners, shots
+
+
+def _live_pressure_ok(stats, minute: int) -> bool:
+    """Owner's 'be careful' guard: only re-offer if the game is still live-dangerous."""
+    if not stats:
+        return minute < 70  # no data → trust only early/mid game
+    sog, corners, shots = _live_stat_totals(stats)
+    if minute >= 80:
+        return sog >= 4 or corners >= 8
+    if minute >= 60:
+        return sog >= 2 or corners >= 4 or shots >= 8
+    return sog >= 1 or corners >= 2 or shots >= 4
+
+
+def _align_goals(fx, home_team):
+    """Return goals oriented to OUR tip's home/away (fixture order may differ).
+    Uses token-overlap COUNT (not a boolean match) so same-city derbies like
+    Real–Atlético (shared 'Madrid') are oriented correctly."""
+    teams = fx.get("teams") or {}
+    th = (teams.get("home") or {}).get("name") or ""
+    ta = (teams.get("away") or {}).get("name") or ""
+    g = fx.get("goals") or {}
+    gh, ga = g.get("home") or 0, g.get("away") or 0
+    ho = _sig_tokens(home_team)
+    hh = len(_sig_tokens(th) & ho)
+    ha = len(_sig_tokens(ta) & ho)
+    return (gh, ga) if hh >= ha else (ga, gh)
+
+
+def _find_live_fixture(live, home, away):
+    for f in live:
+        teams = f.get("teams") or {}
+        th = (teams.get("home") or {}).get("name") or ""
+        ta = (teams.get("away") or {}).get("name") or ""
+        if (_teams_match(th, home) and _teams_match(ta, away)) or \
+           (_teams_match(th, away) and _teams_match(ta, home)):
+            return f
+    return None
+
+
+async def live_autopost() -> dict:
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "no API-Football key"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    live = _apifootball("/fixtures", {"live": "all"}) or []
+    live_by_id = {str((f.get("fixture") or {}).get("id")): f for f in live}
+    now = datetime.now(timezone.utc).isoformat()
+
+    # 1) settle/close live tips whose match has ended
+    closed = 0
+    existing = await db.tips.find({"source": "hq-live", "status": "live"}, {"_id": 0}).to_list(200)
+    for lt in existing:
+        fid = str(lt.get("fixture_id") or "")
+        if fid and fid in live_by_id:
+            continue  # still in play
+        fxs = _apifootball("/fixtures", {"id": fid}) if fid else None
+        if fxs:
+            f0 = fxs[0]
+            short = ((f0.get("fixture") or {}).get("status") or {}).get("short")
+            hg, ag = _align_goals(f0, lt["home_team"])
+            if short in FINISHED_STATUSES:
+                res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])
+                new_status = "won" if res else ("lost" if res is False else "void")
+                await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                    "status": new_status, "final_home": hg, "final_away": ag,
+                    "settled_by": "auto-live", "settled_at": now}})
+                closed += 1
+                continue
+        await db.tips.delete_one({"id": lt["id"]})  # unknown/stale → drop
+        closed += 1
+
+    if not live:
+        return {"posted": 0, "closed": closed, "live": 0}
+
+    # 2) re-offer pending pre-match AI goal-picks that are live & not yet landed
+    tips = await db.tips.find({"source": "hq-auto", "status": "pending"}, {"_id": 0}).to_list(300)
+    posted = 0
+    for t in tips:
+        if posted >= LIVE_MAX_TIPS:
+            break
+        fx = _find_live_fixture(live, t.get("home_team"), t.get("away_team"))
+        if not fx:
+            continue
+        hg, ag = _align_goals(fx, t["home_team"])
+        landed = _live_bet_landed(t.get("market"), hg, ag, t["home_team"], t["away_team"])
+        if landed is not False:  # None (result market) or True (already hit) → skip
+            continue
+        minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+        fid = str((fx.get("fixture") or {}).get("id"))
+        stats = _apifootball("/fixtures/statistics", {"fixture": fid})
+        if not _live_pressure_ok(stats, minute):
+            continue  # dead/flat game → be careful, skip
+        sog, corners, _ = _live_stat_totals(stats)
+        odd = _live_odd(t.get("market"), minute)
+        live_id = f"hqlive-{fid}-{t['id']}"
+        analysis = (
+            f"LIVE nachgereicht ({minute}'): {t.get('market')} — Stand {hg}:{ag}, "
+            f"{sog} Schüsse aufs Tor · {corners} Ecken. Noch nicht gefallen, aber Druck da. "
+            f"Ursprünglich {t.get('ai_rating')}★ Vor-Spiel-Pick — jetzt live zu {odd}."
+        )
+        await db.tips.update_one({"id": live_id}, {
+            "$set": {
+                "market": t.get("market"), "odds": f"{odd:.2f}", "ai_rating": t.get("ai_rating"),
+                "ai_analysis": analysis, "status": "live", "match_time": t.get("match_time"),
+                "live_minute": minute, "live_score": f"{hg}:{ag}", "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None,
+                "home_team": t["home_team"], "away_team": t["away_team"],
+                "country": t.get("country", ""), "league": "TipJarHQ Live",
+                "league_code": t.get("league_code", ""),
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-live", "fixture_id": fid, "created_at": now,
+            },
+        }, upsert=True)
+        posted += 1
+        logger.info(f"LIVE re-offer: {t['home_team']} vs {t['away_team']} — {t.get('market')} @ {odd} ({minute}')")
+    return {"posted": posted, "closed": closed, "live": len(live)}
+
+
+async def live_loop():
+    await asyncio.sleep(200)  # let the pre-match picks populate first
+    while True:
+        try:
+            if API_FOOTBALL_KEY:
+                logger.info(f"HQ loop D (Live): {await live_autopost()}")
+        except Exception as e:
+            logger.error(f"live_loop error: {e}")
+        await asyncio.sleep(LIVE_POLL_SECONDS)
+
+
+
+
 
 
 @app.on_event("startup")
@@ -2991,6 +3217,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
+    _BG_TASKS.append(asyncio.create_task(live_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:
