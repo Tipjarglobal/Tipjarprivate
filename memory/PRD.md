@@ -70,6 +70,26 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Session 2026-07-08 (fork)
+### Win-claim: branded slip image + 404 fix + market wording + UNDER markets
+- FIXED 404 "Bild nicht sichtbar": claim_win uploaded via put_object but never created the
+  db.files record the /files/{path} route requires → now inserts it.
+- Win claims no longer store the raw bookmaker screenshot. `_render_slip_image()` (PIL,
+  FreeSans) renders a standardised TipJar-branded won slip from the extracted data: logo
+  (Tip white/Jar green), WON badge, legs GROUPED by match (fixture titled once), German
+  market names with "Über/Unter", total odds, @user, winnings. Shown in Hall of Fame.
+- Match-key made accent- & language-insensitive (unicodedata fold + de↔en national-team
+  aliases) so "Schweiz"=="Switzerland", "Víkingur"→"vikingur". `_system_match_keys` now
+  PERSISTENT (all tips + parlay legs), since claims arrive after matches finish.
+  WIN_MIN_PLAYED_LEGS 5→3 (TipJar systems can be 3-leg).
+- Live claim accepts up to 4 images (multipart `files`); combined into one branded slip.
+- extract_win_slip prompt updated: German markets, "Über/Unter", team totals ("Víkingur
+  Über 0.5 Tore"), player shots ("Mbappé Über 0.5 Torschüsse"), 1X/X2.
+- AI engine (_forebet_candidates): added UNDER markets (Unter 2.5/3.5 Tore) for low-scoring
+  predicted games; _market_family knows u25/u35/under. Smart Picks restored (top leagues).
+- Frontend: WinClaimModal multi-file live upload + "TipJar Best Wins" button + storage note;
+  HallOfFame shows full branded slip (object-contain) with rank badge, no redundant footer.
+- NOTE: preview only — user must redeploy to production (tipjarglobal.com).
+
 ### Smart Picks RESTORED with top-league-only player markets (owner reversal)
 - Owner: keep the Smart Picks feature (tab + notification toggle); only generate player-prop
   markets for TOP leagues that actually offer them (EPL, La Liga, Serie A, Bundesliga, Ligue 1

@@ -152,7 +152,9 @@ function Home() {
       </section>
 
       <InviteSection />
-      <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} />
+      <div id="best-wins">
+        <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} />
+      </div>
 
       <footer className="border-t border-elevated py-10 text-center px-4">
         <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
@@ -203,7 +205,8 @@ function Home() {
       <WalletModal open={walletOpen} onClose={() => setWalletOpen(false)} />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
-        requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished} />
+        requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished}
+        onViewBestWins={() => document.getElementById("best-wins")?.scrollIntoView({ behavior: "smooth" })} />
     </div>
   );
 }

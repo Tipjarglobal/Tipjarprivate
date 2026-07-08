@@ -1132,7 +1132,7 @@ async def credit_txns(user: dict = Depends(get_current_user)):
 
 
 # ------------------------------------------------------------------ earn credits: win claims
-WIN_MIN_PLAYED_LEGS = 5          # a played-along slip must have >= 5 legs
+WIN_MIN_PLAYED_LEGS = 3          # a played-along slip must have >= 3 legs (TipJar systems can be 3-leg)
 WIN_MIN_SYSTEM_MATCH = 3         # >= 3 legs must match a TipJar system (anti-fraud)
 WIN_LIVE_MIN_LEGS = 4            # live streak: 4 in a row
 WIN_LIVE_MIN_ODDS = 1.60         # each live leg must be > 1.60
@@ -1154,7 +1154,13 @@ async def extract_win_slip(image_b64: str) -> dict:
             "Read this bet-slip screenshot. Return STRICT JSON: "
             '{"status":"won|lost|open","total_odds":<number>,"stake":"","winnings":"",'
             '"legs":[{"home":"","away":"","market":"","odds":<number>,"result":"won|lost|open"}]}. '
-            "status is the overall slip result. Extract every leg. If a value is missing use empty/0."
+            "status is the overall slip result. Extract every leg. If a value is missing use empty/0. "
+            "IMPORTANT market naming — always in GERMAN, always spell the word 'Über' or 'Unter': "
+            "goals over/under => 'Über 2.5 Tore' / 'Unter 3.5 Tore'; "
+            "TEAM total goals => include the team name, e.g. 'Víkingur Über 0.5 Tore', 'Marokko Unter 2.5 Tore'; "
+            "player shots on target => '<Spieler> Über 0.5 Torschüsse' (e.g. 'Mbappé Über 0.5 Torschüsse'); "
+            "double chance => '1X' or 'X2'; both teams to score => 'Beide Teams treffen'. "
+            "Keep 'home' and 'away' as the two teams of the match the leg belongs to."
         )
         resp = await chat.send_message(UserMessage(text=prompt, file_contents=[ImageContent(image_base64=image_b64)]))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
@@ -1188,52 +1194,170 @@ async def extract_win_slip(image_b64: str) -> dict:
 
 
 async def _system_match_keys() -> set:
+    """Match keys of every TipJar pick a user could have played — PERSISTENT.
+    Claims arrive AFTER matches finish, so we must include finished picks too:
+    current systems + all posted tips (any status) + their parlay legs."""
+    keys = set()
     try:
         data = await build_systems()
+        for sysd in data.get("systems", []):
+            for sel in sysd.get("selections", []):
+                keys.add(_match_key(sel.get("home_team"), sel.get("away_team")))
     except Exception:
-        return set()
-    keys = set()
-    for sysd in data.get("systems", []):
-        for sel in sysd.get("selections", []):
-            keys.add(_match_key(sel.get("home_team"), sel.get("away_team")))
+        pass
+    tips = await db.tips.find({}, {"_id": 0, "home_team": 1, "away_team": 1, "legs": 1}).to_list(4000)
+    for t in tips:
+        if t.get("home_team") and t.get("away_team"):
+            keys.add(_match_key(t["home_team"], t["away_team"]))
+        for lg in (t.get("legs") or []):
+            m = lg.get("match") or ""
+            parts = re.split(r"\s[–—\-]\s", m, maxsplit=1)
+            if len(parts) == 2:
+                keys.add(_match_key(parts[0], parts[1]))
     return keys
 
 
+def _render_slip_image(legs, total_odds, stake, winnings, username, ctype) -> bytes:
+    """Render a standardised, TipJar-branded 'won' bet slip from the extracted data —
+    so we NEVER show a random bookmaker screenshot (Betano/Tipwin/…), only our own
+    elegant black-green TipJar slip listing the picks. Used for the Best-Wins gallery."""
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    FB = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
+    FR = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+
+    def font(path, sz):
+        try:
+            return ImageFont.truetype(path, sz)
+        except Exception:
+            return ImageFont.load_default()
+    f_logo, f_h, f_m, f_o = font(FB, 46), font(FB, 28), font(FR, 23), font(FB, 27)
+    f_s, f_big, f_lbl = font(FR, 22), font(FB, 52), font(FR, 21)
+    W, pad, head_h, foot_h = 860, 44, 128, 210
+    legs = legs[:10]
+    # group legs by match so the same fixture is only titled ONCE
+    groups, gidx = [], {}
+    for l in legs:
+        k = _match_key(l.get("home", ""), l.get("away", ""))
+        if k not in gidx:
+            gidx[k] = len(groups)
+            groups.append({"home": l.get("home", "?"), "away": l.get("away", "?"), "mkts": []})
+        groups[gidx[k]]["mkts"].append(l)
+    hdr_h, mrow_h, gap = 48, 44, 16
+    H = head_h + sum(hdr_h + len(g["mkts"]) * mrow_h + gap for g in groups) + foot_h
+    VOID, CARD, GREEN = (9, 9, 11), (20, 21, 24), (46, 204, 87)
+    WHITE, GREY, LINE = (240, 240, 242), (150, 152, 158), (38, 40, 45)
+    img = Image.new("RGB", (W, H), VOID)
+    d = ImageDraw.Draw(img)
+
+    def trunc(txt, fnt, maxw):
+        txt = txt or ""
+        if d.textlength(txt, font=fnt) <= maxw:
+            return txt
+        while txt and d.textlength(txt + "…", font=fnt) > maxw:
+            txt = txt[:-1]
+        return txt + "…"
+
+    def check(cx, cy, sz, col):
+        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=4)
+        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=4)
+    # header: TipJar logo (Tip white / Jar green)
+    d.text((pad, 40), "Tip", font=f_logo, fill=WHITE)
+    tw = d.textlength("Tip", font=f_logo)
+    d.text((pad + tw, 40), "Jar", font=f_logo, fill=GREEN)
+    badge = "WON"
+    bw = d.textlength(badge, font=f_h)
+    bx0 = W - pad - bw - 66
+    d.rounded_rectangle([bx0, 46, W - pad, 96], 14, fill=GREEN)
+    check(bx0 + 20, 74, 18, VOID)
+    d.text((bx0 + 48, 54), badge, font=f_h, fill=VOID)
+    d.line([pad, head_h - 14, W - pad, head_h - 14], fill=LINE, width=2)
+    # legs grouped by match
+    y = head_h
+    for g in groups:
+        d.text((pad, y + 4), trunc(f"{g['home']}  –  {g['away']}", f_h, W - 2 * pad), font=f_h, fill=WHITE)
+        y += hdr_h
+        for l in g["mkts"]:
+            od = l.get("odds") or 0
+            odt = f"{od:.2f}" if od else "gewonnen"
+            ow = d.textlength(odt, font=f_o)
+            d.text((pad + 22, y + 4), trunc(l.get("market", "") or "", f_m, W - 2 * pad - ow - 90), font=f_m, fill=GREY)
+            d.text((W - pad - ow, y + 2), odt, font=f_o, fill=GREEN)
+            check(W - pad - ow - 34, y + 18, 18, GREEN)
+            y += mrow_h
+        d.line([pad, y + 2, W - pad, y + 2], fill=LINE, width=1)
+        y += gap
+    # footer card
+    fy = y + 14
+    d.rounded_rectangle([pad, fy, W - pad, H - 28], 20, fill=CARD)
+    label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie"}.get(ctype, "Gewonnen")
+    d.text((pad + 26, fy + 22), label, font=f_h, fill=GREEN)
+    d.text((pad + 26, fy + 66), "Gesamtquote", font=f_lbl, fill=GREY)
+    ot = f"{total_odds:.2f}" if total_odds else "—"
+    otw = d.textlength(ot, font=f_big)
+    d.rounded_rectangle([W - pad - otw - 52, fy + 18, W - pad - 26, fy + 90], 14, fill=GREEN)
+    d.text((W - pad - otw - 39, fy + 24), ot, font=f_big, fill=VOID)
+    d.text((pad + 26, fy + 104), f"@{username}", font=f_s, fill=WHITE)
+    if winnings:
+        d.text((pad + 26, fy + 140), f"Gewinn: {winnings}", font=f_o, fill=GREEN)
+    if stake:
+        stt = f"Einsatz: {stake}"
+        d.text((W - pad - d.textlength(stt, font=f_s) - 26, fy + 144), stt, font=f_s, fill=GREY)
+    out = io.BytesIO()
+    img.save(out, format="WEBP", quality=88)
+    return out.getvalue()
+
+
 @api_router.post("/wins/claim")
-async def claim_win(file: UploadFile = File(...), type: str = Form(...),
+async def claim_win(file: Optional[UploadFile] = File(None),
+                    files: Optional[List[UploadFile]] = File(None),
+                    type: str = Form(...),
                     user: dict = Depends(get_current_user)):
     ctype = (type or "").strip().lower()
     if ctype not in ("played", "posted", "live"):
         raise HTTPException(status_code=400, detail="Invalid claim type")
-    raw = await file.read()
-    if not raw:
+    # gather uploaded images (live can be up to 4 separate screenshots)
+    imgs_raw = []
+    for f in (files or []):
+        if f:
+            b = await f.read()
+            if b:
+                imgs_raw.append(b)
+    if file:
+        b = await file.read()
+        if b:
+            imgs_raw.append(b)
+    if not imgs_raw:
         raise HTTPException(status_code=400, detail="No file uploaded")
-    image_b64 = base64.b64encode(raw).decode("utf-8")
-    slip = await extract_win_slip(image_b64)
-
-    if slip["status"] != "won":
-        raise HTTPException(status_code=422, detail="Nur GEWONNENE Scheine zählen (Slip ist nicht 'Won').")
-    legs = slip["legs"]
-    legs_n = len(legs)
-    if legs_n < 2:
-        raise HTTPException(status_code=422, detail="Kein gültiger Kombi-Schein erkannt.")
-
-    # anti-duplicate: same set of legs can't be claimed twice
-    sig = hashlib.md5(("|".join(sorted(f"{l['home']}-{l['away']}-{l['market']}" for l in legs))
-                       + f"|{slip['total_odds']}").encode()).hexdigest()
-    if await db.win_claims.find_one({"sig": sig}):
-        raise HTTPException(status_code=409, detail="Dieser Schein wurde bereits eingereicht.")
-
-    sys_keys = await _system_match_keys()
-    matched = sum(1 for l in legs if _match_key(l["home"], l["away"]) in sys_keys)
 
     if ctype == "live":
+        legs = []
+        for b in imgs_raw:
+            s = await extract_win_slip(base64.b64encode(b).decode("utf-8"))
+            if s["status"] != "won":
+                raise HTTPException(status_code=422, detail="Jeder Live-Schein muss GEWONNEN sein.")
+            legs.extend(s["legs"])
+        legs_n = len(legs)
         if legs_n < WIN_LIVE_MIN_LEGS:
-            raise HTTPException(status_code=422, detail=f"Live-Serie braucht mind. {WIN_LIVE_MIN_LEGS} Picks.")
+            raise HTTPException(status_code=422, detail=f"Live-Serie braucht mind. {WIN_LIVE_MIN_LEGS} gewonnene Live-Wetten (lade z.B. 4 Bilder hoch).")
         if any((l["odds"] or 0) <= WIN_LIVE_MIN_ODDS for l in legs):
             raise HTTPException(status_code=422, detail=f"Jede Live-Auswahl muss Quote > {WIN_LIVE_MIN_ODDS} haben.")
-        credits = WIN_LIVE_CREDITS
+        import math
+        odds_list = [l["odds"] for l in legs if l["odds"]]
+        total_odds = round(math.prod(odds_list), 2) if odds_list else 0.0
+        stake, winnings = "", ""
+        credits, matched = WIN_LIVE_CREDITS, legs_n
     else:
+        raw = imgs_raw[0]
+        slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))
+        if slip["status"] != "won":
+            raise HTTPException(status_code=422, detail="Nur GEWONNENE Scheine zählen (Slip ist nicht 'Won').")
+        legs = slip["legs"]
+        legs_n = len(legs)
+        if legs_n < 2:
+            raise HTTPException(status_code=422, detail="Kein gültiger Kombi-Schein erkannt.")
+        sys_keys = await _system_match_keys()
+        matched = sum(1 for l in legs if _match_key(l["home"], l["away"]) in sys_keys)
         if matched < WIN_MIN_SYSTEM_MATCH:
             raise HTTPException(status_code=422,
                                 detail="Das zählt nicht als mitgespielt — der Schein passt zu keinem TipJar-System.")
@@ -1243,22 +1367,35 @@ async def claim_win(file: UploadFile = File(...), type: str = Form(...),
             credits = min(WIN_MAX_CREDITS, WIN_MIN_PLAYED_LEGS + (legs_n - WIN_MIN_PLAYED_LEGS))
         else:  # posted
             credits = WIN_POSTED_CREDITS
+        total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
 
-    # store image now that the claim is valid
-    ext = (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png").lower()
+    # anti-duplicate: the same set of legs can't be claimed twice
+    sig = hashlib.md5(("|".join(sorted(f"{l['home']}-{l['away']}-{l['market']}" for l in legs))
+                       + f"|{total_odds}").encode()).hexdigest()
+    if await db.win_claims.find_one({"sig": sig}):
+        raise HTTPException(status_code=409, detail="Dieser Schein wurde bereits eingereicht.")
+
+    # store a STANDARDISED TipJar-branded slip (never the raw bookmaker screenshot)
+    ext, store_ct = "webp", "image/webp"
+    store_bytes = _render_slip_image(legs, total_odds, stake, winnings, user["username"], ctype)
     image_path = None
     try:
-        result = put_object(f"{APP_NAME}/wins/{user['id']}/{uuid.uuid4()}.{ext}", raw,
-                            file.content_type or "image/png")
+        result = put_object(f"{APP_NAME}/wins/{user['id']}/{uuid.uuid4()}.{ext}", store_bytes, store_ct)
         image_path = result["path"]
+        await db.files.insert_one({
+            "id": str(uuid.uuid4()), "storage_path": image_path,
+            "original_filename": f"tipjar-slip.{ext}", "content_type": store_ct,
+            "owner": user["id"], "is_deleted": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
     except Exception as ex:
         logger.error(f"win image upload failed: {ex}")
 
     claim = {
         "id": str(uuid.uuid4()), "sig": sig, "user_id": user["id"], "username": user["username"],
         "type": ctype, "image_path": image_path, "legs": legs, "legs_count": legs_n,
-        "matched_legs": matched, "total_odds": slip["total_odds"], "stake": slip["stake"],
-        "winnings": slip["winnings"], "credits": credits, "status": "approved",
+        "matched_legs": matched, "total_odds": total_odds, "stake": stake,
+        "winnings": winnings, "credits": credits, "status": "approved",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.win_claims.insert_one(claim)
@@ -1637,9 +1774,9 @@ async def seed_showcase():
             "odds": "1.86", "ai_rating": 10.0,
             "ai_analysis": "Volles Vertrauen. Víkingur Reykjavík: wichtiges CL-Qualifikationsspiel, müssen zuhause gewinnen — wir wollen nur, dass sie treffen (Over 0,5, Quote 1,17). Kolumbien soll sich qualifizieren: keine Tore nötig, einfach nicht in regulärer Zeit verlieren (X2). Luis Díaz ist in absoluter Topform → Über 0,5 Torschüsse aufs Tor (1,59). Sauber abgesicherter Kombi bei 1,86 — Apex 10/10.",
             "legs": [
-                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "won", "selections": ["Víkingur Reykjavík Total Über 0,5"]},
+                {"match": "Víkingur Reykjavík – Győr ETO", "league": "Champions-League-Quali", "kickoff": "07/07 21:00", "status": "won", "selections": ["Víkingur Reykjavík Über 0.5 Tore"]},
                 {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Doppelte Chance X2 (Kolumbien)"]},
-                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Luis Díaz: Über 0,5 Torschüsse aufs Tor"]},
+                {"match": "Schweiz – Kolumbien", "league": "WM-Quali", "kickoff": "07/07 22:00", "status": "won", "selections": ["Luis Díaz Über 0.5 Torschüsse"]},
             ],
             "is_parlay": True, "stake": "", "potential_return": "",
             "status": "won", "settled_by": "manual", "settled_at": now,
@@ -1745,13 +1882,37 @@ _CLUB_NOISE = {"fc", "sc", "sd", "ca", "ac", "cd", "cf", "afc", "cfc", "club",
                "cds", "aa", "ec", "se", "if", "sk", "fk", "cs", "us", "ik",
                "bk", "ff", "kf", "nk", "hnk", "cd", "ud", "sv", "vfl", "vfb"}
 
+# German↔English aliases so a bookmaker slip ("Switzerland/Colombia") matches a
+# TipJar pick stored in German ("Schweiz/Kolumbien"). Token-level, normalised to English.
+_TEAM_ALIASES = {
+    "schweiz": "switzerland", "kolumbien": "colombia", "deutschland": "germany",
+    "spanien": "spain", "frankreich": "france", "italien": "italy",
+    "brasilien": "brazil", "argentinien": "argentina", "niederlande": "netherlands",
+    "belgien": "belgium", "kroatien": "croatia", "serbien": "serbia",
+    "polen": "poland", "tuerkei": "turkey", "turkei": "turkey", "oesterreich": "austria",
+    "schweden": "sweden", "daenemark": "denmark", "danemark": "denmark",
+    "norwegen": "norway", "griechenland": "greece", "ungarn": "hungary",
+    "tschechien": "czechia", "englaende": "england", "vereinigte": "usa",
+    "mexiko": "mexico", "japan": "japan", "suedkorea": "southkorea",
+    "portugal": "portugal", "irland": "ireland", "schottland": "scotland",
+    "wales": "wales", "island": "iceland", "gyor": "gyor",
+}
+
+
+def _fold(n: str) -> str:
+    """Lower-case + strip accents to ASCII (Víkingur→vikingur, Győr→gyor)."""
+    import unicodedata
+    return unicodedata.normalize("NFKD", (n or "").lower()).encode("ascii", "ignore").decode()
+
 
 def _match_key(home: str, away: str) -> str:
-    """Order-independent, prefix-insensitive key so 'SD Aucas' == 'Aucas'."""
+    """Order-independent, prefix-insensitive, accent- & language-insensitive key
+    so 'SD Aucas'=='Aucas' and 'Schweiz'=='Switzerland'=='Víkingur'→'vikingur'."""
     def core(n: str) -> str:
-        toks = [t for t in re.sub(r"[^a-z0-9 ]", " ", (n or "").lower()).split()
+        toks = [_TEAM_ALIASES.get(t, t)
+                for t in re.sub(r"[^a-z0-9 ]", " ", _fold(n)).split()
                 if t and t not in _CLUB_NOISE]
-        return "".join(sorted(toks)) or (n or "").lower().replace(" ", "")
+        return "".join(sorted(toks)) or _fold(n).replace(" ", "")
     return f"{core(home)}|{core(away)}"
 
 
@@ -2182,6 +2343,12 @@ def _market_family(market: str) -> str:
         return "o25"
     if "über 1.5" in m:
         return "o15"
+    if "unter 3.5" in m:
+        return "u35"
+    if "unter 2.5" in m:
+        return "u25"
+    if "unter" in m and "tore" in m:
+        return "under"
     if "über 0.5" in m:
         return "o05" if m.startswith("über") else "team_o05"
     if "genaues ergebnis" in m or "unentschieden" in m:
@@ -2269,6 +2436,15 @@ def _forebet_candidates(r: dict) -> list[dict]:
         elif total == 1:
             opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05",
                          "rating": 8.0, "winprob": 0.80})
+        # UNDER goals for low-scoring predicted games (owner wants Unter markets too).
+        if total <= 1:
+            opts.append({"sfx": "-u25", "market": "Unter 2.5 Tore", "odds": "1.55",
+                         "rating": 8.0, "winprob": 0.80})
+            opts.append({"sfx": "-u35", "market": "Unter 3.5 Tore", "odds": "1.22",
+                         "rating": 8.5, "winprob": 0.90})
+        elif total == 2:
+            opts.append({"sfx": "-u35", "market": "Unter 3.5 Tore", "odds": "1.35",
+                         "rating": 8.0, "winprob": 0.78})
     return opts
 
 

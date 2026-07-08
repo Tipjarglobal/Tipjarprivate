@@ -54,33 +54,32 @@ export default function HallOfFame({ refreshKey, onEarn }) {
                 key={w.id}
                 initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ delay: i * 0.04 }}
-                className="rounded-2xl bg-surface border border-elevated overflow-hidden hover:border-volt/40 transition-colors"
+                className="relative rounded-2xl bg-surface border border-elevated overflow-hidden hover:border-volt/40 transition-colors"
                 data-testid={`hof-card-${i}`}
               >
-                {w.image_path && (
-                  <div className="h-40 bg-black/40 overflow-hidden flex items-center justify-center">
-                    <img src={fileUrl(w.image_path)} alt="win" className="w-full h-full object-cover" />
+                {i < 3 && (
+                  <span className="absolute top-2 right-2 z-10 text-xs font-black text-void bg-volt rounded-full px-2.5 py-0.5 shadow-lg">#{i + 1}</span>
+                )}
+                {w.image_path ? (
+                  <img src={fileUrl(w.image_path)} alt="win" data-testid={`hof-img-${i}`}
+                    className="w-full object-contain bg-black/40" />
+                ) : (
+                  <div className="p-4">
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${meta.color}`}>
+                        <Icon size={13} /> {t(meta.label)}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-baseline justify-between">
+                      <span className="text-zinc-400 text-xs">{t("win.hof.odds")}</span>
+                      <span className="font-mono font-black text-2xl text-volt">{w.total_odds?.toFixed(2)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-sm">
+                      <span className="text-white font-semibold truncate">@{w.username}</span>
+                      <span className="text-zinc-400">{w.legs_count} Legs</span>
+                    </div>
                   </div>
                 )}
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${meta.color}`}>
-                      <Icon size={13} /> {t(meta.label)}
-                    </span>
-                    {i < 3 && <span className="text-xs font-black text-volt">#{i + 1}</span>}
-                  </div>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-zinc-400 text-xs">{t("win.hof.odds")}</span>
-                    <span className="font-mono font-black text-2xl text-volt">{w.total_odds?.toFixed(2)}</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-sm">
-                    <span className="text-white font-semibold truncate">@{w.username}</span>
-                    <span className="text-zinc-400">{w.legs_count} Legs</span>
-                  </div>
-                  {w.winnings && (
-                    <div className="mt-2 text-xs text-zinc-500">{t("win.hof.won")}: <span className="text-white font-semibold">{w.winnings}</span></div>
-                  )}
-                </div>
               </motion.div>
             );
           })}

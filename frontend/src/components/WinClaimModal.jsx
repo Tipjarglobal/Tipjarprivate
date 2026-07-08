@@ -12,12 +12,13 @@ const TYPES = [
   { key: "live", icon: Radio, tid: "win-type-live" },
 ];
 
-export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }) {
+export default function WinClaimModal({ open, onClose, requireLogin, onClaimed, onViewBestWins }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [type, setType] = useState("played");
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [liveFiles, setLiveFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mine, setMine] = useState(null);
   const inputRef = useRef(null);
@@ -42,15 +43,25 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
     setPreview(URL.createObjectURL(f));
   };
 
+  const pickLive = (fileList) => {
+    const arr = Array.from(fileList || []).slice(0, 4);
+    setLiveFiles(arr);
+  };
+
   const submit = async () => {
-    if (!file) {
+    const isLive = type === "live";
+    if (isLive ? liveFiles.length === 0 : !file) {
       toast.error(t("win.needfile"));
       return;
     }
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      if (isLive) {
+        liveFiles.forEach((f) => fd.append("files", f));
+      } else {
+        fd.append("file", file);
+      }
       fd.append("type", type);
       const { data } = await api.post("/wins/claim", fd, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -61,6 +72,7 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
       refreshMine();
       setFile(null);
       setPreview(null);
+      setLiveFiles([]);
     } catch (e) {
       toast.error(apiErr(e, t("win.failed")));
     } finally {
@@ -112,33 +124,80 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed }
             {t(`win.type.${type}.desc`)}
           </p>
 
-          <input ref={inputRef} type="file" accept="image/*" className="hidden"
-            data-testid="win-file-input"
-            onChange={(e) => pick(e.target.files?.[0])} />
-          <button
-            onClick={() => inputRef.current?.click()}
-            data-testid="win-upload-btn"
-            className="mt-4 w-full rounded-2xl border-2 border-dashed border-elevated hover:border-volt/60 transition-colors p-6 flex flex-col items-center gap-2 text-zinc-400"
-          >
-            {preview ? (
-              <img src={preview} alt="slip" className="max-h-52 rounded-xl object-contain" />
-            ) : (
-              <>
-                <Upload size={26} className="text-volt" />
-                <span className="text-sm font-semibold">{t("win.upload")}</span>
-                <span className="text-xs text-zinc-600">{t("submit.dropHint")}</span>
-              </>
-            )}
-          </button>
+          {type === "live" && (
+            <p className="text-xs text-cyan-300 mt-2 leading-snug" data-testid="win-live-hint">
+              {t("win.live.multi")}
+            </p>
+          )}
+
+          {type === "live" ? (
+            <>
+              <input ref={inputRef} type="file" accept="image/*" multiple className="hidden"
+                data-testid="win-file-input-live"
+                onChange={(e) => pickLive(e.target.files)} />
+              <button
+                onClick={() => inputRef.current?.click()}
+                data-testid="win-upload-btn"
+                className="mt-4 w-full rounded-2xl border-2 border-dashed border-elevated hover:border-volt/60 transition-colors p-6 flex flex-col items-center gap-2 text-zinc-400"
+              >
+                {liveFiles.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {liveFiles.map((f, i) => (
+                      <img key={i} src={URL.createObjectURL(f)} alt={`live-${i}`} className="max-h-24 rounded-lg object-contain" />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={26} className="text-volt" />
+                    <span className="text-sm font-semibold">{t("win.upload")}</span>
+                    <span className="text-xs text-zinc-600">{t("submit.dropHint")}</span>
+                  </>
+                )}
+              </button>
+              {liveFiles.length > 0 && (
+                <p className="text-xs text-zinc-500 mt-1 text-center">{liveFiles.length}/4</p>
+              )}
+            </>
+          ) : (
+            <>
+              <input ref={inputRef} type="file" accept="image/*" className="hidden"
+                data-testid="win-file-input"
+                onChange={(e) => pick(e.target.files?.[0])} />
+              <button
+                onClick={() => inputRef.current?.click()}
+                data-testid="win-upload-btn"
+                className="mt-4 w-full rounded-2xl border-2 border-dashed border-elevated hover:border-volt/60 transition-colors p-6 flex flex-col items-center gap-2 text-zinc-400"
+              >
+                {preview ? (
+                  <img src={preview} alt="slip" className="max-h-52 rounded-xl object-contain" />
+                ) : (
+                  <>
+                    <Upload size={26} className="text-volt" />
+                    <span className="text-sm font-semibold">{t("win.upload")}</span>
+                    <span className="text-xs text-zinc-600">{t("submit.dropHint")}</span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
 
           <button
-            onClick={submit} disabled={loading || !file}
+            onClick={submit} disabled={loading || (type === "live" ? liveFiles.length === 0 : !file)}
             data-testid="win-submit-btn"
             className="mt-5 w-full flex items-center justify-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <><Loader2 size={18} className="animate-spin" /> {t("submit.analyzing")}</> : <><Coins size={18} /> {t("win.submit")}</>}
           </button>
           <p className="text-[11px] text-zinc-600 mt-3 text-center leading-snug">{t("win.rules")}</p>
+
+          <button
+            onClick={() => { onViewBestWins?.(); onClose?.(); }}
+            data-testid="win-bestwins-btn"
+            className="mt-4 w-full flex items-center justify-center gap-2 rounded-full border border-volt/40 text-volt font-bold px-6 py-3 hover:bg-volt/10 active:scale-95 transition-all"
+          >
+            <Trophy size={16} /> {t("win.bestwins")}
+          </button>
+          <p className="text-[11px] text-zinc-500 mt-2 text-center leading-snug">{t("win.stored")}</p>
 
           {mine && mine.claims && mine.claims.length > 0 && (
             <div className="mt-6 border-t border-elevated pt-4" data-testid="win-mine-list">
