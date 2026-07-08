@@ -225,6 +225,11 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Admin: Tip nach Live/Offen verschieben)
+- PUT /api/tips/{id}/status akzeptiert jetzt auch "live" (vorher nur won/lost/pending).
+- RateWall: Admin-Button "→ Nach Live" / "→ Nach Offen" auf Member-Tip-Karten (data-testid admin-tolive-{id}). i18n wall.toLive/wall.toPending in allen 8 Sprachen.
+- Zweck: einzelne Member-Picks manuell in den Live-Kanal schieben (z.B. Olympiacos-Pick d432a864 auf Produktion). Preview getestet (curl live<->pending). Produktion braucht Redeploy, dann Verschiebung per API/Button möglich.
+
 ## Changelog — 2026-07-08 (Auto-Live-Erkennung + Live teilbar)
 - Eingereichte Member-Tipps landen jetzt AUTOMATISCH im Live-Kanal (status="live"), wenn das Spiel gerade läuft: Anstoß liegt max. ~150 Min zurück (bzw. ein Parlay-Leg). Neu: _kickoff_dt (inkl. ISO-Format) + _looks_live_now in server.py, angewandt in POST /api/tips. Verifiziert per E2E-curl (live/pending/abgelaufen korrekt).
 - Teilen-Button (RateWall) jetzt auch für LIVE Member-Tipps (vorher nur pending): isShareable = status in [pending,live] & source nicht hq-auto/smart. share-image funktioniert für Live-Tipps (verifiziert).

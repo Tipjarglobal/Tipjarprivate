@@ -445,6 +445,15 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <button onClick={() => onSettle(tip, "lost")} className="flex-1 text-xs font-bold py-1.5 rounded-lg bg-lost/15 text-lost hover:bg-lost/25 transition-colors">{t("wall.lost")}</button>
         </div>
       )}
+      {isAdmin && !["hq-auto", "smart"].includes(tip.source) && (tip.status === "pending" || tip.status === "live") && (
+        <button
+          onClick={() => onSettle(tip, tip.status === "live" ? "pending" : "live")}
+          data-testid={`admin-tolive-${tip.id}`}
+          className="w-full text-xs font-bold py-1.5 mt-2 rounded-lg bg-live/15 text-live hover:bg-live/25 transition-colors"
+        >
+          {tip.status === "live" ? t("wall.toPending") : t("wall.toLive")}
+        </button>
+      )}
     </motion.div>
   );
 }

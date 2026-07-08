@@ -1023,7 +1023,7 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
 
 @api_router.put("/tips/{tip_id}/status")
 async def set_status(tip_id: str, inp: StatusInput, admin: dict = Depends(require_admin)):
-    if inp.status not in ("won", "lost", "pending"):
+    if inp.status not in ("won", "lost", "pending", "live"):
         raise HTTPException(status_code=400, detail="Invalid status")
     res = await db.tips.update_one({"id": tip_id}, {"$set": {"status": inp.status}})
     if res.matched_count == 0:

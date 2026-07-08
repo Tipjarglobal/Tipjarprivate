@@ -197,6 +197,8 @@ const T = {
     "wall.pending": "PENDING",
     "wall.won": "WON",
     "wall.lost": "LOST",
+    "wall.toLive": "→ Move to Live",
+    "wall.toPending": "→ Move to Pending",
     "wall.mark": "Settle",
     "wall.sync": "Sync results now",
     "wall.syncing": "Checking finished matches…",
@@ -455,6 +457,8 @@ const T = {
     "wall.pending": "PENDIENTE",
     "wall.won": "GANADO",
     "wall.lost": "PERDIDO",
+    "wall.toLive": "→ Mover a En Vivo",
+    "wall.toPending": "→ Mover a Pendiente",
     "wall.mark": "Liquidar",
     "wall.sync": "Sincronizar resultados",
     "wall.syncing": "Comprobando partidos finalizados…",
@@ -721,6 +725,8 @@ const T = {
     "wall.pending": "OFFEN",
     "wall.won": "GEWONNEN",
     "wall.lost": "VERLOREN",
+    "wall.toLive": "→ Nach Live",
+    "wall.toPending": "→ Nach Offen",
     "wall.mark": "Abrechnen",
 
     "auth.login": "Willkommen zurück",
@@ -1226,6 +1232,8 @@ const T = {
     "wall.pending": "EN ATTENTE",
     "wall.won": "GAGNÉ",
     "wall.lost": "PERDU",
+    "wall.toLive": "→ Vers En direct",
+    "wall.toPending": "→ Vers En attente",
     "wall.mark": "Régler",
     "wall.sync": "Synchroniser les résultats",
     "wall.syncing": "Vérification des matchs terminés…",
@@ -1469,6 +1477,8 @@ const T = {
     "wall.pending": "IN ATTESA",
     "wall.won": "VINTO",
     "wall.lost": "PERSO",
+    "wall.toLive": "→ In Diretta",
+    "wall.toPending": "→ In Attesa",
     "wall.mark": "Regola",
     "wall.sync": "Sincronizza i risultati",
     "wall.syncing": "Controllo partite finite…",
@@ -1711,6 +1721,8 @@ const T = {
     "wall.pending": "معلّق",
     "wall.won": "رابح",
     "wall.lost": "خاسر",
+    "wall.toLive": "→ إلى المباشر",
+    "wall.toPending": "→ إلى قيد الانتظار",
     "wall.mark": "تسوية",
     "wall.sync": "مزامنة النتائج الآن",
     "wall.syncing": "جارٍ فحص المباريات المنتهية…",
@@ -1953,6 +1965,8 @@ const T = {
     "wall.pending": "BEKLİYOR",
     "wall.won": "KAZANDI",
     "wall.lost": "KAYBETTİ",
+    "wall.toLive": "→ Canlıya Taşı",
+    "wall.toPending": "→ Beklemede'ye Taşı",
     "wall.mark": "Sonuçlandır",
     "wall.sync": "Sonuçları şimdi eşitle",
     "wall.syncing": "Biten maçlar kontrol ediliyor…",
@@ -2101,4 +2115,6 @@ export function I18nProvider({ children }) {
 
 export function useI18n() {
   return useContext(I18nContext);
+}
+xt(I18nContext);
 }
