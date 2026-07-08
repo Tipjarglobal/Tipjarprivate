@@ -2974,6 +2974,11 @@ async def _team_best_props(team_name: str, seasons: list[int]) -> list[dict]:
 
 
 async def smart_autopost() -> dict:
+    """DISABLED (owner 2026-07-08): player-prop markets aren't offered by bookmakers."""
+    return {"posted": 0, "reason": "Smart Bets disabled (player props not bettable)"}
+
+
+async def _smart_autopost_impl() -> dict:
     """Generate player-prop 'Smart Bet' tips for upcoming whitelist matches."""
     if not API_FOOTBALL_KEY:
         return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
@@ -3305,7 +3310,6 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
-    _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")

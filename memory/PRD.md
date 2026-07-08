@@ -70,6 +70,11 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Session 2026-07-08 (fork)
+### Smart Bets removed (owner: player-prop markets not offered by bookmakers)
+- Deleted all source="smart" tips; `smart_autopost()` now returns disabled (impl kept as
+  `_smart_autopost_impl` for reference); `smart_loop` no longer started. Frontend Smart Bets
+  quick-view button (Header.jsx) + tab (App.js) removed → nav now 4 items. counts.smart=0.
+
 ### Value 72% + separate Banker + league whitelist on AI picks (verified: unit + real scrape + screenshot)
 - Owner refined: min win-prob 72% for VALUE (odds ≥1.60), PLUS a separate safe BANKER
   category (winprob ≥0.85, low odds, for combos). Forebet picks one per match: prefer a
