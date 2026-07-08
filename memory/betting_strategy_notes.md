@@ -77,3 +77,24 @@ key is short-priced, high-confidence favorites across leagues, bundled.
   score ≥ 1, we post "<Underdog> Über 0.5 Tore" with priority — it is chosen over all
   other markets for that match.
 
+## LIVE tips theory (owner voice note, 2026-07-08) — for the empty "Live Picks" channel
+Real cases that shape the live logic:
+- Víkingur: 0-0 the whole game, scored in the LAST minute → a live "match still to see
+  a goal" can land very late; strong attacking pressure = keep faith in Über 0.5 live.
+- Argentina: was 1-2 and turned it in the last ~10 minutes → late comebacks/goals are
+  a real live edge when a quality side trails.
+- Schweiz–Kolumbien: 0-0, NEVER a goal → warning: not every game gets a goal, so live
+  "goal will come" is NOT automatic. Read the actual match, don't force it.
+Owner's live angles to auto-generate (in-play, from API-Football live fixtures + stats):
+1. First-goal timing: many games score in the first ~3 minutes, then stay flat. If a
+   game is still 0-0 with heavy pressure (shots/corners), consider live Über 0.5 /
+   next-goal; if it's flat and low-quality, DON'T.
+2. Corners edge: if a team is TRAILING and winning lots of corners (piling pressure)
+   but you feel they can't finish, give a live tip on THAT team to win MORE corners
+   (team corners over X) instead of a goal.
+3. Half-based goal markets: "Tor in der 1. Halbzeit", "Tor in der 2. Halbzeit",
+   "Tor gegen Ende" — good live markets when the shape supports it.
+Practical signals from live stats: shots on target, total shots, corners, ball
+possession, dangerous attacks, current minute + score. Use these to pick ONE smart
+live market per match, same one-pick-per-match discipline as the pre-match engine.
+
