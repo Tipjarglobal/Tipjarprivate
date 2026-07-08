@@ -2,12 +2,15 @@ import React, { useEffect, useState } from "react";
 import Modal from "./Modal";
 import api from "../api";
 import { useI18n } from "../i18n";
-import { Gift, Calendar, Trophy, TrendingUp, Coins, Flame } from "lucide-react";
+import { toast } from "sonner";
+import { Gift, Calendar, Trophy, TrendingUp, Coins, Flame, ShieldCheck } from "lucide-react";
 
-export default function PublicProfileModal({ open, username, onClose, onGift }) {
+export default function PublicProfileModal({ open, username, onClose, onGift, isAdmin }) {
   const { t } = useI18n();
   const [p, setP] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [grantAmt, setGrantAmt] = useState("");
+  const [granting, setGranting] = useState(false);
 
   useEffect(() => {
     if (open && username) {
@@ -23,6 +26,21 @@ export default function PublicProfileModal({ open, username, onClose, onGift }) 
   const since = p?.created_at
     ? new Date(p.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short" })
     : "—";
+
+  const grant = async () => {
+    const amt = parseInt(grantAmt, 10);
+    if (!amt) return;
+    setGranting(true);
+    try {
+      const { data } = await api.post("/admin/credits/grant", { username, amount: amt });
+      toast.success(`+${data.granted} Credits → @${data.username} (neu: ${data.new_balance})`);
+      setGrantAmt("");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Gutschrift fehlgeschlagen");
+    } finally {
+      setGranting(false);
+    }
+  };
 
   const stats = [
     { icon: TrendingUp, label: t("profile.tips"), value: p?.tips_count ?? 0 },
@@ -63,6 +81,32 @@ export default function PublicProfileModal({ open, username, onClose, onGift }) 
         >
           <Gift size={18} /> {t("profile.giftCredits")}
         </button>
+
+        {isAdmin && (
+          <div data-testid="admin-grant-block" className="mt-4 rounded-xl border border-volt/30 bg-void p-3 text-left">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-volt uppercase tracking-wider mb-2">
+              <ShieldCheck size={13} /> Admin: Credits gutschreiben
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={grantAmt}
+                onChange={(e) => setGrantAmt(e.target.value)}
+                placeholder="z.B. 3"
+                data-testid="admin-grant-input"
+                className="flex-1 min-w-0 rounded-lg bg-surface border border-elevated text-white text-sm px-3 py-2 focus:outline-none focus:border-volt"
+              />
+              <button
+                onClick={grant}
+                disabled={granting || !parseInt(grantAmt, 10)}
+                data-testid="admin-grant-btn"
+                className="shrink-0 bg-volt text-void font-bold text-sm rounded-lg px-4 py-2 hover:bg-volt-hover active:scale-95 transition-all disabled:opacity-40"
+              >
+                {granting ? "…" : "Gutschreiben"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

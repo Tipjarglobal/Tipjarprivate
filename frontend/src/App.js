@@ -253,6 +253,7 @@ function Home() {
         username={profileUser}
         onClose={() => setProfileUser("")}
         onGift={(u) => { setProfileUser(""); openGiftTo(u); }}
+        isAdmin={user?.role === "admin"}
       />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
