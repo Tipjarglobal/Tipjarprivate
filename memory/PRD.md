@@ -225,6 +225,12 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (2er-Bet-Builder + Fixes nach Test iteration_30)
+- 2ER-KOMBI (KI): _forebet_candidates erzeugt Combo (schwaches Team Über 0.5 + Über 1.5 Tore) bei pred 1/2, weak_scores, total>=3. forebet_autopost bevorzugt Combo (höheres Risiko), sonst value/banker. Tip: is_parlay + 2 legs (kind team_o05/o15), erscheint im KI-Bereich. Neue settle_hq_combos() rechnet 2er-Kombis deterministisch aus Endstand ab (im settlement_loop + /admin/settle-now). Unit-getestet: Generierung, Anzeige, Abrechnungspfad.
+- FIX (CRITICAL, iteration_30): POST /api/tips/analyze `files`-Feld gab 422 (Optional[List[UploadFile]]). Auf List[UploadFile]=File(default=[]) geändert → Mehrbild-Upload (bis 4) funktioniert.
+- ENTFERNT: rohes Buchmacher-Bild auf Tipp-Karten (RateWall) — Regel „keine Rohbilder".
+- Test iteration_30: Pflicht-Sterne (400/200), KI-Sort nach Anstoß, Share-Bild, Community-Rename, Publish-Sperre, kein Rohbild → alle PASS.
+
 ## Changelog — 2026-07-08 (Slip v2, Sterne-Pflicht, 4 Bilder, LIVE-Badge, KI-Sort)
 - SLIP v2: volle Team-Namen (Auto-Shrink + 2-zeiliger Umbruch statt "…"), größere Schrift, Wasserzeichen gedeckelt (kein Clipping), roter LIVE-Kasten mit Minute+Ergebnis. Bugfix: Live-Community-Schein zeigte "WON" → jetzt OFFEN (ctype live_pending).
 - LIVE-BADGE ÜBERALL: neuer live_annotate_loop (90s) setzt live_state{minute,score} auf jeden nicht-beendeten Einzeltipp, dessen Spiel laut API-Football läuft (sonst clear). RateWall-Karte zeigt roten LIVE-Kasten. KEINE Kanal-Verschiebung mehr — Live-Kanal = beim Posten bestimmt (create_tip, is_live_post via API-Football, alias-fähig Deutschland=Germany).

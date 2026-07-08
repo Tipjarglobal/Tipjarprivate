@@ -682,14 +682,14 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
 # ------------------------------------------------------------------ tips
 @api_router.post("/tips/analyze")
 async def analyze(file: Optional[UploadFile] = File(default=None),
-                  files: Optional[List[UploadFile]] = File(default=None),
+                  files: List[UploadFile] = File(default=[]),
                   text: str = Form(default=""),
                   user: dict = Depends(get_current_user)):
     # accept up to 4 screenshots (a bet slip split across multiple images)
     uploads = []
     if files:
-        uploads.extend([f for f in files if f is not None])
-    if file is not None:
+        uploads.extend([f for f in files if f is not None and getattr(f, "filename", None)])
+    if file is not None and getattr(file, "filename", None):
         uploads.append(file)
     uploads = uploads[:4]
     images_b64, raw_list = [], []
