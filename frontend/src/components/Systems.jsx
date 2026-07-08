@@ -76,16 +76,16 @@ const SystemCard = ({ system }) => {
             className="flex items-start justify-between gap-3 rounded-lg bg-void border border-elevated px-3 py-2.5"
           >
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2 flex-wrap">
                 {s.banker && (
                   <span
                     data-testid="system-banker-badge"
-                    className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 shrink-0 ${cfg.chip}`}
+                    className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 shrink-0 mt-0.5 ${cfg.chip}`}
                   >
                     <ShieldCheck size={10} /> {t("sys.banker")}
                   </span>
                 )}
-                <span className="font-heading font-bold text-white text-sm truncate">
+                <span className="font-heading font-bold text-white text-sm break-words min-w-0">
                   {s.home_team} <span className="text-zinc-600">vs</span> {s.away_team}
                 </span>
               </div>
