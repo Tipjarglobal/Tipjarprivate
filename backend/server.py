@@ -2359,7 +2359,9 @@ SLIP_LEAGUE_KEYWORDS = (
     "premier league", "bundesliga", "la liga", "laliga", "serie a", "serie b",
     "ligue 1", "ligue 2", "eredivisie", "primeira liga", "liga portugal",
     "championship", "efl", "pro league", "super lig", "süper lig",
-    "brazil serie", "brasileir", "argentina", "liga mx", "liga profesional",
+    "brazil serie a", "brazil serie b", "brasileiro série a", "brasileiro série b",
+    "brasileirão", "brasileirao", "série a", "série b",
+    "argentina", "liga mx", "liga profesional",
     "major league soccer", "mls", "primera division", "primera división",
     "ecuador serie", "bolivia primera", "colombia primera", "peru primera",
     "uruguay primera", "chile primera", "j1 league", "j league", "j.league",
@@ -2371,6 +2373,18 @@ SLIP_LEAGUE_KEYWORDS = (
 SLIP_BLOCK_KEYWORDS = (
     "league two", "women", "reserve", "futsal", "friendly", " ii", " u19",
     " u21", " u17", " u20", " u23",
+    # Brazil — exclude ALL obscure divisions & state championships (owner: only the
+    # national Série A / Série B / Brasileirão are bettable). ~20 regional leagues out.
+    "serie c", "série c", "serie d", "série d", "serie a1", "série a1",
+    "serie a2", "série a2", "serie a3", "série a3", "serie b1", "série b1",
+    "serie b2", "série b2", "serie b3", "série b3",
+    "paulista", "carioca", "mineiro", "gaucho", "gaúcho", "catarinense", "baiano",
+    "paranaense", "cearense", "pernambucano", "goiano", "paraibano", "potiguar",
+    "sergipano", "alagoano", "amazonense", "capixaba", "brasiliense",
+    "matogrossense", "mato-grossense", "sul-matogrossense", "rondoniense",
+    "acreano", "acriano", "tocantinense", "maranhense", "piauiense",
+    "amapaense", "roraimense", "copa do nordeste", "copa verde", "copa paulista",
+    "copa rio", "copa fares lopes", "copa gaucha", "copa gaúcha",
 )
 
 
@@ -3447,6 +3461,7 @@ async def predictz_autopost() -> dict:
         # owner: recognised, bettable leagues only (+ no women/youth)
         _lg = (r.get("league") or "").lower()
         if _is_women_or_youth(home) or _is_women_or_youth(away) or \
+           any(b in f" {_lg} " for b in SLIP_BLOCK_KEYWORDS) or \
            not any(k in _lg for k in SLIP_LEAGUE_KEYWORDS):
             continue
         if _team_or_league_blocked(home, away, r.get("league")):
