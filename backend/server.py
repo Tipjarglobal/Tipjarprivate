@@ -3839,22 +3839,35 @@ _MEMBER_LIVE_SRC_EXCLUDE = ["hq-auto", "hq-live", "smart"]
 async def member_live_sync() -> dict:
     """Auto-move member-submitted tips into the Live channel while their match is
     in-play, and back to pending once it has finished (so the settle engine can
-    resolve them). Keeps the Live channel populated automatically."""
+    resolve them). Kickoff strings on slips carry no timezone, so we ALSO consult
+    API-Football's live fixtures — the reliable signal that a match is really live.
+    Only tips the loop itself moved (live_auto) are ever auto-reverted; an admin
+    manual move stays put."""
     now = datetime.now(timezone.utc)
     moved = reverted = 0
+    live_fixtures = _apifootball("/fixtures", {"live": "all"}) if API_FOOTBALL_KEY else []
+
+    def is_live(t) -> bool:
+        if _looks_live_now(t.get("match_time"), t.get("legs"), now):
+            return True
+        home, away = t.get("home_team"), t.get("away_team")
+        if live_fixtures and home and away:
+            return _find_live_fixture(live_fixtures, home, away) is not None
+        return False
+
     pend = await db.tips.find(
         {"status": "pending", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(500)
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
     for t in pend:
-        if _looks_live_now(t.get("match_time"), t.get("legs"), now):
-            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "live"}})
+        if is_live(t):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "live", "live_auto": True}})
             moved += 1
     liv = await db.tips.find(
-        {"status": "live", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(500)
+        {"status": "live", "source": {"$nin": _MEMBER_LIVE_SRC_EXCLUDE}, "live_auto": True},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "home_team": 1, "away_team": 1}).to_list(500)
     for t in liv:
-        if not _looks_live_now(t.get("match_time"), t.get("legs"), now):
-            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "pending"}})
+        if not is_live(t):
+            await db.tips.update_one({"id": t["id"]}, {"$set": {"status": "pending"}, "$unset": {"live_auto": ""}})
             reverted += 1
     return {"moved_to_live": moved, "reverted": reverted}
 

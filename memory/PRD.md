@@ -225,6 +225,11 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
 - (4/5) "Teilen"-Button nur bei PENDING Member-Picks → generiert TipJar-Slip-Bild (POST /api/tips/{id}/share-image) und teilt via Web Share/Telegram; Teil-Text enthält https://tipjarglobal.com.
 - Getestet: testing_agent iteration_28 — 5/5 Flows bestanden, keine Fehler.
 
+## Changelog — 2026-07-08 (Live-Erkennung robust via API-Football)
+- ROOT CAUSE: Slip-Kickoff-Strings tragen keine Zeitzone ("18:00" als UTC gelesen → Spiel wirkt zukünftig). member_live_sync verschob CEST-Live-Spiele daher nicht.
+- FIX: member_live_sync konsultiert jetzt zusätzlich API-Football (/fixtures?live=all) via _find_live_fixture → zuverlässige Live-Erkennung unabhängig von der Slip-Uhrzeit. Nur vom Loop selbst verschobene Tipps (live_auto=True) werden je auto-zurückgesetzt; manuell (Admin) verschobene bleiben live. Getestet: TZ-verschobenes Live-Spiel → korrekt nach Live (live_auto); manueller Live-Tipp bleibt.
+- Braucht Redeploy: Produktion lief noch mit zeitbasierter Version (Olympiakos blieb bei Mitgliedern).
+
 ## Changelog — 2026-07-08 (Auto-Live-Loop + KI-Live-Picks)
 - MEMBER AUTO-LIVE: neuer member_live_loop (alle 3 Min) verschiebt eingereichte Member-Tipps automatisch nach Live, sobald ihr Spiel läuft (_looks_live_now), und nach Spielende zurück auf pending (damit die Auto-Abrechnung greift). Getestet (pending→live→pending PASS).
 - KI-LIVE-PICKS: live_autopost erzeugt jetzt zusätzlich FRISCHE Live-Goal-Picks (Über 1.5/2.5) für laufende Spiele (Minute 10–80, Stand 0-0/1 Tor) mit echter Torgefahr (_live_pressure_ok). Quota-Guard LIVE_STAT_CALL_CAP=20/Run. Verifiziert: 19 Live-Spiele → 8 Picks gepostet (u.a. Olympiakos vs Raków Über 1,5 @ 3,75), rendern korrekt im Live-Kanal mit LIVE-Badge + Teilen.
