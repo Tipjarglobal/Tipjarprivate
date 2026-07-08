@@ -26,7 +26,7 @@ const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
 ];
 
-export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
+export default function RateWall({ refreshKey, requireLogin, view = "ai", onGiftUser }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [tips, setTips] = useState([]);
@@ -183,7 +183,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai" }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {tips.map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} />
+            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onGiftUser={onGiftUser} />
           ))}
         </div>
       )}
@@ -236,7 +236,7 @@ function tipFlags(tip) {
   return [...flags].slice(0, 5);
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onGiftUser }) {
   const flags = tipFlags(tip);
   return (
     <motion.div
@@ -246,12 +246,18 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       className="rounded-xl bg-surface border border-elevated p-4 hover:-translate-y-1 hover:border-volt/50 transition-all flex flex-col"
     >
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0">
+        <button
+          type="button"
+          onClick={() => onGiftUser?.(tip.username)}
+          data-testid={`gift-user-btn-${tip.id}`}
+          title={t("wall.giftUser")}
+          className="flex items-center gap-2 min-w-0 group"
+        >
+          <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0 group-hover:bg-volt group-hover:text-void transition-colors">
             {tip.username?.[0]?.toUpperCase() || "?"}
           </div>
-          <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold">{tip.username}</span></span>
-        </div>
+          <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{tip.username}</span></span>
+        </button>
         <div className="flex items-center gap-2 shrink-0">
           {flags.length > 0 && (
             <span className="text-base leading-none tracking-tight" data-testid="tip-flags">{flags.join(" ")}</span>

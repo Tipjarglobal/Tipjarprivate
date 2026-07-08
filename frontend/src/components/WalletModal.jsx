@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 const REDEEM_THRESHOLD = 10000;
 
-export default function WalletModal({ open, onClose }) {
+export default function WalletModal({ open, onClose, initialTab, initialGiftTo }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [tab, setTab] = useState("buy");
@@ -18,8 +18,12 @@ export default function WalletModal({ open, onClose }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) api.get("/credits/packages").then((r) => setPackages(r.data)).catch(() => {});
-  }, [open]);
+    if (open) {
+      api.get("/credits/packages").then((r) => setPackages(r.data)).catch(() => {});
+      setTab(initialTab || "buy");
+      if (initialGiftTo) setGiftTo(initialGiftTo);
+    }
+  }, [open, initialTab, initialGiftTo]);
 
   const buy = async (pkgId) => {
     setBusy(true);
