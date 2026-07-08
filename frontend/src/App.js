@@ -177,7 +177,7 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => (
+              {[["ai", "nav.viewtips"], ["systems", "nav.viewsystems"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"]].map(([v, lbl]) => (
                 <button
                   key={v}
                   data-testid={`tabview-${v}`}

@@ -2678,6 +2678,18 @@ SMART_PROPS_PER_TEAM = 4     # best props kept per team (1 per player)
 SMART_MIN_RATING = 7.0
 SMART_LOOKAHEAD_H = 120      # only matches within the next 5 days
 
+# Top leagues where bookmakers offer PLAYER prop markets (owner: Smart Picks only here —
+# NOT qualifiers 'wcq/ecq/cq', NOT Brazil 'br1/br2', NOT minor South-American/Asian leagues).
+SMART_LEAGUE_CODES = {
+    # National-team finals (owner: "Smart Picks für die WM" ok) — NOT qualifiers
+    "wc", "ec", "euro",
+    # Top European leagues (1st/2nd tier) — real player markets
+    "en1", "en2", "ge1", "ge2", "sp1", "sp2", "it1", "it2", "fr1", "fr2",
+    "ne1", "po1", "be1", "tu1", "sc1",
+    # USA + Saudi
+    "mls", "ml1", "us1", "sa1",
+}
+
 
 async def _apifootball_async(path: str, params: dict):
     return await asyncio.to_thread(_apifootball, path, params)
@@ -2974,12 +2986,9 @@ async def _team_best_props(team_name: str, seasons: list[int]) -> list[dict]:
 
 
 async def smart_autopost() -> dict:
-    """DISABLED (owner 2026-07-08): player-prop markets aren't offered by bookmakers."""
-    return {"posted": 0, "reason": "Smart Bets disabled (player props not bettable)"}
-
-
-async def _smart_autopost_impl() -> dict:
-    """Generate player-prop 'Smart Bet' tips for upcoming whitelist matches."""
+    """Generate player-prop 'Smart Bet' tips — ONLY for top leagues where bookmakers
+    actually offer player markets (Premier League, La Liga, World Cup, UCL …). Owner:
+    NO player markets for qualifiers, Brazilian or other minor leagues."""
     if not API_FOOTBALL_KEY:
         return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
@@ -2987,11 +2996,13 @@ async def _smart_autopost_impl() -> dict:
         return {"posted": 0, "reason": "HQ account missing"}
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
-    # upcoming, whitelisted, within lookahead window, de-duped
+    # upcoming, TOP-league only, within lookahead window, de-duped
     upcoming, seen = [], set()
     for p in preds:
         if not _pred_whitelisted(p):
             continue
+        if (p.get("league_code") or "").strip().lower() not in SMART_LEAGUE_CODES:
+            continue  # player markets only exist for major leagues
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
             continue
@@ -3314,6 +3325,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
+    _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")

@@ -70,10 +70,15 @@ Tipster, Rater, Anonymous visitor (bell), Admin (settles tips).
   Also July = mostly minor leagues -> low candidate volume until top leagues resume.
 
 ## Session 2026-07-08 (fork)
-### Smart Bets removed (owner: player-prop markets not offered by bookmakers)
-- Deleted all source="smart" tips; `smart_autopost()` now returns disabled (impl kept as
-  `_smart_autopost_impl` for reference); `smart_loop` no longer started. Frontend Smart Bets
-  quick-view button (Header.jsx) + tab (App.js) removed → nav now 4 items. counts.smart=0.
+### Smart Picks RESTORED with top-league-only player markets (owner reversal)
+- Owner: keep the Smart Picks feature (tab + notification toggle); only generate player-prop
+  markets for TOP leagues that actually offer them (EPL, La Liga, Serie A, Bundesliga, Ligue 1
+  +2nd tiers, NED/POR/BEL/TUR/SCO, MLS, Saudi, WC/EC/Euro). EXCLUDE UEFA club qualifiers,
+  Brazil, minor South-American/Asian leagues.
+- Impl: `smart_autopost` re-enabled + `smart_loop` restarted; new `SMART_LEAGUE_CODES` gate in the
+  upcoming filter. Frontend Smart quick-view button (Header.jsx) + tab (App.js) restored (5 nav
+  items). NotificationBell smart toggle was never removed. Currently 0 (summer break) — populates
+  when top leagues open.
 
 ### Value 72% + separate Banker + league whitelist on AI picks (verified: unit + real scrape + screenshot)
 - Owner refined: min win-prob 72% for VALUE (odds ≥1.60), PLUS a separate safe BANKER
