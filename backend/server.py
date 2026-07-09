@@ -3197,29 +3197,38 @@ def _forebet_candidates(r: dict) -> list[dict]:
             opts.append({"sfx": "-utg", "market": f"{home} Über 0.5 Tore",
                          "odds": "1.45", "rating": 8.0, "winprob": 0.66})
         # DYNAMIC single-game bet-builder (owner: "as many legs from one game as you
-        # want — just win"). We stack correlated, high-probability goal markets from
-        # ONE fixture: both teams to score + nested Über-lines. Every over-line is kept
-        # ONE goal BELOW the predicted total (safety buffer), and the lines are nested
-        # (if the top line hits, all lower lines hit too) — so extra legs mostly add
-        # odds without adding real risk. Only settleable kinds are used.
+        # want — just win, but NEVER add a redundant leg"). Both teams to score already
+        # guarantees at least 2 goals, so 'Über 1.5 Tore' is IMPLIED and must never be
+        # added on top. We only stack goal-lines that are NOT implied (Über 2.5+) and
+        # only with a 1-goal safety buffer under the predicted total. If nothing extra
+        # qualifies we simply keep the classic 'both teams to score'.
         if sc and pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
             clegs = [
                 {"market": f"{home} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": home},
                 {"market": f"{away} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": away},
             ]
-            goals_base = {1: 1.40, 2: 2.00, 3: 3.20}
-            max_line = min(total - 2, 3)   # 1-goal buffer under predicted total, max 3 lines
-            for k in range(1, max_line + 1):
+            goals_base = {2: 2.00, 3: 3.20, 4: 5.50}
+            top = min(total - 2, 4)   # highest NON-implied over-line with a 1-goal buffer
+            for k in range(2, top + 1):
                 clegs.append({"market": f"Über {k}.5 Tore",
-                              "base_odd": goals_base.get(k, 3.20), "kind": f"o{k}5"})
+                              "base_odd": goals_base.get(k, 5.50), "kind": f"o{k}5"})
             n = len(clegs)
-            # confidence drops slightly with more legs, but nested over-lines keep it high
-            wp = max(0.45, 0.62 - 0.03 * (n - 3))
+            if n == 2:
+                cmarket = "Beide Teams treffen (Bet-Builder)"
+            else:
+                cmarket = f"Beide Teams treffen + Über {top}.5 Tore ({n}er-Bet-Builder)"
+            wp = max(0.45, 0.64 - 0.04 * (n - 2))
             opts.append({
                 "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": wp,
-                "market": f"Beide Teams treffen + Über {max_line}.5 Tore ({n}er-Bet-Builder)",
+                "market": cmarket,
                 "legs": clegs,
             })
+        # Clean-sheet blowout (owner rule): if a 3-0 / 0-3 looks likelier than both teams
+        # scoring, NEVER bet BTTS or the weak team to score — bet the total line instead.
+        if sc and total >= 3 and (ph == 0 or pa == 0):
+            opts.append({"sfx": "-o25cs", "market": "Über 2.5 Tore",
+                         "odds": "1.85" if total >= 4 else "1.95",
+                         "rating": 7.5, "winprob": 0.62 if total >= 4 else 0.55})
         # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
         if total >= 5 and avg >= 3.5:
             opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
@@ -3320,7 +3329,7 @@ async def forebet_autopost() -> dict:
                     prod *= od
                     legs.append({"home": home, "away": away, "market": lg["market"],
                                  "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
-                if 1.80 <= prod <= 25.0:
+                if 1.60 <= prod <= 25.0:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
@@ -3383,9 +3392,9 @@ async def forebet_autopost() -> dict:
         is_combo = ptype == "combo"
         n_legs = len(c.get("_legs", []))
         if is_combo:
-            builder = ("Bet-Builder: beide Teams treffen + Torlinie aus EINEM Spiel"
+            builder = ("Bet-Builder: beide Teams treffen + höhere Torlinie (ohne redundante Legs) aus EINEM Spiel"
                        if n_legs >= 3 else
-                       "Bet-Builder: schwaches Team trifft + Über 1.5 Tore")
+                       "Bet-Builder: klassisches beide Teams treffen aus EINEM Spiel")
             analysis = (
                 f"TipJarHQ-Kombi ({n_legs}er-Leg): {market} — höheres Risiko, Quote {odds:.2f}. "
                 f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Anstoß {kickoff}. "
