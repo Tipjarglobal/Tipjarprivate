@@ -69,6 +69,24 @@ COMBOS = [
       ("Doppelte Chance 12", "dc_12", "1.32")]),
 ]
 
+# Corner (Ecken) bet-builders — goals + corners from ONE match. `corner_o` legs are
+# settled deterministically from API-Football fixture statistics. Distinct id prefix
+# (hqcur-cc-) so a match can carry both a normal single and a corner builder.
+CORNER_COMBOS = [
+    ("Dynamo Kyiv", "Univ Cluj-Napoca",
+     "Über 1.5 Tore + Über 8.5 Ecken (Bet-Builder)", "1.98",
+     [("Über 1.5 Tore", "o15", "1.28"),
+      ("Über 8.5 Ecken", "corner_o", "1.55")]),
+    ("Qarabag", "Vestri",
+     "Über 1.5 Tore + Über 8.5 Ecken (Bet-Builder)", "1.98",
+     [("Über 1.5 Tore", "o15", "1.28"),
+      ("Über 8.5 Ecken", "corner_o", "1.55")]),
+    ("Sheriff Tiraspol", "NK Aluminij",
+     "Über 2.5 Tore + Über 9.5 Ecken (Bet-Builder)", "2.98",
+     [("Über 2.5 Tore", "o25", "1.70"),
+      ("Über 9.5 Ecken", "corner_o", "1.75")]),
+]
+
 
 def _rating(cat):
     return {"banker": 9.2, "value": 8.0, "risk": 6.5}[cat]
@@ -144,7 +162,27 @@ async def main():
         await db.tips.insert_one(t)
         posted += 1
 
-    print(f"posted {posted} curated tips ({len(SINGLES)} singles + {len(COMBOS)} combos)")
+    for home, away, label, odds, legs in CORNER_COMBOS:
+        t = base_tip(home, away, label, odds, "value", True)
+        t["id"] = f"hqcur-cc-{home}-{away}".replace(" ", "_")
+        mt, lg, lc, cc = meta.get((home, away), (None, "TipJarHQ Pick", "", ""))
+        combo_legs = [{"home": home, "away": away, "market": lm, "odds": float(lo),
+                       "kind": lk, "team": ""} for (lm, lk, lo) in legs]
+        t["combo_legs"] = combo_legs
+        t["legs"] = [{
+            "match": f"{home} – {away}", "league": lg or "", "kickoff": mt,
+            "selections": [lm for (lm, _, _) in legs],
+            "sel_odds": [lo for (_, _, lo) in legs],
+        }]
+        t["ai_analysis"] = (
+            f"Kuratierter TipJarHQ-Bet-Builder mit Ecken-Markt: {label} @ {odds}. "
+            f"Der Ecken-Leg wird automatisch aus den Spielstatistiken abgerechnet. Kategorie: VALUE."
+        )
+        await db.tips.insert_one(t)
+        posted += 1
+
+    print(f"posted {posted} curated tips ({len(SINGLES)} singles + {len(COMBOS)} combos "
+          f"+ {len(CORNER_COMBOS)} corner-builders)")
 
 
 if __name__ == "__main__":

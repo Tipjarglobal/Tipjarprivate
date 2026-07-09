@@ -34,6 +34,9 @@ export function localizeMarket(market, t) {
     ["Unentschieden (X)", t("mkt.draw")],
   ];
   for (const [de, loc] of combos) m = m.split(de).join(loc);
+  // Corner (Ecken) Over/Under lines — dynamic (7.5 / 8.5 / 9.5 …).
+  m = m.replace(/Über\s+(\d+(?:\.\d+)?)\s+Ecken/g, (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.corners")}`);
+  m = m.replace(/Unter\s+(\d+(?:\.\d+)?)\s+Ecken/g, (_, n) => `${t("mkt.und")} ${n} ${t("mkt.corners")}`);
   return m;
 }
 
@@ -365,6 +368,9 @@ const T = {
     "mkt.over05": "Over 0.5 Goals",
     "mkt.over15": "Over 1.5 Goals",
     "mkt.over25": "Over 2.5 Goals",
+    "mkt.ovr": "Over",
+    "mkt.und": "Under",
+    "mkt.corners": "Corners",
     "mkt.btts": "Both Teams to Score (BTTS)",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Double Chance 1X",
@@ -934,6 +940,9 @@ const T = {
     "mkt.over05": "Über 0.5 Tore",
     "mkt.over15": "Über 1.5 Tore",
     "mkt.over25": "Über 2.5 Tore",
+    "mkt.ovr": "Über",
+    "mkt.und": "Unter",
+    "mkt.corners": "Ecken",
     "mkt.btts": "Beide Teams treffen (BTTS)",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Doppelte Chance 1X",

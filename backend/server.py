@@ -2180,10 +2180,27 @@ async def resolve_team_id(name: str):
     return team_id
 
 
+def _is_corner_market(market) -> bool:
+    """A corner (Ecken) Over/Under market — graded from fixture statistics, not the score."""
+    return "ecken" in (market or "").lower()
+
+
+def _corner_total_for_fixture(fixture_id):
+    """Total match corners (both teams) from API-Football fixture statistics.
+    Returns an int, or None when stats are unavailable (caller must NOT settle)."""
+    if not fixture_id:
+        return None
+    stats = _apifootball("/fixtures/statistics", {"fixture": fixture_id})
+    if not stats:
+        return None
+    _sog, corners, _shots = _live_stat_totals(stats)
+    return corners
+
+
 def _grade_goal_leg(kind, market, team, fx):
-    """Deterministically grade a single-match goal / half-time leg from a finished
-    fixture. Returns True (won), False (lost) or None (kind can't be graded → the
-    caller must NOT settle, so a leg we don't understand never fakes a result)."""
+    """Deterministically grade a single-match goal / half-time / corner leg from a
+    finished fixture. Returns True (won), False (lost) or None (kind can't be graded
+    → the caller must NOT settle, so a leg we don't understand never fakes a result)."""
     hg = fx.get("home_goals") or 0
     ag = fx.get("away_goals") or 0
     hth, hta = fx.get("ht_home"), fx.get("ht_away")
@@ -2194,6 +2211,17 @@ def _grade_goal_leg(kind, market, team, fx):
     sh_total = total - ht_total          # second-half goals
     m = (market or "").lower()
     k = (kind or "").lower()
+    # Corner (Ecken) Over/Under — settled from fixture statistics (fx['corners']).
+    if k in ("corner_o", "corner_u") or "ecken" in m:
+        ctot = fx.get("corners")
+        if ctot is None:
+            return None                  # no corner stats → don't guess
+        cm = re.search(r"(\d+)\.5", m)
+        if not cm:
+            return None
+        line = int(cm.group(1))
+        over = ("über" in m) or (k == "corner_o")
+        return ctot >= line + 1 if over else ctot <= line
     # full-time total goals line, e.g. "Über 2.5 Tore" (not a half-time line)
     gm = re.search(r"über\s+(\d+)\.5", m)
     if gm and not team and "halbzeit" not in m and "hz" not in m:
@@ -2258,6 +2286,7 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
                         ht = fx.get("score", {}).get("halftime", {}) or {}
                         return {
                             "home_name": th, "away_name": ta,
+                            "fixture_id": fx.get("fixture", {}).get("id"),
                             "home_goals": fx.get("goals", {}).get("home"),
                             "away_goals": fx.get("goals", {}).get("away"),
                             "ht_home": ht.get("home"), "ht_away": ht.get("away"),
@@ -2340,9 +2369,19 @@ async def settle_pending_tips() -> dict:
         if not fx:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
-        outcome = await judge_market(tip.get("market", ""), tip["home_team"], tip["away_team"],
-                                     fx["home_goals"], fx["away_goals"])
-        new_status = outcome if outcome in ("won", "lost") else "void"
+        outcome_market = tip.get("market", "")
+        if _is_corner_market(outcome_market):
+            fx["corners"] = _corner_total_for_fixture(fx.get("fixture_id"))
+            res = _grade_goal_leg("corner_o" if "über" in outcome_market.lower() else "corner_u",
+                                  outcome_market, "", fx)
+            if res is None:
+                await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+                continue
+            new_status = "won" if res else "lost"
+        else:
+            outcome = await judge_market(tip.get("market", ""), tip["home_team"], tip["away_team"],
+                                         fx["home_goals"], fx["away_goals"])
+            new_status = outcome if outcome in ("won", "lost") else "void"
         if new_status == "void":
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
@@ -2392,8 +2431,12 @@ async def settle_hq_combos() -> dict:
             continue
         hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
         total_g = hg + ag
+        combo_legs = tip.get("combo_legs") or tip.get("legs", [])
+        if any(("corner" in (lg.get("kind", "") or "")) or ("ecken" in (lg.get("market", "") or "").lower())
+               for lg in combo_legs):
+            fx["corners"] = _corner_total_for_fixture(fx.get("fixture_id"))
         all_won, ok = True, True
-        for lg in (tip.get("combo_legs") or tip.get("legs", [])):
+        for lg in combo_legs:
             res = _grade_goal_leg(lg.get("kind"), lg.get("market"), lg.get("team"), fx)
             if res is None:
                 ok = False
@@ -3518,6 +3561,29 @@ def _forebet_candidates(r: dict) -> list[dict]:
             od, p = _pois_line_odds(lam, line, over=False)
             opts.append({"sfx": sfx, "market": f"Unter {line} Tore", "odds": f"{od:.2f}",
                          "rating": rt, "winprob": p})
+        # ── Corner (Ecken) markets. Corners have no dedicated data feed, so we estimate
+        # an expected total-corners rate from the goal expectation (open, attacking games
+        # produce more corners) and price Over/Under lines with the same Poisson model.
+        # These settle deterministically from API-Football fixture statistics. ──
+        corner_lam = max(7.0, min(14.0, 6.5 + 1.4 * lam))
+        for line, sfx, rt in ((7.5, "-co75", 8.0), (8.5, "-co85", 7.5)):
+            od, p = _pois_line_odds(corner_lam, line, over=True)
+            opts.append({"sfx": sfx, "market": f"Über {line} Ecken", "odds": f"{od:.2f}",
+                         "rating": rt, "winprob": p})
+        for line, sfx, rt in ((11.5, "-cu115", 8.0), (10.5, "-cu105", 7.5)):
+            od, p = _pois_line_odds(corner_lam, line, over=False)
+            opts.append({"sfx": sfx, "market": f"Unter {line} Ecken", "odds": f"{od:.2f}",
+                         "rating": rt, "winprob": p})
+        # Corner bet-builder: goals + corners from ONE match (owner request).
+        if total >= 3:
+            opts.append({
+                "sfx": "-cornerbb", "combo": True, "rating": 7.5, "winprob": 0.55,
+                "market": "Über 1.5 Tore + Über 8.5 Ecken (Bet-Builder)",
+                "legs": [
+                    {"market": "Über 1.5 Tore", "base_odd": 1.28, "kind": "o15"},
+                    {"market": "Über 8.5 Ecken", "base_odd": 1.55, "kind": "corner_o"},
+                ],
+            })
         # RISK: favourite -1.5 handicap (win by 2+). Odds/probability scale with the
         # predicted winning margin. High-odds ones land in the "Risk" filter.
         if pred in ("1", "2"):
