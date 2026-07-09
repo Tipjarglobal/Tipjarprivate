@@ -86,7 +86,8 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
 
     y = head_h
     for lg in legs:
-        col = GREEN if lg["status"] == "won" else RED
+        st = lg["status"]
+        col = RED if st == "lost" else GREEN
         odd = lg["odd"]
         ow = d.textlength(odd, font=f_odd)
         mkt_f = fit(lg["market"], FB, 38, 26, W - 2 * pad - ow - 40)
@@ -124,7 +125,7 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
     print("saved", out_path, img.size)
 
 
-# LIVE / undecided legs removed. Green = won, Red = lost.
+# Full slip — ALL legs in one image. Green = won, Red = lost, Amber = live.
 slip1 = [
     {"market": "Total Over 2.5", "home": "KF Vllaznia Shkoder", "away": "Malisheva", "time": "09.07  20:00", "odd": "2.14", "result": "2:1", "status": "won"},
     {"market": "1st Half Over 0.5", "home": "HNK Hajduk Split", "away": "MSK Zilina", "time": "09.07  20:00", "odd": "1.40", "result": "HT 1:0", "status": "won"},
@@ -132,6 +133,9 @@ slip1 = [
     {"market": "Both Teams to Score - Yes", "home": "Sarajevo", "away": "Inter Turku", "time": "09.07  21:00", "odd": "2.09", "result": "1:1", "status": "won"},
     {"market": "Double Chance 1X", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "1.73", "result": "1:0", "status": "won"},
     {"market": "Total Over 0.5", "home": "CSKA Sofia", "away": "Derry City", "time": "09.07  20:00", "odd": "1.01", "result": "3:2", "status": "won"},
+    {"market": "Total Under 3.5", "home": "Glentoran", "away": "Rigas FS", "time": "09.07  20:30", "odd": "1.40", "result": "LIVE", "status": "live"},
+    {"market": "Zalgiris +2.5", "home": "OFK Petrovac", "away": "Vilniaus Zalgiris", "time": "09.07  20:45", "odd": "1.002", "result": "LIVE", "status": "live"},
+    {"market": "Total Under 3.5", "home": "Penybont", "away": "FC Santa Coloma", "time": "09.07  20:45", "odd": "1.30", "result": "LIVE", "status": "live"},
     {"market": "FC Astana -1.5", "home": "Dinamo Tirana", "away": "FC Astana", "time": "09.07  21:00", "odd": "5.50", "result": "0:1", "status": "lost"},
 ]
 
