@@ -1598,19 +1598,19 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             return ImageFont.truetype(path, sz)
         except Exception:
             return ImageFont.load_default()
-    f_logo = font(FB, 110)
-    f_tag = font(FR, 40)
-    f_badge = font(FB, 60)
+    f_logo = font(FB, 92)
+    f_tag = font(FR, 38)
+    f_badge = font(FB, 56)
     f_match = font(FB, 72)
     f_sub = font(FR, 44)
-    f_live = font(FB, 50)
+    f_live = font(FB, 48)
     f_market = font(FR, 62)
-    f_odds = font(FB, 66)
-    f_big = font(FB, 124)
-    f_label = font(FB, 66)
-    f_lbl = font(FR, 48)
-    f_user = font(FB, 56)
-    f_win = font(FB, 60)
+    f_odds = font(FB, 64)
+    f_big = font(FB, 96)
+    f_label = font(FB, 62)
+    f_lbl = font(FR, 46)
+    f_user = font(FB, 54)
+    f_win = font(FB, 58)
     _scratch = ImageDraw.Draw(Image.new("RGB", (4, 4)))
 
     def fit_font(txt, hi, lo, maxw):
@@ -1619,7 +1619,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             if _scratch.textlength(txt, font=f) <= maxw:
                 return f, sz
         return font(FB, lo), lo
-    W, pad, head_h, foot_h = 1080, 66, 258, 440
+    W, pad, head_h, foot_h = 1080, 60, 212, 344
     won = ctype not in ("pending", "live_pending")
     has_live = bool(live_info)
     legs = legs[:10]
@@ -1649,8 +1649,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             f1, s1 = fit_font(g["home"], 64, 34, _tmaxw)
             f2, s2 = fit_font(f"vs {g['away']}", 64, 34, _tmaxw)
             g["tlines"] = [(g["home"], f1, s1), (f"vs {g['away']}", f2, s2)]
-        g["hdr_h"] = sum(sz + 34 for _, _, sz in g["tlines"])
-    mrow_h, gap, sub_h, live_h = 106, 40, 62, 84
+        g["hdr_h"] = sum(sz + 16 for _, _, sz in g["tlines"])
+    mrow_h, gap, sub_h, live_h = 76, 22, 46, 76
     H = head_h + (live_h if has_live else 0) + sum(
         g["hdr_h"] + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
         for g in groups) + foot_h
@@ -1688,26 +1688,26 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=7)
         d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=7)
     # header: TipJar logo (Tip white / Jar green) + tagline
-    d.text((pad, 40), "Tip", font=f_logo, fill=WHITE)
+    d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 40), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 4, 176), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
+    d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + 4, 138), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
     badge = "WON" if won else "OFFEN"
     bw = d.textlength(badge, font=f_badge)
-    bx0 = W - pad - bw - 58
-    d.rounded_rectangle([bx0, 50, W - pad, 138], 20, fill=ACCENT)
-    tx = bx0 + 28
+    bx0 = W - pad - bw - (92 if won else 52)
+    d.rounded_rectangle([bx0, 40, W - pad, 122], 20, fill=ACCENT)
+    tx = bx0 + 26
     if won:
-        check(bx0 + 24, 98, 24, VOID)
-        tx = bx0 + 64
-    d.text((tx, 70), badge, font=f_badge, fill=VOID)
+        check(bx0 + 24, 84, 24, VOID)
+        tx = bx0 + 66
+    d.text((tx, 58), badge, font=f_badge, fill=VOID)
     # area pill (which channel the slip comes from)
     area = {"pending": "COMMUNITY PICK", "live_pending": "LIVE PICK"}.get(ctype)
     if area:
         aw = d.textlength(area, font=f_tag)
-        ax0 = W - pad - aw - 44
-        d.rounded_rectangle([ax0, 158, W - pad, 216], 16, outline=ACCENT, width=3)
-        d.text((ax0 + 22, 168), area, font=f_tag, fill=ACCENT)
+        ax0 = W - pad - aw - 40
+        d.rounded_rectangle([ax0, 134, W - pad, 186], 16, outline=ACCENT, width=3)
+        d.text((ax0 + 20, 142), area, font=f_tag, fill=ACCENT)
     d.line([pad, head_h - 20, W - pad, head_h - 20], fill=LINE, width=3)
     # legs grouped by match
     y = head_h
@@ -1715,7 +1715,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         ty = y + 6
         for txt, tfont, tsz in g["tlines"]:
             d.text((pad, ty), txt, font=tfont, fill=WHITE)
-            ty += tsz + 34
+            ty += tsz + 16
         y += g["hdr_h"]
         if has_live:
             mn, sc = live_info.get("minute"), live_info.get("score")
@@ -1738,33 +1738,33 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             od = l.get("odds") or 0
             odt = f"{od:.2f}" if od else ("gewonnen" if won else "offen")
             ow = d.textlength(odt, font=f_odds)
-            mkx = pad + 32
-            d.text((mkx, y + 8), trunc(l.get("market", "") or "", f_market, W - pad - mkx - ow - 80), font=f_market, fill=(214, 216, 220))
-            d.text((W - pad - ow, y + 4), odt, font=f_odds, fill=ACCENT)
+            mkx = pad + 28
+            d.text((mkx, y + 6), trunc(l.get("market", "") or "", f_market, W - pad - mkx - ow - 72), font=f_market, fill=(214, 216, 220))
+            d.text((W - pad - ow, y + 2), odt, font=f_odds, fill=ACCENT)
             if won:
-                check(W - pad - ow - 56, y + 36, 26, GREEN)
+                check(W - pad - ow - 52, y + 30, 24, GREEN)
             y += mrow_h
-        d.line([pad, y + 4, W - pad, y + 4], fill=LINE, width=2)
+        d.line([pad, y + 2, W - pad, y + 2], fill=LINE, width=2)
         y += gap
     # footer card
-    fy = y + 24
-    d.rounded_rectangle([pad, fy, W - pad, H - 40], 30, fill=CARD)
+    fy = y + 20
+    d.rounded_rectangle([pad, fy, W - pad, H - 34], 28, fill=CARD)
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
              "cashed": "Ausgezahlt",
              "live_pending": "Live-Pick", "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + 42, fy + 40), label, font=f_label, fill=ACCENT)
-    d.text((pad + 42, fy + 138), "Gesamtquote", font=f_lbl, fill=GREY)
+    d.text((pad + 40, fy + 30), label, font=f_label, fill=ACCENT)
+    d.text((pad + 40, fy + 108), "Gesamtquote", font=f_lbl, fill=GREY)
     ot = f"{total_odds:.2f}" if total_odds else "—"
     otw = d.textlength(ot, font=f_big)
-    d.rounded_rectangle([W - pad - otw - 84, fy + 32, W - pad - 42, fy + 176], 22, fill=ACCENT)
-    d.text((W - pad - otw - 63, fy + 42), ot, font=f_big, fill=VOID)
-    d.text((pad + 42, fy + 206), f"@{username}", font=f_user, fill=WHITE)
+    d.rounded_rectangle([W - pad - otw - 76, fy + 26, W - pad - 40, fy + 140], 20, fill=ACCENT)
+    d.text((W - pad - otw - 58, fy + 34), ot, font=f_big, fill=VOID)
+    d.text((pad + 40, fy + 160), f"@{username}", font=f_user, fill=WHITE)
     if stake:
         stt = f"Einsatz: {stake}"
-        d.text((W - pad - d.textlength(stt, font=f_lbl) - 42, fy + 214), stt, font=f_lbl, fill=GREY)
+        d.text((W - pad - d.textlength(stt, font=f_lbl) - 40, fy + 166), stt, font=f_lbl, fill=GREY)
     if winnings:
         wt = (f"Ausgezahlt: {winnings}" if ctype == "cashed" else f"Gewinn: {winnings}") if won else f"Möglicher Gewinn: {winnings}"
-        d.text((pad + 42, fy + 282), wt, font=f_win, fill=ACCENT)
+        d.text((pad + 40, fy + 224), wt, font=f_win, fill=ACCENT)
     out = io.BytesIO()
     img.save(out, format="WEBP", quality=90)
     return out.getvalue()
