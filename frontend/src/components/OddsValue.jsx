@@ -7,20 +7,21 @@ export const oddsNum = (o) => {
   return isNaN(n) ? null : n;
 };
 
-// Renders the odds value, or a "low pregame odds" note when odds < 1.04.
+// Always shows the real odds value. For very low pregame odds (< 1.04) it adds a
+// tiny hint underneath — without ever hiding the actual number.
 export const OddsValue = ({ odds, className = "" }) => {
   const { lang } = useI18n();
   const n = oddsNum(odds);
-  if (n !== null && n < 1.04) {
-    const note =
-      lang === "de"
-        ? "Niedrige Quote pregame – live evtl. höher"
-        : "Low pregame odds – may be higher live";
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] leading-tight text-bell/90 font-medium max-w-[60%] text-right">
-        <Zap size={11} className="shrink-0" /> {note}
-      </span>
-    );
-  }
-  return <span className={className}>{odds}</span>;
+  const low = n !== null && n < 1.04;
+  return (
+    <span className={`inline-flex flex-col items-end ${className}`}>
+      <span>{odds}</span>
+      {low && (
+        <span className="inline-flex items-center gap-1 text-[9px] leading-tight text-bell/90 font-medium mt-0.5 text-right whitespace-nowrap">
+          <Zap size={10} className="shrink-0" />
+          {lang === "de" ? "pregame – live evtl. höher" : "pregame – higher live"}
+        </span>
+      )}
+    </span>
+  );
 };

@@ -9,6 +9,11 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 (evening) — Web Push + tip visibility fix
+- **Tip visibility fix:** market text no longer truncates (`Paide Handica…` → full `Paide Handicap +2.5`) and the real odds number is ALWAYS shown. For odds < 1.04 a tiny "pregame – live evtl. höher" hint now sits UNDER the number instead of replacing it (OddsValue.jsx + RateWall card row).
+- **Web Push (real notifications, app closed / screen off):** VAPID keys in backend/.env; `pywebpush`. Endpoints `/api/push/vapid-public-key|subscribe|unsubscribe`; `notify_all_push` + `_push_payload_for_tip` (game+market details; LIVE picks → blue `/push-live.png` icon). `push_watch_loop` watches new tips (all sources, watermark=now on first run) and pushes. Frontend: bell toggle now also does `pushManager.subscribe` (iOS PWA-install hint), service-worker.js has `push`+`notificationclick` handlers. NOTE: real delivery needs a physical device after deploy — cannot be e2e-tested in this env.
+- OPEN: (1) main "KI Single-Game-Picks" button should show bundled red sum of new picks (user approved, NOT built yet). (2) scraper reactivation multi-day + stability rule (awaiting user a/b).
+
 ### CHANGELOG 2026-07-09 (P.M.) — Category coverage, tab badges + CRITICAL fix
 - **CRITICAL BUG FIXED:** `seed_showcase()` (runs on every startup/deploy) was deleting all TipJarHQ pending tips whose id didn't match `^(hqtip-|hqlive-|smart-)`. The curated `hqcur-*` picks fell through and got wiped on every backend reload/deploy. Regex now includes `hqcur-`. Curated picks survive restarts (verified).
 - **Guaranteed categorisation:** every AI single now always lands in Banker/Value/Risk. Generator has an `else → value` fallback; `/api/tips?category=value` is the catch-all (`category NOT IN [banker,risk]`) so no pick can ever disappear.

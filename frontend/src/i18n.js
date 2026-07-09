@@ -129,6 +129,9 @@ const T = {
 
     "bell.enable": "Get Tip Alerts",
     "bell.enabled": "Alerts On",
+    "bell.denied": "Notifications are blocked. Enable them in your browser settings.",
+    "bell.push_on": "Push notifications on — you'll be alerted even when the app is closed.",
+    "bell.ios_hint": "On iPhone: add TipJar to your Home Screen first (Share → Add to Home Screen), then enable alerts.",
     "bell.tooltip": "Get pinged the second a new tip drops — no sign up needed.",
     "bell.watching": "watching the jar",
     "bell.on": "You're in! We'll ping you on every fresh tip.",
@@ -694,6 +697,9 @@ const T = {
 
     "bell.enable": "Tipp-Alarme",
     "bell.enabled": "Alarme an",
+    "bell.denied": "Benachrichtigungen sind blockiert. Aktiviere sie in den Browser-Einstellungen.",
+    "bell.push_on": "Push-Benachrichtigungen an – du wirst benachrichtigt, auch wenn die App geschlossen ist.",
+    "bell.ios_hint": "Auf dem iPhone: TipJar zuerst zum Home-Bildschirm hinzufügen (Teilen → Zum Home-Bildschirm), dann Alarme aktivieren.",
     "bell.tooltip": "Wir benachrichtigen dich sofort bei jedem neuen Tipp — ganz ohne Anmeldung.",
     "bell.watching": "beobachten den Jar",
     "bell.on": "Du bist dabei! Wir melden jeden frischen Tipp.",

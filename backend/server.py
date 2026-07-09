@@ -48,6 +48,12 @@ AI_MODEL = "gemini-3.1-pro-preview"
 API_FOOTBALL_KEY = os.environ.get('API_FOOTBALL_KEY')
 API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
 SETTLE_INTERVAL_SECONDS = 15 * 60
+
+# ── Web Push (VAPID) ────────────────────────────────────────────────────────
+from pywebpush import webpush, WebPushException
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@tipjarglobal.com")
 SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 req/day)
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 # statuses that mean the game is genuinely running right now
@@ -1921,6 +1927,121 @@ async def notif_stats():
     count = await db.subscribers.count_documents({})
     total = await db.tips.count_documents({})
     return {"subscriber_count": count, "total_tips": total}
+
+
+# ------------------------------------------------------------------ Web Push (VAPID)
+class PushSubIn(BaseModel):
+    endpoint: str
+    keys: dict
+
+
+@api_router.get("/push/vapid-public-key")
+async def push_vapid_key():
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@api_router.post("/push/subscribe")
+async def push_subscribe(sub: PushSubIn, request: Request):
+    if not sub.endpoint or not sub.keys.get("p256dh") or not sub.keys.get("auth"):
+        raise HTTPException(status_code=400, detail="Invalid subscription")
+    user = None
+    try:
+        user = await get_current_user(request)
+    except Exception:
+        user = None
+    now = datetime.now(timezone.utc).isoformat()
+    await db.push_subscriptions.update_one(
+        {"endpoint": sub.endpoint},
+        {"$set": {"endpoint": sub.endpoint, "keys": sub.keys,
+                  "user_id": (user or {}).get("id"), "updated_at": now},
+         "$setOnInsert": {"created_at": now}},
+        upsert=True)
+    return {"ok": True, "count": await db.push_subscriptions.count_documents({})}
+
+
+@api_router.post("/push/unsubscribe")
+async def push_unsubscribe(sub: PushSubIn):
+    await db.push_subscriptions.delete_one({"endpoint": sub.endpoint})
+    return {"ok": True}
+
+
+def _send_web_push(subscription: dict, payload: dict):
+    webpush(
+        subscription_info={"endpoint": subscription["endpoint"], "keys": subscription["keys"]},
+        data=json.dumps(payload),
+        vapid_private_key=VAPID_PRIVATE_KEY,
+        vapid_claims={"sub": VAPID_SUBJECT},
+        ttl=3600,
+    )
+
+
+async def notify_all_push(payload: dict):
+    """Send a Web Push to every stored subscription; prune dead ones (404/410)."""
+    if not VAPID_PRIVATE_KEY:
+        return 0
+    subs = await db.push_subscriptions.find({}, {"_id": 0}).to_list(20000)
+    sent = 0
+    for s in subs:
+        try:
+            await asyncio.to_thread(_send_web_push, s, payload)
+            sent += 1
+        except WebPushException as exc:
+            code = getattr(getattr(exc, "response", None), "status_code", None)
+            if code in (404, 410):
+                await db.push_subscriptions.delete_one({"endpoint": s["endpoint"]})
+        except Exception:
+            pass
+    return sent
+
+
+def _push_payload_for_tip(tip: dict) -> dict:
+    """Build a game/market-detailed push. Live picks get the blue LIVE styling."""
+    home, away = tip.get("home_team") or "", tip.get("away_team") or ""
+    match = f"{home} vs {away}" if away else (home or "TipJar")
+    market = tip.get("market") or ""
+    odds = tip.get("odds")
+    detail = f"{match} — {market}" + (f" @ {odds}" if odds else "")
+    is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
+    if is_live:
+        return {"title": "🔵 LIVE-Pick", "body": detail, "url": "/", "kind": "live",
+                "icon": "/push-live.png", "badge": "/push-live.png", "tag": f"tj-{tip.get('id')}"}
+    cat = (tip.get("category") or "").lower()
+    src = tip.get("source")
+    if src == "hq-auto":
+        label = {"banker": "Banker-Pick", "risk": "Risk-Pick"}.get(cat, "Value-Pick")
+        title = f"⚽ Neuer {label}"
+    elif src == "smart":
+        title = "🧠 Neuer Smart-Pick"
+    else:
+        title = "👥 Neuer Community-Tipp"
+    return {"title": title, "body": detail, "url": "/", "kind": "tip",
+            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": f"tj-{tip.get('id')}"}
+
+
+async def push_watch_loop():
+    """Watch for freshly-created tips (any source) and fire a Web Push with the
+    game + market details. Live picks use the blue LIVE popup. On first run we set
+    the watermark to 'now' so the existing backlog is never pushed."""
+    await asyncio.sleep(45)
+    st = await db.push_state.find_one({"key": "last_push"})
+    last = (st or {}).get("value") or datetime.now(timezone.utc).isoformat()
+    if not st:
+        await db.push_state.update_one({"key": "last_push"}, {"$set": {"value": last}}, upsert=True)
+    while True:
+        try:
+            if VAPID_PRIVATE_KEY:
+                fresh = await db.tips.find(
+                    {"created_at": {"$gt": last}, "status": {"$in": ["pending", "live"]}},
+                    {"_id": 0}).sort("created_at", 1).to_list(50)
+                for tip in fresh[:8]:
+                    await notify_all_push(_push_payload_for_tip(tip))
+                if fresh:
+                    last = fresh[-1]["created_at"]
+                    await db.push_state.update_one({"key": "last_push"},
+                                                   {"$set": {"value": last}}, upsert=True)
+        except Exception as e:
+            logger.error(f"push_watch_loop error: {e}")
+        await asyncio.sleep(45)
 
 
 # ------------------------------------------------------------------ files
@@ -4831,6 +4952,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
+    _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")

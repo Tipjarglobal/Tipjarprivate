@@ -773,9 +773,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               </div>
             );
           })()}
-          <div className="flex items-center justify-between rounded-lg bg-void px-3 py-2 mt-3">
-            <span className="text-white font-semibold text-sm truncate">{formatSelection(tip.market, t) || "—"}</span>
-            {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0 ml-2" />}
+          <div className="flex items-start justify-between gap-3 rounded-lg bg-void px-3 py-2 mt-3">
+            <span className="text-white font-semibold text-sm break-words flex-1 min-w-0">{formatSelection(tip.market, t) || "—"}</span>
+            {tip.odds && <OddsValue odds={tip.odds} className="font-mono font-bold text-volt shrink-0" />}
           </div>
           {(tip.stake || tip.potential_return) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-2 px-1">

@@ -38,6 +38,49 @@ function tipRating(tp) {
   return Math.max(Number(tp.ai_rating || 0), Number(tp.avg_rating || 0));
 }
 
+// ── Web Push helpers (real notifications when the app is closed / screen off) ──
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+function supportsWebPush() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+function isStandalonePwa() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+function isIos() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent);
+}
+async function enableWebPush() {
+  if (!supportsWebPush()) return { ok: false, reason: "unsupported" };
+  if (isIos() && !isStandalonePwa()) return { ok: false, reason: "ios-install" };
+  const reg = await navigator.serviceWorker.ready;
+  const { data } = await api.get("/push/vapid-public-key");
+  if (!data.publicKey) return { ok: false, reason: "no-key" };
+  const existing = await reg.pushManager.getSubscription();
+  const sub = existing || await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(data.publicKey),
+  });
+  const json = sub.toJSON();
+  await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys });
+  return { ok: true };
+}
+async function disableWebPush() {
+  try {
+    if (!supportsWebPush()) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await api.post("/push/unsubscribe", { endpoint: sub.endpoint, keys: sub.toJSON().keys || {} }).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+    }
+  } catch { /* ignore */ }
+}
+
 // Which picks area does a tip belong to (for area-targeted alerts)?
 function tipArea(tp) {
   if (tp.status === "live") return "live";
@@ -183,13 +226,20 @@ export default function NotificationBell() {
     if (!on) {
       try {
         if (window.Notification && Notification.permission !== "granted") {
-          await Notification.requestPermission();
+          const perm = await Notification.requestPermission();
+          if (perm !== "granted") { toast.error(t("bell.denied")); return; }
         }
         const { data } = await api.post("/notifications/subscribe", { anon_id: id });
         setCount(data.subscriber_count);
       } catch {
         /* ignore */
       }
+      // Real Web Push (works when app closed / screen off)
+      try {
+        const res = await enableWebPush();
+        if (res.ok) toast.success(t("bell.push_on"));
+        else if (res.reason === "ios-install") toast.info(t("bell.ios_hint"), { duration: 9000 });
+      } catch { /* ignore */ }
       setOn(true);
       localStorage.setItem("tj_bell", "1");
     } else {
@@ -199,6 +249,7 @@ export default function NotificationBell() {
       } catch {
         /* ignore */
       }
+      await disableWebPush();
       setOn(false);
       localStorage.removeItem("tj_bell");
     }

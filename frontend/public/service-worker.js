@@ -35,3 +35,34 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(req).then((cached) => cached || caches.match("/index.html")))
   );
 });
+
+// ── Web Push: show a notification even when the app/browser is closed ──────
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
+  const title = data.title || "TipJar";
+  const options = {
+    body: data.body || "",
+    icon: data.icon || "/icon-192.png",
+    badge: data.badge || "/icon-192.png",
+    tag: data.tag || "tipjar",
+    renotify: true,
+    vibrate: data.kind === "live" ? [80, 40, 80, 40, 120] : [60, 30, 60],
+    data: { url: data.url || "/", kind: data.kind || "tip" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const all = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of all) {
+        if ("focus" in c) { c.navigate(target).catch(() => {}); return c.focus(); }
+      }
+      return clients.openWindow(target);
+    })()
+  );
+});
