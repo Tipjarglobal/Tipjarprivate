@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Upload, Trophy, Coins, Radio, Users, Loader2, CheckCircle2 } from "lucide-react";
+import { X, Upload, Trophy, Coins, Radio, Users, Loader2, CheckCircle2, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
@@ -10,6 +10,7 @@ const TYPES = [
   { key: "played", icon: Users, tid: "win-type-played" },
   { key: "posted", icon: Trophy, tid: "win-type-posted" },
   { key: "live", icon: Radio, tid: "win-type-live" },
+  { key: "cashed", icon: Banknote, tid: "win-type-cashed" },
 ];
 
 export default function WinClaimModal({ open, onClose, requireLogin, onClaimed, onViewBestWins }) {
@@ -107,7 +108,7 @@ export default function WinClaimModal({ open, onClose, requireLogin, onClaimed, 
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mt-6">
+          <div className="grid grid-cols-2 gap-2 mt-6">
             {TYPES.map(({ key, icon: Icon, tid }) => (
               <button
                 key={key} data-testid={tid} onClick={() => setType(key)}

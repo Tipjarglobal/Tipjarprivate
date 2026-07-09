@@ -1810,24 +1810,31 @@ async def claim_win(file: Optional[UploadFile] = File(None),
     else:
         raw = imgs_raw[0]
         slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))
-        if slip["status"] != "won":
-            raise HTTPException(status_code=422, detail="Nur GEWONNENE Scheine zählen (Slip ist nicht 'Won').")
+        if slip["status"] not in ("won", "cashed"):
+            raise HTTPException(status_code=422, detail="Nur gewonnene oder ausgezahlte Scheine zählen.")
         legs = slip["legs"]
         legs_n = len(legs)
         if legs_n < 2:
             raise HTTPException(status_code=422, detail="Kein gültiger Kombi-Schein erkannt.")
-        sys_keys = await _system_match_keys()
-        matched = sum(1 for l in legs if _match_key(l["home"], l["away"]) in sys_keys)
-        if matched < WIN_MIN_SYSTEM_MATCH:
-            raise HTTPException(status_code=422,
-                                detail="Das zählt nicht als mitgespielt — der Schein passt zu keinem TipJar-System.")
-        if ctype == "played":
-            if legs_n < WIN_MIN_PLAYED_LEGS:
-                raise HTTPException(status_code=422, detail=f"Mitgespielter Schein braucht mind. {WIN_MIN_PLAYED_LEGS} Legs.")
-            credits = min(WIN_MAX_CREDITS, WIN_MIN_PLAYED_LEGS + (legs_n - WIN_MIN_PLAYED_LEGS))
-        else:  # posted
-            credits = WIN_POSTED_CREDITS
-        total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
+        # A cashed-out slip counts as a win trophy — no TipJar-system match required.
+        if slip["status"] == "cashed":
+            ctype = "cashed"
+            matched = legs_n
+            credits = WIN_CASHED_CREDITS
+            total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
+        else:
+            sys_keys = await _system_match_keys()
+            matched = sum(1 for l in legs if _match_key(l["home"], l["away"]) in sys_keys)
+            if matched < WIN_MIN_SYSTEM_MATCH:
+                raise HTTPException(status_code=422,
+                                    detail="Das zählt nicht als mitgespielt — der Schein passt zu keinem TipJar-System.")
+            if ctype == "played":
+                if legs_n < WIN_MIN_PLAYED_LEGS:
+                    raise HTTPException(status_code=422, detail=f"Mitgespielter Schein braucht mind. {WIN_MIN_PLAYED_LEGS} Legs.")
+                credits = min(WIN_MAX_CREDITS, WIN_MIN_PLAYED_LEGS + (legs_n - WIN_MIN_PLAYED_LEGS))
+            else:  # posted
+                credits = WIN_POSTED_CREDITS
+            total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
 
     # anti-duplicate: the same set of legs can't be claimed twice
     sig = hashlib.md5(("|".join(sorted(f"{l['home']}-{l['away']}-{l['market']}" for l in legs))
