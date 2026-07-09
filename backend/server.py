@@ -3532,7 +3532,11 @@ def _forebet_candidates(r: dict) -> list[dict]:
 # Owner curated-mode (2026-07-09): the Single-Picks feed is a hand-curated list
 # (exact bookmaker legs & odds). While True, the Forebet/Predictz auto-scrapers do
 # NOT post or overwrite single picks. Set to False to resume full automation.
-AUTOPOST_PAUSED = True
+# Owner curated-mode toggle. When True the Forebet/Predictz auto-scrapers do NOT
+# post single picks at all. When False they post, but ONLY for tomorrow onward —
+# today's Single-Picks stay hand-curated (see _AUTOPOST_MIN_KO usage below).
+AUTOPOST_PAUSED = False
+FOREBET_TOMORROW_URL = "https://www.forebet.com/en/football-tips-and-predictions-for-tomorrow"
 
 
 async def forebet_autopost() -> dict:
@@ -3542,14 +3546,23 @@ async def forebet_autopost() -> dict:
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
+    # Only auto-post from the start of TOMORROW (UTC) — today stays curated.
+    _now = datetime.now(timezone.utc)
+    _AUTOPOST_MIN_KO = (_now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     try:
-        rows = await asyncio.wait_for(scrape_forebet_today(60), timeout=SCRAPE_TIMEOUT)
-    except asyncio.TimeoutError:
-        logger.error("Forebet scrape timed out")
-        return {"posted": 0, "reason": "scrape timeout"}
+        rows_today = await asyncio.wait_for(scrape_forebet_today(60), timeout=SCRAPE_TIMEOUT)
     except Exception as e:
-        logger.error(f"Forebet scrape failed: {e}")
-        return {"posted": 0, "reason": f"scrape error: {e}"}
+        logger.error(f"Forebet today scrape failed: {e}")
+        rows_today = []
+    try:
+        rows_tomorrow = await asyncio.wait_for(
+            scrape_forebet_today(60, url=FOREBET_TOMORROW_URL), timeout=SCRAPE_TIMEOUT)
+    except Exception as e:
+        logger.warning(f"Forebet tomorrow scrape failed: {e}")
+        rows_tomorrow = []
+    rows = rows_today + rows_tomorrow
+    if not rows:
+        return {"posted": 0, "reason": "scrape empty"}
 
     banned = await _banned_market_families()
     candidates = []
@@ -3582,6 +3595,12 @@ async def forebet_autopost() -> dict:
             logger.warning(f"forebet prediction store failed: {e}")
         home, away = r.get("home"), r.get("away")
         if not home or not away:
+            continue
+        # Owner: today's Single-Picks are hand-curated → the auto-scraper only creates
+        # picks from tomorrow onward. (Predictions for today are still stored above so
+        # the System-Slip keeps working.)
+        _ko = _parse_kickoff(kickoff)
+        if _ko and _ko < _AUTOPOST_MIN_KO:
             continue
         if _is_women_or_youth(home) or _is_women_or_youth(away):
             continue  # owner: only recognised, bettable men's competitions
@@ -3672,17 +3691,17 @@ async def forebet_autopost() -> dict:
         category = c.get("_category", c.get("_ptype", "value"))
         lcode = (r.get("lcode") or "").strip().lower()
         cc = (r.get("cc") or "").strip().lower()
-        # One pick per match PER CATEGORY: drop other pending hq-auto tips of the same
-        # category for this game (keeps Banker/Value/Risk each to a single pick).
-        await db.tips.delete_many({
+        # STABILITY (owner): once a match has a pick in this category, keep it FIXED
+        # (same market + same odds) until kickoff — never swap it on later runs.
+        prior = await db.tips.find_one({
             "source": "hq-auto", "status": "pending", "category": category,
-            "home_team": r["home"], "away_team": r["away"], "match_time": kickoff,
-            "id": {"$ne": tip_id}})
-        existing = await db.tips.find_one({"id": tip_id})
-        if existing:
-            if existing.get("league_code") != lcode:
+            "home_team": r["home"], "away_team": r["away"]})
+        if prior:
+            if lcode and prior.get("league_code") != lcode:
                 await db.tips.update_one(
-                    {"id": tip_id}, {"$set": {"league_code": lcode, "country": cc}})
+                    {"id": prior["id"]}, {"$set": {"league_code": lcode, "country": cc}})
+            continue
+        if await db.tips.find_one({"id": tip_id}):
             continue
         home, away = r["home"], r["away"]
         market = c["market"]
@@ -3870,6 +3889,9 @@ async def predictz_autopost() -> dict:
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
+    # Only auto-post from the start of TOMORROW (UTC) — today stays curated.
+    _AUTOPOST_MIN_KO = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
     # enrich the kickoff-time index with forebet's tomorrow page (exact HH:MM)
     await _index_forebet_times("https://www.forebet.com/en/football-tips-and-predictions-for-tomorrow")
     try:
@@ -3955,6 +3977,9 @@ async def predictz_autopost() -> dict:
         if not _forebet_agrees(market, fb_map.get(_match_key(home, away))):
             continue
         match_time = _predictz_kickoff(r, d)
+        _ko = _parse_kickoff(match_time)
+        if _ko and _ko < _AUTOPOST_MIN_KO:
+            continue  # today stays curated — only post tomorrow onward
         existing = await db.tips.find_one({"id": tip_id}, {"match_time": 1})
         if existing:
             # backfill kickoff time onto tips posted before we scraped times
@@ -3974,6 +3999,12 @@ async def predictz_autopost() -> dict:
         # Predictz picks also carry a Banker/Value category so they surface in the
         # Single-Picks filters (sweet-spot 1.40–2.60 = Value, safer = Banker).
         pcategory = "value" if 1.40 <= _od <= 2.60 else "banker"
+        # STABILITY (owner): keep the first pick per match+category fixed — don't add a
+        # second (e.g. Predictz value on a match Forebet already gave a value pick).
+        if await db.tips.find_one({
+            "source": "hq-auto", "status": "pending", "category": pcategory,
+            "home_team": home, "away_team": away}):
+            continue
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         if "friendl" in league.lower() or "freundschaft" in league.lower():
             league = "Freundschaftsspiel"

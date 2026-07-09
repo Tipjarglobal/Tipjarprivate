@@ -9,6 +9,11 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 (late) — Scraper reactivated (multi-day) + stability
+- **AUTOPOST_PAUSED = False** — auto-scraper is LIVE again, but only posts from TOMORROW onward (`_AUTOPOST_MIN_KO` = start of tomorrow UTC). TODAY stays hand-curated (26 hqcur-* picks untouched). Forebet now scrapes today+tomorrow pages (`FOREBET_TOMORROW_URL`); today rows still feed match_predictions/system-slip but are skipped for picks. Predictz already covers tomorrow+day-after.
+- **STABILITY RULE:** a pick, once posted for a match+category, is FIXED (same market+odds) until kickoff. Forebet posting replaced the old delete-and-replace (which caused 11:00 Über1.5 → 14:00 BTTS → 17:00 DC12 flipping) with a prior-check: if a pending pick for (home,away,category) exists, keep it. Same prior-check added to Predictz. Verified: 2nd scraper run posts 0 (no flip).
+- Verified: today = curated only; tomorrow (2026-07-10) auto picks appear & categorised (Banker/Value/Risk).
+
 ### CHANGELOG 2026-07-09 (evening) — Web Push + tip visibility fix
 - **Tip visibility fix:** market text no longer truncates (`Paide Handica…` → full `Paide Handicap +2.5`) and the real odds number is ALWAYS shown. For odds < 1.04 a tiny "pregame – live evtl. höher" hint now sits UNDER the number instead of replacing it (OddsValue.jsx + RateWall card row).
 - **Web Push (real notifications, app closed / screen off):** VAPID keys in backend/.env; `pywebpush`. Endpoints `/api/push/vapid-public-key|subscribe|unsubscribe`; `notify_all_push` + `_push_payload_for_tip` (game+market details; LIVE picks → blue `/push-live.png` icon). `push_watch_loop` watches new tips (all sources, watermark=now on first run) and pushes. Frontend: bell toggle now also does `pushManager.subscribe` (iOS PWA-install hint), service-worker.js has `push`+`notificationclick` handlers. NOTE: real delivery needs a physical device after deploy — cannot be e2e-tested in this env.
