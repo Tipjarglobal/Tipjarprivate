@@ -272,6 +272,7 @@ const T = {
 
     "profile.title": "Edit Profile",
     "profile.username": "Username (change anytime)",
+    "profile.email": "Email address",
     "profile.save": "Save changes",
     "profile.saved": "Profile updated ✓",
 
@@ -326,6 +327,7 @@ const T = {
     "win.type.played.desc": "You followed a TipJar system and won. Slip needs 5+ legs — earn 5 credits + 1 per extra leg.",
     "win.type.posted.desc": "You were the tipster of the winning pick — earn 20 credits.",
     "win.type.live.desc": "Won 4 live picks in a row, each at odds over 1.60 — earn 20 credits.",
+    "win.type.cashed.desc": "You cashed out your slip early. Upload the 'Cashed Out' screenshot — no TipJar system needed, it's your trophy. Earn 20 credits.",
     "win.upload": "Upload your winning slip",
     "win.submit": "Claim credits",
     "win.needfile": "Please upload your slip screenshot first.",
@@ -835,6 +837,7 @@ const T = {
 
     "profile.title": "Profil bearbeiten",
     "profile.username": "Benutzername (jederzeit änderbar)",
+    "profile.email": "E-Mail-Adresse",
     "profile.save": "Änderungen speichern",
     "profile.saved": "Profil aktualisiert ✓",
 
@@ -889,6 +892,7 @@ const T = {
     "win.type.played.desc": "Du hast ein TipJar-System nachgespielt und gewonnen. Schein braucht 5+ Legs — 5 Credits + 1 pro weiterem Leg.",
     "win.type.posted.desc": "Du warst der Tippgeber des Gewinner-Picks — 20 Credits.",
     "win.type.live.desc": "4 Live-Picks in Folge gewonnen, jede Quote über 1.60 — 20 Credits.",
+    "win.type.cashed.desc": "Du hast deinen Schein vorzeitig ausgezahlt (Cash-out). Lade den 'Ausgezahlt'-Screenshot hoch — kein TipJar-System nötig, das ist deine Trophäe. 20 Credits.",
     "win.upload": "Gewinn-Schein hochladen",
     "win.submit": "Credits einfordern",
     "win.needfile": "Bitte zuerst den Schein-Screenshot hochladen.",

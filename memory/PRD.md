@@ -320,6 +320,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Produktion (tipjarglobal.com) läuft mit ALTEM Code bis Nutzer erneut deployt → verschwundener 7-Leg-Community-Schein war auf Produktion (eigene DB, kein Zugriff, nicht wiederherstellbar). Nutzer muss DEPLOY klicken, damit Live-Settlement + Bewertungswand-Fix + Cashed-Out live gehen.
 - Live-Bereich zeigt viele obskure US-Amateurligen — evtl. striktere Liga-Whitelist für Live-Loop gewünscht (offen).
 
+
+## Changelog — 2026-07-09 (Cash-out-Claim, Homepage-Texte, Profil-E-Mail)
+- Homepage: unter „Was ist TipJar?" neue Blöcke — SYSTEM-MODUS-Label, H3 „Warum Anwender TipJar wählen — statt Telegram, Discord & Co.", Nutzen-Text, „Dein Vorteil"-Box (volt), „Was wir NICHT sind"-Abgrenzung, CTA-Text (kein Button). i18n EN+DE (Rest via EN-Fallback). Kein Zähler, kein FAQ (bewusst).
+- „Zeig deinen Gewinn"/Hall-of-Fame-Claim akzeptiert jetzt CASH-OUT-Scheine: neuer Claim-Typ "cashed" (Button „Ausgezahlt", Banknote-Icon, grid-cols-2). Backend: extract_win_slip erkennt "Cashed Out/Ausgezahlt" → status "cashed"; claim_win-Branch für "cashed" OHNE System-Match-Zwang (eigene Trophäe), 2+ Legs, WIN_CASHED_CREDITS=20; _render_slip_image Label „Ausgezahlt" + „Ausgezahlt:"-Betrag. i18n win.type.cashed(.desc) EN+DE.
+- Profil: E-Mail jetzt änderbar (vorher nur Username). ProfileUpdate.email + Endpoint mit Unique-/Format-Check; ProfileModal neues Feld profile-email. E2E getestet (Username+E-Mail ändern, Login mit neuer E-Mail ok). → Nutzer ändert sein Konto selbst auf Produktion (duexxatuxx→TipJarLogic, danoglidis...→kontakt@tipjarglobal.com).
+
 ## Changelog — 2026-07-09 (Voll-Automatik Abrechnung + korrigierbare Scheine)
 - Abgerechnete Scheine sind jetzt KORRIGIERBAR: TipCard zeigt für Admin/Ersteller (canDelete) auf JEDEM Status die Zeile "Ergebnis setzen / korrigieren" mit 4 Buttons (OFFEN/GEWONNEN/VERLOREN/CASHED OUT), aktueller Status hervorgehoben. `settle()` lädt im Abgerechnet-Tab die Listen neu (loadSettled als useCallback). Behebt "Olympiakos versehentlich auf Verloren, kein Undo möglich".
 - OFFEN-Reopen setzt hq-live → "live" (Auto-Loop übernimmt wieder), sonst "pending".

@@ -442,6 +442,7 @@ class LoginInput(BaseModel):
 
 class ProfileUpdate(BaseModel):
     username: Optional[str] = Field(default=None, min_length=2, max_length=24)
+    email: Optional[str] = None
     timezone: Optional[str] = None
     language: Optional[str] = None
 
@@ -766,6 +767,14 @@ async def update_profile(inp: ProfileUpdate, user: dict = Depends(get_current_us
         if await db.users.find_one({"username": inp.username, "id": {"$ne": user["id"]}}):
             raise HTTPException(status_code=400, detail="Username already taken")
         updates["username"] = inp.username
+    if inp.email is not None:
+        new_email = inp.email.strip().lower()
+        if new_email and new_email != (user.get("email") or "").lower():
+            if "@" not in new_email or "." not in new_email:
+                raise HTTPException(status_code=400, detail="Invalid email address")
+            if await db.users.find_one({"email": new_email, "id": {"$ne": user["id"]}}):
+                raise HTTPException(status_code=400, detail="Email already in use")
+            updates["email"] = new_email
     if inp.timezone:
         updates["timezone"] = inp.timezone
     if inp.language:
@@ -1341,6 +1350,7 @@ WIN_LIVE_MIN_LEGS = 4            # live streak: 4 in a row
 WIN_LIVE_MIN_ODDS = 1.60         # each live leg must be > 1.60
 WIN_POSTED_CREDITS = 20
 WIN_LIVE_CREDITS = 20
+WIN_CASHED_CREDITS = 20
 WIN_MAX_CREDITS = 20             # cap per claim
 
 
@@ -1355,9 +1365,12 @@ async def extract_win_slip(image_b64: str) -> dict:
                                        "Never invent legs that are not visible.")).with_model(AI_MODEL_PROVIDER, AI_MODEL)
         prompt = (
             "Read this bet-slip screenshot. Return STRICT JSON: "
-            '{"status":"won|lost|open","total_odds":<number>,"stake":"","winnings":"",'
+            '{"status":"won|lost|open|cashed","total_odds":<number>,"stake":"","winnings":"",'
             '"legs":[{"home":"","away":"","league":"","date":"","time":"","market":"","odds":<number>,"result":"won|lost|open"}]}. '
-            "status is the overall slip result. Extract every leg. If a value is missing use empty/0. "
+            "status is the overall slip result. If the slip shows 'Cashed Out' / 'Cash Out' / 'Ausgezahlt' / "
+            "'Auszahlung' anywhere (it means the bettor took an early payout), set status to 'cashed' and put "
+            "the paid-out amount into 'winnings' (e.g. '41,61 €'). "
+            "Extract every leg. If a value is missing use empty/0. "
             "For EACH leg also read: 'league' = the competition/league name if shown (e.g. 'Champions-League-Quali', 'Premier League'); "
             "'date' = the match date if shown (keep as printed, e.g. '07/07' or '07.07.'); "
             "'time' = the kickoff time if shown (e.g. '21:00'). Leave these empty if not visible on the slip. "
@@ -1653,6 +1666,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     fy = y + 24
     d.rounded_rectangle([pad, fy, W - pad, H - 40], 30, fill=CARD)
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
+             "cashed": "Ausgezahlt",
              "live_pending": "Live-Pick", "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
     d.text((pad + 42, fy + 40), label, font=f_label, fill=ACCENT)
     d.text((pad + 42, fy + 138), "Gesamtquote", font=f_lbl, fill=GREY)
@@ -1665,7 +1679,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         stt = f"Einsatz: {stake}"
         d.text((W - pad - d.textlength(stt, font=f_lbl) - 42, fy + 214), stt, font=f_lbl, fill=GREY)
     if winnings:
-        wt = f"Gewinn: {winnings}" if won else f"Möglicher Gewinn: {winnings}"
+        wt = (f"Ausgezahlt: {winnings}" if ctype == "cashed" else f"Gewinn: {winnings}") if won else f"Möglicher Gewinn: {winnings}"
         d.text((pad + 42, fy + 282), wt, font=f_win, fill=ACCENT)
     out = io.BytesIO()
     img.save(out, format="WEBP", quality=90)
@@ -1678,7 +1692,7 @@ async def claim_win(file: Optional[UploadFile] = File(None),
                     type: str = Form(...),
                     user: dict = Depends(get_current_user)):
     ctype = (type or "").strip().lower()
-    if ctype not in ("played", "posted", "live"):
+    if ctype not in ("played", "posted", "live", "cashed"):
         raise HTTPException(status_code=400, detail="Invalid claim type")
     # gather uploaded images (live can be up to 4 separate screenshots)
     imgs_raw = []
@@ -1711,6 +1725,21 @@ async def claim_win(file: Optional[UploadFile] = File(None),
         total_odds = round(math.prod(odds_list), 2) if odds_list else 0.0
         stake, winnings = "", ""
         credits, matched = WIN_LIVE_CREDITS, legs_n
+    elif ctype == "cashed":
+        # Cashed-out slip: the bettor took an early payout. It's their own trophy,
+        # so we DON'T require it to match a TipJar system — just that it was cashed out.
+        raw = imgs_raw[0]
+        slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))
+        if slip["status"] not in ("cashed", "won"):
+            raise HTTPException(status_code=422,
+                                detail="Kein ausgezahlter Schein erkannt. Lade einen 'Cashed Out'/'Ausgezahlt'-Schein hoch.")
+        legs = slip["legs"]
+        legs_n = len(legs)
+        if legs_n < 2:
+            raise HTTPException(status_code=422, detail="Kein gültiger Kombi-Schein erkannt.")
+        matched = legs_n
+        credits = WIN_CASHED_CREDITS
+        total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
     else:
         raw = imgs_raw[0]
         slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))

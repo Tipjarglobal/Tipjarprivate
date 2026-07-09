@@ -16,20 +16,21 @@ export default function ProfileModal({ open, onClose }) {
   const { t, setLang } = useI18n();
   const { user, setUser } = useAuth();
   const [username, setUsername] = useState(user?.username || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [timezone, setTimezone] = useState(user?.timezone || "UTC");
   const [language, setLanguage] = useState(user?.language || "en");
   const [busy, setBusy] = useState(false);
 
   React.useEffect(() => {
     if (open && user) {
-      setUsername(user.username); setTimezone(user.timezone); setLanguage(user.language);
+      setUsername(user.username); setEmail(user.email || ""); setTimezone(user.timezone); setLanguage(user.language);
     }
   }, [open, user]);
 
   const save = async () => {
     setBusy(true);
     try {
-      const { data } = await api.put("/auth/profile", { username, timezone, language });
+      const { data } = await api.put("/auth/profile", { username, email, timezone, language });
       setUser(data.user);
       setLang(language);
       toast.success(t("profile.saved"));
@@ -50,6 +51,9 @@ export default function ProfileModal({ open, onClose }) {
       )}
       <Field label={t("profile.username")}>
         <input data-testid="profile-username" className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} minLength={2} maxLength={24} />
+      </Field>
+      <Field label={t("profile.email")}>
+        <input data-testid="profile-email" type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="kontakt@example.com" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("auth.timezone")}>
