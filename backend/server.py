@@ -1191,7 +1191,7 @@ async def leaderboard():
             "_id": "$user_id",
             "username": {"$first": "$username"},
             "total": {"$sum": 1},
-            "won": {"$sum": {"$cond": [{"$eq": ["$status", "won"]}, 1, 0]}},
+            "won": {"$sum": {"$cond": [{"$in": ["$status", ["won", "cashed_out"]]}, 1, 0]}},
             "avg_ai": {"$avg": "$ai_rating"},
         }},
         {"$sort": {"won": -1, "total": -1}},
