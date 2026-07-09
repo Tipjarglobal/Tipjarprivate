@@ -2460,7 +2460,7 @@ async def settle_pending_tips() -> dict:
         ko = _parse_kickoff(t.get("match_time"))
         if t.get("status") == "live":
             finished.append((ko or now, t))
-        elif ko and ko < now - timedelta(hours=2):
+        elif _finished_eligible(t.get("match_time"), ko, now):
             finished.append((ko, t))
     finished.sort(key=lambda x: x[0])  # oldest finished first
     checked, settled, details = 0, 0, []
@@ -2523,7 +2523,7 @@ async def settle_hq_combos() -> dict:
         if tip.get("settle_attempts", 0) >= SETTLE_MAX_ATTEMPTS:
             continue
         ko = _parse_kickoff(tip.get("match_time"))
-        if not (ko and ko < now - timedelta(hours=2)):
+        if not _finished_eligible(tip.get("match_time"), ko, now):
             continue
         dates = [ko.date().isoformat(),
                  (ko + timedelta(days=1)).date().isoformat(),
@@ -3075,6 +3075,30 @@ def _parse_kickoff(mt: str):
             except Exception:
                 return None
     return None
+
+
+def _kickoff_is_date_only(mt: str) -> bool:
+    """A kickoff string with a DATE but NO time (e.g. '9. Jul 2026'). _parse_kickoff
+    assigns these 23:59, which wrongly makes an evening UEFA game that's already over
+    look 'not yet kicked off' → it never auto-settles until after midnight."""
+    s = (mt or "").strip()
+    return bool(s) and ":" not in s and _parse_kickoff(s) is not None
+
+
+def _finished_eligible(mt: str, ko, now) -> bool:
+    """Should we ATTEMPT to settle this pick now? find_finished_fixture only ever
+    returns FT games, so attempting early is always safe (no premature settlement).
+    - normal (time known): kickoff was > 2h ago
+    - date-only: assume a typical evening kickoff (18:00 UTC) so we start trying from
+      ~20:00 UTC on the match date (not the morning → no wasted retries), and settle
+      the same evening the API reports FT instead of waiting past midnight."""
+    if not ko:
+        return False
+    if _kickoff_is_date_only(mt):
+        assumed = ko.replace(hour=18, minute=0, second=0, microsecond=0)
+        return now >= assumed + timedelta(hours=2)
+    return ko < now - timedelta(hours=2)
+
 
 
 async def purge_expired_autotips() -> int:
