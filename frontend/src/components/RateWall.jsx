@@ -271,7 +271,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           </button>
         ))}
         {view !== "live" && <span className="w-px bg-elevated mx-1" />}
-        {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"], ["won", "wall.filter.won"], ["lost", "wall.filter.lost"]].map(([v, lbl]) => (
+        {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"]].map(([v, lbl]) => (
           <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
             {t(lbl)}
