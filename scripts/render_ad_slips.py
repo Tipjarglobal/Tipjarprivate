@@ -89,10 +89,21 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
         st = lg["status"]
         col = RED if st == "lost" else GREEN
         odd = lg["odd"]
-        ow = d.textlength(odd, font=f_odd)
-        mkt_f = fit(lg["market"], FB, 38, 26, W - 2 * pad - ow - 40)
+        if odd:
+            ow = d.textlength(odd, font=f_odd)
+            d.text((W - pad - ow, y - 2), odd, font=f_odd, fill=col)
+        else:
+            # secondary market without its own decimal odd → show a tick / cross
+            mx = W - pad - 30
+            if st == "lost":
+                d.line([(mx - 14, y + 2), (mx + 14, y + 30)], fill=RED, width=8)
+                d.line([(mx - 14, y + 30), (mx + 14, y + 2)], fill=RED, width=8)
+            else:
+                d.line([(mx - 18, y + 16), (mx - 4, y + 30)], fill=GREEN, width=8)
+                d.line([(mx - 4, y + 30), (mx + 18, y + 2)], fill=GREEN, width=8)
+            ow = 0
+        mkt_f = fit(lg["market"], FB, 38, 26, W - 2 * pad - ow - 60)
         d.text((pad, y), lg["market"], font=mkt_f, fill=WHITE)
-        d.text((W - pad - ow, y - 2), odd, font=f_odd, fill=col)
         y += 46
         teams = f"{lg['home']} \u2013 {lg['away']}"
         tf = fit(teams, FR, 32, 22, W - 2 * pad)
@@ -128,7 +139,9 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
 # Full slip — ALL legs in one image. Green = won, Red = lost, Amber = live.
 slip1 = [
     {"market": "Total Over 2.5", "home": "KF Vllaznia Shkoder", "away": "Malisheva", "time": "09.07  20:00", "odd": "2.14", "result": "2:1", "status": "won"},
+    {"market": "Double Chance 12", "home": "KF Vllaznia Shkoder", "away": "Malisheva", "time": "09.07  20:00", "odd": "", "result": "2:1", "status": "won"},
     {"market": "1st Half Over 0.5", "home": "HNK Hajduk Split", "away": "MSK Zilina", "time": "09.07  20:00", "odd": "1.40", "result": "HT 1:0", "status": "won"},
+    {"market": "2nd Half Over 0.5", "home": "HNK Hajduk Split", "away": "MSK Zilina", "time": "09.07  20:00", "odd": "", "result": "HT 1:0", "status": "won"},
     {"market": "1st Half Over 0.5", "home": "NSI Runavik", "away": "Hamrun Spartans", "time": "09.07  20:45", "odd": "1.43", "result": "HT 1:0", "status": "won"},
     {"market": "Both Teams to Score - Yes", "home": "Sarajevo", "away": "Inter Turku", "time": "09.07  21:00", "odd": "2.09", "result": "1:1", "status": "won"},
     {"market": "Double Chance 1X", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "1.73", "result": "1:0", "status": "won"},
