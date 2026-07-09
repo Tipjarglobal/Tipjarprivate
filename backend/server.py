@@ -2681,6 +2681,46 @@ async def admin_live_run(admin: dict = Depends(require_admin)):
     return await live_autopost()
 
 
+@api_router.get("/admin/live-health")
+async def admin_live_health(admin: dict = Depends(require_admin)):
+    """Production diagnostic: tells us in ONE call why the Live channel is/ isn't
+    posting on the deployed environment (env key, HQ account, API reachability,
+    leader status, live tip count)."""
+    out = {
+        "api_football_key_set": bool(API_FOOTBALL_KEY),
+        "api_football_base": API_FOOTBALL_BASE,
+        "is_leader": _is_leader(),
+        "vapid_key_set": bool(VAPID_PRIVATE_KEY),
+    }
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    out["hq_account_exists"] = bool(hq)
+    out["current_live_tips"] = await db.tips.count_documents({"source": "hq-live", "status": "live"})
+    out["pending_prematch_tips"] = await db.tips.count_documents({"source": "hq-auto", "status": "pending"})
+    # Probe API-Football directly (quota + reachability + auth).
+    try:
+        st = await asyncio.to_thread(
+            lambda: requests.get(f"{API_FOOTBALL_BASE}/status",
+                                 headers={"x-apisports-key": API_FOOTBALL_KEY}, timeout=15))
+        sj = st.json()
+        out["api_football_http"] = st.status_code
+        out["api_football_errors"] = sj.get("errors")
+        out["api_football_requests"] = sj.get("response", {}).get("requests")
+        out["api_football_plan"] = (sj.get("response", {}) or {}).get("subscription", {}).get("plan")
+    except Exception as e:
+        out["api_football_probe_error"] = str(e)
+    # Probe the live feed count without posting anything.
+    try:
+        feed = await asyncio.to_thread(
+            lambda: requests.get(f"{API_FOOTBALL_BASE}/fixtures", params={"live": "all"},
+                                 headers={"x-apisports-key": API_FOOTBALL_KEY}, timeout=20).json())
+        out["live_fixtures_available_now"] = feed.get("results")
+        out["live_feed_errors"] = feed.get("errors")
+    except Exception as e:
+        out["live_feed_probe_error"] = str(e)
+    return out
+
+
+
 async def settlement_loop():
     while True:
         await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
