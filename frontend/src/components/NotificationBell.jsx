@@ -129,7 +129,12 @@ export default function NotificationBell() {
   useEffect(() => {
     const openHandler = () => { setOpen(true); setUnseen(0); };
     window.addEventListener("tj-open-alerts", openHandler);
-    return () => window.removeEventListener("tj-open-alerts", openHandler);
+    const enabledHandler = () => setOn(true);  // synced when the prompt enables push
+    window.addEventListener("tj-push-enabled", enabledHandler);
+    return () => {
+      window.removeEventListener("tj-open-alerts", openHandler);
+      window.removeEventListener("tj-push-enabled", enabledHandler);
+    };
   }, []);
 
   const fireAlert = (tp, area) => {

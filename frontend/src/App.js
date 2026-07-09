@@ -13,6 +13,7 @@ import Header from "./components/Header";
 import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
+import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
 import WalletModal from "./components/WalletModal";
@@ -146,6 +147,7 @@ function Home() {
   const openTipsView = (view) => {
     setTipsView(view);
     setTipsOpen(true);
+    window.dispatchEvent(new Event("tj-viewed-pick"));
     // mark this section's tips as seen → clears its red "new" badge
     setSeenCounts((prev) => {
       const next = { ...prev, [view]: counts[view] || 0 };
@@ -183,6 +185,7 @@ function Home() {
   return (
     <div className="App grain min-h-screen overflow-x-hidden" id="top">
       <SplashScreen />
+      <NotificationPrompt />
       <PromoBanner />
       <Header
         onSubmit={() => setSubmitOpen(true)}
