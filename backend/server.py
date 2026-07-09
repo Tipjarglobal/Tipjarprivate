@@ -3803,9 +3803,9 @@ async def forebet_autopost() -> dict:
             if "-1.5" in ml and "handicap" in ml:
                 o2["_ptype"] = "risk"
                 risk_opts.append(o2)
-            elif o["winprob"] >= 0.90:
-                # Owner rule: EVERY single pick with a ≥90% win chance is a Banker,
-                # regardless of odds — the safest picks always live in the Banker tab.
+            elif round(o["winprob"] * 10) >= 9:
+                # Owner rule: EVERY 9- or 10-star single pick (≈86 %+ win chance) is a
+                # Banker, regardless of odds — the safest picks always live in Banker.
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
             elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.42:
@@ -5174,6 +5174,55 @@ async def startup():
         logger.info("Auto-settlement idle — set API_FOOTBALL_KEY to enable")
 
 
+async def _migrate_stars_and_categories():
+    """One-time, idempotent data migration so ALREADY-posted picks match the current
+    owner rules (runs on startup, incl. production): stars from win_prob (≤10, no more
+    8.5 cap), 9/10-star singles → Banker, and strip the old '% Trefferchance' text."""
+    try:
+        docs = await db.tips.find(
+            {"source": "hq-auto", "status": "pending"},
+            {"_id": 0, "id": 1, "win_prob": 1, "ai_rating": 1, "ai_analysis": 1,
+             "is_parlay": 1, "category": 1, "market": 1},
+        ).to_list(3000)
+        changed = 0
+        for d in docs:
+            upd = {}
+            wp = d.get("win_prob")
+            stars = None
+            if wp is not None:
+                stars = max(1, min(10, round(wp * 10)))
+                if float(d.get("ai_rating") or 0) != float(stars):
+                    upd["ai_rating"] = float(stars)
+            ml = (d.get("market") or "").lower()
+            is_handicap15 = ("-1.5" in ml or "-1,5" in ml) and "handicap" in ml
+            if is_handicap15 and not d.get("is_parlay"):
+                # Owner rule: every -1.5 handicap single is a RISK pick.
+                if d.get("category") != "risk":
+                    upd["category"] = "risk"
+                    upd["pick_type"] = "risk"
+            elif stars is not None and stars >= 9 and not d.get("is_parlay") \
+                    and d.get("category") != "risk":
+                # 9/10-star singles → banker (never touch risk handicaps or combos)
+                if d.get("category") != "banker":
+                    upd["category"] = "banker"
+                    upd["pick_type"] = "banker"
+            # strip percentages from existing analysis prose
+            txt = d.get("ai_analysis") or ""
+            if "%" in txt:
+                star_txt = f"{stars if stars is not None else int(round(float(d.get('ai_rating') or 8)))}/10 Sterne"
+                new = re.sub(r"ca\.\s*\d+\s*%\s*Trefferchance", star_txt, txt)
+                new = re.sub(r"\s*\(Value\s*≥\s*1[.,]60\)", "", new).replace("  ", " ")
+                if new != txt:
+                    upd["ai_analysis"] = new
+            if upd:
+                await db.tips.update_one({"id": d["id"]}, {"$set": upd})
+                changed += 1
+        if changed:
+            logger.info(f"Star/category migration updated {changed} picks")
+    except Exception as e:
+        logger.error(f"Star/category migration failed: {e}")
+
+
 async def _startup_seed():
     try:
         await purge_demo_tips()
@@ -5191,6 +5240,7 @@ async def _startup_seed():
             await db.users.update_one({"email": admin_email},
                                       {"$set": {"password_hash": hash_password(admin_pw), "role": "admin"}})
         await seed_showcase()
+        await _migrate_stars_and_categories()
     except Exception as e:
         logger.error(f"Startup seed failed: {e}")
 
