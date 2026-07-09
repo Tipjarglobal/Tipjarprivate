@@ -5432,6 +5432,15 @@ async def _startup_seed():
         elif not verify_password(admin_pw, existing["password_hash"]):
             await db.users.update_one({"email": admin_email},
                                       {"$set": {"password_hash": hash_password(admin_pw), "role": "admin"}})
+        # Promote the owner's personal account(s) to admin so they can reach /insights
+        # without logging into the dedicated admin account. Idempotent; only touches
+        # accounts that already exist.
+        owner_emails = ["kontakt@tipjarglobal.com"]
+        extra = os.environ.get("OWNER_ADMIN_EMAILS", "")
+        owner_emails += [e.strip().lower() for e in extra.split(",") if e.strip()]
+        for oe in owner_emails:
+            await db.users.update_one({"email": oe.lower(), "role": {"$ne": "admin"}},
+                                      {"$set": {"role": "admin"}})
         await seed_showcase()
         await _migrate_stars_and_categories()
     except Exception as e:
