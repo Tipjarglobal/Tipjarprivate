@@ -319,3 +319,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 ## Offene Punkte / Hinweise
 - Produktion (tipjarglobal.com) läuft mit ALTEM Code bis Nutzer erneut deployt → verschwundener 7-Leg-Community-Schein war auf Produktion (eigene DB, kein Zugriff, nicht wiederherstellbar). Nutzer muss DEPLOY klicken, damit Live-Settlement + Bewertungswand-Fix + Cashed-Out live gehen.
 - Live-Bereich zeigt viele obskure US-Amateurligen — evtl. striktere Liga-Whitelist für Live-Loop gewünscht (offen).
+
+## Changelog — 2026-07-09 (Voll-Automatik Abrechnung + korrigierbare Scheine)
+- Abgerechnete Scheine sind jetzt KORRIGIERBAR: TipCard zeigt für Admin/Ersteller (canDelete) auf JEDEM Status die Zeile "Ergebnis setzen / korrigieren" mit 4 Buttons (OFFEN/GEWONNEN/VERLOREN/CASHED OUT), aktueller Status hervorgehoben. `settle()` lädt im Abgerechnet-Tab die Listen neu (loadSettled als useCallback). Behebt "Olympiakos versehentlich auf Verloren, kein Undo möglich".
+- OFFEN-Reopen setzt hq-live → "live" (Auto-Loop übernimmt wieder), sonst "pending".
+- Voll-Automatik Gewonnen/Verloren: bereits vorhanden (settle_pending_tips / settle_hq_combos / settle_multimatch_parlays / live_autopost graden jede Wette + jedes Leg aus API-Football-Endstand). Keine manuelle Aktion nötig; Buttons sind nur Override.
+- Cashed-Out-Grenze (ehrlich dokumentiert): Cash-out ist eine Buchmacher-Aktion, für die es KEINE Datenquelle gibt → kann NICHT auto-erkannt werden. Nutzer setzt "Ausgezahlt" per 1 Klick (D1: ganzer Schein=Ausgezahlt, gewonnene Legs=Gewonnen).
+- NEU: settle_multimatch_parlays gradet jetzt AUCH cashed_out-Scheine leg-für-leg weiter (Status-Filter um "cashed_out" erweitert, Attempt-Cap 24), überschreibt aber NIE den Schein-Status "cashed_out" (is_cashed-Guard). So füllen sich die Legs automatisch mit echtem Gewonnen/Verloren, während der Schein "Ausgezahlt" bleibt. Frontend zeigt Legs wieder per echtem Status (kein Force-Grün mehr). E2E verifiziert (cashed bleibt cashed, normales Parlay flippt zu won).
+

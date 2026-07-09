@@ -578,17 +578,16 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             </span>
           )}
           {tip.legs.map((leg, li) => {
-            const cashed = tip.status === "cashed_out";
-            const ls = cashed ? STATUS_META.won : STATUS_META[leg.status];
-            const settled = ls && (cashed || leg.status !== "pending");
+            const ls = STATUS_META[leg.status];
+            const settled = ls && leg.status !== "pending";
             return (
             <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{leg.match || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {ls && (
-                    <span data-testid={`leg-status-${cashed ? "won" : leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
-                      <ls.Icon size={9} className={(!cashed && leg.status === "live") ? "animate-pulse" : ""} /> {t(ls.key)}
+                    <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
+                      <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
                   {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}

@@ -2174,12 +2174,15 @@ async def settle_multimatch_parlays() -> dict:
         return {"ok": False, "settled": 0}
     now = datetime.now(timezone.utc)
     parlays = await db.tips.find(
-        {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
+        {"status": {"$in": ["pending", "live", "cashed_out"]}, "is_parlay": True,
          "combo_legs": {"$exists": False}, "legs.0": {"$exists": True}},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled, judged = 0, 0
     for tip in parlays:
-        if tip.get("settle_attempts", 0) >= 8:
+        is_cashed = tip.get("status") == "cashed_out"
+        # cashed-out slips keep grading legs longer so every finished game shows its
+        # real Won/Lost, but their overall "Ausgezahlt" status is never overwritten.
+        if tip.get("settle_attempts", 0) >= (24 if is_cashed else 8):
             continue
         legs = tip.get("legs") or []
         changed = any_lost = False
@@ -2228,13 +2231,14 @@ async def settle_multimatch_parlays() -> dict:
         upd = {}
         if changed:
             upd["legs"] = legs
-        if new_status:
+        # never overwrite an "Ausgezahlt" slip — only its legs are auto-graded.
+        if new_status and not is_cashed:
             upd.update({"status": new_status, "settled_by": "auto", "settled_at": now.isoformat()})
         if upd:
             await db.tips.update_one({"id": tip["id"]}, {"$set": upd})
-        if new_status:
+        if new_status and not is_cashed:
             settled += 1
-        else:
+        elif not (all_resolved and is_cashed):
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
     return {"ok": True, "settled": settled, "judged": judged}
 
