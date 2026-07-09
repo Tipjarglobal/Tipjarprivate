@@ -404,17 +404,36 @@ function SmartLab({ t, user, onCreated }) {
   const [sending, setSending] = useState(false);
   const fileRef = useRef(null);
   const [ideas, setIdeas] = useState([]);
+  const [myIdeaRatings, setMyIdeaRatings] = useState({});
   const loadIdeas = useCallback(async () => {
     try {
       const { data } = await api.get("/smart/ideas/recent", { params: { limit: 30 } });
       setIdeas(data);
     } catch { /* ignore */ }
   }, []);
+  const loadMyIdeaRatings = useCallback(async () => {
+    if (!user) { setMyIdeaRatings({}); return; }
+    try {
+      const { data } = await api.get("/smart/ideas/my-ratings");
+      setMyIdeaRatings(data || {});
+    } catch { /* ignore */ }
+  }, [user]);
   useEffect(() => {
     loadIdeas();
     const iv = setInterval(loadIdeas, 20000);
     return () => clearInterval(iv);
   }, [loadIdeas]);
+  useEffect(() => { loadMyIdeaRatings(); }, [loadMyIdeaRatings]);
+  const rateIdea = async (ideaId, stars) => {
+    if (!user) { toast.error(t("smart.chat.login")); return; }
+    try {
+      const { data } = await api.post(`/smart/ideas/${ideaId}/rate`, { stars });
+      setMyIdeaRatings((m) => ({ ...m, [ideaId]: stars }));
+      setIdeas((list) => list.map((it) => (it.id === ideaId
+        ? { ...it, avg_rating: data.avg_rating, ratings_count: data.ratings_count } : it)));
+      toast.success(t("wall.thanks"));
+    } catch (e) { toast.error(apiErr(e)); }
+  };
   const addImages = (e) => {
     const picked = Array.from(e.target.files || []);
     setImages((prev) => [...prev, ...picked].slice(0, 3));
@@ -452,7 +471,7 @@ function SmartLab({ t, user, onCreated }) {
       {/* LEFT — explanation, text pushed left */}
       <div className="text-left">
         <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-volt">
-          <Brain size={15} /> Smart Bets
+          <Brain size={15} /> Smart Picks
         </span>
         <h3 className="font-heading text-2xl md:text-3xl font-black text-white tracking-tight mt-2">{t("smart.title")}</h3>
         <p className="text-zinc-400 text-sm md:text-base mt-3 leading-relaxed">{t("smart.intro")}</p>
@@ -530,7 +549,7 @@ function SmartLab({ t, user, onCreated }) {
             {ideas.map((idea, idx) => {
               const meta = SMART_IDEA_STATUS[idea.status] || SMART_IDEA_STATUS.pending;
               return (
-                <li key={idx} data-testid={`smart-idea-item-${idx}`}
+                <li key={idea.id || idx} data-testid={`smart-idea-item-${idx}`}
                   className="flex items-start gap-3 rounded-xl bg-void/60 border border-white/5 px-3 py-2.5">
                   <div className="w-7 h-7 shrink-0 rounded-full bg-elevated border border-zinc-600 flex items-center justify-center text-[11px] font-bold text-white">
                     {idea.username?.[0]?.toUpperCase() || "?"}
@@ -542,6 +561,12 @@ function SmartLab({ t, user, onCreated }) {
                       {idea.images > 0 && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ImagePlus size={11} /> {idea.images}</span>}
                     </div>
                     {idea.text && <p className="text-sm text-zinc-200 mt-0.5 break-words">{idea.text}</p>}
+                    <div className="flex items-center gap-2 mt-2 flex-wrap" data-testid={`smart-idea-rate-${idx}`}>
+                      <StarRating value={myIdeaRatings[idea.id] || 0} onRate={(s) => rateIdea(idea.id, s)} size={15} readOnly={!user} />
+                      {idea.ratings_count > 0 && (
+                        <span className="text-[11px] text-zinc-400 font-mono">Ø {idea.avg_rating} · {idea.ratings_count}</span>
+                      )}
+                    </div>
                   </div>
                 </li>
               );

@@ -284,7 +284,7 @@ async def submit_smart_idea(
         "raw_text": "", "image_path": None,
         "home_team": fx["home_name"] or home_in, "away_team": fx["away_name"] or away_in,
         "match_time": kickoff, "country": fx.get("country") or "",
-        "league": "TipJarHQ Smart Bet", "league_code": "",
+        "league": "TipJarHQ Smart Pick", "league_code": "",
         "market": (data.get("market") or "").strip(),
         "odds": str(data.get("odds") or "").strip(), "ai_rating": rating, "ai_analysis": analysis,
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
@@ -309,9 +309,50 @@ async def recent_smart_ideas(limit: int = 30):
     whether or not they became a pick. No images, just the submitted text."""
     limit = max(1, min(limit, 60))
     docs = await db.smart_ideas.find(
-        {}, {"_id": 0, "username": 1, "text": 1, "images": 1, "status": 1, "created_at": 1}
+        {}, {"_id": 0, "id": 1, "username": 1, "text": 1, "images": 1, "status": 1,
+             "created_at": 1, "sum_stars": 1, "ratings_count": 1, "avg_rating": 1}
     ).sort("created_at", -1).to_list(limit)
     return docs
+
+
+class IdeaRateInput(BaseModel):
+    stars: int = Field(ge=1, le=10)
+
+
+@api_router.post("/smart/ideas/{idea_id}/rate")
+async def rate_smart_idea(idea_id: str, inp: IdeaRateInput, user: dict = Depends(get_current_user)):
+    """Rate a community Smart-Lab idea on the Apex Scale (1–10 stars)."""
+    idea = await db.smart_ideas.find_one({"id": idea_id})
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    now = datetime.now(timezone.utc)
+    existing = await db.idea_ratings.find_one({"idea_id": idea_id, "user_id": user["id"]})
+    if existing:
+        delta = inp.stars - existing["stars"]
+        await db.idea_ratings.update_one(
+            {"_id": existing["_id"]}, {"$set": {"stars": inp.stars, "updated_at": now.isoformat()}})
+        new_sum = idea.get("sum_stars", 0) + delta
+        new_count = idea.get("ratings_count", 0)
+    else:
+        await db.idea_ratings.insert_one({
+            "id": str(uuid.uuid4()), "idea_id": idea_id, "user_id": user["id"],
+            "stars": inp.stars, "created_at": now.isoformat(),
+        })
+        new_sum = idea.get("sum_stars", 0) + inp.stars
+        new_count = idea.get("ratings_count", 0) + 1
+    avg = round(new_sum / new_count, 1) if new_count else 0
+    await db.smart_ideas.update_one(
+        {"id": idea_id},
+        {"$set": {"sum_stars": new_sum, "ratings_count": new_count, "avg_rating": avg}})
+    return {"ok": True, "idea_id": idea_id, "avg_rating": avg,
+            "ratings_count": new_count, "your_stars": inp.stars}
+
+
+@api_router.get("/smart/ideas/my-ratings")
+async def my_idea_ratings(user: dict = Depends(get_current_user)):
+    docs = await db.idea_ratings.find(
+        {"user_id": user["id"]}, {"_id": 0, "idea_id": 1, "stars": 1}).to_list(500)
+    return {d["idea_id"]: d["stars"] for d in docs}
 
 
 
@@ -4220,7 +4261,7 @@ async def smart_autopost() -> dict:
                 continue
             pct = round(c["prob"] * 100)
             analysis = (
-                f"TipJarHQ Smart Bet: {c['market']}. Saison-Ø {c['avg']:.2f} pro Spiel "
+                f"TipJarHQ Smart Pick: {c['market']}. Saison-Ø {c['avg']:.2f} pro Spiel "
                 f"→ ~{pct}% Trefferwahrscheinlichkeit. Datenbasierter Spieler-Prop, "
                 f"Anstoß {p.get('kickoff')}. Quote ist eine Schätzung."
             )
@@ -4229,7 +4270,7 @@ async def smart_autopost() -> dict:
                 "raw_text": "", "image_path": None,
                 "home_team": home, "away_team": away,
                 "match_time": p.get("kickoff") or "",
-                "country": p.get("country") or "", "league": "TipJarHQ Smart Bet",
+                "country": p.get("country") or "", "league": "TipJarHQ Smart Pick",
                 "league_code": p.get("league_code") or "",
                 "market": c["market"], "odds": str(c["odds"]),
                 "ai_rating": c["rating"], "ai_analysis": analysis,
