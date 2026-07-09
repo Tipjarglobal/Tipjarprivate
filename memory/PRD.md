@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 (night) — Bundled AI new-count on main button
+- Main "KI Single-Game-Picks" button now shows a red bundled count = SUM of new picks across Banker/Value/Risk, using the SAME `tj_cat_seen_ids` store as the tab badges (App.js `computeAiUnread` + `tj-cat-seen` window event kept in sync with RateWall `markCatSeen`). Opening the AI view marks all categories seen → clears main + tab badges together.
+- `/tips/counts` `ai` now counts ALL pending AI picks (singles + combos, all days) so the grey total pill matches the red new-count universe (both = 28 verified).
+
 ### CHANGELOG 2026-07-09 (late) — Scraper reactivated (multi-day) + stability
 - **AUTOPOST_PAUSED = False** — auto-scraper is LIVE again, but only posts from TOMORROW onward (`_AUTOPOST_MIN_KO` = start of tomorrow UTC). TODAY stays hand-curated (26 hqcur-* picks untouched). Forebet now scrapes today+tomorrow pages (`FOREBET_TOMORROW_URL`); today rows still feed match_predictions/system-slip but are skipped for picks. Predictz already covers tomorrow+day-after.
 - **STABILITY RULE:** a pick, once posted for a match+category, is FIXED (same market+odds) until kickoff. Forebet posting replaced the old delete-and-replace (which caused 11:00 Über1.5 → 14:00 BTTS → 17:00 DC12 flipping) with a prior-check: if a pending pick for (home,away,category) exists, keep it. Same prior-check added to Predictz. Verified: 2nd scraper run posts 0 (no flip).

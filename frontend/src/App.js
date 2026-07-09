@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -62,6 +62,40 @@ function Home() {
   const newCounts = {};
   NAV_KEYS.forEach((k) => { newCounts[k] = Math.max(0, (counts[k] || 0) - (seenCounts[k] || 0)); });
 
+  // ── AI button bundled red count = sum of NEW picks across Banker/Value/Risk ──
+  // Uses the SAME seen store (tj_cat_seen_ids) as the per-category tab badges so the
+  // main button and the tabs stay perfectly in sync.
+  const CAT_SEEN_KEY = "tj_cat_seen_ids";
+  const aiIdsRef = useRef({ banker: [], value: [], risk: [] });
+  const [aiUnread, setAiUnread] = useState(0);
+  const catBucketOf = (tp) => (tp.category === "risk" ? "risk" : tp.category === "banker" ? "banker" : "value");
+  const readCatSeen = () => {
+    try { return JSON.parse(localStorage.getItem(CAT_SEEN_KEY) || "{}"); } catch { return {}; }
+  };
+  const computeAiUnread = useCallback(async () => {
+    try {
+      const { data } = await api.get("/tips", { params: { source: "ai", status: "pending", limit: 300 } });
+      const seen = readCatSeen();
+      const byCat = { banker: [], value: [], risk: [] };
+      let unread = 0;
+      data.forEach((tp) => {
+        const c = catBucketOf(tp);
+        byCat[c].push(tp.id);
+        if (!(seen[c] || []).includes(tp.id)) unread += 1;
+      });
+      aiIdsRef.current = byCat;
+      setAiUnread(unread);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    computeAiUnread();
+    const iv = setInterval(computeAiUnread, 20000);
+    const onSeen = () => computeAiUnread();
+    window.addEventListener("tj-cat-seen", onSeen);
+    return () => { clearInterval(iv); window.removeEventListener("tj-cat-seen", onSeen); };
+  }, [computeAiUnread, refreshKey]);
+  newCounts.ai = aiUnread;
+
   useEffect(() => { if (user?.language) setLang(user.language); }, [user, setLang]);
 
   useEffect(() => {
@@ -117,6 +151,15 @@ function Home() {
       localStorage.setItem("tj_seen_counts", JSON.stringify(next));
       return next;
     });
+    // Opening the AI picks marks all Banker/Value/Risk as seen → clears the bundled
+    // main-button count AND the per-category tab badges (kept in sync).
+    if (view === "ai") {
+      const seen = readCatSeen();
+      ["banker", "value", "risk"].forEach((c) => { seen[c] = aiIdsRef.current[c] || []; });
+      localStorage.setItem(CAT_SEEN_KEY, JSON.stringify(seen));
+      setAiUnread(0);
+      window.dispatchEvent(new Event("tj-cat-seen"));
+    }
     if (view === "systems") {
       let tries = 0;
       const tick = () => {

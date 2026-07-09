@@ -425,11 +425,12 @@ async def tips_counts():
     The AI badge reflects the next-24h picks (the default view) so it stays realistic."""
     await purge_expired_autotips()
     now = datetime.now(timezone.utc)
+    # AI badge = every pending Single-Game pick (singles + bet-builder combos, all
+    # days) so it matches the bundled red "new" count and the Banker/Value/Risk tabs.
     ai_docs = await db.tips.find(
-        {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
-        {"match_time": 1}).to_list(500)
-    ai = sum(1 for d in ai_docs if _in_kickoff_window(d.get("match_time"), "24", now))
-    ai_total = len(ai_docs)
+        {"source": "hq-auto", "status": "pending"}, {"match_time": 1}).to_list(1000)
+    ai = len(ai_docs)
+    ai_total = ai
     members = await db.tips.count_documents({"source": {"$nin": ["hq-auto", "smart"]}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})

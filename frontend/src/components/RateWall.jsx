@@ -107,13 +107,16 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     if (view !== "ai") return;
     loadCatBadges();
     const iv = setInterval(loadCatBadges, 20000);
-    return () => clearInterval(iv);
+    const onSeen = () => loadCatBadges();
+    window.addEventListener("tj-cat-seen", onSeen);
+    return () => { clearInterval(iv); window.removeEventListener("tj-cat-seen", onSeen); };
   }, [loadCatBadges, refreshKey]);
   const markCatSeen = (c) => {
     const seen = getCatSeen();
     seen[c] = catIdsRef.current[c] || [];
     localStorage.setItem(CAT_SEEN_KEY, JSON.stringify(seen));
     setCatUnread((u) => ({ ...u, [c]: 0 }));
+    window.dispatchEvent(new Event("tj-cat-seen"));
   };
 
   const loadSettled = useCallback(async () => {
