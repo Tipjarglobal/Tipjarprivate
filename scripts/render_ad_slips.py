@@ -36,20 +36,20 @@ def fit(txt, path, hi, lo, maxw):
 
 def render(legs, total_odds, stake, potential, out_path, subtitle):
     W, pad = 1080, 60
-    f_logo = font(FB, 80)
-    f_tag = font(FR, 32)
-    f_badge = font(FB, 48)
-    f_sub = font(FB, 36)
-    f_teams = font(FR, 32)
-    f_meta = font(FR, 28)
-    f_odd = font(FB, 42)
-    f_big = font(FB, 84)
-    f_lbl = font(FR, 36)
-    f_lblB = font(FB, 48)
-    f_foot = font(FB, 36)
+    f_logo = font(FB, 74)
+    f_tag = font(FR, 30)
+    f_badge = font(FB, 44)
+    f_sub = font(FB, 34)
+    f_teams = font(FR, 30)
+    f_meta = font(FR, 26)
+    f_odd = font(FB, 38)
+    f_big = font(FB, 78)
+    f_lbl = font(FR, 32)
+    f_lblB = font(FB, 44)
+    f_foot = font(FB, 32)
 
-    head_h = 210
-    foot_h = 310
+    head_h = 168
+    foot_h = 300
     row_h = 150
 
     H = head_h + len(legs) * row_h + foot_h
@@ -70,7 +70,7 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
     d.text((pad, 30), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
     d.text((pad + tw, 30), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 4, 118), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
+    d.text((pad + 4, 108), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
 
     badge = "LOST"
     bw = d.textlength(badge, font=f_badge)
@@ -81,7 +81,6 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
     d.line([(cx - 12, cy + 12), (cx + 12, cy - 12)], fill=VOID, width=7)
     d.text((bx0 + 56, 48), badge, font=f_badge, fill=VOID)
 
-    d.text((pad, 158), subtitle, font=f_sub, fill=AMBER)
     d.line([pad, head_h - 14, W - pad, head_h - 14], fill=LINE, width=3)
 
     y = head_h
@@ -102,27 +101,26 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
                 d.line([(mx - 18, y + 16), (mx - 4, y + 30)], fill=GREEN, width=8)
                 d.line([(mx - 4, y + 30), (mx + 18, y + 2)], fill=GREEN, width=8)
             ow = 0
-        mkt_f = fit(lg["market"], FB, 38, 26, W - 2 * pad - ow - 60)
+        mkt_f = fit(lg["market"], FB, 34, 24, W - 2 * pad - ow - 60)
         d.text((pad, y), lg["market"], font=mkt_f, fill=WHITE)
-        y += 46
+        y += 42
         teams = f"{lg['home']} \u2013 {lg['away']}"
-        tf = fit(teams, FR, 32, 22, W - 2 * pad)
+        tf = fit(teams, FR, 30, 22, W - 2 * pad)
         d.text((pad, y), teams, font=tf, fill=(210, 212, 216))
-        y += 40
+        y += 36
         same_next = (i + 1 < len(legs)) and (
             legs[i + 1]["home"] == lg["home"] and legs[i + 1]["away"] == lg["away"])
         d.text((pad, y), lg["time"], font=f_meta, fill=GREY)
-        # result on the RIGHT only once per match → skip it on the upper leg of a group
         if not same_next:
             res = lg["result"]
             rw = d.textlength(res, font=f_meta)
             d.text((W - pad - rw, y + 2), res, font=f_meta, fill=col)
-        y += 46
+        y += 42
         if same_next:
-            y += 12  # same match, next leg → no divider
+            y += 10
         else:
             d.line([pad, y + 4, W - pad, y + 4], fill=(84, 86, 94), width=5)
-            y += 24
+            y += 22
 
     fy = y + 14
     d.rounded_rectangle([pad, fy, W - pad, H - 30], 26, fill=CARD)
@@ -156,9 +154,9 @@ slip1 = [
     {"market": "Double Chance 1X", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "1.73", "result": "1:1", "status": "won"},
     {"market": "Both Teams to Score - Yes", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "", "result": "1:1", "status": "won"},
     {"market": "Total Over 0.5", "home": "CSKA Sofia", "away": "Derry City", "time": "09.07  20:00", "odd": "1.01", "result": "3:2", "status": "won"},
-    {"market": "Total Under 3.5", "home": "Glentoran", "away": "Rigas FS", "time": "09.07  20:30", "odd": "1.40", "result": "LIVE", "status": "live"},
-    {"market": "Zalgiris +2.5", "home": "OFK Petrovac", "away": "Vilniaus Zalgiris", "time": "09.07  20:45", "odd": "1.002", "result": "LIVE", "status": "live"},
-    {"market": "Total Under 3.5", "home": "Penybont", "away": "FC Santa Coloma", "time": "09.07  20:45", "odd": "1.30", "result": "LIVE", "status": "live"},
+    {"market": "Total Under 3.5", "home": "Glentoran", "away": "Rigas FS", "time": "09.07  20:30", "odd": "1.40", "result": "1:2", "status": "won"},
+    {"market": "Zalgiris +2.5", "home": "OFK Petrovac", "away": "Vilniaus Zalgiris", "time": "09.07  20:45", "odd": "1.002", "result": "1:3", "status": "won"},
+    {"market": "Total Under 3.5", "home": "Penybont", "away": "FC Santa Coloma", "time": "09.07  20:45", "odd": "1.30", "result": "0:1", "status": "won"},
     {"market": "FC Astana -1.5", "home": "Dinamo Tirana", "away": "FC Astana", "time": "09.07  21:00", "odd": "5.50", "result": "0:1", "status": "lost"},
 ]
 
