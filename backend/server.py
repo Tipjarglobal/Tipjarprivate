@@ -1991,6 +1991,65 @@ async def resolve_team_id(name: str):
     return team_id
 
 
+def _grade_goal_leg(kind, market, team, fx):
+    """Deterministically grade a single-match goal / half-time leg from a finished
+    fixture. Returns True (won), False (lost) or None (kind can't be graded → the
+    caller must NOT settle, so a leg we don't understand never fakes a result)."""
+    hg = fx.get("home_goals") or 0
+    ag = fx.get("away_goals") or 0
+    hth, hta = fx.get("ht_home"), fx.get("ht_away")
+    ht_known = hth is not None and hta is not None
+    hth, hta = hth or 0, hta or 0
+    total = hg + ag
+    ht_total = hth + hta
+    sh_total = total - ht_total          # second-half goals
+    m = (market or "").lower()
+    k = (kind or "").lower()
+    # full-time total goals line, e.g. "Über 2.5 Tore" (not a half-time line)
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and not team and "halbzeit" not in m and "hz" not in m:
+        return total >= int(gm.group(1)) + 1
+    if k == "team_o05" or ("über 0.5" in m and team):
+        if _teams_match(fx.get("home_name", ""), team):
+            return hg >= 1
+        if _teams_match(fx.get("away_name", ""), team):
+            return ag >= 1
+        return hg >= 1 or ag >= 1
+    if k == "btts" or "beide teams treffen" in m:
+        return hg >= 1 and ag >= 1
+    # full-time result / double chance (computed straight from the final score)
+    if k == "res_1":
+        return hg > ag
+    if k == "res_2":
+        return ag > hg
+    if k == "res_x":
+        return hg == ag
+    if k == "dc_1x":
+        return hg >= ag
+    if k == "dc_x2":
+        return ag >= hg
+    if k == "dc_12":
+        return hg != ag
+    if k in ("ht_o05", "sh_o05", "o05_each", "ht_u25", "ht1_win"):
+        if not ht_known:
+            return None                  # no half-time data → don't guess
+        if k == "ht_o05":
+            return ht_total >= 1
+        if k == "sh_o05":
+            return sh_total >= 1
+        if k == "o05_each":
+            return ht_total >= 1 and sh_total >= 1
+        if k == "ht_u25":
+            return ht_total <= 2
+        if k == "ht1_win":
+            if _teams_match(fx.get("home_name", ""), team):
+                return hth > hta
+            if _teams_match(fx.get("away_name", ""), team):
+                return hta > hth
+            return None
+    return None
+
+
 def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
     for date in dates:
         try:
@@ -2007,10 +2066,12 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
                 if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
                     status = fx.get("fixture", {}).get("status", {}).get("short")
                     if status in FINISHED_STATUSES:
+                        ht = fx.get("score", {}).get("halftime", {}) or {}
                         return {
                             "home_name": th, "away_name": ta,
                             "home_goals": fx.get("goals", {}).get("home"),
                             "away_goals": fx.get("goals", {}).get("away"),
+                            "ht_home": ht.get("home"), "ht_away": ht.get("away"),
                             "status": status,
                         }
             break  # this season had data for the date; no need to probe the other season
@@ -2144,22 +2205,8 @@ async def settle_hq_combos() -> dict:
         total_g = hg + ag
         all_won, ok = True, True
         for lg in (tip.get("combo_legs") or tip.get("legs", [])):
-            kind = lg.get("kind") or ""
-            m = (lg.get("market") or "").lower()
-            team = lg.get("team") or ""
-            gm = re.search(r"über\s+(\d+)\.5", m)
-            if gm and not team:
-                line = int(gm.group(1))
-                # 'Über N.5 Tore' wins when total goals >= N+1
-                res = total_g >= (line + 1)
-            elif kind == "team_o05" or "über 0.5" in m:
-                if _teams_match(fx["home_name"], team):
-                    res = hg >= 1
-                elif _teams_match(fx["away_name"], team):
-                    res = ag >= 1
-                else:
-                    res = (hg >= 1 or ag >= 1)
-            else:
+            res = _grade_goal_leg(lg.get("kind"), lg.get("market"), lg.get("team"), fx)
+            if res is None:
                 ok = False
                 break
             if not res:
@@ -3229,6 +3276,40 @@ def _forebet_candidates(r: dict) -> list[dict]:
             opts.append({"sfx": "-o25cs", "market": "Über 2.5 Tore",
                          "odds": "1.85" if total >= 4 else "1.95",
                          "rating": 7.5, "winprob": 0.62 if total >= 4 else 0.55})
+        # ── Extra sensible single-game builders (owner-requested variety). Every leg is
+        # deterministically settleable via _grade_goal_leg, so nothing can get stuck. ──
+        fav_side = pred if pred in ("1", "2") else None
+        # (a) Beide Teams treffen + Doppelte Chance (goals side backed by the favourite)
+        if sc and ph >= 1 and pa >= 1 and total >= 3 and fav_side:
+            dc_kind, dc_lbl = ("dc_1x", "1X") if fav_side == "1" else ("dc_x2", "X2")
+            opts.append({
+                "sfx": "-bttsdc", "combo": True, "rating": 7.5, "winprob": 0.50,
+                "market": f"Beide Teams treffen + Doppelte Chance {dc_lbl} (Bet-Builder)",
+                "legs": [
+                    {"market": "Beide Teams treffen", "base_odd": 1.55, "kind": "btts"},
+                    {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.28, "kind": dc_kind},
+                ],
+            })
+        # (b) Über 2.5 Tore + Doppelte Chance 12 (high-scoring game, draw unlikely)
+        if sc and total >= 4 and len(probs) >= 3 and (probs[0] + probs[2]) >= 60:
+            opts.append({
+                "sfx": "-o25dc", "combo": True, "rating": 7.5, "winprob": 0.48,
+                "market": "Über 2.5 Tore + Doppelte Chance 12 (Bet-Builder)",
+                "legs": [
+                    {"market": "Über 2.5 Tore", "base_odd": 1.85, "kind": "o25"},
+                    {"market": "Doppelte Chance 12", "base_odd": 1.35, "kind": "dc_12"},
+                ],
+            })
+        # (c) Über 0.5 Tore je Halbzeit (both halves see a goal) — needs an open game
+        if sc and total >= 3 and ph >= 1 and pa >= 1:
+            opts.append({
+                "sfx": "-o05each", "combo": True, "rating": 7.5, "winprob": 0.52,
+                "market": "Über 0.5 Tore in jeder Halbzeit (Bet-Builder)",
+                "legs": [
+                    {"market": "Über 0.5 Tore 1. Halbzeit", "base_odd": 1.55, "kind": "ht_o05"},
+                    {"market": "Über 0.5 Tore 2. Halbzeit", "base_odd": 1.40, "kind": "sh_o05"},
+                ],
+            })
         # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
         if total >= 5 and avg >= 3.5:
             opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
@@ -3426,12 +3507,24 @@ async def forebet_autopost() -> dict:
                 "selections": [lg["market"] for lg in combo_legs],
                 "sel_odds": [f"{lg['odds']:.2f}" for lg in combo_legs],
             }]
+        # Always show the real competition on the tip (owner: "bei Single-Tipps muss das
+        # Turnier drauf sein"). Friendlies are NOT blocked — they're clearly labelled.
+        _raw_lg = (r.get("league") or "").strip()
+        _lg_hay = f"{_raw_lg} {lcode} {cc}".lower()
+        if "friendl" in _lg_hay or "freundschaft" in _lg_hay or "testspiel" in _lg_hay:
+            league_disp = "Freundschaftsspiel"
+        elif _raw_lg:
+            league_disp = _raw_lg.title()
+        elif lcode:
+            league_disp = lcode.upper()
+        else:
+            league_disp = cc or "TipJarHQ Pick"
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
             "home_team": home, "away_team": away,
             "match_time": kickoff,
-            "country": cc, "league": "TipJarHQ Kombi" if is_combo else "TipJarHQ Pick", "league_code": lcode,
+            "country": cc, "league": league_disp, "league_code": lcode,
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
             "win_prob": round(winprob, 3), "pick_type": ptype,
@@ -3656,6 +3749,8 @@ async def predictz_autopost() -> dict:
             continue
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
+        if "friendl" in league.lower() or "freundschaft" in league.lower():
+            league = "Freundschaftsspiel"
         analysis = (
             f"Sicherer Tor-Banker: erwartetes Ergebnis {r.get('pred')}. "
             f"{market} ist bei diesem Spielbild ein starker Pick. "

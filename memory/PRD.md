@@ -321,6 +321,14 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Live-Bereich zeigt viele obskure US-Amateurligen — evtl. striktere Liga-Whitelist für Live-Loop gewünscht (offen).
 
 
+## Changelog — 2026-07-09 (Friendlies-Label, Liga auf Single-Tipps, Bet-Builder-Vielfalt)
+- Bet-Builder Redundanz-Fix: „Über 1.5 Tore" wird nie mehr zu „beide treffen" gepackt (implizit). Tor-Linien ab Über 2.5 mit 1-Tor-Puffer. Klassisches beide treffen bleibt 2 Legs (Combo-Gate 1.80→1.60). Clean Sheet (3:0/0:3) → Über 2.5 statt BTTS.
+- Freundschaftsspiele NICHT geblockt (Blacklist-Ergänzung mkk dnepr/friendl wieder entfernt), sondern als „Freundschaftsspiel" gelabelt (forebet + predictz Tip-Erstellung).
+- Single-Tipps zeigen jetzt echte Liga statt „TipJarHQ Pick" (forebet: league_disp aus r.league/lcode/cc; predictz bereits real). Frontend zeigt tip.league (RateWall Zeile ~568).
+- NEUE settlebare Bet-Builder (deterministisch via neuem `_grade_goal_leg`): Beide treffen + Doppelte Chance (1X/X2), Über 2.5 + DC 12, Über 0.5 je Halbzeit. `find_finished_fixture` liefert jetzt HT-Tore (score.halftime). `_grade_goal_leg` behandelt o{k}5/team_o05/btts/res_*/dc_*/ht_o05/sh_o05/o05_each/ht_u25/ht1_win, gibt None bei unbekanntem Kind (nie Fake-Ergebnis). In settle_hq_combos verdrahtet. Regression + neue Kinds getestet.
+- OFFEN: Ecken-Märkte (brauchen Statistics-API-Abruf) bewusst zurückgestellt.
+
+
 ## Changelog — 2026-07-09 (Cash-out-Claim, Homepage-Texte, Profil-E-Mail)
 - Homepage: unter „Was ist TipJar?" neue Blöcke — SYSTEM-MODUS-Label, H3 „Warum Anwender TipJar wählen — statt Telegram, Discord & Co.", Nutzen-Text, „Dein Vorteil"-Box (volt), „Was wir NICHT sind"-Abgrenzung, CTA-Text (kein Button). i18n EN+DE (Rest via EN-Fallback). Kein Zähler, kein FAQ (bewusst).
 - „Zeig deinen Gewinn"/Hall-of-Fame-Claim akzeptiert jetzt CASH-OUT-Scheine: neuer Claim-Typ "cashed" (Button „Ausgezahlt", Banknote-Icon, grid-cols-2). Backend: extract_win_slip erkennt "Cashed Out/Ausgezahlt" → status "cashed"; claim_win-Branch für "cashed" OHNE System-Match-Zwang (eigene Trophäe), 2+ Legs, WIN_CASHED_CREDITS=20; _render_slip_image Label „Ausgezahlt" + „Ausgezahlt:"-Betrag. i18n win.type.cashed(.desc) EN+DE.
