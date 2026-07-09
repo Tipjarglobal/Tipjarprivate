@@ -85,7 +85,7 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
     d.line([pad, head_h - 14, W - pad, head_h - 14], fill=LINE, width=3)
 
     y = head_h
-    for lg in legs:
+    for i, lg in enumerate(legs):
         st = lg["status"]
         col = RED if st == "lost" else GREEN
         odd = lg["odd"]
@@ -114,8 +114,13 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
         rw = d.textlength(res, font=f_meta)
         d.text((W - pad - rw, y + 2), res, font=f_meta, fill=col)
         y += 46
-        d.line([pad, y, W - pad, y], fill=LINE, width=2)
-        y += 18
+        same_next = (i + 1 < len(legs)) and (
+            legs[i + 1]["home"] == lg["home"] and legs[i + 1]["away"] == lg["away"])
+        if same_next:
+            y += 12  # same match, next leg → no divider
+        else:
+            d.line([pad, y + 4, W - pad, y + 4], fill=(84, 86, 94), width=5)
+            y += 24
 
     fy = y + 14
     d.rounded_rectangle([pad, fy, W - pad, H - 30], 26, fill=CARD)
