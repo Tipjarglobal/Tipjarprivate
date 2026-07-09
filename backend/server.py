@@ -249,33 +249,48 @@ async def submit_smart_idea(
 
     data = await generate_smart_from_idea(text, images_b64)
     if not data:
-        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+        # nothing usable — never leave a blank orphan in the ideas feed
+        if not text:
+            await db.smart_ideas.delete_one({"id": idea_id})
+        else:
+            await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
         return {"ok": True, "created": False, "reason": "not_actionable"}
 
-    # REQUIRED: never post a tip without a real date & time — look up the fixture.
     home_in = (data.get("home_team") or "").strip()
     away_in = (data.get("away_team") or "").strip()
+    market = (data.get("market") or "").strip()
+    if not market or not home_in:
+        if not text:
+            await db.smart_ideas.delete_one({"id": idea_id})
+        else:
+            await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+        return {"ok": True, "created": False, "reason": "not_actionable"}
+
+    # Try to attach a real upcoming fixture for a precise kickoff (nice-to-have, NOT
+    # required). If we find a near fixture (≤48h) the pick auto-settles; otherwise it
+    # is posted as a REPORT/analysis (report=True → excluded from auto-settlement),
+    # exactly like the curated WC analysis cards.
+    kickoff, country, is_report = "", "", True
     tid = await resolve_team_id(home_in)
     fx = find_upcoming_fixture(tid, away_in) if tid else None
-    if not fx:
+    if not fx and away_in:
         tid2 = await resolve_team_id(away_in)
         fx = find_upcoming_fixture(tid2, home_in) if tid2 else None
-    if not fx or not fx.get("date_iso"):
-        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "no_fixture"}})
-        return {"ok": True, "created": False, "reason": "no_fixture"}
-
-    try:
-        ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
-        kickoff = ko_dt.strftime("%d/%m/%Y %H:%M")
-    except Exception:
-        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "no_fixture"}})
-        return {"ok": True, "created": False, "reason": "no_fixture"}
-
-    # Only post if the match starts within the next 48h (never months ahead).
-    hours_to_ko = (ko_dt - now).total_seconds() / 3600.0
-    if hours_to_ko > 48 or hours_to_ko < -3:
-        await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "too_far"}})
-        return {"ok": True, "created": False, "reason": "too_far", "kickoff": kickoff}
+    if fx and fx.get("date_iso"):
+        try:
+            ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
+            hours_to_ko = (ko_dt - now).total_seconds() / 3600.0
+            if -3 <= hours_to_ko <= 48:
+                kickoff = ko_dt.strftime("%d/%m/%Y %H:%M")
+                country = fx.get("country") or ""
+                home_in = fx.get("home_name") or home_in
+                away_in = fx.get("away_name") or away_in
+                is_report = False
+        except Exception:
+            pass
+    # fall back to a date/time the KI read off the screenshot (e.g. "09/07/2026 21:00")
+    if not kickoff:
+        kickoff = (data.get("match_time") or data.get("kickoff") or "").strip()
 
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     tip_id = f"smart-idea-{idea_id[:8]}"
@@ -288,14 +303,15 @@ async def submit_smart_idea(
     tip = {
         "id": tip_id, "user_id": (hq or user)["id"], "username": "TipJarHQ",
         "raw_text": "", "image_path": None,
-        "home_team": fx["home_name"] or home_in, "away_team": fx["away_name"] or away_in,
-        "match_time": kickoff, "country": fx.get("country") or "",
+        "home_team": home_in, "away_team": away_in,
+        "match_time": kickoff, "country": country,
         "league": "TipJarHQ Smart Pick", "league_code": "",
-        "market": (data.get("market") or "").strip(),
+        "market": market,
         "odds": str(data.get("odds") or "").strip(), "ai_rating": rating, "ai_analysis": analysis,
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-        "source": "smart", "smart_idea": True, "idea_by": user.get("username", "anon"),
+        "source": "smart", "smart_idea": True, "report": is_report,
+        "idea_by": user.get("username", "anon"),
         "created_at": now.isoformat(),
     }
     await db.tips.insert_one(tip)
@@ -315,10 +331,11 @@ async def recent_smart_ideas(limit: int = 30):
     whether or not they became a pick. No images, just the submitted text."""
     limit = max(1, min(limit, 60))
     docs = await db.smart_ideas.find(
-        {}, {"_id": 0, "id": 1, "username": 1, "text": 1, "images": 1, "status": 1,
-             "created_at": 1, "sum_stars": 1, "ratings_count": 1, "avg_rating": 1}
+        {"text": {"$nin": ["", None]}},
+        {"_id": 0, "id": 1, "username": 1, "text": 1, "images": 1, "status": 1,
+         "created_at": 1, "sum_stars": 1, "ratings_count": 1, "avg_rating": 1}
     ).sort("created_at", -1).to_list(limit)
-    return docs
+    return [d for d in docs if (d.get("text") or "").strip()]
 
 
 class IdeaRateInput(BaseModel):
@@ -2329,7 +2346,7 @@ async def settle_pending_tips() -> dict:
         return {"ok": False, "reason": "API_FOOTBALL_KEY not configured", "checked": 0, "settled": 0}
     now = datetime.now(timezone.utc)
     raw = await db.tips.find(
-        {"is_parlay": {"$ne": True},
+        {"is_parlay": {"$ne": True}, "report": {"$ne": True},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]},
          "$or": [
              {"status": "pending"},
@@ -4531,16 +4548,23 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
             api_key=EMERGENT_LLM_KEY,
             session_id=f"smartidea-{uuid.uuid4()}",
             system_message=(
-                "You are TipJar's Smart Bet strategist. A football fan sends an insider hint "
-                "about an UPCOMING match (e.g. 'many fouls expected', 'the keeper will make lots of "
-                "saves', 'both wingers will score'), optionally with screenshots of stats, tables or "
-                "standings. Turn it into ONE clever, low-to-mid risk 'smart bet' — ideally a nuanced or "
-                "combined market (e.g. 'goal in 1st half AND home team not to lose', 'player X to score "
-                "AND over 1.5 goals'). Identify the two REAL teams involved (full club names). "
+                "You are TipJar's Smart Bet strategist. A football fan sends an insider hint or a "
+                "screenshot — a free-text tip, a bet-builder / accumulator slip, a stats sheet, or a "
+                "hand-written analysis notebook — about an UPCOMING match. Turn it into ONE clever "
+                "'smart bet' for the SINGLE most prominent match on the input. If several selections "
+                "belong to that match (a bet-builder), COMBINE them into one market string joined with "
+                " ' · ' (e.g. 'El Aynaoui 1+ Foul · Über 1 Tor · Beide treffen'). If the input is a "
+                "multi-match accumulator, pick the single headline/most interesting match and build the "
+                "smart bet from it. Identify the two REAL teams (full names, keep the language used, "
+                "e.g. 'Frankreich', 'Marokko'). "
                 "Respond with ONLY a compact JSON object, no markdown, with keys: "
                 "actionable (bool), home_team (str), away_team (str), market (str, in German), "
-                "rating (number 1-10), odds (string like '1.85'), analysis (str, 1-2 sentences in German). "
-                "Set actionable=false if you cannot identify both teams or there is no usable signal."
+                "match_time (str: the match date & kickoff EXACTLY as printed if visible, normalised to "
+                "'DD/MM/YYYY HH:MM' when possible, e.g. a slip showing 'THU 9 JUL 21:00' → '09/07/2026 21:00'; "
+                "empty string if no date is shown), "
+                "rating (number 1-10), odds (string like '1.85' or '' if unknown), "
+                "analysis (str, a punchy 1-4 sentence German breakdown of the selections). "
+                "Set actionable=false ONLY if you truly cannot identify a home team or any usable bet."
             ),
         ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
         kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
@@ -4552,8 +4576,7 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
         if s == -1 or e == -1:
             return None
         data = json.loads(raw[s:e + 1])
-        if not data.get("actionable") or not data.get("market") \
-                or not data.get("home_team") or not data.get("away_team"):
+        if not data.get("actionable") or not data.get("market") or not data.get("home_team"):
             return None
         return data
     except Exception as ex:
