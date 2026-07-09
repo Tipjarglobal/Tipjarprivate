@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote } from "lucide-react";
 import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
@@ -41,6 +41,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [streakBubble, setStreakBubble] = useState(false);
   const [wonTips, setWonTips] = useState([]);
   const [lostTips, setLostTips] = useState([]);
+  const [cashedTips, setCashedTips] = useState([]);
   const [settledTab, setSettledTab] = useState(null);
 
   useEffect(() => {
@@ -73,11 +74,12 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     let alive = true;
     const loadSettled = async () => {
       try {
-        const [w, l] = await Promise.all([
+        const [w, l, c] = await Promise.all([
           api.get("/tips", { params: { status: "won", sort: "new", limit: 50 } }),
           api.get("/tips", { params: { status: "lost", sort: "new", limit: 50 } }),
+          api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 50 } }),
         ]);
-        if (alive) { setWonTips(w.data); setLostTips(l.data); }
+        if (alive) { setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); }
       } catch { /* ignore */ }
     };
     loadSettled();
@@ -199,32 +201,45 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
             <Clock size={16} className="text-zinc-400 shrink-0" />
             <p className="text-sm text-zinc-300">{t("settled.note")}</p>
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-3 gap-3 mb-8">
             <button
               type="button"
               data-testid="settled-won-toggle"
               onClick={() => setSettledTab((v) => (v === "won" ? null : "won"))}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-4 font-heading font-black text-lg transition-all ${
+              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-4 font-heading font-black text-base transition-all ${
                 settledTab === "won"
                   ? "bg-won text-void border-won shadow-[0_0_18px_rgba(46,204,87,0.45)]"
                   : "bg-won/10 border-won/40 text-won hover:bg-won/20"
               }`}
             >
-              <CheckCircle2 size={22} /> {t("wall.filter.won")}
+              <CheckCircle2 size={20} /> {t("wall.filter.won")}
               <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "won" ? "bg-black/20" : "bg-void/60"}`}>{wonTips.length}</span>
             </button>
             <button
               type="button"
               data-testid="settled-lost-toggle"
               onClick={() => setSettledTab((v) => (v === "lost" ? null : "lost"))}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-4 font-heading font-black text-lg transition-all ${
+              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-4 font-heading font-black text-base transition-all ${
                 settledTab === "lost"
                   ? "bg-lost text-white border-lost shadow-[0_0_18px_rgba(239,68,68,0.45)]"
                   : "bg-lost/10 border-lost/40 text-lost hover:bg-lost/20"
               }`}
             >
-              <XCircle size={22} /> {t("wall.filter.lost")}
+              <XCircle size={20} /> {t("wall.filter.lost")}
               <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{lostTips.length}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="settled-cashed-toggle"
+              onClick={() => setSettledTab((v) => (v === "cashed" ? null : "cashed"))}
+              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-4 font-heading font-black text-base transition-all ${
+                settledTab === "cashed"
+                  ? "bg-sky-400 text-void border-sky-400 shadow-[0_0_18px_rgba(56,189,248,0.5)]"
+                  : "bg-sky-400/10 border-sky-400/40 text-sky-400 hover:bg-sky-400/20"
+              }`}
+            >
+              <Banknote size={20} /> {t("wall.cashed")}
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{cashedTips.length}</span>
             </button>
           </div>
 
@@ -249,6 +264,16 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {lostTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
                 : lostTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+            </div>
+          )}
+
+          {settledTab === "cashed" && (
+            <div data-testid="settled-cashed-col" className="space-y-5">
+              {cashedTips.length === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.cashed")}</p>
+                : cashedTips.map((tip, i) => (
                     <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
@@ -316,6 +341,7 @@ const STATUS_META = {
   lost: { cls: "bg-lost/15 text-lost", text: "text-lost", Icon: XCircle, key: "wall.lost" },
   live: { cls: "bg-live/15 text-live", text: "text-live", Icon: Radio, key: "wall.live" },
   pending: { cls: "bg-amber-500/15 text-amber-400", text: "text-amber-400", Icon: Clock, key: "wall.pending" },
+  cashed_out: { cls: "bg-sky-400/15 text-sky-400", text: "text-sky-400", Icon: Banknote, key: "wall.cashed" },
 };
 
 function StatusBadge({ status, t }) {
@@ -550,16 +576,17 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             </span>
           )}
           {tip.legs.map((leg, li) => {
-            const ls = STATUS_META[leg.status];
-            const settled = ls && leg.status !== "pending";
+            const cashed = tip.status === "cashed_out";
+            const ls = cashed ? STATUS_META.won : STATUS_META[leg.status];
+            const settled = ls && (cashed || leg.status !== "pending");
             return (
             <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{leg.match || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {ls && (
-                    <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
-                      <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
+                    <span data-testid={`leg-status-${cashed ? "won" : leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
+                      <ls.Icon size={9} className={(!cashed && leg.status === "live") ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
                   {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
@@ -636,10 +663,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         <StarRating value={myStars || 0} onRate={(s) => onRate(tip, s)} size={20} />
       </div>
 
-      {isAdmin && tip.status === "pending" && (
-        <div className="flex gap-2 mt-3" data-testid={`admin-settle-${tip.id}`}>
-          <button onClick={() => onSettle(tip, "won")} className="flex-1 text-xs font-bold py-1.5 rounded-lg bg-won/15 text-won hover:bg-won/25 transition-colors">{t("wall.won")}</button>
-          <button onClick={() => onSettle(tip, "lost")} className="flex-1 text-xs font-bold py-1.5 rounded-lg bg-lost/15 text-lost hover:bg-lost/25 transition-colors">{t("wall.lost")}</button>
+      {canDelete && (tip.status === "pending" || tip.status === "live") && (
+        <div className="grid grid-cols-3 gap-2 mt-3" data-testid={`settle-${tip.id}`}>
+          <button onClick={() => onSettle(tip, "won")} data-testid={`settle-won-${tip.id}`} className="text-xs font-bold py-1.5 rounded-lg bg-won/15 text-won hover:bg-won/25 transition-colors">{t("wall.won")}</button>
+          <button onClick={() => onSettle(tip, "lost")} data-testid={`settle-lost-${tip.id}`} className="text-xs font-bold py-1.5 rounded-lg bg-lost/15 text-lost hover:bg-lost/25 transition-colors">{t("wall.lost")}</button>
+          <button onClick={() => onSettle(tip, "cashed_out")} data-testid={`settle-cashed-${tip.id}`} className="flex items-center justify-center gap-1 text-xs font-bold py-1.5 rounded-lg bg-sky-400/15 text-sky-400 hover:bg-sky-400/25 transition-colors"><Banknote size={13} /> {t("wall.cashed")}</button>
         </div>
       )}
       {isAdmin && !["hq-auto", "smart"].includes(tip.source) && (tip.status === "pending" || tip.status === "live") && (

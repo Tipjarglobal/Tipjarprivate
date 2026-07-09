@@ -308,3 +308,14 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - NEU "Apex-Flamme" 🔥: Bewertungsserie-Kachel ist anklickbar → Sprechblase mit Fortschritt zur 30-Tage-Serie. Bei 30 Tagen wird der kosmetische Orden vergeben (erscheint auf eigenem + öffentlichem Profil), und die Serie-Kachel verschwindet von der Startseite. Backend: _maybe_award_apex_flame (Schwelle APEX_FLAME_STREAK=30), rate-Response liefert apex_flame/apex_flame_new; public profile + user-Objekt tragen apex_flame. Rein optisch.
 - Seed 'seed-community-pending' auf den ECHTEN BetScore-Schein korrigiert: 7 Legs (Sutjeska Hcp +3.5, mehrere Über 1.5, Connah's Quay Hcp +2.5, Unter 3.5), Gesamtquote 4.15, Einsatz 12 €, möglicher Gewinn 49,81 €.
 - Getestet: testing_agent iteration_29 — alle Flows bestanden, 0 Konsolenfehler.
+
+
+## Changelog — 2026-07-09 (Logo, Live-Settlement-Rootfix, Bewertungswand, Cashed-Out)
+- Header-Logo: "TipJar" (Tip weiß / Jar mint) mit "GLOBAL" (orange) direkt darunter, leicht links (Team-Foto-Look). Hero-Shield: klickbarer Link "Tipjarglobal.com" (mint, glow) unter dem AnimatedJar.
+- ROOT-FIX Live-Picks blieben ewig im Live-Bereich: `_parse_kickoff()` konnte ISO-Datum (`...T22:00:00+00:00`) nicht parsen → ko=None → zeitbasierte Abrechnung feuerte nie. ISO-8601-Parsing ergänzt. Zusätzlich `live_autopost`-Sweep: überfällige (>3.5h, LIVE_MAX_OPEN_HOURS) oder terminale (PST/CANC/ABD) Live-Picks werden zwangs-abgerechnet/void statt behalten. LIVE_STATUSES-Set eingeführt. Verifiziert (closed:2 bei Testfällen).
+- Bewertungswand zeigt nur noch OFFENE Scheine: Won/Lost-Filter-Tabs aus der Wand entfernt (nur Pending + Live). Abgerechnete Scheine leben ausschließlich im "Abgerechnet"-Tab.
+- NEU Status "cashed_out" (Ausgezahlt): wiederverwendbar, setzbar von Admin UND Ersteller (PUT /tips/{id}/status jetzt get_current_user + owner/admin-Check, 403 sonst). Hellblaues "CASHED OUT"-Badge; jedes Leg zeigt grünes "Gewonnen". Dritter Toggle im Abgerechnet-Tab (hellblau). Erscheint auch in Hall of Fame (type "cashed", aus tips-Collection gemappt). NICHT im 24h-Purge (bleibt als Trophäe). counts.settled inkl. cashed_out. i18n EN+DE ergänzt. E2E verifiziert (owner=erlaubt, non-owner=403, HoF zeigt 'cashed').
+
+## Offene Punkte / Hinweise
+- Produktion (tipjarglobal.com) läuft mit ALTEM Code bis Nutzer erneut deployt → verschwundener 7-Leg-Community-Schein war auf Produktion (eigene DB, kein Zugriff, nicht wiederherstellbar). Nutzer muss DEPLOY klicken, damit Live-Settlement + Bewertungswand-Fix + Cashed-Out live gehen.
+- Live-Bereich zeigt viele obskure US-Amateurligen — evtl. striktere Liga-Whitelist für Live-Loop gewünscht (offen).

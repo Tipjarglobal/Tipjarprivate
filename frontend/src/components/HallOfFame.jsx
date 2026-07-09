@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Coins, Radio, Users, Award, X, Gift } from "lucide-react";
+import { Trophy, Coins, Radio, Users, Award, X, Gift, Banknote } from "lucide-react";
 import api, { fileUrl } from "../api";
 import { useI18n } from "../i18n";
 
@@ -8,6 +8,7 @@ const TYPE_META = {
   played: { icon: Users, label: "win.type.played", color: "text-sky-400" },
   posted: { icon: Trophy, label: "win.type.posted", color: "text-volt" },
   live: { icon: Radio, label: "win.type.live", color: "text-live" },
+  cashed: { icon: Banknote, label: "win.type.cashed", color: "text-sky-400" },
 };
 
 export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {

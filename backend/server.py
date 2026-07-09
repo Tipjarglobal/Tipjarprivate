@@ -375,7 +375,7 @@ async def tips_counts():
     members = await db.tips.count_documents({"source": {"$nin": ["hq-auto", "smart"]}, "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
-    settled = await db.tips.count_documents({"status": {"$in": ["won", "lost"]}})
+    settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}})
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
@@ -1156,18 +1156,22 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
 
 
 @api_router.put("/tips/{tip_id}/status")
-async def set_status(tip_id: str, inp: StatusInput, admin: dict = Depends(require_admin)):
-    if inp.status not in ("won", "lost", "pending", "live"):
+async def set_status(tip_id: str, inp: StatusInput, user: dict = Depends(get_current_user)):
+    if inp.status not in ("won", "lost", "pending", "live", "cashed_out"):
         raise HTTPException(status_code=400, detail="Invalid status")
-    upd = {"status": inp.status}
-    if inp.status in ("won", "lost"):
-        upd["settled_at"] = datetime.now(timezone.utc).isoformat()
-        upd["settled_by"] = "admin"
-    res = await db.tips.update_one({"id": tip_id}, {"$set": upd})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Tip not found")
     tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
-    return tip
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    is_admin = user.get("role") == "admin"
+    is_owner = tip.get("user_id") == user["id"]
+    if not (is_admin or is_owner):
+        raise HTTPException(status_code=403, detail="You can only settle your own slips.")
+    upd = {"status": inp.status}
+    if inp.status in ("won", "lost", "cashed_out"):
+        upd["settled_at"] = datetime.now(timezone.utc).isoformat()
+        upd["settled_by"] = "admin" if is_admin else "owner"
+    await db.tips.update_one({"id": tip_id}, {"$set": upd})
+    return await db.tips.find_one({"id": tip_id}, {"_id": 0})
 
 
 # ------------------------------------------------------------------ leaderboard
@@ -1770,6 +1774,18 @@ async def hall_of_fame():
     docs = await db.win_claims.find(
         {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
     ).sort("total_odds", -1).limit(24).to_list(24)
+    # Cashed-out slips are trophies too — surface them in the Hall of Fame.
+    cashed = await db.tips.find(
+        {"status": "cashed_out"}, {"_id": 0}
+    ).sort("settled_at", -1).limit(24).to_list(24)
+    for tp in cashed:
+        docs.append({
+            "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
+            "total_odds": _to_float(tp.get("odds")),
+            "legs_count": len(tp.get("legs") or []) or 1,
+            "image_path": tp.get("image_path"),
+            "created_at": tp.get("settled_at") or tp.get("created_at"),
+        })
     return docs
 
 
