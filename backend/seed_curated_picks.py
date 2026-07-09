@@ -92,6 +92,14 @@ def _rating(cat):
     return {"banker": 9.2, "value": 8.0, "risk": 6.5}[cat]
 
 
+# Explicit kickoff/league fallback for matches that may not be in the live auto-tip
+# index at seed time — so a curated pick NEVER ends up with match_time=None (which
+# hid it from the wall). Format: (match_time, league, league_code, country).
+META_OVERRIDE = {
+    ("Dinamo Tirana", "Astana"): ("09/07/2026 19:00", "UEFA Europa Conference League", "ecl", "Europe"),
+}
+
+
 async def main():
     c = AsyncIOMotorClient(os.environ["MONGO_URL"])
     db = c[os.environ["DB_NAME"]]
@@ -106,6 +114,10 @@ async def main():
              "match_time": 1, "league": 1, "league_code": 1, "country": 1}).to_list(1000):
         meta.setdefault((d["home_team"], d["away_team"]),
                         (d.get("match_time"), d.get("league"), d.get("league_code"), d.get("country")))
+    # explicit overrides win when the auto index lacks a usable kickoff
+    for key, val in META_OVERRIDE.items():
+        if key not in meta or not meta[key][0]:
+            meta[key] = val
 
     # wipe all current pending hq-auto single picks
     removed = (await db.tips.delete_many({"source": "hq-auto", "status": "pending"})).deleted_count

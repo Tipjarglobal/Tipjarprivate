@@ -3509,9 +3509,11 @@ def _forebet_candidates(r: dict) -> list[dict]:
         # only with a 1-goal safety buffer under the predicted total. If nothing extra
         # qualifies we simply keep the classic 'both teams to score'.
         if sc and pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
+            # Owner rule: a both-teams-to-score builder is written simply as
+            # "Beide Teams treffen" — ONE clean leg, never split into per-team
+            # "Über 0.5 Tore" and never with a redundant "Über 1.5 Tore" on top.
             clegs = [
-                {"market": f"{home} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": home},
-                {"market": f"{away} Über 0.5 Tore", "base_odd": 1.30, "kind": "team_o05", "team": away},
+                {"market": "Beide Teams treffen", "base_odd": 1.70, "kind": "btts"},
             ]
             goals_base = {2: 2.00, 3: 3.20, 4: 5.50}
             top = min(total - 2, 4)   # highest NON-implied over-line with a 1-goal buffer
@@ -3519,16 +3521,19 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 clegs.append({"market": f"Über {k}.5 Tore",
                               "base_odd": goals_base.get(k, 5.50), "kind": f"o{k}5"})
             n = len(clegs)
-            if n == 2:
-                cmarket = "Beide Teams treffen (Bet-Builder)"
+            if n == 1:
+                # Pure both-teams-to-score → a clean SINGLE pick ("Beide Teams
+                # treffen" and nothing more), never a 1-leg "Kombi".
+                opts.append({"sfx": "-btts", "market": "Beide Teams treffen",
+                             "odds": "1.70", "rating": 7.5, "winprob": 0.64})
             else:
                 cmarket = f"Beide Teams treffen + Über {top}.5 Tore ({n}er-Bet-Builder)"
-            wp = max(0.45, 0.64 - 0.04 * (n - 2))
-            opts.append({
-                "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": wp,
-                "market": cmarket,
-                "legs": clegs,
-            })
+                wp = max(0.45, 0.64 - 0.04 * (n - 1))
+                opts.append({
+                    "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": wp,
+                    "market": cmarket,
+                    "legs": clegs,
+                })
         # ── Extra sensible single-game builders (owner-requested variety). Every leg is
         # deterministically settleable via _grade_goal_leg, so nothing can get stuck. ──
         fav_side = pred if pred in ("1", "2") else None
