@@ -162,13 +162,22 @@ slip1 = [
 
 slip2 = [
     {"market": "Total Over 2.5", "home": "US Mondorf-Les-Bains", "away": "Dinamo Tbilisi", "time": "09.07  19:15", "odd": "1.95", "result": "1:2", "status": "won"},
-    {"market": "Total Over 2.5", "home": "Caernarfon", "away": "FCI Levadia", "time": "09.07  19:30", "odd": "1.58", "result": "3:1", "status": "won"},
+    {"market": "Double Chance 12", "home": "US Mondorf-Les-Bains", "away": "Dinamo Tbilisi", "time": "09.07  19:15", "odd": "", "result": "1:2", "status": "won"},
+    {"market": "Total Over 2.5", "home": "Caernarfon", "away": "FCI Levadia", "time": "09.07  19:30", "odd": "1.58", "result": "0:5", "status": "won"},
+    {"market": "Double Chance 12", "home": "Caernarfon", "away": "FCI Levadia", "time": "09.07  19:30", "odd": "", "result": "0:5", "status": "won"},
     {"market": "Total Over 2.5", "home": "CE Europa", "away": "Shkendija Tetovo", "time": "09.07  19:30", "odd": "2.16", "result": "0:5", "status": "won"},
-    {"market": "Total Under 2.5", "home": "Atletic Club Escaldes", "away": "FK Mornar Bar", "time": "09.07  16:00", "odd": "1.67", "result": "3:2", "status": "lost"},
+    {"market": "Both Teams to Score - Yes", "home": "CE Europa", "away": "Shkendija Tetovo", "time": "09.07  19:30", "odd": "", "result": "0:5", "status": "lost"},
+    {"market": "Total Under 2.5", "home": "Atletic Club Escaldes", "away": "FK Mornar Bar", "time": "09.07  16:00", "odd": "1.67", "result": "2:1", "status": "lost"},
+    {"market": "Paide +2.5", "home": "Hegelmann", "away": "Paide Linnameeskond", "time": "09.07  18:00", "odd": "1.03", "result": "1:1", "status": "won"},
+    {"market": "SS Virtus +3.5", "home": "FC Dila Gori", "away": "SS Virtus", "time": "09.07  18:00", "odd": "1.22", "result": "3:1", "status": "won"},
+    {"market": "Qarabag -1.5", "home": "Qarabag", "away": "IF Vestri", "time": "09.07  18:00", "odd": "1.19", "result": "3:0", "status": "won"},
     {"market": "Total Under 2.5", "home": "Alashkert", "away": "Elimai", "time": "09.07  18:00", "odd": "1.60", "result": "1:1", "status": "won"},
-    {"market": "Univ. Cluj 3.5", "home": "Dynamo Kyiv", "away": "Universitatea Cluj", "time": "09.07  19:00", "odd": "1.07", "result": "0:0", "status": "won"},
-    {"market": "St. Joseph's 3.5", "home": "Bohemians", "away": "St. Joseph's", "time": "09.07  19:00", "odd": "1.20", "result": "2:0", "status": "won"},
+    {"market": "Univ. Cluj +3.5", "home": "Dynamo Kyiv", "away": "Universitatea Cluj", "time": "09.07  19:00", "odd": "1.07", "result": "0:0", "status": "won"},
+    {"market": "St. Joseph's +3.5", "home": "Bohemians", "away": "St. Joseph's", "time": "09.07  19:00", "odd": "1.20", "result": "2:0", "status": "won"},
+    {"market": "Total Under 2.5", "home": "Dinamo Minsk", "away": "Sileks", "time": "09.07  19:00", "odd": "1.70", "result": "0:1", "status": "won"},
     {"market": "Total Under 3.5", "home": "Velez Mostar", "away": "FC Milsami", "time": "09.07  19:00", "odd": "1.17", "result": "1:1", "status": "won"},
+    {"market": "Sheriff Tiraspol -1.5", "home": "Sheriff Tiraspol", "away": "Aluminij", "time": "09.07  19:00", "odd": "1.95", "result": "0:0", "status": "lost"},
+    {"market": "Total Under 2.5", "home": "Marsaxlokk FC", "away": "Pyunik Yerevan", "time": "09.07  19:00", "odd": "1.65", "result": "0:3", "status": "lost"},
 ]
 
 render(slip1, 156.61, "1 EUR", "156.61 EUR", "/app/frontend/public/tipjar-slip-1.png", "Multibet  \u00b7  09.07.2026")
