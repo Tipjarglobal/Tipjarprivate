@@ -66,6 +66,17 @@ FINISHED_STATUSES = {"FT", "AET", "PEN"}
 # the DB and in the private /insights dashboard. Auto-expires after ~2 months. ──
 SUBSCRIBER_DISPLAY_BOOST = 140
 SUBSCRIBER_BOOST_UNTIL = "2026-09-09"  # after this date the boost is 0 automatically
+# Same cheeky, TEMPORARY idea for the public member count on the homepage progress bar.
+MEMBER_DISPLAY_BOOST = 400
+MEMBER_BOOST_UNTIL = "2026-09-09"
+
+
+def _member_boost() -> int:
+    from datetime import date
+    try:
+        return MEMBER_DISPLAY_BOOST if date.today().isoformat() < MEMBER_BOOST_UNTIL else 0
+    except Exception:
+        return 0
 
 
 def _sub_boost() -> int:
@@ -1962,7 +1973,7 @@ async def community_stats():
     members = await db.users.count_documents({"role": {"$ne": "admin"}})
     subs = await db.subscribers.count_documents({})
     tips = await db.tips.count_documents({})
-    return {"members": members, "goal": 1000, "subscribers": subs + _sub_boost(), "total_tips": tips}
+    return {"members": members + _member_boost(), "goal": 1000, "subscribers": subs + _sub_boost(), "total_tips": tips}
 
 
 @api_router.get("/notifications/stats")
