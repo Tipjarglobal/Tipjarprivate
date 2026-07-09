@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle } from "lucide-react";
 import StarRating from "./StarRating";
+import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
@@ -777,9 +778,6 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                 <span className={`text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 ${meta[1]}`}>
                   {meta[0]}
                 </span>
-                {tip.win_prob != null && (
-                  <span className="text-[11px] text-zinc-400 font-mono">≈{Math.round(tip.win_prob * 100)}%</span>
-                )}
               </div>
             );
           })()}
@@ -802,14 +800,14 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         </p>
       )}
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-elevated">
-        <div className="text-center">
+      <div className="mt-3 pt-3 border-t border-elevated space-y-2">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-[9px] uppercase tracking-widest text-zinc-500">{t("wall.aisays")}</p>
-          <p className="font-mono font-black text-lg text-volt">{tip.ai_rating}</p>
+          <AiRatingStars rating={tip.ai_rating} />
         </div>
-        <div className="text-center">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-[9px] uppercase tracking-widest text-zinc-500">{t("wall.community")}</p>
-          <p className="font-mono font-black text-lg text-white">{tip.avg_rating || "—"} <span className="text-[10px] text-zinc-500">({tip.ratings_count})</span></p>
+          <p className="font-mono font-black text-base text-white">{tip.avg_rating || "—"} <span className="text-[10px] text-zinc-500">({tip.ratings_count})</span></p>
         </div>
       </div>
 

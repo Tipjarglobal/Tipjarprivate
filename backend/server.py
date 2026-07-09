@@ -55,6 +55,10 @@ VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@tipjarglobal.com")
 SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 req/day)
+# Retry cap per tip. High enough that a match whose FT status is published late by
+# API-Football (some leagues lag 30–90 min) still gets settled instead of being
+# permanently stuck as "open". At a 15-min loop that's ~6h of retries.
+SETTLE_MAX_ATTEMPTS = 24
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 # statuses that mean the game is genuinely running right now
 LIVE_STATUSES = {"1H", "2H", "HT", "ET", "BT", "P", "SUSP", "INT", "LIVE"}
@@ -2053,6 +2057,9 @@ async def push_watch_loop():
     if not st:
         await db.push_state.update_one({"key": "last_push"}, {"$set": {"value": last}}, upsert=True)
     while True:
+        if not _is_leader():
+            await asyncio.sleep(45)
+            continue
         try:
             if VAPID_PRIVATE_KEY:
                 fresh = await db.tips.find(
@@ -2360,7 +2367,7 @@ async def settle_pending_tips() -> dict:
     # returns FT games, so an in-play live tip is never settled prematurely.
     finished = []
     for t in raw:
-        if t.get("settle_attempts", 0) >= 4:
+        if t.get("settle_attempts", 0) >= SETTLE_MAX_ATTEMPTS:
             continue
         ko = _parse_kickoff(t.get("match_time"))
         if t.get("status") == "live":
@@ -2425,7 +2432,7 @@ async def settle_hq_combos() -> dict:
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled = 0
     for tip in combos:
-        if tip.get("settle_attempts", 0) >= 4:
+        if tip.get("settle_attempts", 0) >= SETTLE_MAX_ATTEMPTS:
             continue
         ko = _parse_kickoff(tip.get("match_time"))
         if not (ko and ko < now - timedelta(hours=2)):
@@ -2589,6 +2596,8 @@ async def admin_live_run(admin: dict = Depends(require_admin)):
 async def settlement_loop():
     while True:
         await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
+        if not _is_leader():
+            continue
         try:
             if API_FOOTBALL_KEY:
                 result = await settle_pending_tips()
@@ -3294,6 +3303,54 @@ SCRAPE_TIMEOUT = 90  # hard cap (s) per scrape so a stuck browser can't hang the
 _BG_TASKS: list = []  # long-running background loops, cancelled on shutdown
 
 
+# ── Single-leader election for background jobs ──────────────────────────────
+# Production runs multiple replicas. Without this, EVERY replica runs the
+# settlement/scraper/live loops in parallel → double the API-Football calls
+# (quota exhaustion) and double settle_attempts (tips hit the retry cap far too
+# early and get stuck "open"). A tiny Mongo-based lease makes exactly ONE replica
+# the worker. It is FAIL-OPEN: if the lease can't be read/written we default to
+# running, so background work never stops completely.
+import socket as _socket
+_INSTANCE_ID = f"{_socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+_LEADER_TTL_SECONDS = 90
+_IS_LEADER = {"val": True}  # fail-open default
+
+
+async def _refresh_leadership():
+    now = datetime.now(timezone.utc)
+    now_s = now.isoformat()
+    expiry_s = (now + timedelta(seconds=_LEADER_TTL_SECONDS)).isoformat()
+    r = await db.system_locks.update_one(
+        {"_id": "bg_leader", "$or": [{"holder": _INSTANCE_ID},
+                                     {"expires_at": {"$lte": now_s}}]},
+        {"$set": {"holder": _INSTANCE_ID, "expires_at": expiry_s}},
+    )
+    if r.matched_count == 0:
+        try:
+            await db.system_locks.insert_one(
+                {"_id": "bg_leader", "holder": _INSTANCE_ID, "expires_at": expiry_s})
+        except Exception:
+            pass  # another replica created/holds it → we're a follower
+    doc = await db.system_locks.find_one({"_id": "bg_leader"})
+    _IS_LEADER["val"] = bool(doc and doc.get("holder") == _INSTANCE_ID)
+
+
+async def _leadership_loop():
+    while True:
+        try:
+            await _refresh_leadership()
+        except Exception as e:
+            _IS_LEADER["val"] = True  # fail-open: never freeze all work on a DB blip
+            logger.error(f"leadership refresh error (fail-open): {e}")
+        await asyncio.sleep(30)
+
+
+def _is_leader() -> bool:
+    return _IS_LEADER["val"]
+
+
+
+
 async def _chromium_launchable() -> bool:
     try:
         from playwright.async_api import async_playwright
@@ -3746,6 +3803,11 @@ async def forebet_autopost() -> dict:
             if "-1.5" in ml and "handicap" in ml:
                 o2["_ptype"] = "risk"
                 risk_opts.append(o2)
+            elif o["winprob"] >= 0.90:
+                # Owner rule: EVERY single pick with a ≥90% win chance is a Banker,
+                # regardless of odds — the safest picks always live in the Banker tab.
+                o2["_ptype"] = "banker"
+                banker_opts.append(o2)
             elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.42:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
@@ -3803,7 +3865,10 @@ async def forebet_autopost() -> dict:
         market = c["market"]
         odds, real = c["_odd"], c["_real"]
         ptype = c.get("_ptype", "value")
-        rating = round(c["rating"], 1)
+        # Stars now come straight from the win probability (owner rule): the old 8.5
+        # ceiling is gone — a ≥96% pick shows the full 10 stars, 90% → 9, etc.
+        stars = max(1, min(10, round(winprob * 10)))
+        rating = float(stars)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
         is_combo = ptype == "combo"
@@ -3819,15 +3884,15 @@ async def forebet_autopost() -> dict:
             )
         elif ptype == "banker":
             analysis = (
-                f"TipJarHQ-Banker: {market} — ca. {round(winprob * 100)}% Trefferchance "
-                f"(sicherer Banker, Quote {odds:.2f}). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+                f"TipJarHQ-Banker: {market} — {stars}/10 Sterne, sicherer Banker (Quote {odds:.2f}). "
+                f"Erwartetes Ergebnis {score}, Ø {avg} Tore. "
                 f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
                 f"Ideal für Kombi- & Systemwetten — automatisch von TipJarHQ."
             )
         else:
             analysis = (
-                f"TipJarHQ-Value: {market} — ca. {round(winprob * 100)}% Trefferchance bei "
-                f"Quote {odds:.2f} (Value ≥ 1,60). Erwartetes Ergebnis {score}, Ø {avg} Tore. "
+                f"TipJarHQ-Value: {market} — {stars}/10 Sterne bei Quote {odds:.2f}. "
+                f"Erwartetes Ergebnis {score}, Ø {avg} Tore. "
                 f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
                 f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
             )
@@ -3880,6 +3945,9 @@ async def forebet_autopost() -> dict:
 async def forebet_loop():
     await asyncio.sleep(30)  # let startup settle
     while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
         try:
             if await ensure_chromium():
                 res = await forebet_autopost()
@@ -4133,6 +4201,9 @@ async def predictz_autopost() -> dict:
 async def predictz_loop():
     await asyncio.sleep(90)  # let startup + forebet (fills time index) settle first
     while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
         try:
             if await ensure_chromium():
                 res = await predictz_autopost()
@@ -4609,6 +4680,9 @@ def find_upcoming_fixture(team_id: int, opponent_name: str):
 async def smart_loop():
     await asyncio.sleep(150)  # let predictions populate (forebet+predictz) first
     while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
@@ -4955,6 +5029,9 @@ async def live_autopost() -> dict:
 async def live_loop():
     await asyncio.sleep(200)  # let the pre-match picks populate first
     while True:
+        if not _is_leader():
+            await asyncio.sleep(45)
+            continue
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop D (Live): {await live_autopost()}")
@@ -4997,6 +5074,9 @@ async def live_annotate_sync() -> dict:
 
 async def member_live_loop():
     while True:
+        if not _is_leader():
+            await asyncio.sleep(45)
+            continue
         try:
             res = await live_annotate_sync()
             if res["annotated"] or res["cleared"]:
@@ -5079,6 +5159,7 @@ async def startup():
     # Run purge/admin-seed/showcase-seed in the background so the readiness probe
     # is never blocked by DB/storage latency (prevents deploy timeouts).
     asyncio.create_task(_startup_seed())
+    _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
