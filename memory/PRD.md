@@ -321,6 +321,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Live-Bereich zeigt viele obskure US-Amateurligen — evtl. striktere Liga-Whitelist für Live-Loop gewünscht (offen).
 
 
+## Changelog — 2026-07-09 (Realistische Tor-Quoten via Poisson)
+- Owner spielte Single-Picks real bei BetScore nach → Schätzquoten waren „extrem falsch". Fix: neue `_pois_line_odds(lam, line, over, margin=0.95)` berechnet Über/Unter X.5-Quoten match-spezifisch aus erwarteten Toren (lam = avg bzw. Prognose-Total, Poisson). Feste Fantasiewerte (o15/o05/u25/u35 + clean-sheet o25) ersetzt.
+- Gegen echte Samples kalibriert: Über 2.5 Caernarfon–Levadia real 1.58 → berechnet 1.59; Über 0.5 ~1.01–1.10 (real 1.03); Unter 3.5 ~1.17 (real 1.17); Unter 2.5 ~1.40–1.67 (real 1.60-1.70). Markt-Labels bleiben Dot-Format ("Über 2.5 Tore") für Odds-Lookup/Settlement-Konsistenz.
+- OFFEN (2. Batch erwartet): Handicap-Quoten (Qarabag -1.5=1.19, Sheriff -1.5=1.95) + Team-Totals ebenfalls match-spezifisch machen; Marge feinjustieren.
+
+
 ## Changelog — 2026-07-09 (Friendlies-Label, Liga auf Single-Tipps, Bet-Builder-Vielfalt)
 - Bet-Builder Redundanz-Fix: „Über 1.5 Tore" wird nie mehr zu „beide treffen" gepackt (implizit). Tor-Linien ab Über 2.5 mit 1-Tor-Puffer. Klassisches beide treffen bleibt 2 Legs (Combo-Gate 1.80→1.60). Clean Sheet (3:0/0:3) → Über 2.5 statt BTTS.
 - Freundschaftsspiele NICHT geblockt (Blacklist-Ergänzung mkk dnepr/friendl wieder entfernt), sondern als „Freundschaftsspiel" gelabelt (forebet + predictz Tip-Erstellung).

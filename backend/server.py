@@ -3174,6 +3174,18 @@ async def _banned_market_families() -> set:
 
 
 
+def _pois_line_odds(lam, line, over=True, margin=0.95):
+    """Realistic bookmaker-style odds for an Over/Under goals line, derived from a
+    Poisson model on the expected total goals `lam`. Returns (odd, win_prob)."""
+    import math
+    lam = max(0.2, float(lam or 0))
+    kmax = int(line)                       # goals 0..kmax count as 'Under'
+    p_under = sum(math.exp(-lam) * lam ** k / math.factorial(k) for k in range(kmax + 1))
+    p = (1.0 - p_under) if over else p_under
+    p = min(0.985, max(0.02, p))
+    return round(max(1.01, (1.0 / p) * margin), 2), round(p, 3)
+
+
 def _forebet_candidates(r: dict) -> list[dict]:
     """Return ALL viable market options for a match, each with an estimated win
     probability ('winprob'). forebet_autopost then applies REAL bookmaker odds and
@@ -3270,12 +3282,6 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "market": cmarket,
                 "legs": clegs,
             })
-        # Clean-sheet blowout (owner rule): if a 3-0 / 0-3 looks likelier than both teams
-        # scoring, NEVER bet BTTS or the weak team to score — bet the total line instead.
-        if sc and total >= 3 and (ph == 0 or pa == 0):
-            opts.append({"sfx": "-o25cs", "market": "Über 2.5 Tore",
-                         "odds": "1.85" if total >= 4 else "1.95",
-                         "rating": 7.5, "winprob": 0.62 if total >= 4 else 0.55})
         # ── Extra sensible single-game builders (owner-requested variety). Every leg is
         # deterministically settleable via _grade_goal_leg, so nothing can get stuck. ──
         fav_side = pred if pred in ("1", "2") else None
@@ -3310,32 +3316,21 @@ def _forebet_candidates(r: dict) -> list[dict]:
                     {"market": "Über 0.5 Tore 2. Halbzeit", "base_odd": 1.40, "kind": "sh_o05"},
                 ],
             })
-        # Über 1.5 in a clearly high-scoring game = PRIME 80%+ value market.
-        if total >= 5 and avg >= 3.5:
-            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.60",
-                         "rating": 8.0, "winprob": 0.84})
-        elif total >= 4 and avg >= 3.2:
-            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.50",
-                         "rating": 8.0, "winprob": 0.80})
-        elif total >= 3:
-            opts.append({"sfx": "-o15", "market": "Über 1.5 Tore", "odds": "1.35",
-                         "rating": 7.5, "winprob": 0.72})
-        # Über 0.5 (very safe but low odds — usually filtered out by the 1.60 rule).
-        if total >= 2:
-            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08",
-                         "rating": 8.5, "winprob": 0.90 if total >= 3 else 0.85})
-        elif total == 1:
-            opts.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.05",
-                         "rating": 8.0, "winprob": 0.80})
-        # UNDER goals for low-scoring predicted games (owner wants Unter markets too).
-        if total <= 1:
-            opts.append({"sfx": "-u25", "market": "Unter 2.5 Tore", "odds": "1.55",
-                         "rating": 8.0, "winprob": 0.80})
-            opts.append({"sfx": "-u35", "market": "Unter 3.5 Tore", "odds": "1.22",
-                         "rating": 8.5, "winprob": 0.90})
-        elif total == 2:
-            opts.append({"sfx": "-u35", "market": "Unter 3.5 Tore", "odds": "1.35",
-                         "rating": 8.0, "winprob": 0.78})
+        # ── Goal-line markets with REALISTIC, match-specific odds (owner fed real
+        # bookmaker samples). Odds are derived from a Poisson model on the expected
+        # total goals (lam), so 'Über 2.5' in a 1.5-goal game and a 3.5-goal game get
+        # very different, believable prices instead of a fixed fantasy number. ──
+        lam = avg if (avg and avg > 0) else float(total)
+        # Over lines
+        for line, sfx, rt in ((0.5, "-g", 8.5), (1.5, "-o15", 8.0), (2.5, "-o25", 7.5)):
+            od, p = _pois_line_odds(lam, line, over=True)
+            opts.append({"sfx": sfx, "market": f"Über {line} Tore", "odds": f"{od:.2f}",
+                         "rating": rt, "winprob": p})
+        # Under lines
+        for line, sfx, rt in ((2.5, "-u25", 8.0), (3.5, "-u35", 8.5)):
+            od, p = _pois_line_odds(lam, line, over=False)
+            opts.append({"sfx": sfx, "market": f"Unter {line} Tore", "odds": f"{od:.2f}",
+                         "rating": rt, "winprob": p})
     return opts
 
 
