@@ -14,6 +14,7 @@ REPORTS = [
     {
         "id": "smart-rep-fra-mar",
         "home": "Frankreich", "away": "Marokko", "rating": 8.5,
+        "kickoff": "09/07/2026 20:00",
         "market": "El Aynaoui 1+ Foul · Doué/Barcola 1+ Schuss · Über 1 Tor",
         "analysis": (
             "⚽ Frankreich – Marokko | 4er-Analyse\n"
@@ -31,6 +32,7 @@ REPORTS = [
     {
         "id": "smart-rep-esp-bel",
         "home": "Spanien", "away": "Belgien", "rating": 8.0,
+        "kickoff": "10/07/2026 19:00",
         "market": "Spanien qualifiziert sich · Cucurella 1+ Foul",
         "analysis": (
             "⚽ Spanien – Belgien | Analyse\n"
@@ -43,6 +45,7 @@ REPORTS = [
     {
         "id": "smart-rep-nor-eng",
         "home": "Norwegen", "away": "England", "rating": 8.0,
+        "kickoff": "11/07/2026 21:00",
         "market": "Kane 1+ Schuss aufs Tor · Beide Teams treffen",
         "analysis": (
             "⚽ Norwegen – England | Analyse\n"
@@ -56,6 +59,7 @@ REPORTS = [
     {
         "id": "smart-rep-arg-sui",
         "home": "Argentinien", "away": "Schweiz", "rating": 7.5,
+        "kickoff": "12/07/2026 01:00",
         "market": "Schweiz Über 1,5 Schüsse aufs Tor · Argentinien qualifiziert sich",
         "analysis": (
             "⚽ Argentinien – Schweiz | Analyse\n"
@@ -68,6 +72,7 @@ REPORTS = [
     {
         "id": "smart-note-ishowspeed",
         "home": "Der iShowSpeed-Fluch", "away": "", "rating": 6.0,
+        "kickoff": "",
         "market": "Fun-Fact: Tippe gegen das Team, das iShowSpeed unterstützt 🎽",
         "analysis": (
             "😅 Spaß-Tipp mit ernstem Kern – der 'iShowSpeed-Fluch':\n"
@@ -93,13 +98,13 @@ async def main():
             "id": r["id"], "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
             "home_team": r["home"], "away_team": r["away"],
-            "match_time": "", "country": "", "league": "TipJarHQ Smart Pick", "league_code": "",
+            "match_time": r.get("kickoff", ""), "country": "", "league": "TipJarHQ Smart Pick", "league_code": "",
             "market": r["market"], "odds": "", "ai_rating": r["rating"],
             "ai_analysis": r["analysis"], "legs": [], "is_parlay": False,
             "stake": "", "potential_return": "", "status": "pending",
             "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "smart", "smart_idea": True, "idea_by": "TipJarHQ",
-            "curated": True, "created_at": now,
+            "curated": True, "report": True, "created_at": now,
         }
         await db.tips.replace_one({"id": r["id"]}, tip, upsert=True)
         n += 1

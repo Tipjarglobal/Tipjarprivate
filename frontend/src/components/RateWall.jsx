@@ -411,7 +411,14 @@ const STATUS_META = {
   cashed_out: { cls: "bg-sky-400/15 text-sky-400", text: "text-sky-400", Icon: Banknote, key: "wall.cashed" },
 };
 
-function StatusBadge({ status, t }) {
+function StatusBadge({ status, t, report }) {
+  if (report) {
+    return (
+      <span data-testid="status-badge-report" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-indigo-500/15 text-indigo-300">
+        <Brain size={11} /> Analyse
+      </span>
+    );
+  }
   const s = STATUS_META[status] || STATUS_META.pending;
   const { Icon } = s;
   return (
@@ -682,7 +689,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               {t("wall.final")} {tip.final_home}-{tip.final_away}
             </span>
           )}
-          <StatusBadge status={tip.status} t={t} />
+          <StatusBadge status={tip.status} t={t} report={tip.report} />
           {canDelete && (
             <button
               onClick={() => onDelete(tip)}
