@@ -3245,14 +3245,8 @@ def _forebet_candidates(r: dict) -> list[dict]:
     if sc:
         ph, pa = sc
         total = ph + pa
-        # Favourite handicap -1.5 (must win by 2+) — value on a strong favourite the
-        # book expects to win clearly.
-        if pred in ("1", "2"):
-            fav = home if pred == "1" else away
-            margin = (ph - pa) if pred == "1" else (pa - ph)
-            if margin >= 2:
-                opts.append({"sfx": "-hcpf15", "market": f"{fav} Handicap -1.5",
-                             "odds": "1.80", "rating": 7.0, "winprob": 0.72})
+        # Favourite handicap -1.5 is produced ONLY by the RISK generator below
+        # (single -1.5 handicap per match, realistic odds) — no duplicate here.
         # underdog team-to-score (owner idea) — passes the gate only if the book
         # prices it >= 1.60 while our winprob is high enough.
         if pred == "1" and pa >= 1:
@@ -3343,11 +3337,11 @@ def _forebet_candidates(r: dict) -> list[dict]:
             fav = home if pred == "1" else away
             margin = abs(ph - pa)
             if margin >= 3:
-                h_od, h_wp = 1.75, 0.55
+                h_od, h_wp = 1.65, 0.60
             elif margin == 2:
-                h_od, h_wp = 2.30, 0.45
+                h_od, h_wp = 1.95, 0.50
             elif margin == 1:
-                h_od, h_wp = 4.20, 0.30
+                h_od, h_wp = 2.60, 0.38
             else:
                 h_od, h_wp = None, None
             if h_od:
@@ -3427,11 +3421,14 @@ async def forebet_autopost() -> dict:
                     prod *= od
                     legs.append({"home": home, "away": away, "market": lg["market"],
                                  "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
-                if 1.60 <= prod <= 25.0:
+                # Bet-Builder combos are the owner's favourite "nice" tips (goals each
+                # half, both-teams-score + DC, Über 2.5 + DC12 …). They always live in
+                # VALUE within the sweet-spot 1.40–3.0; anything wilder is dropped.
+                if 1.40 <= prod <= 3.0:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
-                    (risk_opts if prod >= 3.0 else value_opts).append(o2)
+                    value_opts.append(o2)
                 continue
             if _market_family(o["market"]) in banned:
                 continue
@@ -3439,14 +3436,18 @@ async def forebet_autopost() -> dict:
             final_odd = float(ro) if ro else float(o["odds"])
             o2 = dict(o)
             o2["_odd"], o2["_real"], o2["_legs"] = round(final_odd, 2), bool(ro), []
-            # Categorise every single pick into Banker / Value / Risk (owner-requested).
-            if final_odd >= 2.50 and o["winprob"] >= 0.28:
+            ml = o["market"].lower()
+            # Categorise every single pick into Banker / Value / Risk (owner rule):
+            #  • RISK  = ONLY favourite -1.5 handicaps (must win by 2+).
+            #  • VALUE = the sweet-spot 1.40–2.50 tips (goals lines, unders, DC12, team goals).
+            #  • BANKER = very safe low-odds picks (ideal for combos / systems).
+            if "-1.5" in ml and "handicap" in ml:
                 o2["_ptype"] = "risk"
                 risk_opts.append(o2)
-            elif o["winprob"] >= WIN_PROB_MIN and final_odd >= VALUE_MIN_ODDS:
+            elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.42:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
-            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.10:
+            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
         # Post the best pick of EACH available category for this match so all three
@@ -3776,6 +3777,9 @@ async def predictz_autopost() -> dict:
         if _market_family(market) in {"btts", "o25", "o25_btts", "gamble"}:
             continue
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
+        # Predictz picks also carry a Banker/Value category so they surface in the
+        # Single-Picks filters (sweet-spot 1.40–2.60 = Value, safer = Banker).
+        pcategory = "value" if 1.40 <= _od <= 2.60 else "banker"
         league = (r.get("league") or "").title() or "TipJarHQ Pick"
         if "friendl" in league.lower() or "freundschaft" in league.lower():
             league = "Freundschaftsspiel"
@@ -3793,7 +3797,7 @@ async def predictz_autopost() -> dict:
             "match_time": match_time,
             "country": "", "league": league, "market": market,
             "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
-            "pick_type": ptype,
+            "pick_type": ptype, "category": pcategory,
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
