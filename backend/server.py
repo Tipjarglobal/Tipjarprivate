@@ -1958,6 +1958,55 @@ async def notif_stats():
     return {"subscriber_count": count, "total_tips": total}
 
 
+class VisitInput(BaseModel):
+    visitor_id: str = ""
+    path: str = ""
+
+
+@api_router.post("/track/visit")
+async def track_visit(inp: VisitInput):
+    """Anonymous, cookieless visit ping (visitor_id is a random localStorage id).
+    Deduped per visitor per day so we can report both hits and unique visitors."""
+    vid = (inp.visitor_id or "").strip()[:64]
+    if not vid:
+        return {"ok": True}
+    now = datetime.now(timezone.utc)
+    day = now.strftime("%Y-%m-%d")
+    await db.visits.update_one(
+        {"visitor_id": vid, "day": day},
+        {"$inc": {"hits": 1},
+         "$set": {"last_ts": now.isoformat(), "path": (inp.path or "")[:120]},
+         "$setOnInsert": {"first_ts": now.isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.get("/admin/visits")
+async def admin_visits(admin: dict = Depends(require_admin)):
+    """Private analytics — admin only. Never exposed publicly."""
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
+    daily = []
+    for d in days:
+        docs = await db.visits.find({"day": d}, {"_id": 0, "hits": 1}).to_list(100000)
+        daily.append({"day": d, "unique": len(docs), "hits": sum(x.get("hits", 0) for x in docs)})
+    total_unique = len(await db.visits.distinct("visitor_id"))
+    all_docs = await db.visits.find({}, {"_id": 0, "hits": 1}).to_list(200000)
+    total_hits = sum(x.get("hits", 0) for x in all_docs)
+    today_row = next((x for x in daily if x["day"] == today), {"unique": 0, "hits": 0})
+    week = daily[-7:]
+    members = await db.users.count_documents({"role": {"$ne": "admin"}})
+    subs = await db.subscribers.count_documents({})
+    return {
+        "total_unique": total_unique, "total_hits": total_hits,
+        "today_unique": today_row["unique"], "today_hits": today_row["hits"],
+        "week_unique": sum(x["unique"] for x in week), "week_hits": sum(x["hits"] for x in week),
+        "daily": daily, "members": members, "subscribers": subs,
+    }
+
+
 # ------------------------------------------------------------------ Web Push (VAPID)
 class PushSubIn(BaseModel):
     endpoint: str
@@ -5215,7 +5264,9 @@ async def _migrate_stars_and_categories():
                 if new != txt:
                     upd["ai_analysis"] = new
             # Old BTTS bet-builders show two per-team "Über 0.5 Tore" chips — merge them
-            # into ONE "Beide Teams treffen" chip (display only, odds/settlement unchanged).
+            # into ONE "Beide Teams treffen" leg AND drop the redundant "Über 1.5 Tore"
+            # leg (BTTS already guarantees ≥2 goals). Odds/market/combo_legs rebuilt to
+            # match so settlement stays correct.
             if d.get("is_parlay"):
                 clegs = d.get("combo_legs") or []
                 team_legs = [l for l in clegs if (l.get("kind") == "team_o05")
@@ -5224,13 +5275,27 @@ async def _migrate_stars_and_categories():
                     btts_odd = 1.0
                     for l in team_legs:
                         btts_odd *= float(l.get("odds") or 1.30)
-                    others = [l for l in clegs if l not in team_legs]
-                    sels = ["Beide Teams treffen"] + [l.get("market", "") for l in others]
-                    sods = [f"{btts_odd:.2f}"] + [f"{float(l.get('odds') or 0):.2f}" for l in others]
+                    # keep every other leg EXCEPT the redundant Über 1.5 / o15
+                    others = [l for l in clegs if l not in team_legs
+                              and l.get("kind") != "o15"
+                              and "über 1.5 tore" not in (l.get("market", "") or "").lower()]
+                    btts_leg = {"market": "Beide Teams treffen", "odds": round(btts_odd, 2),
+                                "kind": "btts", "team": ""}
+                    new_clegs = [btts_leg] + others
+                    total = btts_odd
+                    for l in others:
+                        total *= float(l.get("odds") or 1.0)
+                    upd["combo_legs"] = new_clegs
+                    upd["odds"] = f"{total:.2f}"
+                    if others:
+                        upd["market"] = (f"Beide Teams treffen + {others[0].get('market','')} "
+                                         f"({len(new_clegs)}er-Bet-Builder)")
+                    else:
+                        upd["market"] = "Beide Teams treffen"
                     disp = d.get("legs") or []
                     if disp:
-                        disp[0]["selections"] = sels
-                        disp[0]["sel_odds"] = sods
+                        disp[0]["selections"] = [l["market"] for l in new_clegs]
+                        disp[0]["sel_odds"] = [f"{float(l['odds']):.2f}" for l in new_clegs]
                         upd["legs"] = disp
             if upd:
                 await db.tips.update_one({"id": d["id"]}, {"$set": upd})

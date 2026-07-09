@@ -23,6 +23,7 @@ import HallOfFame from "./components/HallOfFame";
 import WinClaimModal from "./components/WinClaimModal";
 import SplashScreen from "./components/SplashScreen";
 import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
+import SecretInsights from "./components/SecretInsights";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -456,6 +457,22 @@ function VerifyEmail() {
 }
 
 function App() {
+  useEffect(() => {
+    try {
+      let vid = localStorage.getItem("tj_vid");
+      if (!vid) {
+        vid = (window.crypto && window.crypto.randomUUID)
+          ? window.crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem("tj_vid", vid);
+      }
+      if (!sessionStorage.getItem("tj_visit_sent")) {
+        api.post("/track/visit", { visitor_id: vid, path: window.location.pathname }).catch(() => {});
+        sessionStorage.setItem("tj_visit_sent", "1");
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   return (
     <I18nProvider>
       <AuthProvider>
@@ -465,6 +482,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/credits/success" element={<CreditsSuccess />} />
             <Route path="/verify" element={<VerifyEmail />} />
+            <Route path="/insights" element={<SecretInsights />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>
