@@ -5182,7 +5182,7 @@ async def _migrate_stars_and_categories():
         docs = await db.tips.find(
             {"source": "hq-auto", "status": "pending"},
             {"_id": 0, "id": 1, "win_prob": 1, "ai_rating": 1, "ai_analysis": 1,
-             "is_parlay": 1, "category": 1, "market": 1},
+             "is_parlay": 1, "category": 1, "market": 1, "combo_legs": 1, "legs": 1},
         ).to_list(3000)
         changed = 0
         for d in docs:
@@ -5214,6 +5214,24 @@ async def _migrate_stars_and_categories():
                 new = re.sub(r"\s*\(Value\s*≥\s*1[.,]60\)", "", new).replace("  ", " ")
                 if new != txt:
                     upd["ai_analysis"] = new
+            # Old BTTS bet-builders show two per-team "Über 0.5 Tore" chips — merge them
+            # into ONE "Beide Teams treffen" chip (display only, odds/settlement unchanged).
+            if d.get("is_parlay"):
+                clegs = d.get("combo_legs") or []
+                team_legs = [l for l in clegs if (l.get("kind") == "team_o05")
+                             or ("über 0.5 tore" in (l.get("market", "") or "").lower() and l.get("team"))]
+                if len(team_legs) >= 2:
+                    btts_odd = 1.0
+                    for l in team_legs:
+                        btts_odd *= float(l.get("odds") or 1.30)
+                    others = [l for l in clegs if l not in team_legs]
+                    sels = ["Beide Teams treffen"] + [l.get("market", "") for l in others]
+                    sods = [f"{btts_odd:.2f}"] + [f"{float(l.get('odds') or 0):.2f}" for l in others]
+                    disp = d.get("legs") or []
+                    if disp:
+                        disp[0]["selections"] = sels
+                        disp[0]["sel_odds"] = sods
+                        upd["legs"] = disp
             if upd:
                 await db.tips.update_one({"id": d["id"]}, {"$set": upd})
                 changed += 1
