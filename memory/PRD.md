@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 (P.M.) — Category coverage, tab badges + CRITICAL fix
+- **CRITICAL BUG FIXED:** `seed_showcase()` (runs on every startup/deploy) was deleting all TipJarHQ pending tips whose id didn't match `^(hqtip-|hqlive-|smart-)`. The curated `hqcur-*` picks fell through and got wiped on every backend reload/deploy. Regex now includes `hqcur-`. Curated picks survive restarts (verified).
+- **Guaranteed categorisation:** every AI single now always lands in Banker/Value/Risk. Generator has an `else → value` fallback; `/api/tips?category=value` is the catch-all (`category NOT IN [banker,risk]`) so no pick can ever disappear.
+- **Per-category red badges** (RateWall AI view): Banker/Value/Risk tabs show a one-time red unread count (localStorage `tj_cat_seen_ids`); clicking a tab clears its badge. Reads all AI pending, buckets risk=-1.5 handicap / banker / else value.
+- Verified: 18 singles all categorised (11 banker, 6 value, 1 risk) + 8 value combos; badges 11/14/1 render and clear.
+- OPEN: scraper reactivation for multi-day + stability rule (awaiting user a/b); Web Push feature (VAPID keys generated, not yet wired).
+
 ### CHANGELOG 2026-07-09 — Curated Single-Picks + Category rework
 - **Single-Picks categorisation rewritten** (`_forebet_candidates`/`forebet_autopost`): RISK = ONLY favourite -1.5 handicaps; VALUE = sweet-spot 1.40–2.60 tips (Über/Unter, DC12, handicaps) + all bet-builder combos (1.40–3.0); BANKER = safe (winprob≥0.85). Removed duplicate `-hcpf15` generator; `-hcap15` odds calibrated (1.65/1.95/2.60). Predictz tips now carry `category`.
 - **CURATED MODE (owner)**: `AUTOPOST_PAUSED = True` in server.py — Forebet/Predictz auto-scrapers do NOT post/overwrite single picks while curated. The Single-Picks feed is a hand-picked list of exact bookmaker (BetScore) legs+odds seeded via `backend/seed_curated_picks.py` (18 singles + 8 bet-builders, 26 total). Astana -1.5 @5.50 = RISK. To resume automation set AUTOPOST_PAUSED=False and re-run scrapers.

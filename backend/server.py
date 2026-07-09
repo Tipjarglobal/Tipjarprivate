@@ -1108,8 +1108,14 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     q = {}
     if status:
         q["status"] = status
-    if category in ("banker", "value", "risk"):
-        q["category"] = category
+    # Every AI single lands in exactly one bucket. Banker/Risk are strict;
+    # VALUE is the catch-all so no pick can ever fall through the cracks.
+    if category == "banker":
+        q["category"] = "banker"
+    elif category == "risk":
+        q["category"] = "risk"
+    elif category == "value":
+        q["category"] = {"$nin": ["banker", "risk"]}
     if source == "ai":
         q["source"] = "hq-auto"
     elif source == "smart":
@@ -2453,7 +2459,7 @@ async def seed_showcase():
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
-        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-)"}},
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-|hqcur-)"}},
         "status": {"$nin": ["won", "lost", "live"]},
     })
 
@@ -3510,6 +3516,11 @@ async def forebet_autopost() -> dict:
             elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
+            else:
+                # Guarantee coverage: anything else becomes a Value pick so every
+                # single AI tip always lands in Banker / Value / Risk (owner rule).
+                o2["_ptype"] = "value"
+                value_opts.append(o2)
         # Post the best pick of EACH available category for this match so all three
         # filters (Banker / Value / Risk) stay populated.
         cat_best = []

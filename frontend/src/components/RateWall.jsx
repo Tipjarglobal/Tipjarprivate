@@ -77,6 +77,45 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     return () => clearInterval(iv);
   }, [load, refreshKey]);
 
+  // ── Per-category unread badges (Banker / Value / Risk) ──────────────────
+  // Every AI single lands in exactly one bucket (risk = -1.5 handicaps, banker,
+  // else value). A red count sits on a tab until the user opens that category.
+  const CAT_SEEN_KEY = "tj_cat_seen_ids";
+  const catIdsRef = useRef({ banker: [], value: [], risk: [] });
+  const [catUnread, setCatUnread] = useState({ banker: 0, value: 0, risk: 0 });
+  const getCatSeen = () => {
+    try { return JSON.parse(localStorage.getItem(CAT_SEEN_KEY) || "{}"); } catch { return {}; }
+  };
+  const bucketOf = (tp) => (tp.category === "risk" ? "risk" : tp.category === "banker" ? "banker" : "value");
+  const loadCatBadges = useCallback(async () => {
+    if (view !== "ai") return;
+    try {
+      const { data } = await api.get("/tips", { params: { source: "ai", status: "pending", limit: 300 } });
+      const seen = getCatSeen();
+      const counts = { banker: 0, value: 0, risk: 0 };
+      const byCat = { banker: [], value: [], risk: [] };
+      data.forEach((tp) => {
+        const c = bucketOf(tp);
+        byCat[c].push(tp.id);
+        if (!(seen[c] || []).includes(tp.id)) counts[c] += 1;
+      });
+      catIdsRef.current = byCat;
+      setCatUnread(counts);
+    } catch { /* ignore */ }
+  }, [view]);
+  useEffect(() => {
+    if (view !== "ai") return;
+    loadCatBadges();
+    const iv = setInterval(loadCatBadges, 20000);
+    return () => clearInterval(iv);
+  }, [loadCatBadges, refreshKey]);
+  const markCatSeen = (c) => {
+    const seen = getCatSeen();
+    seen[c] = catIdsRef.current[c] || [];
+    localStorage.setItem(CAT_SEEN_KEY, JSON.stringify(seen));
+    setCatUnread((u) => ({ ...u, [c]: 0 }));
+  };
+
   const loadSettled = useCallback(async () => {
     try {
       const [w, l, c] = await Promise.all([
@@ -304,9 +343,16 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
            ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
            ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"]].map(([v, lbl, on, off]) => (
-            <button key={v} data-testid={`cat-${v}`} onClick={() => setCat((c) => (c === v ? null : v))}
-              className={`px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${cat === v ? on : `bg-surface ${off} hover:text-white`}`}>
+            <button key={v} data-testid={`cat-${v}`}
+              onClick={() => { markCatSeen(v); setCat((c) => (c === v ? null : v)); }}
+              className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${cat === v ? on : `bg-surface ${off} hover:text-white`}`}>
               {lbl}
+              {catUnread[v] > 0 && (
+                <span data-testid={`cat-badge-${v}`}
+                  className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold leading-none shadow-lg ring-2 ring-void animate-pulse">
+                  {catUnread[v] > 99 ? "99+" : catUnread[v]}
+                </span>
+              )}
             </button>
           ))
         ) : (
