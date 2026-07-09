@@ -60,6 +60,20 @@ SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 
 # permanently stuck as "open". At a 15-min loop that's ~6h of retries.
 SETTLE_MAX_ATTEMPTS = 24
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
+
+# ── Cheeky, TEMPORARY public subscriber boost (owner request). Adds a flat number to
+# the PUBLICLY shown subscriber count for social proof. The real count is untouched in
+# the DB and in the private /insights dashboard. Auto-expires after ~2 months. ──
+SUBSCRIBER_DISPLAY_BOOST = 140
+SUBSCRIBER_BOOST_UNTIL = "2026-09-09"  # after this date the boost is 0 automatically
+
+
+def _sub_boost() -> int:
+    from datetime import date
+    try:
+        return SUBSCRIBER_DISPLAY_BOOST if date.today().isoformat() < SUBSCRIBER_BOOST_UNTIL else 0
+    except Exception:
+        return 0
 # statuses that mean the game is genuinely running right now
 LIVE_STATUSES = {"1H", "2H", "HT", "ET", "BT", "P", "SUSP", "INT", "LIVE"}
 # how long a live pick may stay open before it is force-settled no matter what the
@@ -1933,7 +1947,7 @@ async def subscribe(inp: SubscribeInput):
          "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True)
     count = await db.subscribers.count_documents({})
-    return {"subscribed": True, "subscriber_count": count}
+    return {"subscribed": True, "subscriber_count": count + _sub_boost()}
 
 
 @api_router.post("/notifications/unsubscribe")
@@ -3911,9 +3925,27 @@ async def forebet_autopost() -> dict:
         if await db.tips.find_one({"id": tip_id}):
             continue
         home, away = r["home"], r["away"]
+        ptype = c.get("_ptype", "value")
+        # Safety net (owner rule): a bet-builder containing "Beide Teams treffen"
+        # must NEVER also carry "Über 1.5 Tore" — BTTS already guarantees ≥2 goals.
+        if ptype == "combo":
+            _legs = c.get("_legs", [])
+            if any((lg.get("kind") == "btts" or "beide teams treffen" in (lg.get("market", "") or "").lower())
+                   for lg in _legs):
+                _kept = [lg for lg in _legs if lg.get("kind") != "o15"
+                         and "über 1.5 tore" not in (lg.get("market", "") or "").lower()]
+                if len(_kept) != len(_legs):
+                    c["_legs"] = _kept
+                    _p = 1.0
+                    for lg in _kept:
+                        _p *= float(lg.get("odds") or 1.0)
+                    c["_odd"] = round(_p, 2)
+                    _others = [lg for lg in _kept if lg.get("kind") != "btts"
+                               and "beide teams treffen" not in (lg.get("market", "") or "").lower()]
+                    c["market"] = (f"Beide Teams treffen + {_others[0].get('market', '')} ({len(_kept)}er-Bet-Builder)"
+                                   if _others else "Beide Teams treffen")
         market = c["market"]
         odds, real = c["_odd"], c["_real"]
-        ptype = c.get("_ptype", "value")
         # Stars now come straight from the win probability (owner rule): the old 8.5
         # ceiling is gone — a ≥96% pick shows the full 10 stars, 90% → 9, etc.
         stars = max(1, min(10, round(winprob * 10)))
