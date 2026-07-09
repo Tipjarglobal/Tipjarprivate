@@ -4985,6 +4985,19 @@ async def live_autopost() -> dict:
                     "settled_by": "auto-live", "settled_at": now}})
                 closed += 1
                 continue
+            # EARLY SETTLE: over/BTTS live markets are IRREVERSIBLE once they land
+            # (goals only ever go up). The moment the bet is mathematically won we move
+            # it straight to Abgerechnet as WON — no waiting for the final whistle.
+            if short in LIVE_STATUSES:
+                hg, ag = _align_goals(f0, lt["home_team"])
+                if _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"]) is True:
+                    minute = ((f0.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+                    await db.tips.update_one({"id": lt["id"]}, {"$set": {
+                        "status": "won", "final_home": hg, "final_away": ag,
+                        "live_score": f"{hg}:{ag}", "live_minute": minute,
+                        "settled_by": "auto-live-early", "settled_at": now}})
+                    closed += 1
+                    continue
             # still genuinely in-play and not overdue → keep it open
             if short in LIVE_STATUSES and not stale:
                 continue
