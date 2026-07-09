@@ -205,7 +205,10 @@ function Home() {
       </div>
 
       <footer className="border-t border-elevated py-10 text-center px-4">
-        <div className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></div>
+        <div className="inline-flex flex-col items-center leading-none" data-testid="footer-logo">
+          <span className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></span>
+          <span className="font-heading font-black text-[0.6rem] uppercase tracking-[0.25em] text-orange-500 -mt-0.5">global</span>
+        </div>
         <p className="text-xs text-zinc-600 mt-2 mb-6">Post it. Rate it. Cash it.</p>
         <Disclaimer />
       </footer>

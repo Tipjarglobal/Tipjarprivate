@@ -1811,6 +1811,7 @@ async def hall_of_fame():
         docs.append({
             "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
             "total_odds": _to_float(tp.get("odds")),
+            "winnings": tp.get("winnings") or tp.get("potential_return") or "",
             "legs_count": len(tp.get("legs") or []) or 1,
             "image_path": tp.get("image_path"),
             "created_at": tp.get("settled_at") or tp.get("created_at"),

@@ -76,8 +76,17 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
                       </span>
                     </div>
                     <div className="mt-3 flex items-baseline justify-between">
-                      <span className="text-zinc-400 text-xs">{t("win.hof.odds")}</span>
-                      <span className="font-mono font-black text-2xl text-volt">{w.total_odds?.toFixed(2)}</span>
+                      {w.type === "cashed" && w.winnings ? (
+                        <>
+                          <span className="text-zinc-400 text-xs">{t("win.hof.cashed")}</span>
+                          <span className="font-mono font-black text-2xl text-sky-400" data-testid={`hof-cashout-${i}`}>{w.winnings}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-zinc-400 text-xs">{t("win.hof.odds")}</span>
+                          <span className="font-mono font-black text-2xl text-volt">{w.total_odds?.toFixed(2)}</span>
+                        </>
+                      )}
                     </div>
                     <div className="mt-1 flex items-center justify-between text-sm">
                       <button type="button" onClick={() => onUserClick?.(w.username)} data-testid={`hof-gift-user-${i}`}
