@@ -1954,7 +1954,7 @@ async def subscribe(inp: SubscribeInput):
 async def unsubscribe(inp: SubscribeInput):
     await db.subscribers.delete_one({"anon_id": inp.anon_id})
     count = await db.subscribers.count_documents({})
-    return {"subscribed": False, "subscriber_count": count}
+    return {"subscribed": False, "subscriber_count": count + _sub_boost()}
 
 
 @api_router.get("/stats")
@@ -1962,14 +1962,14 @@ async def community_stats():
     members = await db.users.count_documents({"role": {"$ne": "admin"}})
     subs = await db.subscribers.count_documents({})
     tips = await db.tips.count_documents({})
-    return {"members": members, "goal": 1000, "subscribers": subs, "total_tips": tips}
+    return {"members": members, "goal": 1000, "subscribers": subs + _sub_boost(), "total_tips": tips}
 
 
 @api_router.get("/notifications/stats")
 async def notif_stats():
     count = await db.subscribers.count_documents({})
     total = await db.tips.count_documents({})
-    return {"subscriber_count": count, "total_tips": total}
+    return {"subscriber_count": count + _sub_boost(), "total_tips": total}
 
 
 class VisitInput(BaseModel):
@@ -2087,26 +2087,40 @@ async def notify_all_push(payload: dict):
 
 
 def _push_payload_for_tip(tip: dict) -> dict:
-    """Build a game/market-detailed push. Live picks get the blue LIVE styling."""
+    """Build a game/market-detailed push. Live picks get the blue LIVE styling.
+    High-impact picks get a punchier title + a richer sound the foreground app
+    plays: 10★ → coin+explosion ('explosion'), 9★ → coin+fire ('fire')."""
     home, away = tip.get("home_team") or "", tip.get("away_team") or ""
     match = f"{home} vs {away}" if away else (home or "TipJar")
     market = tip.get("market") or ""
     odds = tip.get("odds")
     detail = f"{match} — {market}" + (f" @ {odds}" if odds else "")
+    # Stars mirror the frontend rule: round(win_prob*10), capped 1-10.
+    try:
+        stars = max(1, min(10, round(float(tip.get("win_prob") or 0) * 10)))
+    except Exception:
+        stars = 0
+    sound = "explosion" if stars >= 10 else ("fire" if stars == 9 else "coin")
     is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
     if is_live:
         return {"title": "🔵 LIVE-Pick", "body": detail, "url": "/", "kind": "live",
+                "sound": "explosion" if stars >= 9 else sound,
                 "icon": "/push-live.png", "badge": "/push-live.png", "tag": f"tj-{tip.get('id')}"}
     cat = (tip.get("category") or "").lower()
     src = tip.get("source")
     if src == "hq-auto":
-        label = {"banker": "Banker-Pick", "risk": "Risk-Pick"}.get(cat, "Value-Pick")
-        title = f"⚽ Neuer {label}"
+        if cat == "banker" and stars >= 10:
+            title = "💥 10-Sterne-Banker!"
+        elif cat == "banker" and stars == 9:
+            title = "🔥 9-Sterne-Banker!"
+        else:
+            label = {"banker": "Banker-Pick", "risk": "Risk-Pick"}.get(cat, "Value-Pick")
+            title = f"⚽ Neuer {label}"
     elif src == "smart":
         title = "🧠 Neuer Smart-Pick"
     else:
         title = "👥 Neuer Community-Tipp"
-    return {"title": title, "body": detail, "url": "/", "kind": "tip",
+    return {"title": title, "body": detail, "url": "/", "kind": "tip", "sound": sound,
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": f"tj-{tip.get('id')}"}
 
 

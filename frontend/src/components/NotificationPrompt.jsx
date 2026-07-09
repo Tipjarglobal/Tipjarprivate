@@ -4,6 +4,7 @@ import { BellRing, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "../i18n";
 import { enablePushFull, supportsWebPush, isIos, isStandalonePwa } from "../pushClient";
+import { playCoin } from "../coinSound";
 
 const DISMISS_KEY = "tj_push_prompt_dismissed";
 
@@ -26,7 +27,7 @@ export default function NotificationPrompt() {
     let timer = null;
     const onViewed = () => {
       if (!eligible()) return;
-      timer = setTimeout(() => { if (eligible()) setShow(true); }, 2500);
+      timer = setTimeout(() => { if (eligible()) { setShow(true); playCoin(); } }, 2500);
       window.removeEventListener("tj-viewed-pick", onViewed);
     };
     window.addEventListener("tj-viewed-pick", onViewed);

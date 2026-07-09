@@ -51,6 +51,12 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/", kind: data.kind || "tip" },
   };
   event.waitUntil(self.registration.showNotification(title, options));
+  // Best-effort: nudge any open tab to play the coin ding (SWs can't play audio).
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+      for (const c of cs) c.postMessage({ type: "tj-push-coin", sound: data.sound || "coin" });
+    })
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

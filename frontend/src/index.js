@@ -26,4 +26,10 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/service-worker.js").catch(() => {});
   });
+  // Foreground pushes ask us to play the matching notification sound.
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "tj-push-coin") {
+      import("@/coinSound").then((m) => m.playCoin(e.data.sound || "coin")).catch(() => {});
+    }
+  });
 }
