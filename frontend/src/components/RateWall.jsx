@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle } from "lucide-react";
 import StarRating from "./StarRating";
 import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
@@ -16,6 +16,13 @@ const FILTERS = [
   { k: "hype", label: "wall.filter.hype" },
   { k: "top", label: "wall.filter.top" },
 ];
+const SMART_IDEA_STATUS = {
+  pending: { label: "in Prüfung", cls: "bg-amber-500/15 text-amber-400" },
+  used: { label: "als Pick veröffentlicht", cls: "bg-[#2ECC57]/15 text-[#2ECC57]" },
+  not_actionable: { label: "kein Tipp", cls: "bg-zinc-500/15 text-zinc-400" },
+  no_fixture: { label: "kein Spiel gefunden", cls: "bg-zinc-500/15 text-zinc-400" },
+  too_far: { label: "zu weit weg", cls: "bg-sky-400/15 text-sky-400" },
+};
 const VIEW_TITLE_KEY = {
   ai: "nav.viewtips",
   systems: "nav.viewsystems",
@@ -290,7 +297,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view !== "systems" && view !== "settled" && (
         <>
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
-      {/* filters */}
+      {/* filters — hidden entirely in Smart; no "live" toggle anywhere (dedicated Live tab exists) */}
+      {view !== "smart" && (
       <div className="flex flex-wrap gap-2 mb-6">
         {view === "ai" ? (
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
@@ -309,16 +317,10 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
                 {t(f.label)}
               </button>
             ))}
-            {view !== "live" && <span className="w-px bg-elevated mx-1" />}
-            {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"]].map(([v, lbl]) => (
-              <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
-                {t(lbl)}
-              </button>
-            ))}
           </>
         )}
       </div>
+      )}
 
       {view === "ai" && (
         <div className="flex flex-wrap gap-2 mb-6" data-testid="window-filter">
@@ -401,6 +403,18 @@ function SmartLab({ t, user, onCreated }) {
   const [images, setImages] = useState([]);
   const [sending, setSending] = useState(false);
   const fileRef = useRef(null);
+  const [ideas, setIdeas] = useState([]);
+  const loadIdeas = useCallback(async () => {
+    try {
+      const { data } = await api.get("/smart/ideas/recent", { params: { limit: 30 } });
+      setIdeas(data);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    loadIdeas();
+    const iv = setInterval(loadIdeas, 20000);
+    return () => clearInterval(iv);
+  }, [loadIdeas]);
   const addImages = (e) => {
     const picked = Array.from(e.target.files || []);
     setImages((prev) => [...prev, ...picked].slice(0, 3));
@@ -422,6 +436,7 @@ function SmartLab({ t, user, onCreated }) {
       else if (data.reason === "no_fixture") toast.info(t("smart.chat.nofixture"));
       else if (data.reason === "too_far") toast.info(t("smart.chat.toofar"));
       else toast.success(t("smart.chat.stored"));
+      loadIdeas();
     } catch (e) {
       toast.error(t("smart.chat.error"));
     } finally {
@@ -429,6 +444,7 @@ function SmartLab({ t, user, onCreated }) {
     }
   };
   return (
+    <>
     <div
       data-testid="smart-lab"
       className="mb-10 rounded-2xl border border-volt/25 bg-gradient-to-br from-surface to-void p-5 md:p-7 grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-6 lg:gap-8"
@@ -498,7 +514,42 @@ function SmartLab({ t, user, onCreated }) {
         </div>
         {!user && <p className="text-xs text-zinc-500 mt-2">{t("smart.chat.login")}</p>}
       </div>
-    </div>
+      </div>
+
+      {/* Eingegangene Ideen — was die Community an Smart geschickt hat (kein Tipp nötig) */}
+      <div className="mt-4 rounded-2xl border border-white/10 bg-surface/60 p-4 md:p-5" data-testid="smart-ideas-feed">
+        <div className="flex items-center gap-2 mb-3">
+          <MessageCircle size={16} className="text-volt" />
+          <span className="text-sm font-heading font-black uppercase tracking-wide text-white">Eingegangene Ideen</span>
+          <span className="text-[11px] text-zinc-500 font-mono">({ideas.length})</span>
+        </div>
+        {ideas.length === 0 ? (
+          <p className="text-zinc-500 text-sm py-4 text-center">Noch keine Ideen eingegangen — sei der Erste! 💡</p>
+        ) : (
+          <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {ideas.map((idea, idx) => {
+              const meta = SMART_IDEA_STATUS[idea.status] || SMART_IDEA_STATUS.pending;
+              return (
+                <li key={idx} data-testid={`smart-idea-item-${idx}`}
+                  className="flex items-start gap-3 rounded-xl bg-void/60 border border-white/5 px-3 py-2.5">
+                  <div className="w-7 h-7 shrink-0 rounded-full bg-elevated border border-zinc-600 flex items-center justify-center text-[11px] font-bold text-white">
+                    {idea.username?.[0]?.toUpperCase() || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-zinc-300 truncate">@{idea.username || "anon"}</span>
+                      <span className={`text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
+                      {idea.images > 0 && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ImagePlus size={11} /> {idea.images}</span>}
+                    </div>
+                    {idea.text && <p className="text-sm text-zinc-200 mt-0.5 break-words">{idea.text}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }
 

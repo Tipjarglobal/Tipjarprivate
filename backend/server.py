@@ -303,6 +303,17 @@ async def list_smart_ideas(admin: dict = Depends(require_admin)):
     return docs
 
 
+@api_router.get("/smart/ideas/recent")
+async def recent_smart_ideas(limit: int = 30):
+    """Public feed of what the community has sent to the Smart Lab (raw ideas),
+    whether or not they became a pick. No images, just the submitted text."""
+    limit = max(1, min(limit, 60))
+    docs = await db.smart_ideas.find(
+        {}, {"_id": 0, "username": 1, "text": 1, "images": 1, "status": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(limit)
+    return docs
+
+
 
 
 
