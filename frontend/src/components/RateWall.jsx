@@ -69,23 +69,23 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     return () => clearInterval(iv);
   }, [load, refreshKey]);
 
+  const loadSettled = useCallback(async () => {
+    try {
+      const [w, l, c] = await Promise.all([
+        api.get("/tips", { params: { status: "won", sort: "new", limit: 50 } }),
+        api.get("/tips", { params: { status: "lost", sort: "new", limit: 50 } }),
+        api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 50 } }),
+      ]);
+      setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     if (view !== "settled") return;
-    let alive = true;
-    const loadSettled = async () => {
-      try {
-        const [w, l, c] = await Promise.all([
-          api.get("/tips", { params: { status: "won", sort: "new", limit: 50 } }),
-          api.get("/tips", { params: { status: "lost", sort: "new", limit: 50 } }),
-          api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 50 } }),
-        ]);
-        if (alive) { setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); }
-      } catch { /* ignore */ }
-    };
     loadSettled();
     const iv = setInterval(loadSettled, 20000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [view, refreshKey]);
+    return () => clearInterval(iv);
+  }, [view, refreshKey, loadSettled]);
 
   const rate = async (tip, stars) => {
     if (!user) { requireLogin(); return; }
@@ -116,6 +116,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     try {
       const { data } = await api.put(`/tips/${tip.id}/status`, { status: s });
       setTips((ts) => ts.map((x) => (x.id === tip.id ? data : x)));
+      if (view === "settled") loadSettled();
+      toast.success(t(`wall.${s === "cashed_out" ? "cashed" : s}`) || "OK");
     } catch (err) { toast.error(apiErr(err)); }
   };
 
@@ -663,21 +665,20 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         <StarRating value={myStars || 0} onRate={(s) => onRate(tip, s)} size={20} />
       </div>
 
-      {canDelete && (tip.status === "pending" || tip.status === "live") && (
-        <div className="grid grid-cols-3 gap-2 mt-3" data-testid={`settle-${tip.id}`}>
-          <button onClick={() => onSettle(tip, "won")} data-testid={`settle-won-${tip.id}`} className="text-xs font-bold py-1.5 rounded-lg bg-won/15 text-won hover:bg-won/25 transition-colors">{t("wall.won")}</button>
-          <button onClick={() => onSettle(tip, "lost")} data-testid={`settle-lost-${tip.id}`} className="text-xs font-bold py-1.5 rounded-lg bg-lost/15 text-lost hover:bg-lost/25 transition-colors">{t("wall.lost")}</button>
-          <button onClick={() => onSettle(tip, "cashed_out")} data-testid={`settle-cashed-${tip.id}`} className="flex items-center justify-center gap-1 text-xs font-bold py-1.5 rounded-lg bg-sky-400/15 text-sky-400 hover:bg-sky-400/25 transition-colors"><Banknote size={13} /> {t("wall.cashed")}</button>
+      {canDelete && (
+        <div className="mt-3" data-testid={`settle-${tip.id}`}>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("wall.setresult")}</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            <button onClick={() => onSettle(tip, tip.source === "hq-live" ? "live" : "pending")} data-testid={`settle-open-${tip.id}`}
+              className={`text-[11px] font-bold py-1.5 rounded-lg transition-colors ${["pending","live"].includes(tip.status) ? "bg-amber-400 text-void" : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"}`}>{t("wall.open")}</button>
+            <button onClick={() => onSettle(tip, "won")} data-testid={`settle-won-${tip.id}`}
+              className={`text-[11px] font-bold py-1.5 rounded-lg transition-colors ${tip.status === "won" ? "bg-won text-void" : "bg-won/15 text-won hover:bg-won/25"}`}>{t("wall.won")}</button>
+            <button onClick={() => onSettle(tip, "lost")} data-testid={`settle-lost-${tip.id}`}
+              className={`text-[11px] font-bold py-1.5 rounded-lg transition-colors ${tip.status === "lost" ? "bg-lost text-white" : "bg-lost/15 text-lost hover:bg-lost/25"}`}>{t("wall.lost")}</button>
+            <button onClick={() => onSettle(tip, "cashed_out")} data-testid={`settle-cashed-${tip.id}`}
+              className={`flex items-center justify-center gap-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${tip.status === "cashed_out" ? "bg-sky-400 text-void" : "bg-sky-400/15 text-sky-400 hover:bg-sky-400/25"}`}><Banknote size={12} /> {t("wall.cashed")}</button>
+          </div>
         </div>
-      )}
-      {isAdmin && !["hq-auto", "smart"].includes(tip.source) && (tip.status === "pending" || tip.status === "live") && (
-        <button
-          onClick={() => onSettle(tip, tip.status === "live" ? "pending" : "live")}
-          data-testid={`admin-tolive-${tip.id}`}
-          className="w-full text-xs font-bold py-1.5 mt-2 rounded-lg bg-live/15 text-live hover:bg-live/25 transition-colors"
-        >
-          {tip.status === "live" ? t("wall.toPending") : t("wall.toLive")}
-        </button>
       )}
     </motion.div>
   );
