@@ -3350,8 +3350,16 @@ def _forebet_candidates(r: dict) -> list[dict]:
     return opts
 
 
+# Owner curated-mode (2026-07-09): the Single-Picks feed is a hand-curated list
+# (exact bookmaker legs & odds). While True, the Forebet/Predictz auto-scrapers do
+# NOT post or overwrite single picks. Set to False to resume full automation.
+AUTOPOST_PAUSED = True
+
+
 async def forebet_autopost() -> dict:
     """Scrape forebet, publish DNB + safe goals bankers (with kickoff time) as TipJarHQ."""
+    if AUTOPOST_PAUSED:
+        return {"posted": 0, "reason": "autopost paused (curated mode)"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
@@ -3673,6 +3681,8 @@ async def _index_forebet_times(url: str, limit: int = 250) -> int:
 
 async def predictz_autopost() -> dict:
     """Scrape predictz upcoming days, publish safe goals-market bankers as TipJarHQ."""
+    if AUTOPOST_PAUSED:
+        return {"posted": 0, "reason": "autopost paused (curated mode)"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}

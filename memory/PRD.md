@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 — Curated Single-Picks + Category rework
+- **Single-Picks categorisation rewritten** (`_forebet_candidates`/`forebet_autopost`): RISK = ONLY favourite -1.5 handicaps; VALUE = sweet-spot 1.40–2.60 tips (Über/Unter, DC12, handicaps) + all bet-builder combos (1.40–3.0); BANKER = safe (winprob≥0.85). Removed duplicate `-hcpf15` generator; `-hcap15` odds calibrated (1.65/1.95/2.60). Predictz tips now carry `category`.
+- **CURATED MODE (owner)**: `AUTOPOST_PAUSED = True` in server.py — Forebet/Predictz auto-scrapers do NOT post/overwrite single picks while curated. The Single-Picks feed is a hand-picked list of exact bookmaker (BetScore) legs+odds seeded via `backend/seed_curated_picks.py` (18 singles + 8 bet-builders, 26 total). Astana -1.5 @5.50 = RISK. To resume automation set AUTOPOST_PAUSED=False and re-run scrapers.
+- Settlement unchanged & compatible: singles via `judge_market` (LLM, full-time score), combos via `_grade_goal_leg` (deterministic `kind` per leg). NOT yet live-verified (matches settle this evening).
+- Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
+
+
 ## Tech Stack
 FastAPI + MongoDB (motor) + React (CRA/craco) + Tailwind. framer-motion, canvas-confetti, lucide-react.
 AI: Gemini 3.1 Pro via emergentintegrations (EMERGENT_LLM_KEY). Payments: Stripe (test). Object storage:
