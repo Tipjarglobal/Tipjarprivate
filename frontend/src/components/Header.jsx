@@ -92,7 +92,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
             <AnimatePresence>
               {langOpen && (
                 <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                  className="absolute right-0 mt-2 w-40 rounded-xl bg-surface border border-elevated p-1 shadow-2xl">
+                  className="absolute right-0 mt-2 z-[60] w-40 rounded-xl bg-surface border border-elevated p-1 shadow-2xl">
                   {LANGUAGES.map((l) => (
                     <button key={l.code} data-testid={`lang-${l.code}`} onClick={() => { setLang(l.code); setLangOpen(false); }}
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${l.code === lang ? "bg-volt/10 text-volt" : "text-zinc-300 hover:bg-elevated"}`}>
@@ -119,7 +119,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
                 <AnimatePresence>
                   {menuOpen && (
                     <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                      className="absolute right-0 mt-2 w-52 rounded-xl bg-surface border border-elevated p-1 shadow-2xl">
+                      className="absolute right-0 mt-2 z-[60] w-52 rounded-xl bg-surface border border-elevated p-1 shadow-2xl">
                       <div className="px-3 py-2 border-b border-elevated mb-1">
                         <p className="font-semibold text-white truncate">{user.username}</p>
                         <p className="text-xs text-zinc-500 truncate">{user.email}</p>
