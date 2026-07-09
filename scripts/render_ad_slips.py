@@ -109,13 +109,15 @@ def render(legs, total_odds, stake, potential, out_path, subtitle):
         tf = fit(teams, FR, 32, 22, W - 2 * pad)
         d.text((pad, y), teams, font=tf, fill=(210, 212, 216))
         y += 40
-        d.text((pad, y), lg["time"], font=f_meta, fill=GREY)
-        res = lg["result"]
-        rw = d.textlength(res, font=f_meta)
-        d.text((W - pad - rw, y + 2), res, font=f_meta, fill=col)
-        y += 46
         same_next = (i + 1 < len(legs)) and (
             legs[i + 1]["home"] == lg["home"] and legs[i + 1]["away"] == lg["away"])
+        d.text((pad, y), lg["time"], font=f_meta, fill=GREY)
+        # result on the RIGHT only once per match → skip it on the upper leg of a group
+        if not same_next:
+            res = lg["result"]
+            rw = d.textlength(res, font=f_meta)
+            d.text((W - pad - rw, y + 2), res, font=f_meta, fill=col)
+        y += 46
         if same_next:
             y += 12  # same match, next leg → no divider
         else:
@@ -148,7 +150,9 @@ slip1 = [
     {"market": "1st Half Over 0.5", "home": "HNK Hajduk Split", "away": "MSK Zilina", "time": "09.07  20:00", "odd": "1.40", "result": "HT 1:0", "status": "won"},
     {"market": "2nd Half Over 0.5", "home": "HNK Hajduk Split", "away": "MSK Zilina", "time": "09.07  20:00", "odd": "", "result": "HT 1:0", "status": "won"},
     {"market": "1st Half Over 0.5", "home": "NSI Runavik", "away": "Hamrun Spartans", "time": "09.07  20:45", "odd": "1.43", "result": "HT 1:0", "status": "won"},
+    {"market": "Total Over 1.5", "home": "NSI Runavik", "away": "Hamrun Spartans", "time": "09.07  20:45", "odd": "", "result": "HT 1:0", "status": "won"},
     {"market": "Both Teams to Score - Yes", "home": "Sarajevo", "away": "Inter Turku", "time": "09.07  21:00", "odd": "2.09", "result": "1:1", "status": "won"},
+    {"market": "Double Chance 1X", "home": "Sarajevo", "away": "Inter Turku", "time": "09.07  21:00", "odd": "", "result": "1:1", "status": "won"},
     {"market": "Double Chance 1X", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "1.73", "result": "1:1", "status": "won"},
     {"market": "Both Teams to Score - Yes", "home": "Stjarnan", "away": "Vikingur Gota", "time": "09.07  21:00", "odd": "", "result": "1:1", "status": "won"},
     {"market": "Total Over 0.5", "home": "CSKA Sofia", "away": "Derry City", "time": "09.07  20:00", "odd": "1.01", "result": "3:2", "status": "won"},
