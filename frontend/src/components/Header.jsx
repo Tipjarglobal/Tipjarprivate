@@ -46,7 +46,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewSettled, counts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewSettled, counts = {}, newCounts = {} }) {
   const { t, lang, setLang } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -150,19 +150,19 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
       {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
       <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 gap-2">
-          <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} />
-          <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} spoiler={t("smart.spoiler")} />
-          <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} />
-          <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} variant="gold" />
-          <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} live variant="blue" />
-          <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} variant="checkered" />
+          <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
+          <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
+          <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
+          <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" />
+          <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
+          <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
         </div>
       </div>
     </header>
   );
 }
 
-function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = "green", spoiler }) {
+function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, live, variant = "green", spoiler }) {
   const variants = {
     green: "bg-[#2ECC57] text-black hover:bg-[#26b64c] shadow-[0_0_16px_rgba(46,204,87,0.3)]",
     gold: "bg-[#FFC02E] text-black hover:bg-[#e6ac1f] shadow-[0_0_16px_rgba(255,192,46,0.4)]",
@@ -174,8 +174,16 @@ function QuickView({ onClick, icon: Icon, label, testId, count, live, variant = 
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`flex items-center ${spoiler ? "justify-between pl-4 pr-2" : "justify-center"} gap-2 w-full rounded-full font-heading font-black text-sm py-2.5 active:scale-[0.98] transition-all ${variants[variant] || variants.green}`}
+      className={`relative flex items-center ${spoiler ? "justify-between pl-4 pr-2" : "justify-center"} gap-2 w-full rounded-full font-heading font-black text-sm py-2.5 active:scale-[0.98] transition-all ${variants[variant] || variants.green}`}
     >
+      {newCount > 0 && (
+        <span
+          data-testid={`${testId}-newbadge`}
+          className="absolute -top-1.5 -right-1.5 z-10 min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-black leading-none border-2 border-void shadow-[0_0_10px_rgba(220,38,38,0.7)] animate-pulse"
+        >
+          {newCount > 99 ? "99+" : newCount}
+        </span>
+      )}
       <span className="flex items-center gap-2 min-w-0">
         {live && count > 0 ? <span className={`w-2 h-2 rounded-full animate-pulse ${variant === "blue" ? "bg-white" : "bg-red-700"}`} /> : <Icon size={16} strokeWidth={2.5} />}
         <span className="truncate">{label}</span>

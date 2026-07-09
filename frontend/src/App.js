@@ -54,7 +54,13 @@ function Home() {
   const [giftTarget, setGiftTarget] = useState("");
   const [profileUser, setProfileUser] = useState("");
   const [counts, setCounts] = useState({});
+  const [seenCounts, setSeenCounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tj_seen_counts")) || {}; } catch { return {}; }
+  });
   const [refreshKey, setRefreshKey] = useState(0);
+  const NAV_KEYS = ["ai", "smart", "systems", "members", "live", "settled"];
+  const newCounts = {};
+  NAV_KEYS.forEach((k) => { newCounts[k] = Math.max(0, (counts[k] || 0) - (seenCounts[k] || 0)); });
 
   useEffect(() => { if (user?.language) setLang(user.language); }, [user, setLang]);
 
@@ -71,7 +77,15 @@ function Home() {
 
   useEffect(() => {
     const loadCounts = async () => {
-      try { const { data } = await api.get("/tips/counts"); setCounts(data); } catch { /* ignore */ }
+      try {
+        const { data } = await api.get("/tips/counts");
+        setCounts(data);
+        // first ever load → treat everything as already seen (no badges on fresh visit)
+        if (!localStorage.getItem("tj_seen_counts")) {
+          localStorage.setItem("tj_seen_counts", JSON.stringify(data));
+          setSeenCounts(data);
+        }
+      } catch { /* ignore */ }
     };
     loadCounts();
     const iv = setInterval(loadCounts, 20000);
@@ -97,6 +111,12 @@ function Home() {
   const openTipsView = (view) => {
     setTipsView(view);
     setTipsOpen(true);
+    // mark this section's tips as seen → clears its red "new" badge
+    setSeenCounts((prev) => {
+      const next = { ...prev, [view]: counts[view] || 0 };
+      localStorage.setItem("tj_seen_counts", JSON.stringify(next));
+      return next;
+    });
     if (view === "systems") {
       let tries = 0;
       const tick = () => {
@@ -133,6 +153,7 @@ function Home() {
         onViewSmart={() => openTipsView("smart")}
         onViewSettled={() => openTipsView("settled")}
         counts={counts}
+        newCounts={newCounts}
       />
       {user && !user.email_verified && <VerifyBanner />}
 

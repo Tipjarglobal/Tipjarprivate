@@ -35,6 +35,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [sort, setSort] = useState("new");
   const [status, setStatus] = useState(view === "live" ? "live" : "pending");
   const [win, setWin] = useState("24");
+  const [cat, setCat] = useState(null);
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -55,13 +56,13 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const params = { sort };
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
-      if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; }
+      if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
-  }, [sort, status, view, win]);
+  }, [sort, status, view, win, cat]);
 
   useEffect(() => {
     load();
@@ -291,19 +292,32 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {/* filters */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {FILTERS.map((f) => (
-          <button key={f.k} data-testid={`sort-${f.k}`} onClick={() => setSort(f.k)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${sort === f.k ? "bg-volt text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
-            {t(f.label)}
-          </button>
-        ))}
-        {view !== "live" && <span className="w-px bg-elevated mx-1" />}
-        {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"]].map(([v, lbl]) => (
-          <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
-            {t(lbl)}
-          </button>
-        ))}
+        {view === "ai" ? (
+          [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
+           ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
+           ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"]].map(([v, lbl, on, off]) => (
+            <button key={v} data-testid={`cat-${v}`} onClick={() => setCat((c) => (c === v ? null : v))}
+              className={`px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${cat === v ? on : `bg-surface ${off} hover:text-white`}`}>
+              {lbl}
+            </button>
+          ))
+        ) : (
+          <>
+            {FILTERS.map((f) => (
+              <button key={f.k} data-testid={`sort-${f.k}`} onClick={() => setSort(f.k)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${sort === f.k ? "bg-volt text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
+                {t(f.label)}
+              </button>
+            ))}
+            {view !== "live" && <span className="w-px bg-elevated mx-1" />}
+            {view !== "live" && [["pending", "wall.filter.pending"], ["live", "wall.filter.live"]].map(([v, lbl]) => (
+              <button key={v} data-testid={`status-${v}`} onClick={() => setStatus(v)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${status === v ? "bg-white text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
+                {t(lbl)}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
       {view === "ai" && (

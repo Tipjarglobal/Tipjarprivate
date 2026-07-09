@@ -1052,10 +1052,12 @@ async def purge_demo_tips() -> int:
 @api_router.get("/tips")
 async def list_tips(status: Optional[str] = None, sort: str = "new",
                     source: Optional[str] = None, window: Optional[str] = None,
-                    limit: int = 50):
+                    category: Optional[str] = None, limit: int = 50):
     q = {}
     if status:
         q["status"] = status
+    if category in ("banker", "value", "risk"):
+        q["category"] = category
     if source == "ai":
         q["source"] = "hq-auto"
     elif source == "smart":
@@ -2721,7 +2723,7 @@ async def _dedupe_hq_tips() -> int:
     docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1,
-         "pick_type": 1, "match_time": 1}
+         "pick_type": 1, "match_time": 1, "category": 1}
     ).to_list(4000)
 
     def _odd(d):
@@ -2752,10 +2754,14 @@ async def _dedupe_hq_tips() -> int:
     def _mt(d):
         return (d.get("match_time") or "").strip()
 
+    def _cat(d):
+        return d.get("category") or d.get("pick_type") or "value"
+
+    # dedupe PER CATEGORY so Banker / Value / Risk each keep their own pick per match
     # 1) exact both-team key  2) same kickoff + same home  3) same kickoff + same away
-    dedup_by(lambda d: _match_key(d.get("home_team"), d.get("away_team")))
-    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}" if _mt(d) and d.get("home_team") else None)
-    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}" if _mt(d) and d.get("away_team") else None)
+    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_cat(d)}")
+    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}|{_cat(d)}" if _mt(d) and d.get("home_team") else None)
+    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}|{_cat(d)}" if _mt(d) and d.get("away_team") else None)
 
     if to_delete:
         await db.tips.delete_many({"id": {"$in": list(to_delete)}})
@@ -3331,6 +3337,22 @@ def _forebet_candidates(r: dict) -> list[dict]:
             od, p = _pois_line_odds(lam, line, over=False)
             opts.append({"sfx": sfx, "market": f"Unter {line} Tore", "odds": f"{od:.2f}",
                          "rating": rt, "winprob": p})
+        # RISK: favourite -1.5 handicap (win by 2+). Odds/probability scale with the
+        # predicted winning margin. High-odds ones land in the "Risk" filter.
+        if pred in ("1", "2"):
+            fav = home if pred == "1" else away
+            margin = abs(ph - pa)
+            if margin >= 3:
+                h_od, h_wp = 1.75, 0.55
+            elif margin == 2:
+                h_od, h_wp = 2.30, 0.45
+            elif margin == 1:
+                h_od, h_wp = 4.20, 0.30
+            else:
+                h_od, h_wp = None, None
+            if h_od:
+                opts.append({"sfx": "-hcap15", "market": f"{fav} -1.5 (Handicap)",
+                             "odds": f"{h_od:.2f}", "rating": 6.5, "winprob": h_wp})
     return opts
 
 
@@ -3395,7 +3417,7 @@ async def forebet_autopost() -> dict:
             odds_map = await ensure_match_odds(home, away, kickoff)
         except Exception:
             odds_map = {}
-        value_opts, banker_opts, combo_opts = [], [], []
+        value_opts, banker_opts, risk_opts, combo_opts = [], [], [], []
         for o in _forebet_candidates(r):
             if o.get("combo"):
                 legs, prod = [], 1.0
@@ -3409,33 +3431,42 @@ async def forebet_autopost() -> dict:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
-                    combo_opts.append(o2)
+                    (risk_opts if prod >= 3.0 else value_opts).append(o2)
                 continue
             if _market_family(o["market"]) in banned:
                 continue
             ro = _real_odd_for(o["market"], odds_map, home, away)
             final_odd = float(ro) if ro else float(o["odds"])
             o2 = dict(o)
-            o2["_odd"], o2["_real"] = round(final_odd, 2), bool(ro)
-            if o["winprob"] >= WIN_PROB_MIN and final_odd >= VALUE_MIN_ODDS:
+            o2["_odd"], o2["_real"], o2["_legs"] = round(final_odd, 2), bool(ro), []
+            # Categorise every single pick into Banker / Value / Risk (owner-requested).
+            if final_odd >= 2.50 and o["winprob"] >= 0.28:
+                o2["_ptype"] = "risk"
+                risk_opts.append(o2)
+            elif o["winprob"] >= WIN_PROB_MIN and final_odd >= VALUE_MIN_ODDS:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
-            elif o["winprob"] >= BANKER_WIN_PROB:
+            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.10:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
-        # owner: prefer the higher-risk 2-leg builder when the pattern exists,
-        # else a real VALUE pick, else the safest BANKER.
-        if combo_opts:
-            best = max(combo_opts, key=lambda o: o["_odd"])
-        elif value_opts:
-            best = max(value_opts, key=lambda o: (o["winprob"], o["_odd"]))
-        elif banker_opts:
-            best = max(banker_opts, key=lambda o: (o["winprob"], o["_odd"]))
-        else:
+        # Post the best pick of EACH available category for this match so all three
+        # filters (Banker / Value / Risk) stay populated.
+        cat_best = []
+        if banker_opts:
+            cat_best.append(("banker", max(banker_opts, key=lambda o: (o["winprob"], o["_odd"]))))
+        if value_opts:
+            cat_best.append(("value", max(value_opts, key=lambda o: (o["_ptype"] == "combo", o["winprob"], o["_odd"]))))
+        if risk_opts:
+            cat_best.append(("risk", max(risk_opts, key=lambda o: o["_odd"])))
+        if not cat_best:
             continue
-        candidates.append((best["winprob"], r, best, kickoff))
-    # value + combo picks first (higher odds), then safest bankers
-    candidates.sort(key=lambda x: (x[2].get("_ptype") in ("value", "combo"), x[0], x[2]["_odd"]), reverse=True)
+        for cat, best in cat_best:
+            b = dict(best)
+            b["_category"] = cat
+            candidates.append((best["winprob"], r, b, kickoff))
+    # order: value first, then risk, then bankers; within each by confidence/odds
+    _catrank = {"value": 3, "combo": 3, "risk": 2, "banker": 1}
+    candidates.sort(key=lambda x: (_catrank.get(x[2].get("_ptype"), 0), x[0], x[2]["_odd"]), reverse=True)
     ordered = candidates
 
     posted = 0
@@ -3445,11 +3476,13 @@ async def forebet_autopost() -> dict:
             break
         matchid = r.get("matchid") or f"{r['home']}-{r['away']}"
         tip_id = f"hqtip-a-{matchid}{c['sfx']}"
+        category = c.get("_category", c.get("_ptype", "value"))
         lcode = (r.get("lcode") or "").strip().lower()
         cc = (r.get("cc") or "").strip().lower()
-        # Enforce ONE pick per match: drop any other pending hq-auto tip for this game.
+        # One pick per match PER CATEGORY: drop other pending hq-auto tips of the same
+        # category for this game (keeps Banker/Value/Risk each to a single pick).
         await db.tips.delete_many({
-            "source": "hq-auto", "status": "pending",
+            "source": "hq-auto", "status": "pending", "category": category,
             "home_team": r["home"], "away_team": r["away"], "match_time": kickoff,
             "id": {"$ne": tip_id}})
         existing = await db.tips.find_one({"id": tip_id})
@@ -3522,7 +3555,7 @@ async def forebet_autopost() -> dict:
             "country": cc, "league": league_disp, "league_code": lcode,
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
-            "win_prob": round(winprob, 3), "pick_type": ptype,
+            "win_prob": round(winprob, 3), "pick_type": ptype, "category": category,
             "legs": display_legs, "combo_legs": combo_legs, "is_parlay": is_combo,
             "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
