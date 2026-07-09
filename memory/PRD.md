@@ -9,6 +9,9 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-09 (night 2) — Curated Smart-Pick reports
+- Posted 4 owner WC analysis reports as source="smart" picks (Frankreich–Marokko, Spanien–Belgien, Norwegen–England, Argentinien–Schweiz) — one report card per match, BYPASSING the 48h-fixture requirement (player props / qualify markets have no auto-fixture). Full multi-line German analysis per card. Plus a re-written (not 1:1) "iShowSpeed-Fluch" fun note. Seed: `backend/seed_smart_reports.py`, ids `smart-*` (protected from startup cleanup). match_time="" → dateless, so they do NOT auto-settle (informational reports; remove/settle manually).
+
 ### CHANGELOG 2026-07-09 (night) — Bundled AI new-count on main button
 - Main "KI Single-Game-Picks" button now shows a red bundled count = SUM of new picks across Banker/Value/Risk, using the SAME `tj_cat_seen_ids` store as the tab badges (App.js `computeAiUnread` + `tj-cat-seen` window event kept in sync with RateWall `markCatSeen`). Opening the AI view marks all categories seen → clears main + tab badges together.
 - `/tips/counts` `ai` now counts ALL pending AI picks (singles + combos, all days) so the grey total pill matches the red new-count universe (both = 28 verified).
