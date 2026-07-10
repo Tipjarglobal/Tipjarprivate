@@ -13,6 +13,7 @@ import hashlib
 import base64
 import logging
 import asyncio
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -56,9 +57,9 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@tipjarglobal.com")
 SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 req/day)
 # Retry cap per tip. High enough that a match whose FT status is published late by
-# API-Football (some leagues lag 30–90 min) still gets settled instead of being
-# permanently stuck as "open". At a 15-min loop that's ~6h of retries.
-SETTLE_MAX_ATTEMPTS = 24
+# API-Football (some leagues lag) still gets settled, and that games needing the
+# date-scan fallback keep being retried until the 36h purge removes them anyway.
+SETTLE_MAX_ATTEMPTS = 240
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 
 # ── Cheeky, TEMPORARY public subscriber boost (owner request). Adds a flat number to
@@ -2234,7 +2235,11 @@ async def download_file(path: str):
 
 # ------------------------------------------------------------------ results engine (API-Football)
 def _norm(s: str) -> str:
-    return "".join(c for c in (s or "").lower() if c.isalnum() or c.isspace()).strip()
+    # Strip diacritics (Rīgas→rigas, Žilina→zilina, Mönchengladbach→monchen...) so
+    # API-Football team names match regardless of accents.
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return "".join(c for c in s.lower() if c.isalnum() or c.isspace()).strip()
 
 
 def _teams_match(a: str, b: str) -> bool:
@@ -2379,6 +2384,43 @@ def _grade_goal_leg(kind, market, team, fx):
     return None
 
 
+def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict = None):
+    """Robust fallback: scan ALL fixtures on the kickoff date and match BOTH team
+    names (either orientation). Independent of team-id/season resolution, which
+    fails for many summer-qualifier leagues (diacritics, city suffixes). Returns a
+    finished-fixture dict like find_finished_fixture, else None."""
+    for date in dates:
+        try:
+            int(date[:4])
+        except (ValueError, TypeError):
+            continue
+        if cache is not None and date in cache:
+            fixtures = cache[date]
+        else:
+            fixtures = _apifootball("/fixtures", {"date": date}) or []
+            if cache is not None:
+                cache[date] = fixtures
+        for fx in fixtures:
+            th = fx.get("teams", {}).get("home", {}).get("name", "")
+            ta = fx.get("teams", {}).get("away", {}).get("name", "")
+            hit = (_teams_match(th, home_name) and _teams_match(ta, away_name)) or \
+                  (_teams_match(th, away_name) and _teams_match(ta, home_name))
+            if not hit:
+                continue
+            status = fx.get("fixture", {}).get("status", {}).get("short")
+            if status in FINISHED_STATUSES:
+                ht = fx.get("score", {}).get("halftime", {}) or {}
+                return {
+                    "home_name": th, "away_name": ta,
+                    "fixture_id": fx.get("fixture", {}).get("id"),
+                    "home_goals": fx.get("goals", {}).get("home"),
+                    "away_goals": fx.get("goals", {}).get("away"),
+                    "ht_home": ht.get("home"), "ht_away": ht.get("away"),
+                    "status": status,
+                }
+    return None
+
+
 def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
     for date in dates:
         try:
@@ -2464,6 +2506,7 @@ async def settle_pending_tips() -> dict:
             finished.append((ko, t))
     finished.sort(key=lambda x: x[0])  # oldest finished first
     checked, settled, details = 0, 0, []
+    date_cache = {}
     for ko, tip in finished[:SETTLE_BATCH_CAP]:
         checked += 1
         dates = [ko.date().isoformat(),
@@ -2474,10 +2517,10 @@ async def settle_pending_tips() -> dict:
         if not team_id:
             team_id = await resolve_team_id(tip["away_team"])
             opponent = tip["home_team"]
-        if not team_id:
-            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
-            continue
-        fx = find_finished_fixture(team_id, opponent, dates)
+        fx = find_finished_fixture(team_id, opponent, dates) if team_id else None
+        if not fx:
+            # Fallback: scan the date's fixtures and match both team names directly.
+            fx = _datescan_fixture(tip["home_team"], tip["away_team"], dates, date_cache)
         if not fx:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
@@ -2534,10 +2577,9 @@ async def settle_hq_combos() -> dict:
         if not team_id:
             team_id = await resolve_team_id(away)
             opponent = home
-        if not team_id:
-            await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
-            continue
-        fx = find_finished_fixture(team_id, opponent, dates)
+        fx = find_finished_fixture(team_id, opponent, dates) if team_id else None
+        if not fx:
+            fx = _datescan_fixture(home, away, dates)
         if not fx:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
