@@ -2248,11 +2248,27 @@ def _teams_match(a: str, b: str) -> bool:
         return False
     if na == nb or na in nb or nb in na:
         return True
-    ta, tb = set(na.split()), set(nb.split())
-    common = ta & tb
+    # space-insensitive containment ("st josephs" ⇄ "st joseph s fc")
+    ca, cb = na.replace(" ", ""), nb.replace(" ", "")
+    if ca and cb and (ca in cb or cb in ca):
+        return True
     stop = {"fc", "cf", "sc", "ac", "club", "de", "the", "and"}
-    common = {w for w in common if w not in stop and len(w) > 2}
-    return len(common) >= 1
+    ta = [w for w in na.split() if w not in stop and len(w) > 2]
+    tb = [w for w in nb.split() if w not in stop and len(w) > 2]
+
+    def _close(x, y):
+        if x == y or x.startswith(y) or y.startswith(x):
+            return True
+        # tolerate a single transliteration diff of equal-length tokens (Yelimai/Yelimay)
+        if len(x) >= 5 and len(x) == len(y):
+            return sum(1 for i in range(len(x)) if x[i] != y[i]) <= 1
+        return False
+
+    for wa in ta:
+        for wb in tb:
+            if _close(wa, wb):
+                return True
+    return False
 
 
 def _apifootball(path: str, params: dict):
