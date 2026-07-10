@@ -1280,7 +1280,7 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
 
 @api_router.put("/tips/{tip_id}/status")
 async def set_status(tip_id: str, inp: StatusInput, user: dict = Depends(get_current_user)):
-    if inp.status not in ("won", "lost", "pending", "live", "cashed_out"):
+    if inp.status not in ("won", "lost", "pending", "live", "cashed_out", "void"):
         raise HTTPException(status_code=400, detail="Invalid status")
     tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
     if not tip:
@@ -2031,6 +2031,38 @@ async def admin_visits(admin: dict = Depends(require_admin)):
         "week_unique": sum(x["unique"] for x in week), "week_hits": sum(x["hits"] for x in week),
         "daily": daily, "members": members, "subscribers": subs,
     }
+
+
+@api_router.get("/admin/pending-tips")
+async def admin_pending_tips(admin: dict = Depends(require_admin)):
+    """All open tips (pending/live) grouped by source — for the admin pick-manager."""
+    docs = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "id": 1, "source": 1, "status": 1, "market": 1, "match": 1,
+         "home_team": 1, "away_team": 1, "match_time": 1, "kickoff": 1, "odds": 1,
+         "win_prob": 1, "ai_rating": 1, "is_parlay": 1, "combo_legs": 1,
+         "report": 1, "settle_attempts": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(500)
+
+    def _label(t):
+        m = t.get("match")
+        if m:
+            return m
+        h, a = t.get("home_team"), t.get("away_team")
+        return f"{h} — {a}" if (h or a) else (t.get("market") or "—")
+
+    src_names = {
+        "hq-auto": "KI-Picks", "hq-live": "Live-Picks", "smart": "Smart Picks",
+    }
+    items = []
+    for t in docs:
+        src = t.get("source") or "member"
+        items.append({
+            **t,
+            "label": _label(t),
+            "source_name": src_names.get(src, "Mitglieder-Tipps"),
+        })
+    return {"count": len(items), "items": items}
 
 
 # ------------------------------------------------------------------ Web Push (VAPID)

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle } from "lucide-react";
-import api from "../api";
+import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal } from "lucide-react";
+import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
 
 // PRIVATE analytics — only reachable at /insights and only for the admin account.
@@ -43,6 +43,8 @@ export default function SecretInsights() {
         <p className="text-xs text-zinc-500 mb-8">Nur für dich sichtbar · anonym & cookiefrei</p>
 
         <LiveHealth health={health} healthErr={healthErr} />
+
+        <PickManager />
 
         {!data && !err && (
           <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={18} /> lädt…</div>
@@ -163,6 +165,123 @@ const LiveHealth = ({ health, healthErr }) => {
           </div>
         </>
       )}
+    </div>
+  );
+};
+
+// ── Pick-Manager ─────────────────────────────────────────────
+// Lists every open tip (pending/live) and lets the admin resolve it
+// with one tap: Gewonnen · Verloren · Void · Löschen. Perfect for custom
+// player-prop Smart Picks that API-Football can't settle automatically.
+const SETTLE_ACTIONS = [
+  { key: "won", label: "Gewonnen", icon: Trophy, cls: "bg-won/15 text-won hover:bg-won/25" },
+  { key: "lost", label: "Verloren", icon: XCircle, cls: "bg-lost/15 text-lost hover:bg-lost/25" },
+  { key: "void", label: "Void", icon: Ban, cls: "bg-zinc-700/40 text-zinc-300 hover:bg-zinc-700/60" },
+];
+
+const SRC_ORDER = ["Smart Picks", "Live-Picks", "KI-Picks", "Mitglieder-Tipps"];
+
+const PickManager = () => {
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState(false);
+  const [busy, setBusy] = useState({});
+
+  const load = () => {
+    setErr(false);
+    api.get("/admin/pending-tips")
+      .then((r) => setItems(r.data.items || []))
+      .catch(() => setErr(true));
+  };
+  useEffect(load, []);
+
+  const act = async (tip, action) => {
+    const verb = action === "delete" ? "löschen" : action;
+    if (!window.confirm(`Wette „${tip.label}" wirklich als "${verb}" markieren?`)) return;
+    setBusy((b) => ({ ...b, [tip.id]: true }));
+    try {
+      if (action === "delete") await api.delete(`/tips/${tip.id}`);
+      else await api.put(`/tips/${tip.id}/status`, { status: action });
+      setItems((cur) => cur.filter((t) => t.id !== tip.id));
+    } catch (e) {
+      alert(apiErr(e, "Aktion fehlgeschlagen."));
+    } finally {
+      setBusy((b) => ({ ...b, [tip.id]: false }));
+    }
+  };
+
+  const groups = {};
+  (items || []).forEach((t) => {
+    (groups[t.source_name] = groups[t.source_name] || []).push(t);
+  });
+  const groupNames = Object.keys(groups).sort(
+    (a, b) => (SRC_ORDER.indexOf(a) + 1 || 99) - (SRC_ORDER.indexOf(b) + 1 || 99)
+  );
+
+  return (
+    <div className="rounded-2xl border border-elevated bg-surface p-5 mb-8" data-testid="pick-manager">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="text-volt" size={16} />
+          <p className="text-xs uppercase tracking-widest text-zinc-400">Pick-Manager · offene Wetten</p>
+        </div>
+        <button onClick={load} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="pm-refresh">
+          <RefreshCw size={15} />
+        </button>
+      </div>
+
+      {!items && !err && (
+        <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={16} /> lädt…</div>
+      )}
+      {err && <p className="text-lost text-sm">Konnte offene Wetten nicht laden.</p>}
+      {items && items.length === 0 && (
+        <p className="text-sm text-zinc-500" data-testid="pm-empty">🎉 Keine offenen Wetten — alles abgerechnet.</p>
+      )}
+
+      {groupNames.map((name) => (
+        <div key={name} className="mb-5 last:mb-0">
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">{name} · {groups[name].length}</p>
+          <div className="space-y-2">
+            {groups[name].map((t) => (
+              <div key={t.id} className="rounded-xl border border-elevated bg-void/40 p-3" data-testid={`pm-item-${t.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-white font-semibold truncate">{t.label}</p>
+                    <p className="text-[11px] text-zinc-400 break-words">{t.market || "—"}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-600">
+                      <span className={`px-1.5 py-0.5 rounded ${t.status === "live" ? "bg-lost/20 text-lost" : "bg-zinc-700/40 text-zinc-400"}`}>
+                        {t.status === "live" ? "LIVE" : "OFFEN"}
+                      </span>
+                      {t.odds ? <span>Quote {t.odds}</span> : null}
+                      {t.match_time ? <span>{new Date(t.match_time).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span> : null}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2.5">
+                  {SETTLE_ACTIONS.map((a) => (
+                    <button
+                      key={a.key}
+                      disabled={busy[t.id]}
+                      onClick={() => act(t, a.key)}
+                      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${a.cls}`}
+                      data-testid={`pm-${a.key}-${t.id}`}
+                    >
+                      <a.icon size={13} /> {a.label}
+                    </button>
+                  ))}
+                  <button
+                    disabled={busy[t.id]}
+                    onClick={() => act(t, "delete")}
+                    className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-lost/10 text-lost/80 hover:bg-lost/20 transition-colors disabled:opacity-40"
+                    data-testid={`pm-delete-${t.id}`}
+                  >
+                    <Trash2 size={13} /> Löschen
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

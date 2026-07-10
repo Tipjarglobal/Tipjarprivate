@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only regression on the new admin Pick-Manager on /insights. Verified: (1) section renders under 'PICK-MANAGER · offene Wetten' with data-testid='pick-manager'; (2) open tips are grouped by source (Smart Picks, KI-Picks visible) with all 4 action buttons (pm-won-*, pm-lost-*, pm-void-*, pm-delete-*) for each row; (3) clicking Void on seeded 'test-pm-dummy-void' with confirm accepted removes it from UI, marks status='void' on backend (verified via /api/tips) and drops it from /api/admin/pending-tips; (4) clicking Löschen on 'test-pm-dummy-del' removes it from UI and fully deletes it from DB (absent from both /api/tips and /api/admin/pending-tips); (5) pm-refresh button re-fetches /api/admin/pending-tips (1 additional call observed) while keeping the section mounted. Login used username='admin@tipjar.com' with API returning field 'token' (not access_token).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pm_final.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SecretInsights.jsx uses native window.confirm() before settle/delete — works but blocks the JS thread; automated tests must override window.confirm (add_init_script) since Playwright's dialog handler still yields click timeouts. Consider replacing with a shadcn AlertDialog for consistency and testability.",
+    "PickManager currently only groups by t.source_name and sorts by SRC_ORDER; if a source name from backend does not exactly match one of ['Smart Picks','Live-Picks','KI-Picks','Mitglieder-Tipps'] it falls to the end — acceptable but worth guarding against typos/casing on backend.",
+    "act() catches errors and shows alert(), but does not roll back the optimistic list mutation before the try; safe here because the item is only removed inside the try after success, so OK.",
+    "GET /api/tips still exposes deleted-then-recreated seed tips with status 'pending' publicly — not a bug for this feature, but 'void' status is not filtered on the client (verified via API only)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only run)", "frontend": "100%" },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (POST /api/auth/login body field 'username'; response field 'token' — NOT 'access_token'; store in localStorage as 'tj_token')",
+  "seed_data_creation": "Used pre-seeded tips only: test-pm-dummy-void (voided during test) and test-pm-dummy-del (deleted during test). No other picks were touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both seeded PickManager test tips have been consumed by this run (void → status=void, del → hard-deleted). To rerun this flow, main agent must re-seed 'test-pm-dummy-void' and 'test-pm-dummy-del' in /api/admin/pending-tips first. For Playwright: (a) inject 'window.confirm=()=>true' via add_init_script BEFORE navigating to /insights — otherwise page.click hangs even with no_wait_after=True because the sync confirm() dialog blocks the renderer; (b) log in via POST /api/auth/login and set localStorage 'tj_token' from response.token (NOT access_token).",
+  "rca of the issue": "N/A — no bugs found. Only test-harness issue encountered was Playwright's default click waiting for post-action ack while window.confirm() blocked the JS thread; solved by overriding window.confirm via add_init_script."
+}
