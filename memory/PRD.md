@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-10 — Admin Pick-Manager + void status
+- **Fixed P0:** hanging Frankreich–Marokko Smart Pick `smart-rep-fra-mar` (player props "El Aynaoui 1+ Foul · Doué/Barcola 1+ Schuss · Über 1 Tor") set to status="void" (game over, unresolvable by API-Football).
+- **New admin Pick-Manager** in `SecretInsights.jsx` (/insights): `GET /api/admin/pending-tips` returns all open (pending/live) tips grouped by source (Smart Picks/Live-Picks/KI-Picks/Mitglieder-Tipps). Admin can one-tap resolve each pick: Gewonnen/Verloren/Void/Löschen via existing `PUT /api/tips/{id}/status` (now accepts "void") + `DELETE /api/tips/{id}`. Solves recurring issue of custom player-prop picks hanging forever. Tested frontend 100% (iteration_35).
+
 ### CHANGELOG 2026-07-09 (night 2) — Curated Smart-Pick reports
 - Posted 4 owner WC analysis reports as source="smart" picks (Frankreich–Marokko, Spanien–Belgien, Norwegen–England, Argentinien–Schweiz) — one report card per match, BYPASSING the 48h-fixture requirement (player props / qualify markets have no auto-fixture). Full multi-line German analysis per card. Plus a re-written (not 1:1) "iShowSpeed-Fluch" fun note. Seed: `backend/seed_smart_reports.py`, ids `smart-*` (protected from startup cleanup). match_time="" → dateless, so they do NOT auto-settle (informational reports; remove/settle manually).
 
