@@ -2997,7 +2997,7 @@ def _league_blocked_predictz(league: str) -> bool:
 # obscure/untrustworthy fixtures.
 TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "forge", "saint-laurent", "saint laurent",
-                         "delaware", "eagle fc")
+                         "delaware", "eagle fc", "gumi", "sportstoto")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
