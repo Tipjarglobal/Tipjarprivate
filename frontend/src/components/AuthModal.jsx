@@ -56,7 +56,7 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
           </Field>
         )}
         {mode === "login" && (
-          <Field label={t("auth.username")}>
+          <Field label={t("auth.usernameOrEmail")}>
             <input data-testid="auth-username" className={inputCls} value={form.username} onChange={upd("username")} required />
           </Field>
         )}
