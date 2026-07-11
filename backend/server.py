@@ -482,12 +482,17 @@ async def tips_counts():
     live = await db.tips.count_documents({"status": "live"})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}})
+    won_n = await db.tips.count_documents({"status": "won"})
+    lost_n = await db.tips.count_documents({"status": "lost"})
+    cashed_n = await db.tips.count_documents({"status": "cashed_out"})
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
-    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live, "systems": systems_n, "smart": smart, "settled": settled}
+    return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
+            "systems": systems_n, "smart": smart, "settled": settled,
+            "won": won_n, "lost": lost_n, "cashed": cashed_n}
 
 
 

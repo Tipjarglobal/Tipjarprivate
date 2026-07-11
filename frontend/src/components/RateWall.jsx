@@ -51,6 +51,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [wonTips, setWonTips] = useState([]);
   const [lostTips, setLostTips] = useState([]);
   const [cashedTips, setCashedTips] = useState([]);
+  const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0 });
   const [settledTab, setSettledTab] = useState(null);
 
   useEffect(() => {
@@ -122,12 +123,18 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
   const loadSettled = useCallback(async () => {
     try {
-      const [w, l, c] = await Promise.all([
-        api.get("/tips", { params: { status: "won", sort: "new", limit: 50 } }),
-        api.get("/tips", { params: { status: "lost", sort: "new", limit: 50 } }),
-        api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 50 } }),
+      const [w, l, c, counts] = await Promise.all([
+        api.get("/tips", { params: { status: "won", sort: "new", limit: 100 } }),
+        api.get("/tips", { params: { status: "lost", sort: "new", limit: 100 } }),
+        api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 100 } }),
+        api.get("/tips/counts"),
       ]);
       setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data);
+      setSettledCounts({
+        won: counts.data.won ?? w.data.length,
+        lost: counts.data.lost ?? l.data.length,
+        cashed: counts.data.cashed ?? c.data.length,
+      });
     } catch { /* ignore */ }
   }, []);
 
@@ -266,7 +273,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               }`}
             >
               <CheckCircle2 size={20} /> {t("wall.filter.won")}
-              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "won" ? "bg-black/20" : "bg-void/60"}`}>{wonTips.length}</span>
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "won" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.won}</span>
             </button>
             <button
               type="button"
@@ -279,7 +286,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               }`}
             >
               <XCircle size={20} /> {t("wall.filter.lost")}
-              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{lostTips.length}</span>
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.lost}</span>
             </button>
             <button
               type="button"
@@ -292,7 +299,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               }`}
             >
               <Banknote size={20} /> {t("wall.cashed")}
-              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{cashedTips.length}</span>
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
             </button>
           </div>
 
