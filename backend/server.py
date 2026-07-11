@@ -3006,7 +3006,8 @@ def _league_blocked_predictz(league: str) -> bool:
 # obscure/untrustworthy fixtures.
 TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "forge", "saint-laurent", "saint laurent",
-                         "delaware", "eagle fc", "gumi", "sportstoto")
+                         "delaware", "eagle fc", "gumi", "sportstoto",
+                         "prievidza", "inter bratislava")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
@@ -5114,6 +5115,26 @@ def _find_live_fixture(live, home, away):
     return None
 
 
+def _fixture_league_label(fx) -> str:
+    """Human-readable competition name for a live fixture (owner: every live pick MUST
+    show its league). Friendlies are labelled 'Club Friendlies' / 'Freundschaftsspiel'.
+    Country is shown separately by the frontend, so it is NOT baked into the name."""
+    lg = (fx or {}).get("league") or {}
+    name = (lg.get("name") or "").strip()
+    country = (lg.get("country") or "").strip()
+    low = f"{name} {country}".lower()
+    if "friendl" in low or "freundschaft" in low:
+        return "Club Friendlies" if "club" in low else "Freundschaftsspiel"
+    return name or "Live-Spiel"
+
+
+def _fixture_country(fx) -> str:
+    """Country for the live pick, blank for global 'World' competitions (friendlies)."""
+    country = (((fx or {}).get("league") or {}).get("country") or "").strip()
+    return "" if country.lower() in ("world", "") else country
+
+
+
 async def live_autopost() -> dict:
     if not API_FOOTBALL_KEY:
         return {"posted": 0, "reason": "no API-Football key"}
@@ -5233,14 +5254,14 @@ async def live_autopost() -> dict:
                 "market": t.get("market"), "odds": f"{odd:.2f}",
                 "ai_rating": min(7.0, float(t.get("ai_rating") or 7.0)), "win_prob": 0.7,
                 "ai_analysis": analysis, "status": "live", "match_time": t.get("match_time"),
+                "league": t.get("league") or "Live-Spiel",
+                "country": t.get("country", ""), "league_code": t.get("league_code", ""),
                 "live_minute": minute, "live_score": f"{hg}:{ag}", "updated_at": now,
             },
             "$setOnInsert": {
                 "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
                 "raw_text": "", "image_path": None,
                 "home_team": t["home_team"], "away_team": t["away_team"],
-                "country": t.get("country", ""), "league": "TipJarHQ Live",
-                "league_code": t.get("league_code", ""),
                 "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
                 "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
                 "source": "hq-live", "fixture_id": fid, "created_at": now,
@@ -5295,6 +5316,9 @@ async def live_autopost() -> dict:
                 "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.0,
                 "ai_analysis": analysis, "status": "live",
                 "win_prob": 0.7,
+                "league": _fixture_league_label(fx),
+                "country": _fixture_country(fx),
+                "league_code": "",
                 "live_minute": minute, "live_score": f"{goals.get('home') or 0}:{goals.get('away') or 0}",
                 "updated_at": now,
             },
@@ -5302,7 +5326,6 @@ async def live_autopost() -> dict:
                 "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
                 "raw_text": "", "image_path": None,
                 "home_team": home, "away_team": away,
-                "country": "", "league": "TipJarHQ Live", "league_code": "",
                 "match_time": ((fx.get("fixture") or {}).get("date") or ""),
                 "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
                 "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
