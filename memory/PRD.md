@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-11b — First-half (HT) settlement + HT markets in System der Stunde
+- **New `_grade_ht_selection`**: first-half goal markets (Über/Unter X.5 Tore 1. Halbzeit) now settled deterministically from the half-time score (fixtures carry ht_home/ht_away). Wired into `settle_multimatch_parlays` (falls back to LLM judge for non-HT markets; keeps leg open if HT data missing). Unit-tested, all pass.
+- **System der Stunde** now leads with "Über 1.5 Tore 1. Halbzeit" for high-scoring games (the Lyon/Anderlecht style) + safe "Über 0.5 / Unter 3.5 Tore 1. Halbzeit" variants. Total odds still enforced >3.6 (test: 4.94).
+
 ### CHANGELOG 2026-07-11 — Best-Won/Cashed bucket + System der Stunde + rating overhaul
 - **Rating honesty:** Live picks capped at 7★ (never banker/explosion), BTTS capped 6★, 9-10★ only for ultra-safe pre-match bankers. Value singles now need ≥62% win prob (was 42%); "post everything" fallback removed → fewer but safer picks.
 - **BTTS replaced** by favourite-anchored bet-builders: `{Fav} Über 0.5 + Über 1.5 (+ Über 0.5 2.HZ)` and `{Fav} Über 0.5 + Doppelte Chance`. Underdog never required to score.

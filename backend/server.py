@@ -2726,6 +2726,26 @@ async def purge_settled_tips() -> int:
     return len(stale)
 
 
+def _grade_ht_selection(selection, ht_h, ht_a):
+    """Grade a FIRST-HALF goals market from the half-time score.
+    Returns 'won' / 'lost' / 'open' (HT market but no HT data yet) / None (not a HT market)."""
+    s = (selection or "").lower()
+    is_ht = any(k in s for k in (
+        "1. halbzeit", "erste halbzeit", "1.halbzeit", "1. hz", "erste hz",
+        "1. hälfte", "1.hälfte", "first half", "1st half", "ht ", " ht", "halftime"))
+    if not is_ht:
+        return None
+    if ht_h is None or ht_a is None:
+        return "open"
+    total = (ht_h or 0) + (ht_a or 0)
+    m = re.search(r"(\d)[.,]5", s)
+    line = (int(m.group(1)) + 0.5) if m else 0.5
+    if "unter" in s or "under" in s:
+        return "won" if total < line else "lost"
+    return "won" if total > line else "lost"
+
+
+
 async def settle_multimatch_parlays() -> dict:
     """Settle multi-match parlays (member + AI system tips) leg-by-leg from the final
     scores. A parlay is LOST the moment any leg loses, and WON only when every leg is
@@ -2777,12 +2797,27 @@ async def settle_multimatch_parlays() -> dict:
                 continue
             hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
             leg_res = "won"
+            leg_open = False
             for sel in (leg.get("selections") or []):
+                sel_txt = _fmt_selection(sel)
+                ht = _grade_ht_selection(sel_txt, fx.get("ht_home"), fx.get("ht_away"))
+                if ht is not None:
+                    # first-half market → graded deterministically from the HT score
+                    if ht == "open":
+                        leg_open = True
+                        break
+                    if ht == "lost":
+                        leg_res = "lost"
+                        break
+                    continue
                 judged += 1
-                o = await judge_market(_fmt_selection(sel), home, away, hg, ag)
+                o = await judge_market(sel_txt, home, away, hg, ag)
                 if o == "lost":
                     leg_res = "lost"
                     break
+            if leg_open:
+                all_resolved, all_won = False, False
+                continue
             leg["status"] = "lost" if leg_res == "lost" else "won"
             leg["final"] = f"{hg}:{ag}"
             changed = True
@@ -3565,8 +3600,9 @@ async def build_systems() -> dict:
         team = _fav_team(p)
         fp = p.get("fav_prob") or 0
         total = p.get("total") or 0
-        if p.get("over25") or total >= 3.5:
-            mk, od, rt = "Über 2.5 Tore", 1.95, 7.5
+        # Owner: first-half goal markets are the heart of this system.
+        if total >= 3.2 or p.get("over25"):
+            mk, od, rt = "Über 1.5 Tore 1. Halbzeit", 2.60, 6.5   # torreiches Spiel → 2+ Tore 1.HZ
         elif p.get("btts"):
             mk, od, rt = "Beide Teams treffen (BTTS)", 1.90, 7.0
         elif team and fp >= 55:
@@ -3575,7 +3611,7 @@ async def build_systems() -> dict:
             dc = "1X" if p.get("fav") == "home" else "X2"
             mk, od, rt = f"{team} Doppelte Chance {dc}", round(_dc_odds(fp) * 1.15, 2), 7.5
         else:
-            mk, od, rt = "Über 1.5 Tore", 1.35, 8.0
+            mk, od, rt = "Über 0.5 Tore 1. Halbzeit", 1.45, 7.5   # sichere HZ-Variante
         hour_cands.append(_apply_real(_sel(p, mk, od, rt)))
         used_h.add(p["id"])
         if len(hour_cands) >= 4:
