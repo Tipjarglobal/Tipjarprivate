@@ -4782,7 +4782,7 @@ async def predictz_loop():
 # ---------------------------------------------------------------------------
 PLAYER_CACHE_TTL_H = 24
 SMART_MAX_MATCHES = 14       # upcoming matches processed per run
-SMART_PROPS_PER_TEAM = 4     # best props kept per team (1 per player)
+SMART_PROPS_PER_TEAM = 6     # best props kept per team (1 per player) — massive builder
 SMART_MIN_RATING = 7.0
 SMART_LOOKAHEAD_H = 120      # only matches within the next 5 days
 
@@ -5139,31 +5139,46 @@ async def smart_autopost() -> dict:
         props = (await _team_best_props(home, seasons)) + (await _team_best_props(away, seasons))
         candidates += len(props)
         mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
-        for c in props:
-            slug = re.sub(r"[^a-z0-9]+", "-", c["market"].lower()).strip("-")[:40]
-            tip_id = f"smart-{mkey}-{slug}"
-            if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
-                continue
-            pct = round(c["prob"] * 100)
-            analysis = (
-                f"TipJarHQ Smart Pick: {c['market']}. Saison-Ø {c['avg']:.2f} pro Spiel "
-                f"→ ~{pct}% Trefferwahrscheinlichkeit. Datenbasierter Spieler-Prop, "
-                f"Anstoß {p.get('kickoff')}. Quote ist eine Schätzung."
-            )
-            await db.tips.insert_one({
-                "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
-                "raw_text": "", "image_path": None,
-                "home_team": home, "away_team": away,
-                "match_time": p.get("kickoff") or "",
-                "country": p.get("country") or "", "league": "TipJarHQ Smart Pick",
-                "league_code": p.get("league_code") or "",
-                "market": c["market"], "odds": str(c["odds"]),
-                "ai_rating": c["rating"], "ai_analysis": analysis,
-                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
-                "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-                "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            posted += 1
+        # Owner (2026-07-11): bundle ALL props of a match into ONE massive Bet-Builder
+        # instead of many separate picks. Includes shots / shots-on-target / fouls / cards
+        # (from _build_player_props) + a corner market. Player props can't auto-settle, so
+        # the whole builder stays pending until resolved in the admin Pick-Manager.
+        if len(props) < 2:
+            continue
+        tip_id = f"smart-{mkey}-builder"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        legs = [{"market": c["market"], "odds": str(c["odds"]), "kind": "player", "status": "open"}
+                for c in props]
+        legs.append({"market": "Über 8.5 Ecken (Spiel gesamt)", "odds": "1.80",
+                     "kind": "corner_o", "line": 8.5, "status": "open"})
+        prod = 1.0
+        for lg in legs:
+            try:
+                prod *= float(lg["odds"])
+            except Exception:
+                pass
+        avg_rating = round(sum(c["rating"] for c in props) / len(props), 1)
+        analysis = (
+            f"TipJarHQ Mega Bet-Builder: {len(legs)} datenbasierte Spieler-Props & Team-Märkte "
+            f"(Schüsse, Schüsse aufs Tor, Fouls, Ecken …) für {home} vs {away}. "
+            f"Anstoß {p.get('kickoff')}. Quoten sind Schätzungen."
+        )
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away,
+            "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": "TipJarHQ Smart Pick",
+            "league_code": p.get("league_code") or "",
+            "market": f"{home} vs {away} — Mega Bet-Builder ({len(legs)} Legs)",
+            "odds": f"{round(prod, 2)}", "combo_legs": legs, "is_parlay": True,
+            "ai_rating": avg_rating, "ai_analysis": analysis,
+            "legs": [], "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
     logger.info(f"Smart Bet run: posted {posted}, matches {scanned}, candidates {candidates}")
     return {"posted": posted, "matches": scanned, "candidates": candidates}
 
