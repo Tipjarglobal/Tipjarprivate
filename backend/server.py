@@ -486,6 +486,16 @@ async def tips_counts():
     won_n = await db.tips.count_documents({"status": "won"})
     lost_n = await db.tips.count_documents({"status": "lost"})
     cashed_n = await db.tips.count_documents({"status": "cashed_out"})
+    bestwon_n = await db.tips.count_documents({
+        "status": "won",
+        "id": {"$not": {"$regex": "^seed-"}},
+        "$or": [
+            {"source": "smart"},
+            {"source": "hq-system"},
+            {"source": "hq-auto", "category": "risk"},
+            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
+        ],
+    })
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
@@ -493,7 +503,7 @@ async def tips_counts():
         systems_n = 0
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
             "systems": systems_n, "smart": smart, "settled": settled,
-            "won": won_n, "lost": lost_n, "cashed": cashed_n}
+            "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n}
 
 
 
@@ -1182,6 +1192,16 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["source"] = "smart"
     elif source == "members":
         q["source"] = {"$nin": ["hq-auto", "smart"]}
+    elif source == "bestwon":
+        # "Best Won" bucket (owner): all winning Smart + Risk-single + Community +
+        # System picks — the special wins the owner wants to track (esp. systems).
+        q["$or"] = [
+            {"source": "smart"},
+            {"source": "hq-system"},
+            {"source": "hq-auto", "category": "risk"},
+            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
+        ]
+        q["id"] = {"$not": {"$regex": "^seed-"}}
     limit = max(1, min(limit, 1000))
     fetch = 300 if window in ("24", "48", "48plus") else (200 if source == "ai" else limit)
     if sort == "top":
@@ -2671,12 +2691,16 @@ PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota gu
 
 async def purge_settled_tips() -> int:
     """Settled slips (won/lost) are auto-removed 24h after they were settled — the
-    'Abgerechnet' area only ever shows the last day. Seed showcase tips are kept."""
+    'Abgerechnet' area only ever shows the last day. Seed showcase tips are kept.
+    WON System picks (source=hq-system) are ALSO kept forever so the owner can always
+    see whether a system ever won ('Best Won' history)."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     docs = await db.tips.find(
         {"status": {"$in": ["won", "lost", "void"]}, "id": {"$not": {"$regex": "^seed-"}}},
-        {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1}).to_list(5000)
-    stale = [d["id"] for d in docs if (d.get("settled_at") or d.get("created_at") or "") < cutoff]
+        {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1, "source": 1, "status": 1}).to_list(5000)
+    stale = [d["id"] for d in docs
+             if (d.get("settled_at") or d.get("created_at") or "") < cutoff
+             and not (d.get("source") == "hq-system" and d.get("status") == "won")]
     if not stale:
         return 0
     await db.tips.delete_many({"id": {"$in": stale}})
@@ -2766,6 +2790,7 @@ async def settle_multimatch_parlays() -> dict:
 @api_router.post("/admin/settle-now")
 async def settle_now(admin: dict = Depends(require_admin)):
     res = await settle_pending_tips()
+    res["systems_snapshot"] = await snapshot_systems()
     res["combos"] = await settle_hq_combos()
     res["parlays"] = await settle_multimatch_parlays()
     try:
@@ -2827,12 +2852,13 @@ async def settlement_loop():
             continue
         try:
             if API_FOOTBALL_KEY:
+                snap = await snapshot_systems()
                 result = await settle_pending_tips()
                 combos = await settle_hq_combos()
                 parlays = await settle_multimatch_parlays()
                 purged = await purge_settled_tips()
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
-                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; purged24h {purged}")
+                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; systems snap {snap}; purged24h {purged}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")
 
@@ -3518,6 +3544,58 @@ async def build_systems() -> dict:
                              "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
         ],
     }
+
+
+async def snapshot_systems() -> int:
+    """Persist today's system slips as tips (source=hq-system, is_parlay) so they get
+    auto-settled leg-by-leg and any WINNING system surfaces in 'Best Won'. This is the
+    only way to answer 'does a system ever win'. Frozen once per day via $setOnInsert."""
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return 0
+    try:
+        data = await build_systems()
+    except Exception as e:
+        logger.warning(f"snapshot_systems build failed: {e}")
+        return 0
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc).isoformat()
+    saved = 0
+    for s in data.get("systems", []):
+        sels = s.get("selections") or []
+        if len(sels) < 2:
+            continue
+        legs = [{
+            "match": f"{sel.get('home_team')} \u2013 {sel.get('away_team')}",
+            "league": sel.get("league") or "",
+            "kickoff": sel.get("match_time") or "",
+            "sel_odds": [f"{sel.get('odds')}"],
+            "selections": [sel.get("market")],
+            "status": "open",
+        } for sel in sels]
+        tip_id = f"hqsys-{s.get('key')}-{day}"
+        await db.tips.update_one({"id": tip_id}, {
+            "$setOnInsert": {
+                "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ System",
+                "raw_text": "", "image_path": None,
+                "home_team": "", "away_team": "",
+                "match_time": legs[0]["kickoff"] if legs else "",
+                "country": "", "league": s.get("title") or "System-Schein",
+                "league_code": "",
+                "market": s.get("system_label") or f"{len(sels)}er-System",
+                "odds": f"{s.get('total_odds')}",
+                "ai_rating": 6.0, "win_prob": 0.0,
+                "ai_analysis": f"{s.get('title')} \u2014 {s.get('subtitle')} (Gesamtquote {s.get('total_odds')}).",
+                "legs": legs, "is_parlay": True,
+                "stake": "", "potential_return": "",
+                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "status": "pending", "source": "hq-system",
+                "system_key": s.get("key"), "created_at": now,
+            },
+        }, upsert=True)
+        saved += 1
+    return saved
+
 
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
 FOREBET_TIME_INDEX: dict[str, str] = {}

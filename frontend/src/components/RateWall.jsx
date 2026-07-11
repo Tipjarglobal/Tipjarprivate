@@ -51,7 +51,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [wonTips, setWonTips] = useState([]);
   const [lostTips, setLostTips] = useState([]);
   const [cashedTips, setCashedTips] = useState([]);
-  const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0 });
+  const [bestwonTips, setBestwonTips] = useState([]);
+  const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0 });
   const [settledTab, setSettledTab] = useState(null);
 
   useEffect(() => {
@@ -123,17 +124,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
   const loadSettled = useCallback(async () => {
     try {
-      const [w, l, c, counts] = await Promise.all([
+      const [w, l, c, bw, counts] = await Promise.all([
         api.get("/tips", { params: { status: "won", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "lost", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 1000 } }),
+        api.get("/tips", { params: { status: "won", source: "bestwon", sort: "new", limit: 1000 } }),
         api.get("/tips/counts"),
       ]);
-      setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data);
+      setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); setBestwonTips(bw.data);
       setSettledCounts({
         won: counts.data.won ?? w.data.length,
         lost: counts.data.lost ?? l.data.length,
         cashed: counts.data.cashed ?? c.data.length,
+        bestwon: counts.data.bestwon ?? bw.data.length,
       });
     } catch { /* ignore */ }
   }, []);
@@ -288,19 +291,43 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               <XCircle size={20} /> {t("wall.filter.lost")}
               <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.lost}</span>
             </button>
-            <button
-              type="button"
-              data-testid="settled-cashed-toggle"
-              onClick={() => setSettledTab((v) => (v === "cashed" ? null : "cashed"))}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-4 font-heading font-black text-base transition-all ${
-                settledTab === "cashed"
-                  ? "bg-sky-400 text-void border-sky-400 shadow-[0_0_18px_rgba(56,189,248,0.5)]"
-                  : "bg-sky-400/10 border-sky-400/40 text-sky-400 hover:bg-sky-400/20"
-              }`}
+            <div
+              className="relative rounded-xl overflow-hidden min-h-[60px] self-stretch"
+              data-testid="settled-bestwon-cashed"
             >
-              <Banknote size={20} /> {t("wall.cashed")}
-              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
-            </button>
+              {/* Best Won — upper-right triangle (gold): all won Smart/Risk/Community/System picks */}
+              <button
+                type="button"
+                data-testid="settled-bestwon-toggle"
+                onClick={() => setSettledTab((v) => (v === "bestwon" ? null : "bestwon"))}
+                style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}
+                className={`absolute inset-0 flex items-start justify-end gap-1.5 pt-2.5 pr-3 font-heading font-black text-sm transition-colors ${
+                  settledTab === "bestwon"
+                    ? "bg-amber-400 text-void"
+                    : "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25"
+                }`}
+              >
+                <Trophy size={15} /> Best Won
+                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "bestwon" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
+              </button>
+              {/* Cashed Out — lower-left triangle (blue) */}
+              <button
+                type="button"
+                data-testid="settled-cashed-toggle"
+                onClick={() => setSettledTab((v) => (v === "cashed" ? null : "cashed"))}
+                style={{ clipPath: "polygon(0 0, 100% 100%, 0 100%)" }}
+                className={`absolute inset-0 flex items-end justify-start gap-1.5 pb-2.5 pl-3 font-heading font-black text-sm transition-colors ${
+                  settledTab === "cashed"
+                    ? "bg-sky-400 text-void"
+                    : "bg-sky-400/15 text-sky-300 hover:bg-sky-400/25"
+                }`}
+              >
+                <Banknote size={15} /> {t("wall.cashed")}
+                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
+              </button>
+              {/* diagonal divider */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.28) 50%, transparent calc(50% + 0.5px))" }} />
+            </div>
           </div>
 
           {settledTab === null && (
@@ -324,6 +351,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {lostTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
                 : lostTips.map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  ))}
+            </div>
+          )}
+
+          {settledTab === "bestwon" && (
+            <div data-testid="settled-bestwon-col" className="space-y-5">
+              <p className="text-sm text-amber-300/90 mb-1 flex items-center gap-2">
+                <Trophy size={15} /> Gewonnene Smart-, Risk-, Community- & System-Picks
+              </p>
+              {bestwonTips.length === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch keine dieser Picks gewonnen.</p>
+                : bestwonTips.map((tip, i) => (
                     <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
