@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-11d — System der Stunde uses full Anderlecht 3-leg combo
+- The hour-system now bundles the complete **"Über 1.5 Tore 1.HZ + Beide Teams treffen + Über 2.5 Tore"** combo per high-scoring game (total≥4, both score) as ONE selection (combo_markets), odds ~4-9. Persisted as a parlay leg carrying all 3 selections (HT-aware settlement). Up to 2 combo games.
+- `snapshot_systems` + Systems.jsx (SystemCard + visible filter) updated to allow single-selection combo systems; combo legs render as ✓-bulleted lines. Verified end-to-end (screenshot: card shows 3 legs @ 8.66).
+
 ### CHANGELOG 2026-07-11c — Anderlecht-style hot combo (single-match)
 - New single-match bet-builder for goal-heavy games (predicted total ≥4, both teams score): **"Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore"**, higher odds (~4-9), shown in the **Risk** filter. Persisted as a settleable combo (combo_legs kinds ht_o15/btts/o25).
 - Added `ht_o15`/`ht_o25`/`ht_u35` to `_grade_goal_leg` (combo HT settlement). BTTS safety-net fixed to NOT strip the first-half "Über 1.5 Tore 1. Halbzeit" leg (only redundant full-match o15). All leg-grading unit-tested.

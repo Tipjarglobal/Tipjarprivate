@@ -3599,16 +3599,35 @@ async def build_systems() -> dict:
         if ko and hour_lo <= ko <= hour_hi:
             near.append((ko, p))
     near.sort(key=lambda x: x[0])
-    hour_cands, used_h = [], set()
+    def _combo_odd(p, legs):
+        tot = 1.0
+        for mk, base in legs:
+            s = _apply_real(_sel(p, mk, base, 7.0))
+            tot *= float(s.get("odds") or base)
+        return round(tot, 2)
+
+    combo_games, single_cands, used_h = [], [], set()
     for ko, p in near:
         if p["id"] in used_h:
             continue
+        used_h.add(p["id"])
         team = _fav_team(p)
         fp = p.get("fav_prob") or 0
         total = p.get("total") or 0
-        # Owner: first-half goal markets are the heart of this system.
+        ph, pa = p.get("ph") or 0, p.get("pa") or 0
+        # HOT high-scoring game → the full "Anderlecht" 3-leg combo as ONE selection.
+        if total >= 4 and ph >= 1 and pa >= 1:
+            legs3 = [("Über 1.5 Tore 1. Halbzeit", 2.60),
+                     ("Beide Teams treffen", 1.80),
+                     ("Über 2.5 Tore", 1.85)]
+            sel = _sel(p, "Über 1.5 Tore 1. HZ + Beide treffen + Über 2.5 Tore",
+                       _combo_odd(p, legs3), 6.5)
+            sel["combo_markets"] = [m for m, _ in legs3]
+            combo_games.append(sel)
+            continue
+        # otherwise a single flexible leg (first-half goals preferred)
         if total >= 3.2 or p.get("over25"):
-            mk, od, rt = "Über 1.5 Tore 1. Halbzeit", 2.60, 6.5   # torreiches Spiel → 2+ Tore 1.HZ
+            mk, od, rt = "Über 1.5 Tore 1. Halbzeit", 2.60, 6.5
         elif p.get("btts"):
             mk, od, rt = "Beide Teams treffen (BTTS)", 1.90, 7.0
         elif team and fp >= 55:
@@ -3617,11 +3636,8 @@ async def build_systems() -> dict:
             dc = "1X" if p.get("fav") == "home" else "X2"
             mk, od, rt = f"{team} Doppelte Chance {dc}", round(_dc_odds(fp) * 1.15, 2), 7.5
         else:
-            mk, od, rt = "Über 0.5 Tore 1. Halbzeit", 1.45, 7.5   # sichere HZ-Variante
-        hour_cands.append(_apply_real(_sel(p, mk, od, rt)))
-        used_h.add(p["id"])
-        if len(hour_cands) >= 4:
-            break
+            mk, od, rt = "Über 0.5 Tore 1. Halbzeit", 1.45, 7.5
+        single_cands.append(_apply_real(_sel(p, mk, od, rt)))
 
     def _prod(ls):
         r = 1.0
@@ -3630,10 +3646,14 @@ async def build_systems() -> dict:
         return r
 
     hour = []
-    if len(hour_cands) >= 2:
-        hour_cands.sort(key=lambda s: float(s.get("odds") or 1), reverse=True)
+    if combo_games:
+        # A single Anderlecht combo (~4-9 odds) already clears 3.6 → that's the system.
+        # Add a 2nd combo for extra Wumms when available (max 2 to stay sane).
+        hour = combo_games[:2]
+    elif len(single_cands) >= 2:
+        single_cands.sort(key=lambda s: float(s.get("odds") or 1), reverse=True)
         picked = []
-        for s in hour_cands:
+        for s in single_cands:
             picked.append(s)
             if len(picked) >= 2 and _prod(picked) > 3.6:
                 break
@@ -3680,14 +3700,16 @@ async def snapshot_systems() -> int:
     saved = 0
     for s in data.get("systems", []):
         sels = s.get("selections") or []
-        if len(sels) < 2:
+        # A single-game 3-leg combo (Anderlecht) counts as a full slip on its own.
+        has_combo = any(sel.get("combo_markets") for sel in sels)
+        if len(sels) < 2 and not has_combo:
             continue
         legs = [{
             "match": f"{sel.get('home_team')} \u2013 {sel.get('away_team')}",
             "league": sel.get("league") or "",
             "kickoff": sel.get("match_time") or "",
             "sel_odds": [f"{sel.get('odds')}"],
-            "selections": [sel.get("market")],
+            "selections": sel.get("combo_markets") or [sel.get("market")],
             "status": "open",
         } for sel in sels]
         tip_id = f"hqsys-{s.get('key')}-{day}"

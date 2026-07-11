@@ -32,7 +32,8 @@ const SystemCard = ({ system }) => {
   const { t } = useI18n();
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
-  if (!system.selections || system.selections.length < 2) return null;
+  const hasCombo = (system.selections || []).some((s) => s.combo_markets);
+  if (!system.selections || (system.selections.length < 2 && !hasCombo)) return null;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -89,9 +90,20 @@ const SystemCard = ({ system }) => {
                   {s.home_team} <span className="text-zinc-600">vs</span> {s.away_team}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5 leading-snug break-words">
-                {formatSelection(s.market, t)}{s.match_time ? ` · ${s.match_time}` : ""}
-              </p>
+              {s.combo_markets ? (
+                <div className="mt-1 space-y-0.5">
+                  {s.combo_markets.map((m, idx) => (
+                    <p key={idx} className="text-xs text-zinc-300 leading-snug break-words flex items-start gap-1.5">
+                      <span className="text-volt mt-0.5">✓</span> {formatSelection(m, t)}
+                    </p>
+                  ))}
+                  {s.match_time && <p className="text-[10px] text-zinc-600 mt-0.5">{s.match_time}</p>}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-400 mt-0.5 leading-snug break-words">
+                  {formatSelection(s.market, t)}{s.match_time ? ` · ${s.match_time}` : ""}
+                </p>
+              )}
             </div>
             <div className="text-right shrink-0 pt-0.5">
               <OddsValue odds={s.odds} className={`font-mono font-bold text-sm ${cfg.odds}`} />
@@ -111,7 +123,8 @@ export const Systems = () => {
     api.get("/systems").then(({ data }) => setSystems(data.systems || [])).catch(() => {});
   }, []);
 
-  const visible = systems.filter((s) => s.selections && s.selections.length >= 2);
+  const visible = systems.filter((s) => s.selections
+    && (s.selections.length >= 2 || s.selections.some((sel) => sel.combo_markets)));
   if (visible.length === 0) return null;
 
   return (
