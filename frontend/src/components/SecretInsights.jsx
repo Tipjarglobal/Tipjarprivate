@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
 
@@ -45,6 +45,8 @@ export default function SecretInsights() {
         <LiveHealth health={health} healthErr={healthErr} />
 
         <PickManager />
+
+        <SettlementMonitor />
 
         {!data && !err && (
           <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={18} /> lädt…</div>
@@ -286,3 +288,90 @@ const PickManager = () => {
   );
 };
 
+
+
+// ── Settlement Monitor ───────────────────────────────────────
+// Owner tool: watch System picks & first-half (HT) combos auto-settle in production.
+const STAT_STYLE = {
+  pending: "bg-zinc-700/40 text-zinc-300", live: "bg-lost/20 text-lost",
+  won: "bg-won/20 text-won", lost: "bg-lost/20 text-lost", void: "bg-zinc-700/40 text-zinc-400",
+};
+const STAT_LABEL = { pending: "OFFEN", live: "LIVE", won: "GEWONNEN", lost: "VERLOREN", void: "VOID" };
+
+const MonitorGroup = ({ title, data }) => {
+  if (!data) return null;
+  const s = data.summary || {};
+  return (
+    <div className="mb-5 last:mb-0">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <p className="text-[10px] uppercase tracking-widest text-zinc-500">{title}</p>
+        <span className="text-[10px] text-zinc-400">gesamt {s.total || 0}</span>
+        <span className="text-[10px] text-zinc-500">· offen {s.pending || 0}</span>
+        <span className="text-[10px] text-won">· {s.won || 0} gewonnen</span>
+        <span className="text-[10px] text-lost">· {s.lost || 0} verloren</span>
+        {s.void ? <span className="text-[10px] text-zinc-500">· {s.void} void</span> : null}
+      </div>
+      <div className="space-y-2">
+        {(data.items || []).slice(0, 25).map((t) => (
+          <div key={t.id} className="rounded-xl border border-elevated bg-void/40 p-3" data-testid={`sm-${t.id}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-white font-semibold break-words">{t.market || "—"}</p>
+                <p className="text-[11px] text-zinc-500">{t.league} {t.odds ? `· Quote ${t.odds}` : ""}</p>
+              </div>
+              <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${STAT_STYLE[t.status] || "bg-zinc-700/40 text-zinc-300"}`}>
+                {STAT_LABEL[t.status] || (t.status || "").toUpperCase()}
+              </span>
+            </div>
+            {(t.legs || []).length > 0 && (
+              <div className="mt-1.5 space-y-0.5">
+                {t.legs.map((l, i) => (
+                  <p key={i} className="text-[11px] text-zinc-400 break-words flex items-start gap-1.5">
+                    <span className={l.status === "won" ? "text-won" : l.status === "lost" ? "text-lost" : "text-zinc-600"}>
+                      {l.status === "won" ? "✓" : l.status === "lost" ? "✕" : "•"}
+                    </span>
+                    <span>{l.match ? `${l.match}: ` : ""}{(l.sel || []).join(" + ")}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const SettlementMonitor = () => {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  const load = () => {
+    setErr(false);
+    api.get("/admin/settlement-monitor").then((r) => setData(r.data)).catch(() => setErr(true));
+  };
+  useEffect(load, []);
+  return (
+    <div className="rounded-2xl border border-elevated bg-surface p-5 mb-8" data-testid="settlement-monitor">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Layers className="text-volt" size={16} />
+          <p className="text-xs uppercase tracking-widest text-zinc-400">Settlement-Monitor · Systeme & HZ-Combos</p>
+        </div>
+        <button onClick={load} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="sm-refresh">
+          <RefreshCw size={15} />
+        </button>
+      </div>
+      {!data && !err && <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={16} /> lädt…</div>}
+      {err && <p className="text-lost text-sm">Konnte Settlement-Daten nicht laden.</p>}
+      {data && (
+        <>
+          <MonitorGroup title="System-Picks (hq-system)" data={data.systems} />
+          <MonitorGroup title="Erste-Halbzeit-Combos" data={data.ht_combos} />
+          {(data.systems?.summary?.total || 0) + (data.ht_combos?.summary?.total || 0) === 0 && (
+            <p className="text-sm text-zinc-600">Noch keine System-/HZ-Combo-Tipps.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+};

@@ -2108,6 +2108,40 @@ async def admin_pending_tips(admin: dict = Depends(require_admin)):
     return {"count": len(items), "items": items}
 
 
+@api_router.get("/admin/settlement-monitor")
+async def admin_settlement_monitor(admin: dict = Depends(require_admin)):
+    """Owner monitoring: track settlement of System picks (source=hq-system) and
+    first-half (HT) bet-builders so we can confirm they auto-resolve in production."""
+    def _clean(t):
+        legs = t.get("legs") or t.get("combo_legs") or []
+        return {
+            "id": t.get("id"), "status": t.get("status"),
+            "market": t.get("market"), "league": t.get("league"),
+            "odds": t.get("odds"), "settled_at": t.get("settled_at"),
+            "match_time": t.get("match_time"),
+            "legs": [{"match": l.get("match") or "", "sel": l.get("selections") or [l.get("market")],
+                      "status": l.get("status")} for l in legs],
+        }
+    systems = await db.tips.find({"source": "hq-system"}).sort("created_at", -1).to_list(200)
+    ht = await db.tips.find(
+        {"source": {"$ne": "hq-system"},
+         "$or": [{"market": {"$regex": "Halbzeit", "$options": "i"}},
+                 {"combo_legs.market": {"$regex": "Halbzeit", "$options": "i"}}]}
+    ).sort("created_at", -1).to_list(200)
+
+    def _summary(rows):
+        return {"total": len(rows),
+                "pending": sum(1 for r in rows if r.get("status") in ("pending", "live")),
+                "won": sum(1 for r in rows if r.get("status") == "won"),
+                "lost": sum(1 for r in rows if r.get("status") == "lost"),
+                "void": sum(1 for r in rows if r.get("status") == "void")}
+    return {
+        "systems": {"summary": _summary(systems), "items": [_clean(t) for t in systems]},
+        "ht_combos": {"summary": _summary(ht), "items": [_clean(t) for t in ht]},
+    }
+
+
+
 # ------------------------------------------------------------------ Web Push (VAPID)
 class PushSubIn(BaseModel):
     endpoint: str
@@ -2968,7 +3002,7 @@ async def seed_showcase():
     allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
-        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-|hqcur-)"}},
+        "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-|hqcur-|hqsys-)"}},
         "status": {"$nin": ["won", "lost", "live"]},
     })
 

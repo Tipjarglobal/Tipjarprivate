@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-11e — Settlement Monitor + CRITICAL system-pick persistence fix
+- **CRITICAL FIX:** the startup cleanup (`_startup_seed`) was deleting every pending `hqsys-*` system pick on each backend restart/deploy (id regex only whitelisted hqtip-/hqlive-/smart-/hqcur-). Added `hqsys-` → system picks now survive restarts (verified 6→6). Without this the whole "does a system ever win" tracking silently wiped daily.
+- **New admin Settlement-Monitor** (`GET /admin/settlement-monitor` + panel in /insights): live status (OFFEN/GEWONNEN/VERLOREN) of all System picks (hq-system) and first-half (HT) combos, with per-leg breakdown, so the owner can watch auto-settlement in production. Verified via screenshot.
+
 ### CHANGELOG 2026-07-11d — System der Stunde uses full Anderlecht 3-leg combo
 - The hour-system now bundles the complete **"Über 1.5 Tore 1.HZ + Beide Teams treffen + Über 2.5 Tore"** combo per high-scoring game (total≥4, both score) as ONE selection (combo_markets), odds ~4-9. Persisted as a parlay leg carrying all 3 selections (HT-aware settlement). Up to 2 combo games.
 - `snapshot_systems` + Systems.jsx (SystemCard + visible filter) updated to allow single-selection combo systems; combo legs render as ✓-bulleted lines. Verified end-to-end (screenshot: card shows 3 legs @ 8.66).
