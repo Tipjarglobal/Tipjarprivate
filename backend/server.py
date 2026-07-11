@@ -2147,8 +2147,11 @@ def _push_payload_for_tip(tip: dict) -> dict:
     sound = "explosion" if stars >= 10 else ("fire" if stars == 9 else "coin")
     is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
     if is_live:
+        # Owner (2026-07-10): live in-play bets are never "impossible to lose" — cap at
+        # 7★ and never fire the 9/10★ explosion sound.
+        stars = min(stars, 7)
         return {"title": "🔵 LIVE-Pick", "body": detail, "url": "/", "kind": "live",
-                "sound": "explosion" if stars >= 9 else sound,
+                "sound": "coin",
                 "icon": "/push-live.png", "badge": "/push-live.png", "tag": f"tj-{tip.get('id')}"}
     cat = (tip.get("category") or "").lower()
     src = tip.get("source")
@@ -3795,12 +3798,15 @@ def _forebet_candidates(r: dict) -> list[dict]:
         # (single -1.5 handicap per match, realistic odds) — no duplicate here.
         # underdog team-to-score (owner idea) — passes the gate only if the book
         # prices it >= 1.60 while our winprob is high enough.
-        if pred == "1" and pa >= 1:
-            opts.append({"sfx": "-utg", "market": f"{away} Über 0.5 Tore",
-                         "odds": "1.45", "rating": 8.0, "winprob": 0.66})
-        elif pred == "2" and ph >= 1:
-            opts.append({"sfx": "-utg", "market": f"{home} Über 0.5 Tore",
-                         "odds": "1.45", "rating": 8.0, "winprob": 0.66})
+        # Owner (2026-07-10): FAVOURITE to score over 0.5 (safe — a clear favourite
+        # almost always scores). The risky UNDERDOG-to-score single was removed after
+        # France–Morocco (the weak side that can't create chances must never anchor a pick).
+        if pred == "1" and ph >= 1:
+            opts.append({"sfx": "-ftg", "market": f"{home} Über 0.5 Tore",
+                         "odds": "1.22", "rating": 8.5, "winprob": 0.88})
+        elif pred == "2" and pa >= 1:
+            opts.append({"sfx": "-ftg", "market": f"{away} Über 0.5 Tore",
+                         "odds": "1.22", "rating": 8.5, "winprob": 0.88})
         # DYNAMIC single-game bet-builder (owner: "as many legs from one game as you
         # want — just win, but NEVER add a redundant leg"). Both teams to score already
         # guarantees at least 2 goals, so 'Über 1.5 Tore' is IMPLIED and must never be
@@ -3808,42 +3814,42 @@ def _forebet_candidates(r: dict) -> list[dict]:
         # only with a 1-goal safety buffer under the predicted total. If nothing extra
         # qualifies we simply keep the classic 'both teams to score'.
         if sc and pred in ("1", "2") and ph >= 1 and pa >= 1 and total >= 3:
-            # Owner rule: a both-teams-to-score builder is written simply as
-            # "Beide Teams treffen" — ONE clean leg, never split into per-team
-            # "Über 0.5 Tore" and never with a redundant "Über 1.5 Tore" on top.
+            # Owner (2026-07-10): the risky "Beide Teams treffen" builder is replaced by a
+            # FAVOURITE-anchored combo that never needs the underdog to score:
+            #   {Favourite} Über 0.5 Tore  +  Über 1.5 Tore gesamt  (+ Über 0.5 Tore 2. HZ)
+            # Games like France–Morocco (weak side kept scoreless) now still win. Every
+            # leg settles deterministically via _grade_goal_leg.
+            fav_team = home if pred == "1" else away
             clegs = [
-                {"market": "Beide Teams treffen", "base_odd": 1.70, "kind": "btts"},
+                {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.22,
+                 "kind": "team_o05", "team": fav_team},
+                {"market": "Über 1.5 Tore", "base_odd": 1.30, "kind": "o15"},
             ]
-            goals_base = {2: 2.00, 3: 3.20, 4: 5.50}
-            top = min(total - 2, 4)   # highest NON-implied over-line with a 1-goal buffer
-            for k in range(2, top + 1):
-                clegs.append({"market": f"Über {k}.5 Tore",
-                              "base_odd": goals_base.get(k, 5.50), "kind": f"o{k}5"})
+            if total >= 4:
+                clegs.append({"market": "Über 0.5 Tore 2. Halbzeit",
+                              "base_odd": 1.40, "kind": "sh_o05"})
             n = len(clegs)
-            if n == 1:
-                # Pure both-teams-to-score → a clean SINGLE pick ("Beide Teams
-                # treffen" and nothing more), never a 1-leg "Kombi".
-                opts.append({"sfx": "-btts", "market": "Beide Teams treffen",
-                             "odds": "1.70", "rating": 7.5, "winprob": 0.64})
-            else:
-                cmarket = f"Beide Teams treffen + Über {top}.5 Tore ({n}er-Bet-Builder)"
-                wp = max(0.45, 0.64 - 0.04 * (n - 1))
-                opts.append({
-                    "sfx": "-combo", "combo": True, "rating": 7.5, "winprob": wp,
-                    "market": cmarket,
-                    "legs": clegs,
-                })
+            others = " + ".join(l["market"] for l in clegs[1:])
+            cmarket = f"{fav_team} Über 0.5 Tore + {others} ({n}er-Bet-Builder)"
+            wp = 0.72 if n == 2 else 0.60
+            opts.append({
+                "sfx": "-favbb", "combo": True, "rating": 7.5, "winprob": wp,
+                "market": cmarket, "legs": clegs,
+            })
         # ── Extra sensible single-game builders (owner-requested variety). Every leg is
         # deterministically settleable via _grade_goal_leg, so nothing can get stuck. ──
         fav_side = pred if pred in ("1", "2") else None
-        # (a) Beide Teams treffen + Doppelte Chance (goals side backed by the favourite)
-        if sc and ph >= 1 and pa >= 1 and total >= 3 and fav_side:
+        # (a) Favourite Über 0.5 Tore + Doppelte Chance (both backed by the strong side —
+        # replaces the old BTTS+DC builder; the underdog is never required to score).
+        if sc and total >= 2 and fav_side:
+            fav_team = home if fav_side == "1" else away
             dc_kind, dc_lbl = ("dc_1x", "1X") if fav_side == "1" else ("dc_x2", "X2")
             opts.append({
-                "sfx": "-bttsdc", "combo": True, "rating": 7.5, "winprob": 0.50,
-                "market": f"Beide Teams treffen + Doppelte Chance {dc_lbl} (Bet-Builder)",
+                "sfx": "-favdc", "combo": True, "rating": 7.5, "winprob": 0.70,
+                "market": f"{fav_team} Über 0.5 Tore + Doppelte Chance {dc_lbl} (Bet-Builder)",
                 "legs": [
-                    {"market": "Beide Teams treffen", "base_odd": 1.55, "kind": "btts"},
+                    {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.22,
+                     "kind": "team_o05", "team": fav_team},
                     {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.28, "kind": dc_kind},
                 ],
             })
@@ -4050,17 +4056,14 @@ async def forebet_autopost() -> dict:
                 # Banker, regardless of odds — the safest picks always live in Banker.
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
-            elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.42:
+            elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.62:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
             elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
-            else:
-                # Guarantee coverage: anything else becomes a Value pick so every
-                # single AI tip always lands in Banker / Value / Risk (owner rule).
-                o2["_ptype"] = "value"
-                value_opts.append(o2)
+            # else: DROP it (owner 2026-07-10: fewer picks, but only ones we actually win.
+            # A single with <62% win chance is a coin-flip and is no longer posted.)
         # Post the best pick of EACH available category for this match so all three
         # filters (Banker / Value / Risk) stay populated.
         cat_best = []
@@ -4128,6 +4131,10 @@ async def forebet_autopost() -> dict:
         # Stars now come straight from the win probability (owner rule): the old 8.5
         # ceiling is gone — a ≥96% pick shows the full 10 stars, 90% → 9, etc.
         stars = max(1, min(10, round(winprob * 10)))
+        # Owner (2026-07-10): a "Beide Teams treffen" market is a wobbly bet — cap it at
+        # 6★ so it can never look like a near-certain 9/10★ pick.
+        if "beide teams treffen" in market.lower():
+            stars = min(stars, 6)
         rating = float(stars)
         score = r.get("score") or "?"
         avg = r.get("avg") or "?"
@@ -5217,7 +5224,8 @@ async def live_autopost() -> dict:
         )
         await db.tips.update_one({"id": live_id}, {
             "$set": {
-                "market": t.get("market"), "odds": f"{odd:.2f}", "ai_rating": t.get("ai_rating"),
+                "market": t.get("market"), "odds": f"{odd:.2f}",
+                "ai_rating": min(7.0, float(t.get("ai_rating") or 7.0)), "win_prob": 0.7,
                 "ai_analysis": analysis, "status": "live", "match_time": t.get("match_time"),
                 "live_minute": minute, "live_score": f"{hg}:{ag}", "updated_at": now,
             },
@@ -5278,8 +5286,9 @@ async def live_autopost() -> dict:
         live_id = f"hqlive-fresh-{fid}"
         await db.tips.update_one({"id": live_id}, {
             "$set": {
-                "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.5,
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.0,
                 "ai_analysis": analysis, "status": "live",
+                "win_prob": 0.7,
                 "live_minute": minute, "live_score": f"{goals.get('home') or 0}:{goals.get('away') or 0}",
                 "updated_at": now,
             },
