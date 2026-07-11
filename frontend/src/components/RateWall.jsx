@@ -124,9 +124,9 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const loadSettled = useCallback(async () => {
     try {
       const [w, l, c, counts] = await Promise.all([
-        api.get("/tips", { params: { status: "won", sort: "new", limit: 100 } }),
-        api.get("/tips", { params: { status: "lost", sort: "new", limit: 100 } }),
-        api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 100 } }),
+        api.get("/tips", { params: { status: "won", sort: "new", limit: 1000 } }),
+        api.get("/tips", { params: { status: "lost", sort: "new", limit: 1000 } }),
+        api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 1000 } }),
         api.get("/tips/counts"),
       ]);
       setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data);

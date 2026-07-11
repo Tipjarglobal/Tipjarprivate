@@ -471,6 +471,7 @@ async def tips_counts():
     """Post counts per picks area — powers the homepage badges & area alerts.
     The AI badge reflects the next-24h picks (the default view) so it stays realistic."""
     await purge_expired_autotips()
+    await purge_settled_tips()
     now = datetime.now(timezone.utc)
     # AI badge = every pending Single-Game pick (singles + bet-builder combos, all
     # days) so it matches the bundled red "new" count and the Banker/Value/Risk tabs.
@@ -1181,7 +1182,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["source"] = "smart"
     elif source == "members":
         q["source"] = {"$nin": ["hq-auto", "smart"]}
-    limit = max(1, min(limit, 100))
+    limit = max(1, min(limit, 1000))
     fetch = 300 if window in ("24", "48", "48plus") else (200 if source == "ai" else limit)
     if sort == "top":
         cursor = db.tips.find(q, {"_id": 0}).sort([("avg_rating", -1), ("ratings_count", -1)]).limit(fetch)
