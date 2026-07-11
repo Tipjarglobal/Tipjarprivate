@@ -2458,17 +2458,23 @@ def _grade_goal_leg(kind, market, team, fx):
         return ag >= hg
     if k == "dc_12":
         return hg != ag
-    if k in ("ht_o05", "sh_o05", "o05_each", "ht_u25", "ht1_win"):
+    if k in ("ht_o05", "ht_o15", "ht_o25", "sh_o05", "o05_each", "ht_u25", "ht_u35", "ht1_win"):
         if not ht_known:
             return None                  # no half-time data → don't guess
         if k == "ht_o05":
             return ht_total >= 1
+        if k == "ht_o15":
+            return ht_total >= 2
+        if k == "ht_o25":
+            return ht_total >= 3
         if k == "sh_o05":
             return sh_total >= 1
         if k == "o05_each":
             return ht_total >= 1 and sh_total >= 1
         if k == "ht_u25":
             return ht_total <= 2
+        if k == "ht_u35":
+            return ht_total <= 3
         if k == "ht1_win":
             if _teams_match(fx.get("home_name", ""), team):
                 return hth > hta
@@ -4053,6 +4059,19 @@ def _forebet_candidates(r: dict) -> list[dict]:
                     {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.28, "kind": dc_kind},
                 ],
             })
+        # (a2) HOT high-scoring "Anderlecht-style" builder (owner 2026-07-11): for open,
+        # goal-heavy games → Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore.
+        # Higher odds/risk; every leg settles deterministically (ht_o15 / btts / o25).
+        if sc and total >= 4 and ph >= 1 and pa >= 1:
+            opts.append({
+                "sfx": "-hot", "combo": True, "hot": True, "rating": 7.0, "winprob": 0.40,
+                "market": "Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore (3er-Bet-Builder)",
+                "legs": [
+                    {"market": "Über 1.5 Tore 1. Halbzeit", "base_odd": 2.60, "kind": "ht_o15"},
+                    {"market": "Beide Teams treffen", "base_odd": 1.80, "kind": "btts"},
+                    {"market": "Über 2.5 Tore", "base_odd": 1.85, "kind": "o25"},
+                ],
+            })
         # (b) Über 2.5 Tore + Doppelte Chance 12 (high-scoring game, draw unlikely)
         if sc and total >= 4 and len(probs) >= 3 and (probs[0] + probs[2]) >= 60:
             opts.append({
@@ -4229,9 +4248,16 @@ async def forebet_autopost() -> dict:
                     legs.append({"home": home, "away": away, "market": lg["market"],
                                  "odds": od, "kind": lg["kind"], "team": lg.get("team", "")})
                 # Bet-Builder combos are the owner's favourite "nice" tips (goals each
-                # half, both-teams-score + DC, Über 2.5 + DC12 …). They always live in
-                # VALUE within the sweet-spot 1.40–3.0; anything wilder is dropped.
-                if 1.40 <= prod <= 3.0:
+                # half, favourite scores + DC, Über 2.5 + DC12 …). They live in VALUE
+                # within 1.40–3.0. The HOT high-scoring builder allows bigger odds and
+                # lands in the RISK filter (but stays a settleable combo).
+                if o.get("hot"):
+                    if 3.0 <= prod <= 15.0:
+                        o2 = dict(o)
+                        o2["_odd"], o2["_legs"] = round(prod, 2), legs
+                        o2["_ptype"], o2["_real"] = "combo", True
+                        risk_opts.append(o2)
+                elif 1.40 <= prod <= 3.0:
                     o2 = dict(o)
                     o2["_odd"], o2["_legs"] = round(prod, 2), legs
                     o2["_ptype"], o2["_real"] = "combo", True
@@ -4314,8 +4340,14 @@ async def forebet_autopost() -> dict:
             _legs = c.get("_legs", [])
             if any((lg.get("kind") == "btts" or "beide teams treffen" in (lg.get("market", "") or "").lower())
                    for lg in _legs):
-                _kept = [lg for lg in _legs if lg.get("kind") != "o15"
-                         and "über 1.5 tore" not in (lg.get("market", "") or "").lower()]
+                # strip ONLY the redundant full-match "Über 1.5 Tore" — never the
+                # first-half "Über 1.5 Tore 1. Halbzeit" leg (owner's Anderlecht builder).
+                def _is_redundant_o15(lg):
+                    mk = (lg.get("market", "") or "").lower()
+                    if "halbzeit" in mk or "hz" in mk:
+                        return False
+                    return lg.get("kind") == "o15" or "über 1.5 tore" in mk
+                _kept = [lg for lg in _legs if not _is_redundant_o15(lg)]
                 if len(_kept) != len(_legs):
                     c["_legs"] = _kept
                     _p = 1.0

@@ -9,6 +9,10 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-11c — Anderlecht-style hot combo (single-match)
+- New single-match bet-builder for goal-heavy games (predicted total ≥4, both teams score): **"Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore"**, higher odds (~4-9), shown in the **Risk** filter. Persisted as a settleable combo (combo_legs kinds ht_o15/btts/o25).
+- Added `ht_o15`/`ht_o25`/`ht_u35` to `_grade_goal_leg` (combo HT settlement). BTTS safety-net fixed to NOT strip the first-half "Über 1.5 Tore 1. Halbzeit" leg (only redundant full-match o15). All leg-grading unit-tested.
+
 ### CHANGELOG 2026-07-11b — First-half (HT) settlement + HT markets in System der Stunde
 - **New `_grade_ht_selection`**: first-half goal markets (Über/Unter X.5 Tore 1. Halbzeit) now settled deterministically from the half-time score (fixtures carry ht_home/ht_away). Wired into `settle_multimatch_parlays` (falls back to LLM judge for non-HT markets; keeps leg open if HT data missing). Unit-tested, all pass.
 - **System der Stunde** now leads with "Über 1.5 Tore 1. Halbzeit" for high-scoring games (the Lyon/Anderlecht style) + safe "Über 0.5 / Unter 3.5 Tore 1. Halbzeit" variants. Total odds still enforced >3.6 (test: 4.94).
