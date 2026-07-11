@@ -5148,19 +5148,30 @@ async def smart_autopost() -> dict:
         tip_id = f"smart-{mkey}-builder"
         if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
             continue
-        legs = [{"market": c["market"], "odds": str(c["odds"]), "kind": "player", "status": "open"}
-                for c in props]
-        legs.append({"market": "Über 8.5 Ecken (Spiel gesamt)", "odds": "1.80",
-                     "kind": "corner_o", "line": 8.5, "status": "open"})
+        combo_legs = [{"home": home, "away": away, "market": c["market"],
+                       "odds": str(c["odds"]), "kind": "player", "team": "", "status": "open"}
+                      for c in props]
+        combo_legs.append({"home": home, "away": away, "market": "Über 8.5 Ecken",
+                           "odds": "1.80", "kind": "corner_o", "line": 8.5,
+                           "team": "", "status": "open"})
         prod = 1.0
-        for lg in legs:
+        for lg in combo_legs:
             try:
                 prod *= float(lg["odds"])
             except Exception:
                 pass
+        # Frontend display leg (one match, all selections bundled) — mirrors AI bet-builders
+        display_legs = [{
+            "match": f"{home} – {away}",
+            "league": "TipJarHQ Smart Pick",
+            "kickoff": p.get("kickoff") or "",
+            "selections": [lg["market"] for lg in combo_legs],
+            "sel_odds": [str(lg["odds"]) for lg in combo_legs],
+            "status": "pending",
+        }]
         avg_rating = round(sum(c["rating"] for c in props) / len(props), 1)
         analysis = (
-            f"TipJarHQ Mega Bet-Builder: {len(legs)} datenbasierte Spieler-Props & Team-Märkte "
+            f"TipJarHQ Mega Bet-Builder: {len(combo_legs)} datenbasierte Spieler-Props & Team-Märkte "
             f"(Schüsse, Schüsse aufs Tor, Fouls, Ecken …) für {home} vs {away}. "
             f"Anstoß {p.get('kickoff')}. Quoten sind Schätzungen."
         )
@@ -5171,10 +5182,10 @@ async def smart_autopost() -> dict:
             "match_time": p.get("kickoff") or "",
             "country": p.get("country") or "", "league": "TipJarHQ Smart Pick",
             "league_code": p.get("league_code") or "",
-            "market": f"{home} vs {away} — Mega Bet-Builder ({len(legs)} Legs)",
-            "odds": f"{round(prod, 2)}", "combo_legs": legs, "is_parlay": True,
+            "market": f"{home} vs {away} — Mega Bet-Builder ({len(combo_legs)} Legs)",
+            "odds": f"{round(prod, 2)}", "combo_legs": combo_legs, "is_parlay": True,
             "ai_rating": avg_rating, "ai_analysis": analysis,
-            "legs": [], "stake": "", "potential_return": "",
+            "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
         })
