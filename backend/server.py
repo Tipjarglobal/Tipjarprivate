@@ -496,6 +496,14 @@ async def tips_counts():
             {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
         ],
     })
+    won_normal_n = await db.tips.count_documents({
+        "status": "won",
+        "id": {"$not": {"$regex": "^seed-"}},
+        "$or": [
+            {"source": "hq-live"},
+            {"source": "hq-auto", "category": {"$ne": "risk"}},
+        ],
+    })
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
@@ -503,7 +511,8 @@ async def tips_counts():
         systems_n = 0
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
             "systems": systems_n, "smart": smart, "settled": settled,
-            "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n}
+            "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
+            "won_normal": won_normal_n}
 
 
 
@@ -1200,6 +1209,14 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             {"source": "hq-system"},
             {"source": "hq-auto", "category": "risk"},
             {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
+        ]
+        q["id"] = {"$not": {"$regex": "^seed-"}}
+    elif source == "normalwon":
+        # The plain green "Won" bucket: ordinary AI value/banker singles + live wins.
+        # The "best" wins (smart/risk/community/system) live in the Cashed-Out bucket.
+        q["$or"] = [
+            {"source": "hq-live"},
+            {"source": "hq-auto", "category": {"$ne": "risk"}},
         ]
         q["id"] = {"$not": {"$regex": "^seed-"}}
     limit = max(1, min(limit, 1000))
@@ -3529,20 +3546,78 @@ async def build_systems() -> dict:
         _apply_real(s)
     for s in vals:
         _apply_real(s)
+
+    # 6) SYSTEM DER STUNDE — flash combo ~1h before kickoff. Flexible full-match markets
+    # (team win / double chance / over goals / BTTS) so it settles reliably. Total odds
+    # MUST exceed 3.6. Owner: "sei sehr flexibel, kannst auch sichere Variante gehen".
+    now_dt = datetime.now(timezone.utc)
+    hour_lo, hour_hi = now_dt - timedelta(minutes=10), now_dt + timedelta(minutes=90)
+    near = []
+    for p in preds:
+        ko = _parse_kickoff(p.get("kickoff"))
+        if ko and hour_lo <= ko <= hour_hi:
+            near.append((ko, p))
+    near.sort(key=lambda x: x[0])
+    hour_cands, used_h = [], set()
+    for ko, p in near:
+        if p["id"] in used_h:
+            continue
+        team = _fav_team(p)
+        fp = p.get("fav_prob") or 0
+        total = p.get("total") or 0
+        if p.get("over25") or total >= 3.5:
+            mk, od, rt = "Über 2.5 Tore", 1.95, 7.5
+        elif p.get("btts"):
+            mk, od, rt = "Beide Teams treffen (BTTS)", 1.90, 7.0
+        elif team and fp >= 55:
+            mk, od, rt = f"{team} Sieg", round(max(1.65, min(2.6, 100.0 / fp)), 2), 7.0
+        elif team:
+            dc = "1X" if p.get("fav") == "home" else "X2"
+            mk, od, rt = f"{team} Doppelte Chance {dc}", round(_dc_odds(fp) * 1.15, 2), 7.5
+        else:
+            mk, od, rt = "Über 1.5 Tore", 1.35, 8.0
+        hour_cands.append(_apply_real(_sel(p, mk, od, rt)))
+        used_h.add(p["id"])
+        if len(hour_cands) >= 4:
+            break
+
+    def _prod(ls):
+        r = 1.0
+        for s in ls:
+            r *= float(s.get("odds") or 1)
+        return r
+
+    hour = []
+    if len(hour_cands) >= 2:
+        hour_cands.sort(key=lambda s: float(s.get("odds") or 1), reverse=True)
+        picked = []
+        for s in hour_cands:
+            picked.append(s)
+            if len(picked) >= 2 and _prod(picked) > 3.6:
+                break
+        if len(picked) >= 2 and _prod(picked) > 3.6:
+            hour = picked
+
+    systems = [
+        _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
+                         "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
+        _finalize_system(bankers, len(bankers), "value", "Banker-Kombi des Tages",
+                         "5 stärkste Favoriten · Doppelte Chance · echte Quoten", "value"),
+        _finalize_system(vals, 2, "smartvalue", "Value-Kombi des Tages",
+                         "Tor-Value: BTTS & Über 2.5 · mittlere Quote", "value"),
+        _finalize_system(risks, 0, "risk", "Risk-Kombi des Tages",
+                         "Doppelte Chance + Beide treffen · höhere Quote", "risk"),
+        _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi des Tages",
+                         "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
+    ]
+    if hour:
+        systems.insert(0, _finalize_system(
+            hour, 0, "hour", "System der Stunde",
+            "Το Σύστημα της Ώρας · startet ~1 Std. vor Anpfiff · Gesamtquote 3.6+", "value"))
+
     return {
         "week": datetime.now(timezone.utc).strftime("%d.%m.%Y"),
-        "systems": [
-            _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
-                             "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
-            _finalize_system(bankers, len(bankers), "value", "Banker-Kombi des Tages",
-                             "5 stärkste Favoriten · Doppelte Chance · echte Quoten", "value"),
-            _finalize_system(vals, 2, "smartvalue", "Value-Kombi des Tages",
-                             "Tor-Value: BTTS & Über 2.5 · mittlere Quote", "value"),
-            _finalize_system(risks, 0, "risk", "Risk-Kombi des Tages",
-                             "Doppelte Chance + Beide treffen · höhere Quote", "risk"),
-            _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi des Tages",
-                             "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
-        ],
+        "systems": systems,
     }
 
 
@@ -3574,6 +3649,10 @@ async def snapshot_systems() -> int:
             "status": "open",
         } for sel in sels]
         tip_id = f"hqsys-{s.get('key')}-{day}"
+        if s.get("key") == "hour":
+            # the hour-system changes through the day — one persisted tip per match set
+            sig = hashlib.md5("|".join(sorted(l["match"] for l in legs)).encode()).hexdigest()[:8]
+            tip_id = f"hqsys-hour-{sig}"
         await db.tips.update_one({"id": tip_id}, {
             "$setOnInsert": {
                 "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ System",

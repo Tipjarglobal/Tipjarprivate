@@ -125,7 +125,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const loadSettled = useCallback(async () => {
     try {
       const [w, l, c, bw, counts] = await Promise.all([
-        api.get("/tips", { params: { status: "won", sort: "new", limit: 1000 } }),
+        api.get("/tips", { params: { status: "won", source: "normalwon", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "lost", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "won", source: "bestwon", sort: "new", limit: 1000 } }),
@@ -133,7 +133,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       ]);
       setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); setBestwonTips(bw.data);
       setSettledCounts({
-        won: counts.data.won ?? w.data.length,
+        won: counts.data.won_normal ?? w.data.length,
         lost: counts.data.lost ?? l.data.length,
         cashed: counts.data.cashed ?? c.data.length,
         bestwon: counts.data.bestwon ?? bw.data.length,
@@ -291,43 +291,37 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               <XCircle size={20} /> {t("wall.filter.lost")}
               <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "lost" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.lost}</span>
             </button>
-            <div
-              className="relative rounded-xl overflow-hidden min-h-[60px] self-stretch"
-              data-testid="settled-bestwon-cashed"
+            <button
+              type="button"
+              data-testid="settled-special-toggle"
+              onClick={() => setSettledTab((v) => (v === "special" ? null : "special"))}
+              className="relative rounded-xl overflow-hidden min-h-[60px] self-stretch group"
             >
-              {/* Best Won — upper-right triangle (gold): all won Smart/Risk/Community/System picks */}
-              <button
-                type="button"
-                data-testid="settled-bestwon-toggle"
-                onClick={() => setSettledTab((v) => (v === "bestwon" ? null : "bestwon"))}
+              {/* upper-right triangle (gold) — Best Won */}
+              <span
+                aria-hidden
                 style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}
-                className={`absolute inset-0 flex items-start justify-end gap-1.5 pt-2.5 pr-3 font-heading font-black text-sm transition-colors ${
-                  settledTab === "bestwon"
-                    ? "bg-amber-400 text-void"
-                    : "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25"
+                className={`pointer-events-none absolute inset-0 flex items-start justify-end gap-1.5 pt-2.5 pr-3 font-heading font-black text-sm transition-colors ${
+                  settledTab === "special" ? "bg-amber-400 text-void" : "bg-amber-400/15 text-amber-300 group-hover:bg-amber-400/25"
                 }`}
               >
                 <Trophy size={15} /> Best Won
-                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "bestwon" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
-              </button>
-              {/* Cashed Out — lower-left triangle (blue) */}
-              <button
-                type="button"
-                data-testid="settled-cashed-toggle"
-                onClick={() => setSettledTab((v) => (v === "cashed" ? null : "cashed"))}
+                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
+              </span>
+              {/* lower-left triangle (blue) — Cashed Out */}
+              <span
+                aria-hidden
                 style={{ clipPath: "polygon(0 0, 100% 100%, 0 100%)" }}
-                className={`absolute inset-0 flex items-end justify-start gap-1.5 pb-2.5 pl-3 font-heading font-black text-sm transition-colors ${
-                  settledTab === "cashed"
-                    ? "bg-sky-400 text-void"
-                    : "bg-sky-400/15 text-sky-300 hover:bg-sky-400/25"
+                className={`pointer-events-none absolute inset-0 flex items-end justify-start gap-1.5 pb-2.5 pl-3 font-heading font-black text-sm transition-colors ${
+                  settledTab === "special" ? "bg-sky-400 text-void" : "bg-sky-400/15 text-sky-300 group-hover:bg-sky-400/25"
                 }`}
               >
                 <Banknote size={15} /> {t("wall.cashed")}
-                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "cashed" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
-              </button>
+                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
+              </span>
               {/* diagonal divider */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.28) 50%, transparent calc(50% + 0.5px))" }} />
-            </div>
+              <span aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.28) 50%, transparent calc(50% + 0.5px))" }} />
+            </button>
           </div>
 
           {settledTab === null && (
@@ -356,24 +350,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
             </div>
           )}
 
-          {settledTab === "bestwon" && (
-            <div data-testid="settled-bestwon-col" className="space-y-5">
-              <p className="text-sm text-amber-300/90 mb-1 flex items-center gap-2">
-                <Trophy size={15} /> Gewonnene Smart-, Risk-, Community- & System-Picks
+          {settledTab === "special" && (
+            <div data-testid="settled-special-col" className="space-y-5">
+              <p className="text-sm mb-1 flex items-center gap-2">
+                <Trophy size={15} className="text-amber-300" />
+                <span className="text-amber-300">Best Won</span>
+                <span className="text-zinc-500">·</span>
+                <Banknote size={15} className="text-sky-300" />
+                <span className="text-sky-300">Cashed Out</span>
+                <span className="text-zinc-500 text-xs">— gewonnene Smart-, Risk-, Community- & System-Picks + Cash-Outs</span>
               </p>
-              {bestwonTips.length === 0
-                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch keine dieser Picks gewonnen.</p>
-                : bestwonTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
-                  ))}
-            </div>
-          )}
-
-          {settledTab === "cashed" && (
-            <div data-testid="settled-cashed-col" className="space-y-5">
-              {cashedTips.length === 0
-                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.cashed")}</p>
-                : cashedTips.map((tip, i) => (
+              {(bestwonTips.length + cashedTips.length) === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch nichts hier — sobald ein Smart/Risk/Community/System-Pick gewinnt (oder ein Schein ausgezahlt wird), erscheint er hier.</p>
+                : [...bestwonTips, ...cashedTips].map((tip, i) => (
                     <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>

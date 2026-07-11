@@ -9,6 +9,15 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-11 — Best-Won/Cashed bucket + System der Stunde + rating overhaul
+- **Rating honesty:** Live picks capped at 7★ (never banker/explosion), BTTS capped 6★, 9-10★ only for ultra-safe pre-match bankers. Value singles now need ≥62% win prob (was 42%); "post everything" fallback removed → fewer but safer picks.
+- **BTTS replaced** by favourite-anchored bet-builders: `{Fav} Über 0.5 + Über 1.5 (+ Über 0.5 2.HZ)` and `{Fav} Über 0.5 + Doppelte Chance`. Underdog never required to score.
+- **Live picks now show real league** (`_fixture_league_label`), friendlies = "Club Friendlies". Blacklist added: gumi, sportstoto, prievidza, "inter bratislava".
+- **Settled counts fixed** (real won/lost/cashed from `/tips/counts`), 100-item cap removed (→1000), 24h purge runs on counts fetch. Won-system picks kept forever.
+- **Best Won / Cashed Out bucket:** third settled button is ONE button, visually split into two triangles (gold "Best Won" + blue "Cashed Out"), opens ONE combined view = won Smart/Risk/Community/System picks + cash-outs. Green "Won" = normal AI/Live wins only. New `/tips?source=bestwon|normalwon`, counts `bestwon`/`won_normal`.
+- **System picks persisted & auto-settled** (`snapshot_systems`, source=hq-system, is_parlay) so we can see if a system ever wins → surfaces in Best Won.
+- **NEW "System der Stunde"** (Το Σύστημα της Ώρας): flash combo ~1h before kickoff, flexible full-match legs (team win/DC/over goals/BTTS), total odds MUST be >3.6, persisted per match-set, i18n in all 8 langs.
+
 ### CHANGELOG 2026-07-10 — Admin Pick-Manager + void status
 - **Fixed P0:** hanging Frankreich–Marokko Smart Pick `smart-rep-fra-mar` (player props "El Aynaoui 1+ Foul · Doué/Barcola 1+ Schuss · Über 1 Tor") set to status="void" (game over, unresolvable by API-Football).
 - **New admin Pick-Manager** in `SecretInsights.jsx` (/insights): `GET /api/admin/pending-tips` returns all open (pending/live) tips grouped by source (Smart Picks/Live-Picks/KI-Picks/Mitglieder-Tipps). Admin can one-tap resolve each pick: Gewonnen/Verloren/Void/Löschen via existing `PUT /api/tips/{id}/status` (now accepts "void") + `DELETE /api/tips/{id}`. Solves recurring issue of custom player-prop picks hanging forever. Tested frontend 100% (iteration_35).
