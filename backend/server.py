@@ -31,6 +31,11 @@ from pydantic import BaseModel, Field, EmailStr
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
+from models import (
+    RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
+    RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
+    IdeaRateInput, VisitInput, PushSubIn,
+)
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest,
 )
@@ -249,10 +254,6 @@ async def admin_smart_reset(admin: dict = Depends(require_admin)):
     return {"deleted": deleted, **res}
 
 
-class SmartIdeaInput(BaseModel):
-    text: str
-
-
 @api_router.post("/smart/idea")
 async def submit_smart_idea(
     text: str = Form(default=""),
@@ -369,10 +370,6 @@ async def recent_smart_ideas(limit: int = 30):
          "created_at": 1, "sum_stars": 1, "ratings_count": 1, "avg_rating": 1}
     ).sort("created_at", -1).to_list(limit)
     return [d for d in docs if (d.get("text") or "").strip()]
-
-
-class IdeaRateInput(BaseModel):
-    stars: int = Field(ge=1, le=10)
 
 
 @api_router.post("/smart/ideas/{idea_id}/rate")
@@ -550,77 +547,7 @@ async def send_verification_email(email: str, token: str, origin: str) -> dict:
 
 
 # ------------------------------------------------------------------ models
-class RegisterInput(BaseModel):
-    email: Optional[EmailStr] = None
-    password: str = Field(min_length=6)
-    username: str = Field(min_length=2, max_length=24)
-    timezone: str = "UTC"
-    language: str = "en"
-    ref: Optional[str] = None
-    origin_url: Optional[str] = None
-
-
-class VerifyInput(BaseModel):
-    token: str
-
-
-class OriginInput(BaseModel):
-    origin_url: Optional[str] = None
-
-
-class LoginInput(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
-    password: str
-
-
-class ProfileUpdate(BaseModel):
-    username: Optional[str] = Field(default=None, min_length=2, max_length=24)
-    email: Optional[str] = None
-    timezone: Optional[str] = None
-    language: Optional[str] = None
-
-
-class TipSaveInput(BaseModel):
-    raw_text: str = ""
-    image_path: Optional[str] = None
-    home_team: str = ""
-    away_team: str = ""
-    match_time: str = ""
-    country: str = ""
-    league: str = ""
-    market: str = ""
-    odds: str = ""
-    ai_rating: float = 0
-    ai_analysis: str = ""
-    legs: Optional[List[dict]] = None
-    is_parlay: bool = False
-    stake: str = ""
-    potential_return: str = ""
-    self_rating: int = 0
-    image_paths: Optional[List[str]] = None
-
-
-class RateInput(BaseModel):
-    stars: int = Field(ge=1, le=10)
-
-
-class GiftInput(BaseModel):
-    to_username: str
-    amount: int = Field(gt=0)
-
-
-class CheckoutInput(BaseModel):
-    package_id: str
-    origin_url: str
-
-
-class SubscribeInput(BaseModel):
-    anon_id: str
-
-
-class StatusInput(BaseModel):
-    status: str  # won | lost | pending
+# (Pydantic request models moved to models.py — imported at the top of this file.)
 
 
 # ------------------------------------------------------------------ AI
@@ -2030,11 +1957,6 @@ async def notif_stats():
     return {"subscriber_count": count + _sub_boost(), "total_tips": total}
 
 
-class VisitInput(BaseModel):
-    visitor_id: str = ""
-    path: str = ""
-
-
 @api_router.post("/track/visit")
 async def track_visit(inp: VisitInput):
     """Anonymous, cookieless visit ping (visitor_id is a random localStorage id).
@@ -2146,11 +2068,6 @@ async def admin_settlement_monitor(admin: dict = Depends(require_admin)):
 
 
 # ------------------------------------------------------------------ Web Push (VAPID)
-class PushSubIn(BaseModel):
-    endpoint: str
-    keys: dict
-
-
 @api_router.get("/push/vapid-public-key")
 async def push_vapid_key():
     return {"publicKey": VAPID_PUBLIC_KEY}

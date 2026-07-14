@@ -69,6 +69,10 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-14 — Refactor Stufe 1: Pydantic-Modelle ausgelagert (verhaltensneutral)
+- Alle 15 Request-Modelle (RegisterInput, LoginInput, TipSaveInput, GiftInput, CheckoutInput, StatusInput, SmartIdeaInput, IdeaRateInput, VisitInput, PushSubIn …) aus `server.py` in neues `backend/models.py` verschoben; `server.py` importiert sie oben. Rein organisatorisch, KEINE Logikänderung. server.py 5947 → 5863 Zeilen. Per curl verifiziert: login, /auth/me, /tips/counts, /tips?source=smart, /systems, /credits/packages, /push/vapid-public-key, /track/visit, register-Validierung (422) — alle OK. Frontend lädt e2e.
+- OFFEN (P1, größere Folge-Stufen, jeweils mit Tests): Config/Infra → core.py; danach Domain-Splits (auth, tips, credits, wins, engine/scraper, smart/systems) in eigene Router-Module.
+
 ### CHANGELOG 2026-07-14 — Blanke Smart-Ideen verhindert + alte Reports (France–Marokko) auto-gelöscht
 - **Blanke "Eingegangene Ideen" behoben (Root-Cause):** `submit_smart_idea` legte den öffentlichen Feed-Eintrag SOFORT an — auch bei reinen Bild-Uploads ohne Text → blanke Karte (@user + Bild-Icon, kein Inhalt). Fix: Feed-Eintrag wird nur noch bei echtem Text (≥6 Zeichen) erstellt; Bild-only-Einreichungen werden weiter zu einem Pick verarbeitet, erzeugen aber KEINE blanke Feed-Karte. Per curl verifiziert (Bild-only → created:false, Feed bleibt leer).
 - **Startup-Cleanup `_cleanup_smart_junk()`** (läuft bei jedem Start, inkl. Produktion nach Deploy): (1) löscht blanke `smart_ideas` (Text leer/nur Whitespace/None); (2) löscht alte Smart-**Report**-Picks (report=True, älter als 3 Tage) + alle `status:void` Smart-Picks → entfernt fertige Karten wie France–Marokko. Frische Reports (<3 Tage) bleiben erhalten. Per Testseed verifiziert (fra-mar 5d → gelöscht, frischer Report → bleibt, 2 blanke Ideen → gelöscht).
