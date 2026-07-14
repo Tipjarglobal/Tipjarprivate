@@ -271,29 +271,32 @@ async def submit_smart_idea(
         text = text[:600]
     now = datetime.now(timezone.utc)
     idea_id = str(uuid.uuid4())
-    await db.smart_ideas.insert_one({
-        "id": idea_id, "user_id": user["id"], "username": user.get("username", "anon"),
-        "text": text, "images": len(images_b64), "status": "pending",
-        "created_at": now.isoformat(), "tip_id": None,
-    })
+    # Only image, no text → never create a public "Eingegangene Idee" feed card (it would
+    # render blank). We still process the image into a pick below; the feed record is created
+    # ONLY when there is real text to show.
+    has_text = len(text) >= 6
+
+    async def _drop_or_fail():
+        if has_text:
+            await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+
+    if has_text:
+        await db.smart_ideas.insert_one({
+            "id": idea_id, "user_id": user["id"], "username": user.get("username", "anon"),
+            "text": text, "images": len(images_b64), "status": "pending",
+            "created_at": now.isoformat(), "tip_id": None,
+        })
 
     data = await generate_smart_from_idea(text, images_b64)
     if not data:
-        # nothing usable — never leave a blank orphan in the ideas feed
-        if not text:
-            await db.smart_ideas.delete_one({"id": idea_id})
-        else:
-            await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+        await _drop_or_fail()
         return {"ok": True, "created": False, "reason": "not_actionable"}
 
     home_in = (data.get("home_team") or "").strip()
     away_in = (data.get("away_team") or "").strip()
     market = (data.get("market") or "").strip()
     if not market or not home_in:
-        if not text:
-            await db.smart_ideas.delete_one({"id": idea_id})
-        else:
-            await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "not_actionable"}})
+        await _drop_or_fail()
         return {"ok": True, "created": False, "reason": "not_actionable"}
 
     # Try to attach a real upcoming fixture for a precise kickoff (nice-to-have, NOT
@@ -5792,6 +5795,33 @@ async def startup():
         logger.info("Auto-settlement idle — set API_FOOTBALL_KEY to enable")
 
 
+async def _cleanup_smart_junk():
+    """Owner rules (runs on startup, incl. production):
+    1) Remove blank 'Eingegangene Ideen' — image-only or empty-text idea records that
+       render as blank cards in the Smart-Lab feed (a failed/blank upload must never show).
+    2) Remove stale Smart 'report' picks (informational WC-style analyses) once the match
+       is long over: reports older than 3 days, dateless reports, and any 'void' smart pick.
+       This clears finished cards like the old France–Marokko report."""
+    try:
+        blank = await db.smart_ideas.delete_many(
+            {"$or": [{"text": {"$in": ["", None]}},
+                     {"text": {"$regex": r"^\s*$"}}]}
+        )
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        stale_reports = await db.tips.delete_many(
+            {"source": "smart",
+             "$or": [
+                 {"report": True, "created_at": {"$lt": cutoff}},
+                 {"status": "void"},
+             ]}
+        )
+        if blank.deleted_count or stale_reports.deleted_count:
+            logger.info(f"Smart cleanup: {blank.deleted_count} blank ideas, "
+                        f"{stale_reports.deleted_count} stale/void smart reports removed")
+    except Exception as e:
+        logger.error(f"Smart cleanup failed: {e}")
+
+
 async def _migrate_stars_and_categories():
     """One-time, idempotent data migration so ALREADY-posted picks match the current
     owner rules (runs on startup, incl. production): stars from win_prob (≤10, no more
@@ -5902,6 +5932,7 @@ async def _startup_seed():
                                       {"$set": {"role": "admin"}})
         await seed_showcase()
         await _migrate_stars_and_categories()
+        await _cleanup_smart_junk()
     except Exception as e:
         logger.error(f"Startup seed failed: {e}")
 
