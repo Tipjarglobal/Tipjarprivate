@@ -315,18 +315,18 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {/* diagonal divider */}
               <span aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.28) 50%, transparent calc(50% + 0.5px))" }} />
               {/* Best Won label — top-right */}
-              <span className={`pointer-events-none absolute top-1.5 right-2 flex items-center gap-1 font-heading font-black text-xs whitespace-nowrap transition-colors ${
+              <span className={`pointer-events-none absolute top-1.5 right-1.5 sm:right-2 flex items-center gap-0.5 sm:gap-1 font-heading font-black text-[9px] sm:text-xs whitespace-nowrap transition-colors ${
                 settledTab === "special" ? "text-void" : "text-amber-300"
               }`}>
-                <Trophy size={13} /> Best Won
-                <span className={`text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
+                <Trophy className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> Best Won
+                <span className={`text-[9px] sm:text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
               </span>
               {/* Cashed Out label — bottom-left */}
-              <span className={`pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1 font-heading font-black text-xs whitespace-nowrap transition-colors ${
+              <span className={`pointer-events-none absolute bottom-1.5 left-1.5 sm:left-2 flex items-center gap-0.5 sm:gap-1 font-heading font-black text-[9px] sm:text-xs whitespace-nowrap transition-colors ${
                 settledTab === "special" ? "text-void" : "text-sky-300"
               }`}>
-                <Banknote size={13} /> {t("wall.cashed")}
-                <span className={`text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
+                <Banknote className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> {t("wall.cashed")}
+                <span className={`text-[9px] sm:text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
               </span>
             </button>
           </div>
