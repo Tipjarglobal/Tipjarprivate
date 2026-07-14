@@ -295,32 +295,39 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               type="button"
               data-testid="settled-special-toggle"
               onClick={() => setSettledTab((v) => (v === "special" ? null : "special"))}
-              className="relative rounded-xl overflow-hidden min-h-[60px] self-stretch group"
+              className="relative rounded-xl overflow-hidden min-h-[68px] self-stretch group"
             >
-              {/* upper-right triangle (gold) — Best Won */}
+              {/* colour fills only (clipped) — labels sit on top, un-clipped, so both words stay fully readable */}
               <span
                 aria-hidden
                 style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}
-                className={`pointer-events-none absolute inset-0 flex items-start justify-end gap-1.5 pt-2.5 pr-3 font-heading font-black text-sm transition-colors ${
-                  settledTab === "special" ? "bg-amber-400 text-void" : "bg-amber-400/15 text-amber-300 group-hover:bg-amber-400/25"
+                className={`pointer-events-none absolute inset-0 transition-colors ${
+                  settledTab === "special" ? "bg-amber-400" : "bg-amber-400/15 group-hover:bg-amber-400/25"
                 }`}
-              >
-                <Trophy size={15} /> Best Won
-                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
-              </span>
-              {/* lower-left triangle (blue) — Cashed Out */}
+              />
               <span
                 aria-hidden
                 style={{ clipPath: "polygon(0 0, 100% 100%, 0 100%)" }}
-                className={`pointer-events-none absolute inset-0 flex items-end justify-start gap-1.5 pb-2.5 pl-3 font-heading font-black text-sm transition-colors ${
-                  settledTab === "special" ? "bg-sky-400 text-void" : "bg-sky-400/15 text-sky-300 group-hover:bg-sky-400/25"
+                className={`pointer-events-none absolute inset-0 transition-colors ${
+                  settledTab === "special" ? "bg-sky-400" : "bg-sky-400/15 group-hover:bg-sky-400/25"
                 }`}
-              >
-                <Banknote size={15} /> {t("wall.cashed")}
-                <span className={`text-[11px] font-mono rounded-full px-1.5 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
-              </span>
+              />
               {/* diagonal divider */}
               <span aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.28) 50%, transparent calc(50% + 0.5px))" }} />
+              {/* Best Won label — top-right */}
+              <span className={`pointer-events-none absolute top-1.5 right-2 flex items-center gap-1 font-heading font-black text-xs whitespace-nowrap transition-colors ${
+                settledTab === "special" ? "text-void" : "text-amber-300"
+              }`}>
+                <Trophy size={13} /> Best Won
+                <span className={`text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.bestwon}</span>
+              </span>
+              {/* Cashed Out label — bottom-left */}
+              <span className={`pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1 font-heading font-black text-xs whitespace-nowrap transition-colors ${
+                settledTab === "special" ? "text-void" : "text-sky-300"
+              }`}>
+                <Banknote size={13} /> {t("wall.cashed")}
+                <span className={`text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
+              </span>
             </button>
           </div>
 
