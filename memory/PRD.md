@@ -69,6 +69,10 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-14 — Alte verlorene WM-Demo-Scheine entfernt
+- `seed_showcase` erzeugte bei jedem Backend-Start zwei verlorene Demo-Scheine neu: "Portugal & Messi – Winner & Top Scorer" (WM) und die Häcken/Portugal-Spanien-Kombi → tauchten dauerhaft in der "Verloren"-Sammlung auf. Beide entfernt: Seeding + `upsert` gelöscht, aus `allowed_ids` entfernt und beim Start explizit gelöscht (können nicht wiederkommen). Der gewonnene Schaufenster-Schein "Schweiz–Kolumbien" (Best Won) bleibt. Verifiziert (beide weg, won bleibt).
+- HINWEIS: greift auf Produktion erst nach erneutem **Deploy**.
+
 ### CHANGELOG 2026-07-14 — Fehl-Ideen im "Eingegangene Ideen"-Feed entfernt (Screenshot-Klärung)
 - Die 2 "blanken" Ideen waren KEINE textlosen Einträge, sondern Fehl-Einreichungen mit Text aber Status "not_actionable"/"no_fixture" ("KEIN TIPP" / "KEIN SPIEL GEFUNDEN"), z. B. Test-Text + alte iShowSpeed-France-Marokko-Notiz. Der Feed zeigte diese noch an.
 - Fix: `recent_smart_ideas` liefert jetzt NUR Ideen mit `status="used"` (Ideen, die tatsächlich zu einem Smart Pick wurden). `_cleanup_smart_junk` löscht zusätzlich alle smart_ideas mit `status != "used"`. Per Testseed verifiziert (used bleibt; not_actionable + no_fixture gelöscht; Feed = nur used).

@@ -2920,72 +2920,19 @@ async def seed_showcase():
     # (hqtip-* singles/combos, hqlive-* live picks, smart-* smart bets). Only remove
     # OTHER TipJarHQ-authored junk, and NEVER delete a settled/live pick — settled KI
     # single picks must stay in the 'Abgerechnet' box (they leave via the 24h purge).
-    allowed_ids = ["seed-portugal-messi", "seed-hacken-parlay", "seed-swiss-colombia-multibet"]
+    allowed_ids = ["seed-swiss-colombia-multibet"]
     await db.tips.delete_many({
         "user_id": hq["id"],
         "id": {"$nin": allowed_ids, "$not": {"$regex": "^(hqtip-|hqlive-|smart-|hqcur-|hqsys-)"}},
         "status": {"$nin": ["won", "lost", "live"]},
     })
 
-    # Portugal & Messi — authoritative: always re-upload the tax-free image + force-update the tip
-    messi_image = None
-    try:
-        img_file = os.path.join(os.path.dirname(__file__), "seed_assets", "portugal_messi.jpg")
-        with open(img_file, "rb") as f:
-            data = f.read()
-        path = f"{APP_NAME}/tips/{hq['id']}/seed-portugal-messi-notax.jpg"
-        messi_image = put_object(path, data, "image/jpeg")["path"]
-        await db.files.update_one(
-            {"storage_path": messi_image},
-            {"$set": {"owner": hq["id"], "content_type": "image/jpeg", "is_deleted": False},
-             "$setOnInsert": {"id": str(uuid.uuid4()), "original_filename": "portugal_messi.jpg", "created_at": now}},
-            upsert=True,
-        )
-    except Exception as e:
-        logger.error(f"seed image upload failed: {e}")
-
-    await db.tips.update_one(
-        {"id": "seed-portugal-messi"},
-        {"$set": {
-            "user_id": hq["id"], "username": "TipJarHQ", "image_path": messi_image,
-            "home_team": "Portugal & Lionel Messi", "away_team": "",
-            "match_time": "19/07/2026 21:00", "country": "International",
-            "league": "World Cup – Player Specials", "market": "Winner & Top Scorer",
-            "odds": "35.00", "ai_rating": 2.0,
-            "ai_analysis": "Pure fan-favourite gamble: Messi banging in goals against easy opponents, chasing the Golden Boot — and the football gods teasing a dream Portugal vs Argentina final, Ronaldo vs Messi last dance. Unrealistic? Sure. Irresistible? Absolutely.",
-            "legs": [], "is_parlay": False, "stake": "25,00 €", "potential_return": "875,00 €",
-            "status": "lost",
-        },
-         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
-                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
-        upsert=True,
-    )
-    logger.info("Seeded/updated showcase tip: Portugal & Messi")
-
-    # Häcken multibet — 4 legs, each spread into its own block (no smushed market string)
-    await db.tips.update_one(
-        {"id": "seed-hacken-parlay"},
-        {"$set": {
-            "user_id": hq["id"], "username": "TipJarHQ", "image_path": None,
-            "home_team": "", "away_team": "",
-            "match_time": "06/07/2026 19:00 & 21:00", "country": "Sweden / International",
-            "league": "Allsvenskan / Länderspiel",
-            "market": "",
-            "odds": "2.47", "ai_rating": 7.0,
-            "ai_analysis": "Tor-Legs sind konservativ & sehr wahrscheinlich (Over 1,5, Djurgården trifft, Portugal–Spanien Over 1,5). Das gesamte Risiko hing am Fouls-Over-21,5-Leg — das kam, aber Portugal–Spanien Over 1,5 fiel nicht. Kombi damit verloren. Apex 7/10.",
-            "legs": [
-                {"match": "BK Häcken – Djurgården", "league": "Allsvenskan", "kickoff": "06/07 19:00", "status": "won", "selections": ["Total Über 1,5", "Djurgården Team Über 0,5"], "sel_odds": ["1.22", "1.35"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "lost", "selections": ["Total Über 1,5"], "sel_odds": ["1.20"]},
-                {"match": "Portugal – Spanien", "league": "Länderspiel", "kickoff": "06/07 21:00", "status": "won", "selections": ["Fouls Über 21,5"], "sel_odds": ["1.85"]},
-            ],
-            "is_parlay": True, "stake": "53,23 €", "potential_return": "131,48 €",
-            "status": "lost",
-        },
-         "$setOnInsert": {"raw_text": "", "sum_stars": 0,
-                          "ratings_count": 0, "avg_rating": 0, "created_at": now}},
-        upsert=True,
-    )
-    logger.info("Seeded/updated showcase tip: Häcken parlay (settled: lost)")
+    # Owner (2026-07-14): the old lost WC showcase slips ("Portugal & Messi – Winner &
+    # Top Scorer", the Häcken/Portugal-Spanien parlay) are stale demo content and must
+    # NOT reappear. Delete them permanently (they used to be re-seeded every startup).
+    for dead_id in ["seed-portugal-messi", "seed-hacken-parlay"]:
+        await db.tips.delete_one({"id": dead_id})
+        await db.tip_ratings.delete_many({"tip_id": dead_id})
 
     # Swiss-Colombia + Vikingur Reykjavik 3-leg multibet (posted by user as TipJarHQ, 10 stars)
     await db.tips.update_one(
