@@ -69,6 +69,11 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-14 — Fehl-Ideen im "Eingegangene Ideen"-Feed entfernt (Screenshot-Klärung)
+- Die 2 "blanken" Ideen waren KEINE textlosen Einträge, sondern Fehl-Einreichungen mit Text aber Status "not_actionable"/"no_fixture" ("KEIN TIPP" / "KEIN SPIEL GEFUNDEN"), z. B. Test-Text + alte iShowSpeed-France-Marokko-Notiz. Der Feed zeigte diese noch an.
+- Fix: `recent_smart_ideas` liefert jetzt NUR Ideen mit `status="used"` (Ideen, die tatsächlich zu einem Smart Pick wurden). `_cleanup_smart_junk` löscht zusätzlich alle smart_ideas mit `status != "used"`. Per Testseed verifiziert (used bleibt; not_actionable + no_fixture gelöscht; Feed = nur used).
+- HINWEIS: greift auf Produktion erst nach erneutem **Deploy** — dann verschwinden die 2 Fehl-Ideen automatisch beim Backend-Start.
+
 ### CHANGELOG 2026-07-14 — Refactor Stufe 1: Pydantic-Modelle ausgelagert (verhaltensneutral)
 - Alle 15 Request-Modelle (RegisterInput, LoginInput, TipSaveInput, GiftInput, CheckoutInput, StatusInput, SmartIdeaInput, IdeaRateInput, VisitInput, PushSubIn …) aus `server.py` in neues `backend/models.py` verschoben; `server.py` importiert sie oben. Rein organisatorisch, KEINE Logikänderung. server.py 5947 → 5863 Zeilen. Per curl verifiziert: login, /auth/me, /tips/counts, /tips?source=smart, /systems, /credits/packages, /push/vapid-public-key, /track/visit, register-Validierung (422) — alle OK. Frontend lädt e2e.
 - OFFEN (P1, größere Folge-Stufen, jeweils mit Tests): Config/Infra → core.py; danach Domain-Splits (auth, tips, credits, wins, engine/scraper, smart/systems) in eigene Router-Module.

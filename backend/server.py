@@ -361,11 +361,12 @@ async def list_smart_ideas(admin: dict = Depends(require_admin)):
 
 @api_router.get("/smart/ideas/recent")
 async def recent_smart_ideas(limit: int = 30):
-    """Public feed of what the community has sent to the Smart Lab (raw ideas),
-    whether or not they became a pick. No images, just the submitted text."""
+    """Public feed of community Smart-Lab ideas that ACTUALLY became a Smart Pick
+    (status='used'). Failed/non-actionable submissions ('KEIN TIPP', 'KEIN SPIEL
+    GEFUNDEN') never appear — the feed only shows ideas that produced a real pick."""
     limit = max(1, min(limit, 60))
     docs = await db.smart_ideas.find(
-        {"text": {"$nin": ["", None]}},
+        {"status": "used", "text": {"$nin": ["", None]}},
         {"_id": 0, "id": 1, "username": 1, "text": 1, "images": 1, "status": 1,
          "created_at": 1, "sum_stars": 1, "ratings_count": 1, "avg_rating": 1}
     ).sort("created_at", -1).to_list(limit)
@@ -5722,7 +5723,8 @@ async def _cleanup_smart_junk():
     try:
         blank = await db.smart_ideas.delete_many(
             {"$or": [{"text": {"$in": ["", None]}},
-                     {"text": {"$regex": r"^\s*$"}}]}
+                     {"text": {"$regex": r"^\s*$"}},
+                     {"status": {"$ne": "used"}}]}
         )
         cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
         stale_reports = await db.tips.delete_many(
