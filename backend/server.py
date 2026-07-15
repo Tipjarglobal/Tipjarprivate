@@ -2506,10 +2506,34 @@ def _parse_player_market(market: str):
 
 
 def _grade_player_leg(leg, pmap, team_cards, fx):
-    """Grade a single player-prop / team-card leg from finished-match player stats.
-    Returns True (won), False (lost) or None (cannot grade → do NOT settle)."""
+    """Grade a single player-prop / team-card / qualifier / handicap leg from a finished
+    match. Returns True (won), False (lost) or None (cannot grade → do NOT settle)."""
     market = leg.get("market") or ""
     m = market.lower()
+    kind0 = (leg.get("kind") or "").lower()
+    hg0, ag0 = fx.get("home_goals") or 0, fx.get("away_goals") or 0
+    # Two-legged tie: aggregate-aware qualification (uses the stored first-leg result).
+    if kind0 == "qualify":
+        qc = leg.get("qual_ctx") or {}
+        agg_a = (qc.get("a1") or 0) + hg0   # teamA = return-leg HOME
+        agg_b = (qc.get("b1") or 0) + ag0   # teamB = return-leg AWAY
+        hw, aw = fx.get("home_winner"), fx.get("away_winner")
+        if agg_a > agg_b:
+            qualifier = qc.get("teamA")
+        elif agg_b > agg_a:
+            qualifier = qc.get("teamB")
+        elif hw:
+            qualifier = qc.get("teamA")
+        elif aw:
+            qualifier = qc.get("teamB")
+        else:
+            return None  # aggregate level & no ET/pen winner flag → can't determine
+        return _norm(qc.get("team") or "") == _norm(qualifier or "")
+    # Asian handicap ±1.5 (wins as long as the team does NOT lose by 2+ goals).
+    if kind0 == "ah15_home":
+        return (hg0 + 1.5) > ag0
+    if kind0 == "ah15_away":
+        return (ag0 + 1.5) > hg0
     # Team-level markets first (no single player)
     if "beide teams" in m and "karte" in m:
         if not team_cards or len(team_cards) < 2:
@@ -2572,6 +2596,41 @@ def _grade_player_leg(leg, pmap, team_cards, fx):
     if kind == "saves":
         return rec["saves"] >= need
     return None
+
+
+def _h2h_first_leg(id1: int, id2: int, before_dt):
+    """First leg of a two-legged tie: the most recent FINISHED head-to-head meeting in
+    the ~30 days before the return leg. Returns {home_name, away_name, hg, ag, ...} or None."""
+    if not id1 or not id2:
+        return None
+    resp = _apifootball("/fixtures/headtohead", {"h2h": f"{id1}-{id2}"})
+    if not resp:
+        return None
+    best = None
+    for fx in resp:
+        st = fx.get("fixture", {}).get("status", {}).get("short")
+        if st not in FINISHED_STATUSES:
+            continue
+        d = fx.get("fixture", {}).get("date")
+        try:
+            fdt = datetime.fromisoformat((d or "").replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if fdt >= before_dt or fdt < before_dt - timedelta(days=30):
+            continue
+        if best is None or fdt > best[0]:
+            best = (fdt, fx)
+    if not best:
+        return None
+    fx = best[1]
+    return {
+        "home_name": fx.get("teams", {}).get("home", {}).get("name", ""),
+        "away_name": fx.get("teams", {}).get("away", {}).get("name", ""),
+        "hg": fx.get("goals", {}).get("home") or 0,
+        "ag": fx.get("goals", {}).get("away") or 0,
+        "date": best[0].isoformat(),
+        "fixture_id": fx.get("fixture", {}).get("id"),
+    }
 
 
 def _grade_goal_leg(kind, market, team, fx):
@@ -5224,6 +5283,120 @@ async def _team_best_props(team_name: str, seasons: list[int]) -> list[dict]:
     return out
 
 
+QUAL_KEYWORDS = ("qualif", "champions", "europa", "conference", "uefa", "libertadores",
+                 "sudamericana", "afc ", "caf ", "concacaf", "play-off", "playoff",
+                 "preliminary", "wcq", "ecq")
+
+
+def _looks_two_legged(pred) -> bool:
+    txt = f"{pred.get('league','')} {pred.get('league_code','')} {pred.get('country','')}".lower()
+    return any(k in txt for k in QUAL_KEYWORDS)
+
+
+async def qualifier_autopost() -> dict:
+    """Two-legged-tie awareness: for return legs of qualifier ties, look up the FIRST-leg
+    result (H2H) and post the smartest safe Smart Pick — '{Leader} qualifiziert sich'
+    (+ Über 1.5 Tore when the tie is goal-heavy) for a clear aggregate lead, or a double
+    Asian-handicap ±1.5 (no team wins by 2) for a level tie. Aggregate-settled after FT."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    upcoming, seen = [], set()
+    for p in preds:
+        if not _looks_two_legged(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > 60:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        upcoming.append((ko, p))
+    upcoming.sort(key=lambda x: x[0])
+    posted, scanned = 0, 0
+    for ko, p in upcoming[:12]:
+        scanned += 1
+        home, away = p.get("home"), p.get("away")
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"qual-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        id_h = await resolve_team_id(home)
+        id_a = await resolve_team_id(away)
+        if not (id_h and id_a):
+            continue
+        first = _h2h_first_leg(id_h, id_a, ko)
+        if not first:
+            continue  # no recent prior meeting → not a two-legged tie we can reason about
+        # map first-leg goals onto teamA(=return-leg home)/teamB(=return-leg away)
+        if _teams_match(first["home_name"], home):
+            a1, b1 = first["hg"], first["ag"]
+        else:
+            a1, b1 = first["ag"], first["hg"]
+        total1 = a1 + b1
+        legs = []
+        if a1 != b1:
+            leader = home if a1 > b1 else away
+            lead = abs(a1 - b1)
+            q_odds = "1.12" if lead >= 2 else "1.35"
+            legs.append({"home": home, "away": away,
+                         "market": f"{leader} qualifiziert sich", "kind": "qualify",
+                         "odds": q_odds, "status": "open",
+                         "qual_ctx": {"team": leader, "a1": a1, "b1": b1,
+                                      "teamA": home, "teamB": away}})
+            if total1 >= 2:  # tie already produced goals → back more goals
+                legs.append({"home": home, "away": away, "market": "Über 1.5 Tore",
+                             "kind": "total_o", "line": 1.5, "odds": "1.40", "status": "open"})
+            subtitle = (f"{leader} führt nach Hinspiel {a1}:{b1} (aggregat). "
+                        f"Wir setzen auf Weiterkommen"
+                        + (" + Tore, da das Hinspiel torreich war." if total1 >= 2 else "."))
+        else:
+            # level tie between two even sides → nobody wins by 2 goals (double AH ±1.5)
+            legs.append({"home": home, "away": away, "market": f"{home} +1.5",
+                         "kind": "ah15_home", "odds": "1.30", "status": "open"})
+            legs.append({"home": home, "away": away, "market": f"{away} +1.5",
+                         "kind": "ah15_away", "odds": "1.30", "status": "open"})
+            subtitle = (f"Enges Duell (Hinspiel {a1}:{b1}). Doppel-Handicap ±1,5: "
+                        f"gewinnt, solange keine Mannschaft mit 2+ Toren gewinnt.")
+        prod = 1.0
+        for lg in legs:
+            try:
+                prod *= float(lg["odds"])
+            except Exception:
+                pass
+        display_legs = [{
+            "match": f"{home} – {away}", "league": p.get("league") or "Qualifikation",
+            "kickoff": p.get("kickoff") or "",
+            "selections": [lg["market"] for lg in legs],
+            "sel_odds": [lg["odds"] for lg in legs], "status": "pending",
+        }]
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": "TipJarHQ Qualifikations-Pick",
+            "league_code": p.get("league_code") or "",
+            "market": f"{home} vs {away} — Qualifikations-Pick",
+            "odds": f"{round(prod, 2)}", "combo_legs": legs, "is_parlay": True,
+            "ai_rating": 8.0, "win_prob": 0.0,
+            "ai_analysis": f"Hinspiel-basiert: {subtitle} (Gesamtquote {round(prod, 2)}).",
+            "legs": display_legs, "stake": "", "potential_return": "",
+            "status": "pending", "source": "smart", "category": "banker",
+            "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "created_at": now.isoformat(),
+        })
+        posted += 1
+    return {"posted": posted, "scanned": scanned}
+
+
 async def smart_autopost() -> dict:
     """Generate player-prop 'Smart Bet' tips — ONLY for top leagues where bookmakers
     actually offer player markets (Premier League, La Liga, World Cup, UCL …). Owner:
@@ -5398,6 +5571,7 @@ async def smart_loop():
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
+                logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
         except Exception as e:
             logger.error(f"smart_loop error: {e}")
         await asyncio.sleep(12 * 3600)  # every 12 hours (season stats change slowly)

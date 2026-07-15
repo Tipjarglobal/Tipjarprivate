@@ -69,6 +69,14 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15f — Hinspiel-Bewusstsein: Qualifikations-Picks für Zweikampf-Duelle
+- Neue Engine `qualifier_autopost()` (im Smart-Loop): erkennt Rückspiele von Qualifikations-Duellen (CL/EL/ECL/Kontinental via Liga-Keywords), holt das HINSPIEL-Ergebnis via API-Football H2H (`_h2h_first_leg`) und baut den smartesten sicheren Pick:
+  - klarer Aggregat-Vorsprung → "{Leader} qualifiziert sich" (@1.12/1.35 je nach Vorsprung) + "Über 1.5 Tore" wenn Hinspiel torreich (≥2).
+  - ausgeglichenes Duell → Doppel-Handicap ±1,5 auf beide Seiten (gewinnt, solange keiner mit 2+ Toren gewinnt).
+- **Aggregat-Abrechnung**: neue kinds `qualify` (Hin+Rückspiel-Summe, ET/Elfmeter-Flag als Tiebreak; qual_ctx auf dem Leg gespeichert), `ah15_home`/`ah15_away`, `total_o`. In `_grade_player_leg`.
+- Verifiziert: `_h2h_first_leg` fand real Kairat 2:1 Sutjeska (08.07.); Aggregat-Grading korrekt (Kairat weiter bei 0:0, raus bei Sutjeska 2:0); Handicap korrekt. LIVE-Lauf erzeugte 6 echte Qualifikations-Picks (Astana, Pyunik, Rigas, Paide-Handicap …).
+- Antwort auf Nutzerfrage: Die Engine schaute VORHER NICHT auf Hinspiele — jetzt tut sie es.
+
 ### CHANGELOG 2026-07-15e — System-Picks ("System der Stunde") rechneten nie ab
 - Zwei Bugs in `settle_multimatch_parlays` (zuständig für System-Picks & Member-Parlays):
   1) **Versuchs-Limit vor Anpfiff aufgebraucht:** System-Picks entstehen ~1h vor Anstoß. Das 8-Versuche-Limit wurde abgearbeitet, WÄHREND die Spiele noch liefen → nach Spielende nie wieder versucht → blieb ewig "OFFEN". Fix: Limit greift erst, wenn ALLE Spiele vorbei sind (`due` = jetzt ≥ letzter Anstoß + 2h); Attempts zählen nur noch dann. Limit auf 12 erhöht.
