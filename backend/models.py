@@ -98,3 +98,9 @@ class VisitInput(BaseModel):
 class PushSubIn(BaseModel):
     endpoint: str
     keys: dict
+    areas: Optional[dict] = None
+
+
+class PushPrefsIn(BaseModel):
+    endpoint: str
+    areas: dict

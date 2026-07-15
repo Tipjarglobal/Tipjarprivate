@@ -34,7 +34,7 @@ from predictz import scrape_predictz, parse_pred_score
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
-    IdeaRateInput, VisitInput, PushSubIn,
+    IdeaRateInput, VisitInput, PushSubIn, PushPrefsIn,
 )
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest,
@@ -2116,13 +2116,24 @@ async def push_subscribe(sub: PushSubIn, request: Request):
     except Exception:
         user = None
     now = datetime.now(timezone.utc).isoformat()
+    fields = {"endpoint": sub.endpoint, "keys": sub.keys,
+              "user_id": (user or {}).get("id"), "updated_at": now}
+    if sub.areas is not None:
+        fields["areas"] = sub.areas
     await db.push_subscriptions.update_one(
         {"endpoint": sub.endpoint},
-        {"$set": {"endpoint": sub.endpoint, "keys": sub.keys,
-                  "user_id": (user or {}).get("id"), "updated_at": now},
-         "$setOnInsert": {"created_at": now}},
+        {"$set": fields, "$setOnInsert": {"created_at": now}},
         upsert=True)
     return {"ok": True, "count": await db.push_subscriptions.count_documents({})}
+
+
+@api_router.post("/push/preferences")
+async def push_preferences(prefs: PushPrefsIn):
+    """Store per-device notification-area preferences (e.g. AI tips on/off) so the
+    server-side Web Push respects them, not just the in-app popups."""
+    await db.push_subscriptions.update_one(
+        {"endpoint": prefs.endpoint}, {"$set": {"areas": prefs.areas}})
+    return {"ok": True}
 
 
 @api_router.post("/push/unsubscribe")
@@ -2142,12 +2153,18 @@ def _send_web_push(subscription: dict, payload: dict):
 
 
 async def notify_all_push(payload: dict):
-    """Send a Web Push to every stored subscription; prune dead ones (404/410)."""
+    """Send a Web Push to every stored subscription; prune dead ones (404/410).
+    Respects per-device area preferences: a device that turned an area off (e.g. AI
+    tips) is skipped for that area. Subs without stored prefs receive everything."""
     if not VAPID_PRIVATE_KEY:
         return 0
+    area = payload.get("area")
     subs = await db.push_subscriptions.find({}, {"_id": 0}).to_list(20000)
     sent = 0
     for s in subs:
+        prefs = s.get("areas") or {}
+        if area and prefs.get(area) is False:
+            continue
         try:
             await asyncio.to_thread(_send_web_push, s, payload)
             sent += 1
@@ -2158,6 +2175,13 @@ async def notify_all_push(payload: dict):
         except Exception:
             pass
     return sent
+
+
+def _tip_push_area(tip: dict) -> str:
+    if tip.get("status") == "live" or tip.get("source") == "hq-live":
+        return "live"
+    src = tip.get("source")
+    return "ai" if src == "hq-auto" else ("smart" if src == "smart" else "members")
 
 
 def _push_payload_for_tip(tip: dict) -> dict:
@@ -2184,7 +2208,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
         # 7★ and never fire the 9/10★ explosion sound.
         stars = min(stars, 7)
         return {"title": "🔵 LIVE-Pick", "body": detail, "url": f"/?pick={pid}&area=live",
-                "kind": "live", "sound": "coin", "pick_id": pid,
+                "kind": "live", "sound": "coin", "pick_id": pid, "area": "live",
                 "icon": "/push-live.png", "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
     if src == "hq-auto":
@@ -2202,11 +2226,11 @@ def _push_payload_for_tip(tip: dict) -> dict:
     # Fixed tag ('tipjar-pick') so a burst of queued pushes COLLAPSES into one visible
     # notification (newest wins) instead of stacking → no endless-swipe. Deep-link via ?pick=.
     return {"title": title, "body": detail, "url": f"/?pick={pid}&area={area}", "kind": "tip",
-            "sound": sound, "pick_id": pid,
+            "sound": sound, "pick_id": pid, "area": area,
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
 
 
-def _digest_payload_for_tips(tips: list) -> dict:
+def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
     """One bundled push for a batch of fresh picks (no endless-swipe). Fixed tag so it
     replaces any previous digest. Opens the app; the in-app bell lists each pick."""
     n = len(tips)
@@ -2218,6 +2242,7 @@ def _digest_payload_for_tips(tips: list) -> dict:
     body = " · ".join(names) + (f" +{n - 3} mehr" if n > 3 else "")
     title = f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else "")
     return {"title": title, "body": body, "url": "/", "kind": "digest", "sound": "coin",
+            "area": area,
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
 
 
@@ -2239,12 +2264,17 @@ async def push_watch_loop():
                 fresh = await db.tips.find(
                     {"created_at": {"$gt": last}, "status": {"$in": ["pending", "live"]}},
                     {"_id": 0}).sort("created_at", 1).to_list(50)
-                # One detailed push for a single pick (with deep-link); one bundled digest
-                # for a batch — never a stack of individual notifications.
-                if len(fresh) == 1:
-                    await notify_all_push(_push_payload_for_tip(fresh[0]))
-                elif len(fresh) > 1:
-                    await notify_all_push(_digest_payload_for_tips(fresh))
+                # Group by area (ai/smart/members/live) so each push carries one area
+                # and can be filtered per-device. One detailed push per single pick,
+                # one bundled digest per area with multiple.
+                by_area = {}
+                for tp in fresh:
+                    by_area.setdefault(_tip_push_area(tp), []).append(tp)
+                for a, tps in by_area.items():
+                    if len(tps) == 1:
+                        await notify_all_push(_push_payload_for_tip(tps[0]))
+                    else:
+                        await notify_all_push(_digest_payload_for_tips(tps, a))
                 if fresh:
                     last = fresh[-1]["created_at"]
                     await db.push_state.update_one({"key": "last_push"},
@@ -2252,6 +2282,43 @@ async def push_watch_loop():
         except Exception as e:
             logger.error(f"push_watch_loop error: {e}")
         await asyncio.sleep(45)
+
+
+@api_router.get("/users/search")
+async def search_users(q: str = "", limit: int = 15):
+    """Search members by username (partial, case-insensitive). Also matches the
+    Latin transliteration so a Greek/Cyrillic username is findable by Latin input."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"results": []}
+    rx = re.escape(q)
+    docs = await db.users.find(
+        {"username": {"$regex": rx, "$options": "i"}}, {"_id": 0}
+    ).limit(200).to_list(200)
+    # transliteration fallback: match normalized Latin form of stored usernames
+    if len(docs) < limit:
+        qn = _norm(q)
+        seen = {d["username"] for d in docs}
+        extra = await db.users.find({}, {"_id": 0, "username": 1, "id": 1, "created_at": 1,
+                                         "received_credits": 1, "streak": 1, "apex_flame": 1}).to_list(5000)
+        for d in extra:
+            un = d.get("username") or ""
+            if un in seen:
+                continue
+            forms = [_norm(x) for x in _latin_variants(un)]
+            if any(qn and qn in f for f in forms):
+                docs.append(d)
+                seen.add(un)
+    results = []
+    for u in docs[:limit]:
+        results.append({
+            "username": u.get("username"),
+            "apex_flame": u.get("apex_flame", False),
+            "received_credits": u.get("received_credits", 0),
+            "streak": u.get("streak", 0),
+            "tips_count": await db.tips.count_documents({"user_id": u.get("id")}),
+        })
+    return {"results": results}
 
 
 # ------------------------------------------------------------------ files

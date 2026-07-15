@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -383,6 +383,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view !== "systems" && view !== "settled" && (
         <>
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
+      {view === "members" && <MemberSearch onUserClick={onUserClick} t={t} />}
       {/* filters — hidden entirely in Smart; no "live" toggle anywhere (dedicated Live tab exists) */}
       {view !== "smart" && (
       <div className="flex flex-wrap gap-2 mb-6">
@@ -678,6 +679,61 @@ function SmartLab({ t, user, onCreated }) {
   );
 }
 
+function MemberSearch({ onUserClick, t }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    setLoading(true);
+    const id = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/users/search?q=${encodeURIComponent(q.trim())}`);
+        setResults(data.results || []);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [q]);
+  return (
+    <div className="mb-6" data-testid="member-search">
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+        <input
+          data-testid="member-search-input"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("wall.searchMembers")}
+          className="w-full rounded-full bg-surface border border-elevated pl-10 pr-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-volt/60 focus:outline-none transition-colors"
+        />
+      </div>
+      {q.trim().length >= 2 && (
+        <div className="mt-2 rounded-xl bg-surface border border-elevated divide-y divide-elevated overflow-hidden" data-testid="member-search-results">
+          {loading && <p className="px-4 py-3 text-sm text-zinc-500">{t("wall.searching")}</p>}
+          {!loading && results.length === 0 && <p className="px-4 py-3 text-sm text-zinc-500" data-testid="member-search-empty">{t("wall.noMembers")}</p>}
+          {results.map((m) => (
+            <button
+              key={m.username}
+              type="button"
+              data-testid={`member-result-${m.username}`}
+              onClick={() => onUserClick?.(m.username)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-elevated transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {toLatin(m.username)?.[0]?.toUpperCase() || "?"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-white font-semibold truncate">{toLatin(m.username)}{m.apex_flame ? " 🔥" : ""}</p>
+                <p className="text-[11px] text-zinc-500">{m.tips_count} {t("wall.tipsLabel")} · {m.received_credits} Credits</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
@@ -693,13 +749,18 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       setSharing(false);
     }
   };
+  const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart"].includes(tip.source);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
       transition={{ delay: (i % 6) * 0.05 }}
       id={`pick-${tip.id}`}
       data-testid={`tip-card-${tip.id}`}
-      className="rounded-xl bg-surface border border-elevated p-4 hover:-translate-y-1 hover:border-volt/50 transition-all flex flex-col scroll-mt-24"
+      className={`rounded-xl border p-4 hover:-translate-y-1 transition-all flex flex-col scroll-mt-24 ${
+        isMemberPick
+          ? "bg-[#1b1030] border-purple-500/25 hover:border-purple-400/70"
+          : "bg-surface border-elevated hover:border-volt/50"
+      }`}
     >
       <div className="flex items-center justify-between mb-3">
         <button

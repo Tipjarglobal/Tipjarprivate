@@ -54,7 +54,7 @@ function isStandalonePwa() {
 function isIos() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
-async function enableWebPush() {
+async function enableWebPush(areas) {
   if (!supportsWebPush()) return { ok: false, reason: "unsupported" };
   if (isIos() && !isStandalonePwa()) return { ok: false, reason: "ios-install" };
   const reg = await navigator.serviceWorker.ready;
@@ -66,7 +66,7 @@ async function enableWebPush() {
     applicationServerKey: urlBase64ToUint8Array(data.publicKey),
   });
   const json = sub.toJSON();
-  await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys });
+  await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys, areas });
   return { ok: true };
 }
 async function disableWebPush() {
@@ -124,6 +124,16 @@ export default function NotificationBell() {
 
   useEffect(() => {
     localStorage.setItem("tj_bell_areas", JSON.stringify(areas));
+    // Sync choices to the server so the REAL Web Push (app closed / screen off)
+    // respects them too — not just the in-app popups.
+    (async () => {
+      try {
+        if (!supportsWebPush()) return;
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await api.post("/push/preferences", { endpoint: sub.endpoint, areas });
+      } catch { /* ignore */ }
+    })();
   }, [areas]);
 
   useEffect(() => {
@@ -245,7 +255,7 @@ export default function NotificationBell() {
       }
       // Real Web Push (works when app closed / screen off)
       try {
-        const res = await enableWebPush();
+        const res = await enableWebPush(areasRef.current);
         if (res.ok) toast.success(t("bell.push_on"));
         else if (res.reason === "ios-install") toast.info(t("bell.ios_hint"), { duration: 9000 });
       } catch { /* ignore */ }
