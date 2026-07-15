@@ -69,6 +69,9 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15c — Hängende abgelaufene Smart-Picks (France) sofort entfernen
+- Ein pending Smart-Pick, dessen Spiel längst vorbei ist und der nicht abgerechnet werden konnte (kein API-Fixture), hing bisher bis zur 36h-Löschung fest. `_cleanup_smart_junk` löscht jetzt beim Start alle pending Smart-Picks > 8h nach Anstoß → France–Spanien verschwindet nach Deploy sofort. Zukünftige Picks bleiben unberührt (nur vergangene). Verifiziert.
+
 ### CHANGELOG 2026-07-15b — Benachrichtigungen: Flut gestoppt, Deep-Link, Sammel-Alarm + France–Spanien Abrechnung
 - **France–Spanien / "qualifiziert sich" abrechenbar:** `_grade_player_leg` rechnet "{Team} qualifiziert sich" jetzt über das Sieger-Flag des Spiels (inkl. Verlängerung/Elfmeter, Tor-Fallback) ab; Fixture-Daten tragen `home_winner`/`away_winner`. Legacy-Legs bekommen `home`/`away` aus dem Tip injiziert. → Der France–Spanien Mega-Builder rechnet sich nach Deploy automatisch ab (sofern noch nicht gepurged).
 - **Benachrichtigungs-Flut behoben (Punkt 2):** OS-Pushes nutzten eindeutige Tags (`tj-{id}`) → stapelten sich → endloses Wischen. Jetzt FESTE Tags (`tipjar-pick` / `tipjar-live`) → ein Rückstau kollabiert zu EINER sichtbaren Benachrichtigung (neueste gewinnt).

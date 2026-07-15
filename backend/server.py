@@ -5888,9 +5888,21 @@ async def _cleanup_smart_junk():
                  {"status": "void"},
              ]}
         )
-        if blank.deleted_count or stale_reports.deleted_count:
+        # Owner (2026-07-15): a pending Smart Pick whose match kicked off long ago and
+        # never auto-settled (e.g. no API fixture / friendly) must NOT linger until the
+        # 36h purge. Drop any pending smart pick > 8h past kickoff.
+        stuck = 0
+        now = datetime.now(timezone.utc)
+        async for t in db.tips.find({"source": "smart", "status": "pending"},
+                                    {"id": 1, "match_time": 1}):
+            ko = _parse_kickoff(t.get("match_time"))
+            if ko and ko < now - timedelta(hours=8):
+                await db.tips.delete_one({"id": t["id"]})
+                stuck += 1
+        if blank.deleted_count or stale_reports.deleted_count or stuck:
             logger.info(f"Smart cleanup: {blank.deleted_count} blank ideas, "
-                        f"{stale_reports.deleted_count} stale/void smart reports removed")
+                        f"{stale_reports.deleted_count} stale/void reports, "
+                        f"{stuck} stuck expired smart picks removed")
     except Exception as e:
         logger.error(f"Smart cleanup failed: {e}")
 
