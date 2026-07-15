@@ -660,6 +660,38 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         return fallback
 
 
+_ANALYST_SYSTEM = (
+    "Du bist der scharfsinnige Chef-Analyst von TipJar. Schreibe eine KURZE (2–3 Sätze), "
+    "EINZIGARTIGE deutsche Wett-Analyse zu genau diesem Spiel. Absolut KEINE Standardfloskeln, "
+    "keine Wiederholung der Quote/Sterne, kein 'automatisch von TipJarHQ'. Nenne einen konkreten, "
+    "sinnvollen Grund (Taktik, Form, Aggregat bei Rückspielen, Spielbelastung/Rotation, Motivation, "
+    "Torerwartung). Variiere Stil und Einstieg bei jedem Spiel. Sei zugespitzt und meinungsstark, "
+    "aber seriös. Höchstens 1 Emoji. Antworte NUR mit dem Analysetext, ohne Anführungszeichen."
+)
+
+
+async def llm_pick_analysis(context: str) -> str:
+    """Generate a unique, opinionated German analysis for a pick. Returns "" on failure so
+    the caller keeps its template fallback."""
+    if not EMERGENT_LLM_KEY:
+        return ""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"anal-{uuid.uuid4()}",
+            system_message=_ANALYST_SYSTEM,
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=f"Spiel-Daten:\n{context}\n\nSchreibe die Analyse."))
+        out = (resp if isinstance(resp, str) else str(resp)).strip()
+        if out.startswith(('"', "„", "»")):
+            out = out.strip('"„»«”')
+        return out[:600]
+    except Exception as e:
+        logger.error(f"llm_pick_analysis failed: {e}")
+        return ""
+
+
+
 async def moderate_text(text: str) -> tuple[bool, str]:
     """Lightweight text moderation. Returns (safe, reason). Fails open on error."""
     text = (text or "").strip()
@@ -2634,15 +2666,15 @@ def _h2h_first_leg(id1: int, id2: int, before_dt):
 
 
 def _matches_between(team_id: int, after_dt, before_dt):
-    """How many competitive matches a team played BETWEEN the two qualifier legs
-    (fixture congestion). 0 → rested / domestic league in summer break (e.g. Bulgaria);
-    ≥1 → played its league in between (e.g. Scandinavian sides). None = unknown."""
+    """Fixture load a team carried BETWEEN the two qualifier legs. Returns
+    (count, detail) where detail lists each result from the team's view
+    ("0:3 verloren; 2:1 gewonnen"). 0 → rested (league in summer break)."""
     if not team_id:
-        return None
+        return 0, ""
     resp = _apifootball("/fixtures", {"team": team_id, "last": 8})
     if not resp:
-        return None
-    cnt = 0
+        return 0, ""
+    out = []
     for fx in resp:
         st = fx.get("fixture", {}).get("status", {}).get("short")
         if st not in FINISHED_STATUSES:
@@ -2652,9 +2684,15 @@ def _matches_between(team_id: int, after_dt, before_dt):
             fdt = datetime.fromisoformat((d or "").replace("Z", "+00:00"))
         except (ValueError, TypeError):
             continue
-        if after_dt < fdt < before_dt:  # strictly between the legs → not a tie leg
-            cnt += 1
-    return cnt
+        if not (after_dt < fdt < before_dt):
+            continue
+        hg = fx.get("goals", {}).get("home") or 0
+        ag = fx.get("goals", {}).get("away") or 0
+        is_home = fx.get("teams", {}).get("home", {}).get("id") == team_id
+        gf, ga = (hg, ag) if is_home else (ag, hg)
+        res = "gewonnen" if gf > ga else ("verloren" if gf < ga else "unentschieden")
+        out.append(f"{gf}:{ga} {res}")
+    return len(out), "; ".join(out)
 
 
 def _grade_goal_leg(kind, market, team, fx):
@@ -4655,6 +4693,13 @@ async def forebet_autopost() -> dict:
                 f"Anstoß {kickoff}. {'Echte Buchmacher-Quote. ' if real else ''}"
                 f"Datenbasierter Value-Pick — automatisch von TipJarHQ."
             )
+        # Unique, opinionated analysis via LLM (falls back to the template above on failure).
+        _ctx = (f"Wettbewerb: {r.get('league') or lcode}. Spiel: {home} vs {away}. "
+                f"Markt/Tipp: {market}. Quote: {odds:.2f}. Sterne: {stars}/10. "
+                f"Erwartetes Ergebnis {score}, Ø {avg} Tore. Typ: {ptype}. Anstoß {kickoff}.")
+        _llm = await llm_pick_analysis(_ctx)
+        if _llm:
+            analysis = _llm
         combo_legs = c.get("_legs", []) if is_combo else []
         # Frontend-friendly single-match display: one fixture row with all selection
         # chips (settlement uses the separate `combo_legs` with kind/team info).
@@ -4938,6 +4983,12 @@ async def predictz_autopost() -> dict:
             f"Rechtzeitig gepostet, damit du dein Systemwette-Programm aufbauen kannst — "
             f"automatisch von TipJarHQ."
         )
+        _ctx = (f"Wettbewerb: {league}. Spiel: {home} vs {away}. Markt/Tipp: {market}. "
+                f"Quote: {odds}. Sterne: {rating}/10. Erwartetes Ergebnis {r.get('pred')}. "
+                f"Anstoß {match_time}.")
+        _llm = await llm_pick_analysis(_ctx)
+        if _llm:
+            analysis = _llm
         tip = {
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -5375,21 +5426,20 @@ async def qualifier_autopost() -> dict:
         rest_home = _matches_between(id_h, fl_dt, ko)
         rest_away = _matches_between(id_a, fl_dt, ko)
 
-        def _load_txt(name, n):
-            if n is None:
-                return ""
+        def _load_txt(name, rest):
+            n, detail = rest
             if n <= 0:
                 return f"{name} ausgeruht (Sommerpause, kein Spiel zwischen den Duellen)"
-            return f"{name} belastet ({n} Ligaspiel{'e' if n > 1 else ''} zwischenzeitlich)"
-        load_bits = [b for b in (_load_txt(home, rest_home), _load_txt(away, rest_away)) if b]
-        load_note = (" Belastung: " + "; ".join(load_bits) + ".") if load_bits else ""
+            return f"{name} belastet ({n} Spiel dazwischen: {detail})"
+        load_bits = [_load_txt(home, rest_home), _load_txt(away, rest_away)]
+        load_note = " Belastung: " + "; ".join(load_bits) + "."
         legs = []
         rating = 8.0
         if a1 != b1:
             leader = home if a1 > b1 else away
             lead = abs(a1 - b1)
-            leader_rest = rest_home if leader == home else rest_away
-            opp_rest = rest_away if leader == home else rest_home
+            leader_rest = (rest_home if leader == home else rest_away)[0]
+            opp_rest = (rest_away if leader == home else rest_home)[0]
             q_odds = "1.12" if lead >= 2 else "1.35"
             legs.append({"home": home, "away": away,
                          "market": f"{leader} qualifiziert sich", "kind": "qualify",
@@ -5404,7 +5454,6 @@ async def qualifier_autopost() -> dict:
                 rating = max(5.5, rating - 2.0)
             elif (leader_rest == 0) and opp_rest and opp_rest >= 1:
                 rating = min(9.0, rating + 0.5)
-            base = int(lead)
             subtitle = (f"{leader} führt nach Hinspiel (aggregat {a1}:{b1}). "
                         f"Wir setzen auf Weiterkommen"
                         + (" + Tore, da das Hinspiel torreich war." if total1 >= 2 else "."))
@@ -5429,6 +5478,17 @@ async def qualifier_autopost() -> dict:
             "selections": [lg["market"] for lg in legs],
             "sel_odds": [lg["odds"] for lg in legs], "status": "pending",
         }]
+        base_analysis = f"Hinspiel-basiert: {subtitle}{load_note} (Gesamtquote {round(prod, 2)})."
+        _ctx = (f"Rückspiel eines Qualifikations-Duells über zwei Spiele. "
+                f"Spiel: {home} (Heim) vs {away} (Auswärts), {p.get('league') or 'Qualifikation'}. "
+                f"Hinspiel-Aggregat: {home} {a1} : {b1} {away}. "
+                f"Unsere Wette: {', '.join(lg['market'] for lg in legs)} (Gesamtquote {round(prod, 2)}). "
+                f"Spielbelastung zwischen den Duellen — {load_note.strip()} "
+                f"Erkläre in 2-3 Sätzen, warum das ein guter Pick ist: berücksichtige Aggregat "
+                f"(zurückliegendes Team MUSS offensiv spielen → Tore/Verlängerung), Weiterkommen "
+                f"und Belastung/mögliche Rotation, falls ein Team ein schlechtes Ligaspiel dazwischen hatte.")
+        _llm = await llm_pick_analysis(_ctx)
+        analysis = _llm or base_analysis
         await db.tips.insert_one({
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -5438,7 +5498,7 @@ async def qualifier_autopost() -> dict:
             "market": f"{home} vs {away} — Qualifikations-Pick",
             "odds": f"{round(prod, 2)}", "combo_legs": legs, "is_parlay": True,
             "ai_rating": round(rating, 1), "win_prob": 0.0,
-            "ai_analysis": f"Hinspiel-basiert: {subtitle}{load_note} (Gesamtquote {round(prod, 2)}).",
+            "ai_analysis": analysis,
             "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "source": "smart", "category": "banker",
             "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,

@@ -69,6 +69,13 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15h — Einzigartige LLM-Analysen statt Standard-Text + Rotations-Kontext
+- **Problem:** Single Picks (und Qualifikations-Picks) hatten immer denselben festen Standard-Analyse-Text.
+- Neu: `llm_pick_analysis()` (Emergent LLM Key, AI_MODEL) generiert pro Pick eine EINZIGARTIGE, meinungsstarke deutsche 2-3-Satz-Analyse mit echtem taktischen/statistischen Grund. Template bleibt als Fallback. Eingebaut in beide Single-Pick-Generatoren (Forebet + Predictz) und in `qualifier_autopost`.
+- **Rotations-/Belastungs-Kontext:** `_matches_between` liefert jetzt auch die Ergebnisse der Zwischenspiele (z. B. "0:3 verloren") → die LLM kann Rotation/Fokus aufs Europa-Spiel erkennen und erwähnen.
+- Qualifikations-Analyse-Prompt enthält Aggregat, zurückliegendes Team (muss offensiv → Tore/Verlängerung), Weiterkommen und Belastung. Verifiziert: Kairat-Beispiel wird sinngemäß exakt so generiert; alle 6 Qualifikations-Picks + Single Picks haben unterschiedliche, sinnvolle Texte.
+- HINWEIS: jede Pick-Erstellung ruft nun das LLM (verbraucht Universal-Key-Guthaben).
+
 ### CHANGELOG 2026-07-15g — Qualifikations-Picks: Spielbelastung/Erholung erkennen
 - `qualifier_autopost` prüft jetzt zusätzlich per `_matches_between`, wie viele Spiele jedes Team ZWISCHEN Hin- und Rückspiel hatte: 0 = ausgeruht (Land in Sommerpause, z. B. Bulgarien/Albanien), ≥1 = belastet (aktive Sommerliga, z. B. Skandinavier).
 - Fließt ein in: Analyse-Text ("X belastet (1 Ligaspiel), Y ausgeruht") UND Sterne-Rating (müder Favorit vs ausgeruhter Außenseiter → −2★; ausgeruhter Favorit vs belasteter Gegner → +0,5★).
