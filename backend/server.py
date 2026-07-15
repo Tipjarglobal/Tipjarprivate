@@ -2962,13 +2962,20 @@ async def settle_multimatch_parlays() -> dict:
          "combo_legs": {"$exists": False}, "legs.0": {"$exists": True}},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled, judged = 0, 0
+    scan_cache = {}
     for tip in parlays:
         is_cashed = tip.get("status") == "cashed_out"
-        # cashed-out slips keep grading legs longer so every finished game shows its
-        # real Won/Lost, but their overall "Ausgezahlt" status is never overwritten.
-        if tip.get("settle_attempts", 0) >= (24 if is_cashed else 8):
-            continue
         legs = tip.get("legs") or []
+        # Only enforce the retry cap once EVERY match is over. A slip created ~1h before
+        # kickoff would otherwise burn its whole attempt budget while games are still
+        # upcoming/in-play and never settle after full-time.
+        kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
+        if not kos:
+            k0 = _kickoff_dt(tip.get("match_time"))
+            kos = [k0] if k0 else []
+        due = bool(kos) and now >= max(kos) + timedelta(hours=2)
+        if due and tip.get("settle_attempts", 0) >= (24 if is_cashed else 12):
+            continue
         changed = any_lost = False
         all_won = all_resolved = True
         for leg in legs:
@@ -2995,6 +3002,10 @@ async def settle_multimatch_parlays() -> dict:
                 team_id = await resolve_team_id(away)
                 opp = home
             fx = find_finished_fixture(team_id, opp, dates) if team_id else None
+            if not fx:
+                # robust fallback for obscure clubs (diacritics, city suffixes, season
+                # detection): scan all fixtures on the date and match both team names.
+                fx = _datescan_fixture(home, away, dates, scan_cache)
             if not fx:
                 all_resolved, all_won = False, False
                 continue
@@ -3037,7 +3048,7 @@ async def settle_multimatch_parlays() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$set": upd})
         if new_status and not is_cashed:
             settled += 1
-        elif not (all_resolved and is_cashed):
+        elif due and not (all_resolved and is_cashed):
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
     return {"ok": True, "settled": settled, "judged": judged}
 

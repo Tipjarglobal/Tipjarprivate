@@ -69,6 +69,13 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15e — System-Picks ("System der Stunde") rechneten nie ab
+- Zwei Bugs in `settle_multimatch_parlays` (zuständig für System-Picks & Member-Parlays):
+  1) **Versuchs-Limit vor Anpfiff aufgebraucht:** System-Picks entstehen ~1h vor Anstoß. Das 8-Versuche-Limit wurde abgearbeitet, WÄHREND die Spiele noch liefen → nach Spielende nie wieder versucht → blieb ewig "OFFEN". Fix: Limit greift erst, wenn ALLE Spiele vorbei sind (`due` = jetzt ≥ letzter Anstoß + 2h); Attempts zählen nur noch dann. Limit auf 12 erhöht.
+  2) **Kein Datescan-Fallback:** Für obskure Vereine (Vikingur Reykjavik, Gyori ETO, Ararat-Armenia …) scheiterte `find_finished_fixture` (Saison/Diakritika). Jetzt Fallback auf `_datescan_fixture` (scannt alle Spiele am Tag, matcht beide Teamnamen).
+- Verifiziert E2E mit echtem "System der Stunde" (4 Legs, 14/07): settelt als **lost** — Levski Sofia 4:0 Borac war zur HALBZEIT 0:0, daher riss "Über 0,5 Tore 1. HZ" (die anderen 3 Legs gewonnen).
+- Greift auf Produktion nach **Deploy** (bestehender Pick hat attempts<12 → wird erneut versucht & abgerechnet).
+
 ### CHANGELOG 2026-07-15d — KERN-BUG: lokalisierte Teamnamen blockierten JEDE Smart-Pick-Abrechnung
 - Ursache, warum France–Spanien (und andere Smart-Picks) nie abrechneten: Picks speichern Teamnamen in der App-Sprache ("Frankreich"/"Spanien"), aber API-Football nutzt Englisch ("France"/"Spain"). `resolve_team_id`/`find_finished_fixture` fanden nichts → keine Abrechnung.
 - Fix: `COUNTRY_NAME_EN`-Map (DE/ES/FR/IT → EN Nationalmannschafts-Namen) + `_en_name`-Helfer; angewandt in `resolve_team_id`, `find_finished_fixture` und `_datescan_fixture` (Gegner- & Heim/Auswärts-Matching). Fehlerhafte team_cache-Einträge (team_id=None) werden beim Start geleert, damit die Map greift.
