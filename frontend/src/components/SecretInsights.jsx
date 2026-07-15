@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
+import { toLatin } from "../i18n";
 
 // PRIVATE analytics — only reachable at /insights and only for the admin account.
 // Regular visitors never see this; there is no link to it anywhere in the UI.
@@ -316,8 +317,8 @@ const MonitorGroup = ({ title, data }) => {
           <div key={t.id} className="rounded-xl border border-elevated bg-void/40 p-3" data-testid={`sm-${t.id}`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm text-white font-semibold break-words">{t.market || "—"}</p>
-                <p className="text-[11px] text-zinc-500">{t.league} {t.odds ? `· Quote ${t.odds}` : ""}</p>
+                <p className="text-sm text-white font-semibold break-words">{toLatin(t.market) || "—"}</p>
+                <p className="text-[11px] text-zinc-500">{toLatin(t.league)} {t.odds ? `· Quote ${t.odds}` : ""}</p>
               </div>
               <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${STAT_STYLE[t.status] || "bg-zinc-700/40 text-zinc-300"}`}>
                 {STAT_LABEL[t.status] || (t.status || "").toUpperCase()}
@@ -330,7 +331,7 @@ const MonitorGroup = ({ title, data }) => {
                     <span className={l.status === "won" ? "text-won" : l.status === "lost" ? "text-lost" : "text-zinc-600"}>
                       {l.status === "won" ? "✓" : l.status === "lost" ? "✕" : "•"}
                     </span>
-                    <span>{l.match ? `${l.match}: ` : ""}{(l.sel || []).join(" + ")}</span>
+                    <span>{l.match ? `${toLatin(l.match)}: ` : ""}{(l.sel || []).map((x) => toLatin(x)).join(" + ")}</span>
                   </p>
                 ))}
               </div>

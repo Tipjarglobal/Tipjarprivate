@@ -656,11 +656,11 @@ function SmartLab({ t, user, onCreated }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-zinc-300 truncate">@{idea.username || "anon"}</span>
+                      <span className="text-xs font-bold text-zinc-300 truncate">@{toLatin(idea.username) || "anon"}</span>
                       <span className={`text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
                       {idea.images > 0 && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ImagePlus size={11} /> {idea.images}</span>}
                     </div>
-                    {idea.text && <p className="text-sm text-zinc-200 mt-0.5 break-words">{idea.text}</p>}
+                    {idea.text && <p className="text-sm text-zinc-200 mt-0.5 break-words">{toLatin(idea.text)}</p>}
                     <div className="flex items-center gap-2 mt-2 flex-wrap" data-testid={`smart-idea-rate-${idx}`}>
                       <StarRating value={myIdeaRatings[idea.id] || 0} onRate={(s) => rateIdea(idea.id, s)} size={15} readOnly={!user} />
                       {idea.ratings_count > 0 && (
@@ -712,7 +712,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0 group-hover:bg-volt group-hover:text-void transition-colors">
             {tip.username?.[0]?.toUpperCase() || "?"}
           </div>
-          <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{tip.username}</span></span>
+          <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{toLatin(tip.username)}</span></span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
           {isShareable && (
@@ -840,7 +840,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
 
       {tip.ai_analysis && (
         <p className="text-xs text-zinc-400 mt-2 border-l-2 border-volt pl-2 leading-snug">
-          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {tip.ai_analysis}
+          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {toLatin(tip.ai_analysis)}
         </p>
       )}
 

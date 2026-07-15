@@ -3,7 +3,7 @@ import { Bell, BellRing, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, toLatin } from "../i18n";
 
 function anonId() {
   let id = localStorage.getItem("tj_anon");
@@ -141,7 +141,7 @@ export default function NotificationBell() {
     const areaLabel = t(`bell.area.${area}`);
     const name = tp.is_parlay
       ? `${(tp.legs || []).length}-leg parlay`
-      : `${tp.home_team || "Tip"}${tp.away_team ? " vs " + tp.away_team : ""}`;
+      : `${toLatin(tp.home_team) || "Tip"}${tp.away_team ? " vs " + toLatin(tp.away_team) : ""}`;
     const rating = tipRating(tp);
     const title = area === "live"
       ? `\uD83D\uDD34 ${t("bell.new.live")} — ${areaLabel}`

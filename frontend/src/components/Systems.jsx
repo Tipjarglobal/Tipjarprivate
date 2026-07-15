@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers } from "lucide-react";
 import { OddsValue } from "./OddsValue";
-import { useI18n, localizeMarket, formatSelection } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin } from "../i18n";
 import api from "../api";
 
 const RISK = {
@@ -87,7 +87,7 @@ const SystemCard = ({ system }) => {
                   </span>
                 )}
                 <span className="font-heading font-bold text-white text-sm break-words min-w-0">
-                  {s.home_team} <span className="text-zinc-600">vs</span> {s.away_team}
+                  {toLatin(s.home_team)} <span className="text-zinc-600">vs</span> {toLatin(s.away_team)}
                 </span>
               </div>
               {s.combo_markets ? (

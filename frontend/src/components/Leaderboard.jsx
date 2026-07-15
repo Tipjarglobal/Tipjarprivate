@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Crown } from "lucide-react";
 import api from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, toLatin } from "../i18n";
 
 export default function Leaderboard({ refreshKey }) {
   const { t } = useI18n();
@@ -41,7 +41,7 @@ export default function Leaderboard({ refreshKey }) {
               <span className={`col-span-1 font-mono font-black ${i === 0 ? "text-volt" : i < 3 ? "text-white" : "text-zinc-500"}`}>{i + 1}</span>
               <span className="col-span-6 flex items-center gap-2 min-w-0">
                 <span className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0">{r.username?.[0]?.toUpperCase()}</span>
-                <span className="text-white font-semibold truncate">{r.username}</span>
+                <span className="text-white font-semibold truncate">{toLatin(r.username)}</span>
               </span>
               <span className="col-span-2 text-right font-mono text-zinc-300">{r.total_tips}</span>
               <span className="col-span-1 text-right font-mono text-won">{r.won}</span>

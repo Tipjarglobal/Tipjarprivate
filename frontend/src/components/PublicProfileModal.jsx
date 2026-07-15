@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Modal from "./Modal";
 import api from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, toLatin } from "../i18n";
 import { Gift, Calendar, Trophy, TrendingUp, Coins, Flame } from "lucide-react";
 
 export default function PublicProfileModal({ open, username, onClose, onGift }) {
@@ -36,7 +36,7 @@ export default function PublicProfileModal({ open, username, onClose, onGift }) 
         <div className="w-20 h-20 rounded-full bg-volt text-void flex items-center justify-center text-3xl font-black mx-auto shadow-[0_0_24px_rgba(225,255,0,0.35)]">
           {username?.[0]?.toUpperCase() || "?"}
         </div>
-        <h3 className="mt-3 text-xl font-black text-white" data-testid="profile-username">@{username}</h3>
+        <h3 className="mt-3 text-xl font-black text-white" data-testid="profile-username">@{toLatin(username)}</h3>
         {p?.apex_flame && (
           <div data-testid="profile-apex-flame" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-bell/15 border border-bell/40 px-3 py-1 text-xs font-black text-bell">
             <Flame size={14} /> {t("profile.apexFlame")}

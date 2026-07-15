@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Coins, Radio, Users, Award, X, Gift, Banknote } from "lucide-react";
 import api, { fileUrl } from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, toLatin } from "../i18n";
 
 const TYPE_META = {
   played: { icon: Users, label: "win.type.played", color: "text-sky-400" },
@@ -90,7 +90,7 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
                     </div>
                     <div className="mt-1 flex items-center justify-between text-sm">
                       <button type="button" onClick={() => onUserClick?.(w.username)} data-testid={`hof-gift-user-${i}`}
-                        className="text-white font-semibold truncate hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">@{w.username}</button>
+                        className="text-white font-semibold truncate hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">@{toLatin(w.username)}</button>
                       <span className="text-zinc-400">{w.legs_count} Legs</span>
                     </div>
                   </div>
@@ -135,7 +135,7 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
               <span className="w-6 h-6 rounded-full bg-volt text-void flex items-center justify-center text-xs font-black">
                 {viewer.username?.[0]?.toUpperCase() || "?"}
               </span>
-              @{viewer.username}
+              @{toLatin(viewer.username)}
               <Gift size={14} className="text-volt" />
             </button>
           </div>
