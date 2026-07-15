@@ -6235,6 +6235,15 @@ async def _cleanup_smart_junk():
         # Drop failed team-name resolutions so the localized-name map (Frankreich→France)
         # takes effect on the next settlement pass.
         await db.team_cache.delete_many({"team_id": None})
+        # Give stuck parlays (smart / system / member) a fresh settlement chance after the
+        # engine fixes (localized team names, datescan, aggregate grading). Their retry
+        # budget may have been burned by the OLD code that couldn't resolve teams.
+        reset = await db.tips.update_many(
+            {"is_parlay": True, "status": {"$in": ["pending", "live"]},
+             "settle_attempts": {"$gt": 0}},
+            {"$set": {"settle_attempts": 0}})
+        if reset.modified_count:
+            logger.info(f"Reset settle_attempts on {reset.modified_count} stuck parlays")
     except Exception as e:
         logger.error(f"Smart cleanup failed: {e}")
 

@@ -69,6 +69,12 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15i — France–Spanien hing in Smart Picks: settle_attempts-Limit reset
+- Ursache: Der France–Spanien Smart-Pick blieb pending, weil der ALTE Code (vor der Teamnamen-Übersetzung) sein Versuchs-Limit (SETTLE_MAX_ATTEMPTS=240) aufgebraucht hatte → wurde in `settle_hq_combos` dauerhaft übersprungen, obwohl die Abrechnung jetzt funktioniert.
+- Fix: `_cleanup_smart_junk` (Startup) setzt `settle_attempts` für alle hängenden Parlays (pending/live, is_parlay) auf 0 zurück → beim nächsten Abrechnungslauf werden sie mit der reparierten Engine neu versucht.
+- Verifiziert E2E: Pick mit attempts=240 → vor Reset pending (übersprungen) → nach Cleanup+Settle "lost" 0:2 → verlässt Smart Picks.
+- Greift auf Produktion nach **Deploy** (Startup-Reset läuft beim Neustart).
+
 ### CHANGELOG 2026-07-15h — Einzigartige LLM-Analysen statt Standard-Text + Rotations-Kontext
 - **Problem:** Single Picks (und Qualifikations-Picks) hatten immer denselben festen Standard-Analyse-Text.
 - Neu: `llm_pick_analysis()` (Emergent LLM Key, AI_MODEL) generiert pro Pick eine EINZIGARTIGE, meinungsstarke deutsche 2-3-Satz-Analyse mit echtem taktischen/statistischen Grund. Template bleibt als Fallback. Eingebaut in beide Single-Pick-Generatoren (Forebet + Predictz) und in `qualifier_autopost`.
