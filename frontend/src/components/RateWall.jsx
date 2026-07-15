@@ -8,7 +8,7 @@ import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
-import { useI18n, localizeMarket, formatSelection } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -756,8 +756,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       )}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mb-2">
-        {tip.league && <span>{tip.league}</span>}
-        {tip.country && <span>· {tip.country}</span>}
+        {tip.league && <span>{toLatin(tip.league)}</span>}
+        {tip.country && <span>· {toLatin(tip.country)}</span>}
         {tip.match_time && !(tip.legs && tip.legs.length) && <span>· {tip.match_time}</span>}
       </div>
 
@@ -774,7 +774,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             return (
             <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{leg.match || "—"}</span>
+                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{toLatin(leg.match) || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {ls && (
                     <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
@@ -784,7 +784,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
                 </div>
               </div>
-              {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
+              {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {(leg.selections || []).map((s, si) => {
                   const od = (leg.sel_odds || [])[si];
@@ -808,7 +808,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       ) : (
         <>
           <h4 className="font-heading font-bold text-white text-lg leading-tight">
-            {tip.home_team || "—"} <span className="text-zinc-600 text-sm">vs</span> {tip.away_team || "—"}
+            {toLatin(tip.home_team) || "—"} <span className="text-zinc-600 text-sm">vs</span> {toLatin(tip.away_team) || "—"}
           </h4>
           {(tip.category || tip.pick_type) && (() => {
             const cat = tip.category || (tip.pick_type === "value" || tip.pick_type === "combo" ? "value" : tip.pick_type);

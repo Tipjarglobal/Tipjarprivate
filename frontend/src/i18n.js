@@ -1,4 +1,15 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { transliterate } from "transliteration";
+
+// Convert non-Latin scripts (Greek, Cyrillic, Arabic, Hebrew, CJK, …) to Latin
+// characters for display only. Latin text (incl. German umlauts ä/ö/ü/ß and
+// accents) is left untouched so we never mangle "München" into "Munchen".
+const NON_LATIN_RE = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/;
+export function toLatin(text) {
+  if (!text || typeof text !== "string") return text;
+  if (!NON_LATIN_RE.test(text)) return text;
+  return transliterate(text);
+}
 
 export const LANGUAGES = [
   { code: "en", label: "English", flag: "🇬🇧" },
@@ -48,6 +59,9 @@ export function localizeMarket(market, t) {
 //  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
 //  - already-correct German markets pass through localizeMarket unchanged.
 export function formatSelection(sel, t) {
+  return toLatin(_formatSelection(sel, t));
+}
+function _formatSelection(sel, t) {
   if (!sel || typeof sel !== "string") return sel;
   const s = sel.trim();
   const dec = (x) => x.replace(",", ".");
