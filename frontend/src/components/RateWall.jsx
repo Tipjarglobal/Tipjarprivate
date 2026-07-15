@@ -697,8 +697,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
       transition={{ delay: (i % 6) * 0.05 }}
+      id={`pick-${tip.id}`}
       data-testid={`tip-card-${tip.id}`}
-      className="rounded-xl bg-surface border border-elevated p-4 hover:-translate-y-1 hover:border-volt/50 transition-all flex flex-col"
+      className="rounded-xl bg-surface border border-elevated p-4 hover:-translate-y-1 hover:border-volt/50 transition-all flex flex-col scroll-mt-24"
     >
       <div className="flex items-center justify-between mb-3">
         <button

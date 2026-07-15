@@ -69,6 +69,14 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15b — Benachrichtigungen: Flut gestoppt, Deep-Link, Sammel-Alarm + France–Spanien Abrechnung
+- **France–Spanien / "qualifiziert sich" abrechenbar:** `_grade_player_leg` rechnet "{Team} qualifiziert sich" jetzt über das Sieger-Flag des Spiels (inkl. Verlängerung/Elfmeter, Tor-Fallback) ab; Fixture-Daten tragen `home_winner`/`away_winner`. Legacy-Legs bekommen `home`/`away` aus dem Tip injiziert. → Der France–Spanien Mega-Builder rechnet sich nach Deploy automatisch ab (sofern noch nicht gepurged).
+- **Benachrichtigungs-Flut behoben (Punkt 2):** OS-Pushes nutzten eindeutige Tags (`tj-{id}`) → stapelten sich → endloses Wischen. Jetzt FESTE Tags (`tipjar-pick` / `tipjar-live`) → ein Rückstau kollabiert zu EINER sichtbaren Benachrichtigung (neueste gewinnt).
+- **Sammel-Benachrichtigung (Punkt 4):** `push_watch_loop` sendet bei mehreren frischen Picks EINE Digest-Push ("⚡ N neue Picks …") statt vieler einzelner; bei genau einem Pick eine Detail-Push mit Deep-Link.
+- **Deep-Link (Punkt 3):** Push-`url` = `/?pick={id}&area={area}`; Service-Worker navigiert dahin; App.js `jumpToPick` öffnet die Ansicht und scrollt/hebt den Pick hervor (`#pick-{id}` Anker + Glow). Verifiziert per Screenshot.
+- **In-App-Alarme (Punkt 4):** Jede Toast-Meldung hat jetzt "Pick ansehen" → springt via `tj-open-pick` direkt auf den jeweiligen Pick.
+- HINWEIS: Echte OS-Push-Zustellung ist nur auf echten Geräten testbar; Payload/Tag/Deep-Link-Logik ist verifiziert. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-15 — Auto-Abrechnung für Spieler-Prop Mega-Bet-Builder (Smart Picks)
 - Smart Mega-Bet-Builder (Spieler-Props) konnten bisher NICHT automatisch abgerechnet werden → blieben pending & wurden nach 36h gelöscht (nie in Won/Lost). Jetzt gebaut:
   - `_player_stats_for_fixture` holt per-Spieler Match-Stats aus API-Football `/fixtures/players` (Schüsse, Schüsse aufs Tor, Fouls begangen/gezogen, Karten, Tore, Paraden) + Team-Karten-Summen. An echten Daten verifiziert (Villarreal–Atlético, 45 Spieler geparst).

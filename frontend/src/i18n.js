@@ -132,6 +132,7 @@ const T = {
 
     "bell.enable": "Get Tip Alerts",
     "bell.enabled": "Alerts On",
+    "bell.view_pick": "View pick",
     "bell.denied": "Notifications are blocked. Enable them in your browser settings.",
     "push.prompt.title": "Never miss a winning tip",
     "push.prompt.body": "Turn on alerts and we'll ping you the second a fresh pick or live banker drops — even when the app is closed.",
@@ -714,6 +715,7 @@ const T = {
 
     "bell.enable": "Tipp-Alarme",
     "bell.enabled": "Alarme an",
+    "bell.view_pick": "Pick ansehen",
     "bell.denied": "Benachrichtigungen sind blockiert. Aktiviere sie in den Browser-Einstellungen.",
     "push.prompt.title": "Verpass keinen Gewinner-Tipp",
     "push.prompt.body": "Aktiviere Benachrichtigungen und wir melden dir jeden neuen Pick oder Live-Banker sofort — auch wenn die App geschlossen ist.",

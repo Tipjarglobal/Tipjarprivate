@@ -182,6 +182,38 @@ function Home() {
     return () => window.removeEventListener("tj-open-view", h);
   }, []);
 
+  // Deep-link from a push notification: /?pick=<id>&area=<area> → open that area and
+  // scroll straight to the pick (tapping an alert ports directly onto the pick).
+  const jumpToPick = useCallback((area, pick) => {
+    if (!pick) return;
+    openTipsView(area || "ai");
+    let tries = 0;
+    const tick = () => {
+      const el = document.getElementById(`pick-${pick}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "box-shadow 0.3s ease";
+        el.style.boxShadow = "0 0 0 3px rgba(198,255,0,0.85)";
+        setTimeout(() => { el.style.boxShadow = ""; }, 3200);
+      } else if (tries++ < 40) {
+        setTimeout(tick, 150);
+      }
+    };
+    setTimeout(tick, 450);
+  }, []);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const pick = sp.get("pick");
+    if (pick) {
+      jumpToPick(sp.get("area") || "ai", pick);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    const h = (e) => jumpToPick(e.detail?.area, e.detail?.id);
+    window.addEventListener("tj-open-pick", h);
+    return () => window.removeEventListener("tj-open-pick", h);
+  }, [jumpToPick]);
+
   return (
     <div className="App grain min-h-screen overflow-x-hidden" id="top">
       <SplashScreen />

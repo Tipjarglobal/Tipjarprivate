@@ -2144,15 +2144,17 @@ def _push_payload_for_tip(tip: dict) -> dict:
         stars = 0
     sound = "explosion" if stars >= 10 else ("fire" if stars == 9 else "coin")
     is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
+    pid = tip.get("id")
+    src = tip.get("source")
+    area = "live" if is_live else ("ai" if src == "hq-auto" else ("smart" if src == "smart" else "members"))
     if is_live:
         # Owner (2026-07-10): live in-play bets are never "impossible to lose" — cap at
         # 7★ and never fire the 9/10★ explosion sound.
         stars = min(stars, 7)
-        return {"title": "🔵 LIVE-Pick", "body": detail, "url": "/", "kind": "live",
-                "sound": "coin",
-                "icon": "/push-live.png", "badge": "/push-live.png", "tag": f"tj-{tip.get('id')}"}
+        return {"title": "🔵 LIVE-Pick", "body": detail, "url": f"/?pick={pid}&area=live",
+                "kind": "live", "sound": "coin", "pick_id": pid,
+                "icon": "/push-live.png", "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
-    src = tip.get("source")
     if src == "hq-auto":
         if cat == "banker" and stars >= 10:
             title = "💥 10-Sterne-Banker!"
@@ -2165,8 +2167,26 @@ def _push_payload_for_tip(tip: dict) -> dict:
         title = "🧠 Neuer Smart-Pick"
     else:
         title = "👥 Neuer Community-Tipp"
-    return {"title": title, "body": detail, "url": "/", "kind": "tip", "sound": sound,
-            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": f"tj-{tip.get('id')}"}
+    # Fixed tag ('tipjar-pick') so a burst of queued pushes COLLAPSES into one visible
+    # notification (newest wins) instead of stacking → no endless-swipe. Deep-link via ?pick=.
+    return {"title": title, "body": detail, "url": f"/?pick={pid}&area={area}", "kind": "tip",
+            "sound": sound, "pick_id": pid,
+            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
+
+
+def _digest_payload_for_tips(tips: list) -> dict:
+    """One bundled push for a batch of fresh picks (no endless-swipe). Fixed tag so it
+    replaces any previous digest. Opens the app; the in-app bell lists each pick."""
+    n = len(tips)
+    live_n = sum(1 for t in tips if t.get("status") == "live" or t.get("source") == "hq-live")
+    def _short(t):
+        h, a = t.get("home_team") or "", t.get("away_team") or ""
+        return f"{h} vs {a}" if a else (t.get("market") or h or "Pick")
+    names = [_short(t) for t in tips[:3]]
+    body = " · ".join(names) + (f" +{n - 3} mehr" if n > 3 else "")
+    title = f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else "")
+    return {"title": title, "body": body, "url": "/", "kind": "digest", "sound": "coin",
+            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
 
 
 async def push_watch_loop():
@@ -2187,8 +2207,12 @@ async def push_watch_loop():
                 fresh = await db.tips.find(
                     {"created_at": {"$gt": last}, "status": {"$in": ["pending", "live"]}},
                     {"_id": 0}).sort("created_at", 1).to_list(50)
-                for tip in fresh[:8]:
-                    await notify_all_push(_push_payload_for_tip(tip))
+                # One detailed push for a single pick (with deep-link); one bundled digest
+                # for a batch — never a stack of individual notifications.
+                if len(fresh) == 1:
+                    await notify_all_push(_push_payload_for_tip(fresh[0]))
+                elif len(fresh) > 1:
+                    await notify_all_push(_digest_payload_for_tips(fresh))
                 if fresh:
                     last = fresh[-1]["created_at"]
                     await db.push_state.update_one({"key": "last_push"},
@@ -2455,7 +2479,21 @@ def _grade_player_leg(leg, pmap, team_cards, fx):
             return None
         return all(v >= 1 for v in team_cards.values())
     if "qualifiziert" in m or "qualif" in m or "weiterkommen" in m:
-        return None  # tournament progression can't be derived from one fixture
+        # Knockout progression proxy: the named team qualifies if it wins the tie/match
+        # (winner flag accounts for extra time & penalties; goals as fallback).
+        home_de = _norm(leg.get("home") or "")
+        away_de = _norm(leg.get("away") or "")
+        first_home = home_de.split()[0] if home_de else ""
+        first_away = away_de.split()[0] if away_de else ""
+        target_home = bool(first_home and first_home in m)
+        target_away = bool(first_away and first_away in m)
+        if target_home == target_away:
+            return None  # ambiguous team reference
+        hw, aw = fx.get("home_winner"), fx.get("away_winner")
+        hg, ag = fx.get("home_goals") or 0, fx.get("away_goals") or 0
+        if target_home:
+            return hw if hw is not None else hg > ag
+        return aw if aw is not None else ag > hg
     kind = (leg.get("kind") or "").lower()
     line = leg.get("line")
     if kind in ("", "player") or line is None:
@@ -2607,6 +2645,8 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
                     "home_goals": fx.get("goals", {}).get("home"),
                     "away_goals": fx.get("goals", {}).get("away"),
                     "ht_home": ht.get("home"), "ht_away": ht.get("away"),
+                    "home_winner": fx.get("teams", {}).get("home", {}).get("winner"),
+                    "away_winner": fx.get("teams", {}).get("away", {}).get("winner"),
                     "status": status,
                 }
     return None
@@ -2635,6 +2675,8 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
                             "home_goals": fx.get("goals", {}).get("home"),
                             "away_goals": fx.get("goals", {}).get("away"),
                             "ht_home": ht.get("home"), "ht_away": ht.get("away"),
+                            "home_winner": fx.get("teams", {}).get("home", {}).get("winner"),
+                            "away_winner": fx.get("teams", {}).get("away", {}).get("winner"),
                             "status": status,
                         }
             break  # this season had data for the date; no need to probe the other season
@@ -2797,6 +2839,8 @@ async def settle_hq_combos() -> dict:
                 continue
         all_won, ok = True, True
         for lg in combo_legs:
+            lg.setdefault("home", home)
+            lg.setdefault("away", away)
             res = _grade_goal_leg(lg.get("kind"), lg.get("market"), lg.get("team"), fx)
             if res is None:
                 res = _grade_player_leg(lg, pmap or {}, team_cards or {}, fx)

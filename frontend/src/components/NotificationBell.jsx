@@ -152,8 +152,12 @@ export default function NotificationBell() {
       description: body,
       duration: area === "live" ? 15000 : 10000,
       action: {
-        label: t(`nav.${VIEW_KEY[area] || "viewtips"}`),
-        onClick: () => window.dispatchEvent(new CustomEvent("tj-open-view", { detail: area })),
+        label: tp.id ? t("bell.view_pick") : t(`nav.${VIEW_KEY[area] || "viewtips"}`),
+        onClick: () => window.dispatchEvent(
+          tp.id
+            ? new CustomEvent("tj-open-pick", { detail: { area, id: tp.id } })
+            : new CustomEvent("tj-open-view", { detail: area })
+        ),
       },
     });
     setUnseen((u) => u + 1);
