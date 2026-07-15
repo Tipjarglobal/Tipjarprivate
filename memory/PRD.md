@@ -69,6 +69,11 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15g — Qualifikations-Picks: Spielbelastung/Erholung erkennen
+- `qualifier_autopost` prüft jetzt zusätzlich per `_matches_between`, wie viele Spiele jedes Team ZWISCHEN Hin- und Rückspiel hatte: 0 = ausgeruht (Land in Sommerpause, z. B. Bulgarien/Albanien), ≥1 = belastet (aktive Sommerliga, z. B. Skandinavier).
+- Fließt ein in: Analyse-Text ("X belastet (1 Ligaspiel), Y ausgeruht") UND Sterne-Rating (müder Favorit vs ausgeruhter Außenseiter → −2★; ausgeruhter Favorit vs belasteter Gegner → +0,5★).
+- Verifiziert mit echten Daten: Astana (1 Ligaspiel dazwischen) vs Dinamo Tirana (Pause) → Rating 8→6; Rigas FS belastet → 6; beidseitig ausgeruhte Duelle behalten volle Bewertung.
+
 ### CHANGELOG 2026-07-15f — Hinspiel-Bewusstsein: Qualifikations-Picks für Zweikampf-Duelle
 - Neue Engine `qualifier_autopost()` (im Smart-Loop): erkennt Rückspiele von Qualifikations-Duellen (CL/EL/ECL/Kontinental via Liga-Keywords), holt das HINSPIEL-Ergebnis via API-Football H2H (`_h2h_first_leg`) und baut den smartesten sicheren Pick:
   - klarer Aggregat-Vorsprung → "{Leader} qualifiziert sich" (@1.12/1.35 je nach Vorsprung) + "Über 1.5 Tore" wenn Hinspiel torreich (≥2).

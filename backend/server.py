@@ -2633,6 +2633,30 @@ def _h2h_first_leg(id1: int, id2: int, before_dt):
     }
 
 
+def _matches_between(team_id: int, after_dt, before_dt):
+    """How many competitive matches a team played BETWEEN the two qualifier legs
+    (fixture congestion). 0 → rested / domestic league in summer break (e.g. Bulgaria);
+    ≥1 → played its league in between (e.g. Scandinavian sides). None = unknown."""
+    if not team_id:
+        return None
+    resp = _apifootball("/fixtures", {"team": team_id, "last": 8})
+    if not resp:
+        return None
+    cnt = 0
+    for fx in resp:
+        st = fx.get("fixture", {}).get("status", {}).get("short")
+        if st not in FINISHED_STATUSES:
+            continue
+        d = fx.get("fixture", {}).get("date")
+        try:
+            fdt = datetime.fromisoformat((d or "").replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if after_dt < fdt < before_dt:  # strictly between the legs → not a tie leg
+            cnt += 1
+    return cnt
+
+
 def _grade_goal_leg(kind, market, team, fx):
     """Deterministically grade a single-match goal / half-time / corner leg from a
     finished fixture. Returns True (won), False (lost) or None (kind can't be graded
@@ -5342,10 +5366,30 @@ async def qualifier_autopost() -> dict:
         else:
             a1, b1 = first["ag"], first["hg"]
         total1 = a1 + b1
+        # Fixture congestion between the legs: Scandinavian sides play their summer league
+        # in between (tired); teams from countries in summer break only play the tie (fresh).
+        try:
+            fl_dt = datetime.fromisoformat(first["date"])
+        except (ValueError, TypeError):
+            fl_dt = ko - timedelta(days=7)
+        rest_home = _matches_between(id_h, fl_dt, ko)
+        rest_away = _matches_between(id_a, fl_dt, ko)
+
+        def _load_txt(name, n):
+            if n is None:
+                return ""
+            if n <= 0:
+                return f"{name} ausgeruht (Sommerpause, kein Spiel zwischen den Duellen)"
+            return f"{name} belastet ({n} Ligaspiel{'e' if n > 1 else ''} zwischenzeitlich)"
+        load_bits = [b for b in (_load_txt(home, rest_home), _load_txt(away, rest_away)) if b]
+        load_note = (" Belastung: " + "; ".join(load_bits) + ".") if load_bits else ""
         legs = []
+        rating = 8.0
         if a1 != b1:
             leader = home if a1 > b1 else away
             lead = abs(a1 - b1)
+            leader_rest = rest_home if leader == home else rest_away
+            opp_rest = rest_away if leader == home else rest_home
             q_odds = "1.12" if lead >= 2 else "1.35"
             legs.append({"home": home, "away": away,
                          "market": f"{leader} qualifiziert sich", "kind": "qualify",
@@ -5355,7 +5399,13 @@ async def qualifier_autopost() -> dict:
             if total1 >= 2:  # tie already produced goals → back more goals
                 legs.append({"home": home, "away": away, "market": "Über 1.5 Tore",
                              "kind": "total_o", "line": 1.5, "odds": "1.40", "status": "open"})
-            subtitle = (f"{leader} führt nach Hinspiel {a1}:{b1} (aggregat). "
+            # congestion factor: a tired leader vs a rested underdog is more upset-prone
+            if leader_rest and leader_rest >= 1 and (opp_rest == 0):
+                rating = max(5.5, rating - 2.0)
+            elif (leader_rest == 0) and opp_rest and opp_rest >= 1:
+                rating = min(9.0, rating + 0.5)
+            base = int(lead)
+            subtitle = (f"{leader} führt nach Hinspiel (aggregat {a1}:{b1}). "
                         f"Wir setzen auf Weiterkommen"
                         + (" + Tore, da das Hinspiel torreich war." if total1 >= 2 else "."))
         else:
@@ -5364,6 +5414,7 @@ async def qualifier_autopost() -> dict:
                          "kind": "ah15_home", "odds": "1.30", "status": "open"})
             legs.append({"home": home, "away": away, "market": f"{away} +1.5",
                          "kind": "ah15_away", "odds": "1.30", "status": "open"})
+            rating = 7.5
             subtitle = (f"Enges Duell (Hinspiel {a1}:{b1}). Doppel-Handicap ±1,5: "
                         f"gewinnt, solange keine Mannschaft mit 2+ Toren gewinnt.")
         prod = 1.0
@@ -5386,8 +5437,8 @@ async def qualifier_autopost() -> dict:
             "league_code": p.get("league_code") or "",
             "market": f"{home} vs {away} — Qualifikations-Pick",
             "odds": f"{round(prod, 2)}", "combo_legs": legs, "is_parlay": True,
-            "ai_rating": 8.0, "win_prob": 0.0,
-            "ai_analysis": f"Hinspiel-basiert: {subtitle} (Gesamtquote {round(prod, 2)}).",
+            "ai_rating": round(rating, 1), "win_prob": 0.0,
+            "ai_analysis": f"Hinspiel-basiert: {subtitle}{load_note} (Gesamtquote {round(prod, 2)}).",
             "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "source": "smart", "category": "banker",
             "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
