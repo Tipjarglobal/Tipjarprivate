@@ -16,6 +16,16 @@ export function toLatin(text) {
   return transliterate(text);
 }
 
+// Team-name display: native-script readers (el/ar) keep the original; everyone else
+// prefers the canonical API-Football Latin name (e.g. "Blumenau SC") when available,
+// else falls back to phonetic transliteration.
+export function displayTeam(raw, latin) {
+  const lang = (typeof localStorage !== "undefined" && localStorage.getItem("tj_lang")) || "en";
+  if (lang === "el" || lang === "ar") return raw;
+  if (latin) return latin;
+  return toLatin(raw);
+}
+
 export const LANGUAGES = [
   { code: "en", label: "English", flag: "🇬🇧" },
   { code: "de", label: "Deutsch", flag: "🇩🇪" },

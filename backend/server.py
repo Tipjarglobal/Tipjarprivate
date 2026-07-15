@@ -2331,8 +2331,52 @@ def _norm(s: str) -> str:
     return "".join(c for c in s.lower() if c.isalnum() or c.isspace()).strip()
 
 
-def _teams_match(a: str, b: str) -> bool:
-    na, nb = _norm(a), _norm(b)
+_GREEK_RE = re.compile(r"[\u0370-\u03FF]")
+_NON_LATIN_RE = re.compile(r"[^\u0000-\u024F]")
+_GR_MONO = {
+    "α": "a", "β": "v", "γ": "g", "δ": "d", "ε": "e", "ζ": "z", "η": "i",
+    "θ": "th", "ι": "i", "κ": "k", "λ": "l", "μ": "m", "ν": "n", "ξ": "x",
+    "ο": "o", "π": "p", "ρ": "r", "σ": "s", "ς": "s", "τ": "t", "υ": "y",
+    "φ": "f", "χ": "ch", "ψ": "ps", "ω": "o",
+}
+
+
+def _translit_greek(s: str, hard: bool) -> str:
+    """Modern-Greek → Latin. Digraphs μπ/ντ/ου are ambiguous: the 'hard' variant
+    maps μπ→b, ντ→d, ου→u (→ 'Μπλούμεναου'→'blumenau'); the 'soft' variant keeps
+    μπ→mp, ντ→nt, ου→ou (→ 'Ολυμπιακός'→'olympiakos'). We try both when resolving."""
+    s = unicodedata.normalize("NFD", (s or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    for a, b in [("μπ", "b" if hard else "mp"), ("ντ", "d" if hard else "nt"),
+                 ("γκ", "g"), ("γγ", "ng"), ("τσ", "ts"), ("τζ", "tz"),
+                 ("ου", "u" if hard else "ou"), ("αυ", "av"), ("ευ", "ev")]:
+        s = s.replace(a, b)
+    return "".join(_GR_MONO.get(c, c) for c in s)
+
+
+def _latin_variants(name: str) -> list:
+    """Latin transliteration candidates for a possibly non-Latin team name (Greek
+    gets both digraph variants; Cyrillic/other via unidecode). Original included."""
+    name = (name or "").strip()
+    out = [name]
+    if _GREEK_RE.search(name):
+        out.append(_translit_greek(name, False))
+        out.append(_translit_greek(name, True))
+    elif _NON_LATIN_RE.search(name):
+        try:
+            from unidecode import unidecode
+            out.append(unidecode(name))
+        except Exception:
+            pass
+    seen, res = set(), []
+    for x in out:
+        if x and x not in seen:
+            seen.add(x)
+            res.append(x)
+    return res
+
+
+def _match_norm(na: str, nb: str) -> bool:
     if not na or not nb:
         return False
     if na == nb or na in nb or nb in na:
@@ -2356,6 +2400,16 @@ def _teams_match(a: str, b: str) -> bool:
     for wa in ta:
         for wb in tb:
             if _close(wa, wb):
+                return True
+    return False
+
+
+def _teams_match(a: str, b: str) -> bool:
+    fa = {_norm(x) for x in _latin_variants(a)}
+    fb = {_norm(x) for x in _latin_variants(b)}
+    for na in fa:
+        for nb in fb:
+            if _match_norm(na, nb):
                 return True
     return False
 
@@ -2416,25 +2470,29 @@ async def resolve_team_id(name: str):
     if cached:
         return cached.get("team_id")
     # localized national-team name → API-Football English name (e.g. Frankreich → France)
-    search_name = COUNTRY_NAME_EN.get(key, name.strip())
-    resp = _apifootball("/teams", {"search": search_name})
-    # fallbacks for name mismatches (hyphens, city suffixes)
-    if not resp:
-        simplified = re.sub(r"[-_]", " ", search_name).strip()
-        if simplified.lower() != search_name.lower():
-            resp = _apifootball("/teams", {"search": simplified})
-    if not resp:
-        first = re.sub(r"[^A-Za-z0-9 ]", " ", search_name).split()
-        if first and len(first[0]) >= 4:
-            resp = _apifootball("/teams", {"search": first[0]})
+    base_name = COUNTRY_NAME_EN.get(key, name.strip())
+    # Try each Latin transliteration candidate (Greek/Cyrillic → Latin) until one resolves.
     team_id = None
-    if resp:
-        for item in resp:
-            if _teams_match(item.get("team", {}).get("name", ""), search_name):
-                team_id = item["team"]["id"]
-                break
-        if team_id is None:
-            team_id = resp[0].get("team", {}).get("id")
+    for search_name in _latin_variants(base_name) or [base_name]:
+        resp = _apifootball("/teams", {"search": search_name})
+        # fallbacks for name mismatches (hyphens, city suffixes)
+        if not resp:
+            simplified = re.sub(r"[-_]", " ", search_name).strip()
+            if simplified.lower() != search_name.lower():
+                resp = _apifootball("/teams", {"search": simplified})
+        if not resp:
+            first = re.sub(r"[^A-Za-z0-9 ]", " ", search_name).split()
+            if first and len(first[0]) >= 4:
+                resp = _apifootball("/teams", {"search": first[0]})
+        if resp:
+            for item in resp:
+                if _teams_match(item.get("team", {}).get("name", ""), search_name):
+                    team_id = item["team"]["id"]
+                    break
+            if team_id is None:
+                team_id = resp[0].get("team", {}).get("id")
+        if team_id is not None:
+            break
     await db.team_cache.update_one({"key": key}, {"$set": {"key": key, "team_id": team_id}}, upsert=True)
     return team_id
 
@@ -2939,9 +2997,17 @@ async def settle_pending_tips() -> dict:
         if new_status == "void":
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
+        # canonical (Latin) team names from API-Football, mapped to the tip's orientation,
+        # so non-Greek readers see "Blumenau SC" instead of "Μπλούμεναου".
+        if _teams_match(fx.get("home_name", ""), tip["home_team"]) or \
+           _teams_match(fx.get("away_name", ""), tip["away_team"]):
+            home_latin, away_latin = fx.get("home_name"), fx.get("away_name")
+        else:
+            home_latin, away_latin = fx.get("away_name"), fx.get("home_name")
         await db.tips.update_one({"id": tip["id"]}, {"$set": {
             "status": new_status,
             "final_home": fx["home_goals"], "final_away": fx["away_goals"],
+            "home_team_latin": home_latin, "away_team_latin": away_latin,
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
         }})
         settled += 1

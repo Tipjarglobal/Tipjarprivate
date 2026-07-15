@@ -8,7 +8,7 @@ import { Systems } from "./Systems";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
-import { useI18n, localizeMarket, formatSelection, toLatin } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -808,7 +808,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       ) : (
         <>
           <h4 className="font-heading font-bold text-white text-lg leading-tight">
-            {toLatin(tip.home_team) || "—"} <span className="text-zinc-600 text-sm">vs</span> {toLatin(tip.away_team) || "—"}
+            {displayTeam(tip.home_team, tip.home_team_latin) || "—"} <span className="text-zinc-600 text-sm">vs</span> {displayTeam(tip.away_team, tip.away_team_latin) || "—"}
           </h4>
           {(tip.category || tip.pick_type) && (() => {
             const cat = tip.category || (tip.pick_type === "value" || tip.pick_type === "combo" ? "value" : tip.pick_type);
