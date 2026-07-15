@@ -8,6 +8,11 @@ const NON_LATIN_RE = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u060
 export function toLatin(text) {
   if (!text || typeof text !== "string") return text;
   if (!NON_LATIN_RE.test(text)) return text;
+  // Keep the original script when the reader's selected language uses that same
+  // script (a Greek user who picked Ελληνικά wants to see Ολυμπιακός, not Latin).
+  const lang = (typeof localStorage !== "undefined" && localStorage.getItem("tj_lang")) || "en";
+  if (lang === "el" && /[\u0370-\u03FF]/.test(text)) return text;
+  if (lang === "ar" && /[\u0600-\u06FF]/.test(text)) return text;
   return transliterate(text);
 }
 
