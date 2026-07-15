@@ -69,6 +69,16 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
+### CHANGELOG 2026-07-15 — Auto-Abrechnung für Spieler-Prop Mega-Bet-Builder (Smart Picks)
+- Smart Mega-Bet-Builder (Spieler-Props) konnten bisher NICHT automatisch abgerechnet werden → blieben pending & wurden nach 36h gelöscht (nie in Won/Lost). Jetzt gebaut:
+  - `_player_stats_for_fixture` holt per-Spieler Match-Stats aus API-Football `/fixtures/players` (Schüsse, Schüsse aufs Tor, Fouls begangen/gezogen, Karten, Tore, Paraden) + Team-Karten-Summen. An echten Daten verifiziert (Villarreal–Atlético, 45 Spieler geparst).
+  - `_grade_player_leg` rechnet jedes Leg deterministisch: sot/shots/fouls_c/fouls_d/scorer/card/saves + "Beide Teams eine Karte". "qualifiziert sich" bleibt ungradbar (None) — wird aber vom aktuellen Generator nicht mehr erzeugt. Inkl. Text-Parser-Fallback für Legacy-Märkte ("Mbappé 1+ Torschüsse" etc.).
+  - Generierung erhält jetzt `kind`/`player`/`line`/`team` in combo_legs (vorher als "player" überschrieben).
+  - `settle_hq_combos`-Query um `source:"smart"` erweitert (verarbeitete vorher NUR hq-auto) — das war der eigentliche Grund, warum Smart-Builder nie abgerechnet wurden.
+  - Ziel-Tab nach Abrechnung: Sieg → **Best Won**, Niederlage → **Lost**, Cash-Out → **Cashed Out**.
+- Verifiziert: Unit-Tests (strukturiert + legacy) + echter End-to-End-Test (Parlay mit Verlierer-Leg → lost, alle Gewinner → won).
+- HINWEIS: greift auf Produktion erst nach erneutem **Deploy**.
+
 ### CHANGELOG 2026-07-14 — Best Won / Cashed Out Button lesbar gemacht
 - Der diagonale Split-Button schnitt beide Labels an der Diagonale ab. Fix (RateWall.jsx): Farbflächen (beschnitten) und Text (nicht beschnitten) getrennt — "Best Won" oben-rechts, "CASHED OUT" unten-links, beide vollständig lesbar in Ruhe- & Aktiv-Zustand. Button etwas höher (68px). Per Screenshot verifiziert.
 

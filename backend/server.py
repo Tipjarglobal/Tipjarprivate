@@ -2363,6 +2363,142 @@ def _corner_total_for_fixture(fixture_id):
     return corners
 
 
+PLAYER_LEG_KINDS = {"sot", "shots", "fouls_c", "fouls_d", "scorer", "card", "saves", "player"}
+
+
+def _name_key(n: str) -> str:
+    """Last-name key for fuzzy player matching (handles 'Kylian Mbappé' vs 'K. Mbappé')."""
+    parts = [p for p in _norm(n).split() if len(p) >= 2]
+    return parts[-1] if parts else ""
+
+
+def _player_stats_for_fixture(fixture_id):
+    """Per-player match stats from API-Football /fixtures/players. Returns
+    (players_by_key, team_card_totals) or (None, None) if stats are unavailable
+    (caller must NOT settle in that case)."""
+    if not fixture_id:
+        return None, None
+    resp = _apifootball("/fixtures/players", {"fixture": fixture_id})
+    if not resp:
+        return None, None
+    pmap, team_cards = {}, {}
+    for block in resp:
+        tname = (block.get("team") or {}).get("name", "")
+        tcards = 0
+        for pl in (block.get("players") or []):
+            name = (pl.get("player") or {}).get("name") or ""
+            st = ((pl.get("statistics") or [{}])[0]) or {}
+            shots = st.get("shots") or {}
+            goals = st.get("goals") or {}
+            fouls = st.get("fouls") or {}
+            cards = st.get("cards") or {}
+            yc = cards.get("yellow") or 0
+            rc = cards.get("red") or 0
+            rec = {
+                "shots_total": shots.get("total") or 0,
+                "shots_on": shots.get("on") or 0,
+                "goals": goals.get("total") or 0,
+                "saves": goals.get("saves") or 0,
+                "fouls_c": fouls.get("committed") or 0,
+                "fouls_d": fouls.get("drawn") or 0,
+                "cards": yc + rc,
+                "team": tname,
+            }
+            tcards += yc + rc
+            key = _name_key(name)
+            if key:
+                pmap[key] = rec
+        if tname:
+            team_cards[_norm(tname)] = tcards
+    return pmap, team_cards
+
+
+def _parse_player_market(market: str):
+    """Infer (kind, need) from a German player-prop market string (fallback for legs
+    without a structured kind/line, e.g. legacy 'Mbappé 1+ Torschüsse')."""
+    m = (market or "").lower()
+    need = None
+    nm = re.search(r"(\d+)\s*\+", m)
+    if nm:
+        need = int(nm.group(1))
+    else:
+        om = re.search(r"über\s+(\d+)[.,]5", m)
+        if om:
+            need = int(om.group(1)) + 1
+    if "torschütze" in m or "anytime" in m or ("trifft" in m and "beide" not in m):
+        kind = "scorer"
+    elif "aufs tor" in m or "torschüsse" in m or "torschusse" in m:
+        kind = "sot"
+    elif "schüsse" in m or "schusse" in m:
+        kind = "shots"
+    elif "gefoult" in m:
+        kind = "fouls_d"
+    elif "foul" in m:
+        kind = "fouls_c"
+    elif "karte" in m:
+        kind = "card"
+    elif "paraden" in m:
+        kind = "saves"
+    else:
+        kind = None
+    return kind, (need if need else 1)
+
+
+def _grade_player_leg(leg, pmap, team_cards, fx):
+    """Grade a single player-prop / team-card leg from finished-match player stats.
+    Returns True (won), False (lost) or None (cannot grade → do NOT settle)."""
+    market = leg.get("market") or ""
+    m = market.lower()
+    # Team-level markets first (no single player)
+    if "beide teams" in m and "karte" in m:
+        if not team_cards or len(team_cards) < 2:
+            return None
+        return all(v >= 1 for v in team_cards.values())
+    if "qualifiziert" in m or "qualif" in m or "weiterkommen" in m:
+        return None  # tournament progression can't be derived from one fixture
+    kind = (leg.get("kind") or "").lower()
+    line = leg.get("line")
+    if kind in ("", "player") or line is None:
+        pk, need = _parse_player_market(market)
+        kind = pk or kind
+        need = need
+    else:
+        need = int(line) + 1
+    if kind not in ("sot", "shots", "fouls_c", "fouls_d", "scorer", "card", "saves"):
+        return None
+    if not pmap:
+        return None
+    player = leg.get("player") or (market.split(" — ")[0] if " — " in market else "")
+    if not player:
+        # legacy: take the leading words before the first digit / stat keyword
+        player = re.split(r"\d|über|torsch|schüss|schuss|foul|karte|paraden|trifft",
+                          market, flags=re.IGNORECASE)[0].strip()
+    key = _name_key(player)
+    rec = pmap.get(key)
+    if not rec:
+        for k, v in pmap.items():
+            if key and (key in k or k in key):
+                rec = v
+                break
+    if not rec:
+        return None  # player not found in fixture stats → don't guess
+    if kind == "sot":
+        return rec["shots_on"] >= need
+    if kind == "shots":
+        return rec["shots_total"] >= need
+    if kind == "fouls_c":
+        return rec["fouls_c"] >= need
+    if kind == "fouls_d":
+        return rec["fouls_d"] >= need
+    if kind == "scorer":
+        return rec["goals"] >= 1
+    if kind == "card":
+        return rec["cards"] >= 1
+    if kind == "saves":
+        return rec["saves"] >= need
+    return None
+
+
 def _grade_goal_leg(kind, market, team, fx):
     """Deterministically grade a single-match goal / half-time / corner leg from a
     finished fixture. Returns True (won), False (lost) or None (kind can't be graded
@@ -2607,14 +2743,15 @@ async def settle_pending_tips() -> dict:
 
 
 async def settle_hq_combos() -> dict:
-    """Settle the TipJarHQ 2-leg bet-builders (source=hq-auto, is_parlay). Both legs
-    are goal markets on the SAME match, so we judge them deterministically from the
-    final score: 'o15' → total goals >= 2; 'team_o05' → that team scored >= 1."""
+    """Settle TipJarHQ bet-builders: the 2-leg goal builders (source=hq-auto) AND the
+    Smart Mega-Bet-Builders (source=smart) with player-prop legs. Every leg lives on the
+    SAME match, so legs are graded deterministically from the final score / fixture &
+    player statistics. Win → 'Best Won', loss → 'Lost'."""
     if not API_FOOTBALL_KEY:
         return {"ok": False, "settled": 0}
     now = datetime.now(timezone.utc)
     combos = await db.tips.find(
-        {"source": "hq-auto", "status": "pending", "is_parlay": True},
+        {"source": {"$in": ["hq-auto", "smart"]}, "status": "pending", "is_parlay": True},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled = 0
     for tip in combos:
@@ -2644,9 +2781,25 @@ async def settle_hq_combos() -> dict:
         if any(("corner" in (lg.get("kind", "") or "")) or ("ecken" in (lg.get("market", "") or "").lower())
                for lg in combo_legs):
             fx["corners"] = _corner_total_for_fixture(fx.get("fixture_id"))
+        # Player-prop legs (shots / shots on target / fouls / cards / scorer / saves) —
+        # fetch the finished match's per-player stats once so the whole Mega-Bet-Builder
+        # can auto-settle (win → Best Won, lose → Lost).
+        pmap, team_cards = None, None
+        has_player = any(
+            (lg.get("kind", "") or "").lower() in PLAYER_LEG_KINDS
+            or _parse_player_market(lg.get("market", ""))[0] is not None
+            or ("beide teams" in (lg.get("market", "") or "").lower())
+            for lg in combo_legs)
+        if has_player:
+            pmap, team_cards = _player_stats_for_fixture(fx.get("fixture_id"))
+            if not pmap:
+                await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+                continue
         all_won, ok = True, True
         for lg in combo_legs:
             res = _grade_goal_leg(lg.get("kind"), lg.get("market"), lg.get("team"), fx)
+            if res is None:
+                res = _grade_player_leg(lg, pmap or {}, team_cards or {}, fx)
             if res is None:
                 ok = False
                 break
@@ -4880,7 +5033,7 @@ def _build_player_props(pstat: dict) -> list[dict]:
         p = _prob_over(line, lam)
         cands.append({"market": f"{name} — {label}", "prob": p,
                       "rating": _rating_from_prob(p), "odds": _odds_from_prob(p),
-                      "kind": kind, "avg": lam})
+                      "kind": kind, "avg": lam, "line": line, "player": name})
 
     if is_gk:
         if sv >= 3.0:
@@ -4902,12 +5055,14 @@ def _build_player_props(pstat: dict) -> list[dict]:
             p = _prob_over(0.5, gl)
             cands.append({"market": f"{name} — Torschütze (Anytime)", "prob": p,
                           "rating": min(8.0, _rating_from_prob(p)),
-                          "odds": _odds_from_prob(p), "kind": "scorer", "avg": gl})
+                          "odds": _odds_from_prob(p), "kind": "scorer", "avg": gl,
+                          "line": 0.5, "player": name})
         if yc >= 0.45:
             p = min(0.85, yc)
             cands.append({"market": f"{name} — sieht eine Karte", "prob": p,
                           "rating": min(7.5, _rating_from_prob(p)),
-                          "odds": _odds_from_prob(p), "kind": "card", "avg": yc})
+                          "odds": _odds_from_prob(p), "kind": "card", "avg": yc,
+                          "line": 0.5, "player": name})
 
     return [c for c in cands if c["rating"] >= SMART_MIN_RATING]
 
@@ -5004,7 +5159,13 @@ async def smart_autopost() -> dict:
         scanned += 1
         seasons = _smart_seasons(p.get("kickoff"))
         home, away = p.get("home"), p.get("away")
-        props = (await _team_best_props(home, seasons)) + (await _team_best_props(away, seasons))
+        home_props = await _team_best_props(home, seasons)
+        away_props = await _team_best_props(away, seasons)
+        for c in home_props:
+            c["team"] = home
+        for c in away_props:
+            c["team"] = away
+        props = home_props + away_props
         candidates += len(props)
         mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
         # Owner (2026-07-11): bundle ALL props of a match into ONE massive Bet-Builder
@@ -5017,7 +5178,9 @@ async def smart_autopost() -> dict:
         if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
             continue
         combo_legs = [{"home": home, "away": away, "market": c["market"],
-                       "odds": str(c["odds"]), "kind": "player", "team": "", "status": "open"}
+                       "odds": str(c["odds"]), "kind": c.get("kind", "player"),
+                       "player": c.get("player", ""), "line": c.get("line"),
+                       "team": c.get("team", ""), "status": "open"}
                       for c in props]
         combo_legs.append({"home": home, "away": away, "market": "Über 8.5 Ecken",
                            "odds": "1.80", "kind": "corner_o", "line": 8.5,
