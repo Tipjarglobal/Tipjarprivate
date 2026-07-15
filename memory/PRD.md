@@ -69,7 +69,13 @@ Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System 
 - Frontend: RateWall card badge now shows correct BANKER/VALUE/RISK label+colour (was VALUE/BANKER only).
 
 
-### CHANGELOG 2026-07-15c — Hängende abgelaufene Smart-Picks (France) sofort entfernen
+### CHANGELOG 2026-07-15d — KERN-BUG: lokalisierte Teamnamen blockierten JEDE Smart-Pick-Abrechnung
+- Ursache, warum France–Spanien (und andere Smart-Picks) nie abrechneten: Picks speichern Teamnamen in der App-Sprache ("Frankreich"/"Spanien"), aber API-Football nutzt Englisch ("France"/"Spain"). `resolve_team_id`/`find_finished_fixture` fanden nichts → keine Abrechnung.
+- Fix: `COUNTRY_NAME_EN`-Map (DE/ES/FR/IT → EN Nationalmannschafts-Namen) + `_en_name`-Helfer; angewandt in `resolve_team_id`, `find_finished_fixture` und `_datescan_fixture` (Gegner- & Heim/Auswärts-Matching). Fehlerhafte team_cache-Einträge (team_id=None) werden beim Start geleert, damit die Map greift.
+- Voreilige 8h-Löschung hängender Smart-Picks wieder ENTFERNT (Nutzer will Abrechnung, nicht Löschung).
+- Verifiziert End-to-End gegen echtes Spiel (Frankreich 0:2 Spanien, fixture 1585131): alle 8 Legs korrekt gegradet, Schein settelt als **lost** (Mbappé/Yamal 0 Schüsse aufs Tor, Yamal 0 Schüsse, Doué 0 Fouls → 4 Legs gerissen).
+
+### CHANGELOG 2026-07-15c — Hängende abgelaufene Smart-Picks (France) sofort entfernen (ZURÜCKGENOMMEN)
 - Ein pending Smart-Pick, dessen Spiel längst vorbei ist und der nicht abgerechnet werden konnte (kein API-Fixture), hing bisher bis zur 36h-Löschung fest. `_cleanup_smart_junk` löscht jetzt beim Start alle pending Smart-Picks > 8h nach Anstoß → France–Spanien verschwindet nach Deploy sofort. Zukünftige Picks bleiben unberührt (nur vergangene). Verifiziert.
 
 ### CHANGELOG 2026-07-15b — Benachrichtigungen: Flut gestoppt, Deep-Link, Sammel-Alarm + France–Spanien Abrechnung

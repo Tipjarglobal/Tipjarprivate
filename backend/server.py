@@ -2341,6 +2341,41 @@ def _apifootball(path: str, params: dict):
         return None
 
 
+# National-team names in the app's languages → API-Football's English name. Smart Picks
+# (WC/EC) store localized names like 'Frankreich'/'Spanien'; without this map the
+# settlement engine can't resolve the team → the slip never settles.
+COUNTRY_NAME_EN = {
+    "frankreich": "France", "francia": "France", "france": "France",
+    "spanien": "Spain", "espana": "Spain", "espagne": "Spain", "spagna": "Spain",
+    "deutschland": "Germany", "allemagne": "Germany", "alemania": "Germany", "germania": "Germany",
+    "italien": "Italy", "italie": "Italy", "italia": "Italy",
+    "england": "England", "inghilterra": "England", "inglaterra": "England", "angleterre": "England",
+    "niederlande": "Netherlands", "holland": "Netherlands", "hollande": "Netherlands",
+    "paesi bassi": "Netherlands", "paises bajos": "Netherlands",
+    "belgien": "Belgium", "belgique": "Belgium", "belgica": "Belgium", "belgio": "Belgium",
+    "portugal": "Portugal", "portogallo": "Portugal",
+    "kroatien": "Croatia", "croatie": "Croatia", "croacia": "Croatia", "croazia": "Croatia",
+    "schweiz": "Switzerland", "suisse": "Switzerland", "suiza": "Switzerland", "svizzera": "Switzerland",
+    "osterreich": "Austria", "autriche": "Austria", "austria": "Austria",
+    "danemark": "Denmark", "danemark": "Denmark", "dinamarca": "Denmark", "danimarca": "Denmark", "dane": "Denmark",
+    "polen": "Poland", "pologne": "Poland", "polonia": "Poland",
+    "schweden": "Sweden", "suede": "Sweden", "suecia": "Sweden", "svezia": "Sweden",
+    "norwegen": "Norway", "norvege": "Norway", "noruega": "Norway", "norvegia": "Norway",
+    "turkei": "Turkey", "turquie": "Turkey", "turquia": "Turkey", "turchia": "Turkey", "turkiye": "Turkey",
+    "griechenland": "Greece", "grece": "Greece", "grecia": "Greece",
+    "brasilien": "Brazil", "bresil": "Brazil", "brasil": "Brazil", "brasile": "Brazil",
+    "argentinien": "Argentina", "argentine": "Argentina", "argentina": "Argentina",
+    "marokko": "Morocco", "maroc": "Morocco", "marruecos": "Morocco", "marocco": "Morocco",
+    "kolumbien": "Colombia", "colombie": "Colombia", "colombia": "Colombia",
+    "vereinigte staaten": "USA", "usa": "USA", "etats-unis": "USA", "estados unidos": "USA",
+    "mexiko": "Mexico", "mexique": "Mexico", "mexico": "Mexico", "messico": "Mexico",
+    "japan": "Japan", "japon": "Japan", "giappone": "Japan",
+    "sudkorea": "South Korea", "coree du sud": "South Korea", "corea del sur": "South Korea",
+    "kroatie": "Croatia", "serbien": "Serbia", "serbie": "Serbia", "serbia": "Serbia",
+    "uruguay": "Uruguay", "senegal": "Senegal", "ghana": "Ghana", "nigeria": "Nigeria",
+}
+
+
 async def resolve_team_id(name: str):
     if not name or len(name.strip()) < 3:
         return None
@@ -2348,20 +2383,22 @@ async def resolve_team_id(name: str):
     cached = await db.team_cache.find_one({"key": key})
     if cached:
         return cached.get("team_id")
-    resp = _apifootball("/teams", {"search": name.strip()})
+    # localized national-team name → API-Football English name (e.g. Frankreich → France)
+    search_name = COUNTRY_NAME_EN.get(key, name.strip())
+    resp = _apifootball("/teams", {"search": search_name})
     # fallbacks for name mismatches (hyphens, city suffixes)
     if not resp:
-        simplified = re.sub(r"[-_]", " ", name).strip()
-        if simplified.lower() != name.strip().lower():
+        simplified = re.sub(r"[-_]", " ", search_name).strip()
+        if simplified.lower() != search_name.lower():
             resp = _apifootball("/teams", {"search": simplified})
     if not resp:
-        first = re.sub(r"[^A-Za-z0-9 ]", " ", name).split()
+        first = re.sub(r"[^A-Za-z0-9 ]", " ", search_name).split()
         if first and len(first[0]) >= 4:
             resp = _apifootball("/teams", {"search": first[0]})
     team_id = None
     if resp:
         for item in resp:
-            if _teams_match(item.get("team", {}).get("name", ""), name):
+            if _teams_match(item.get("team", {}).get("name", ""), search_name):
                 team_id = item["team"]["id"]
                 break
         if team_id is None:
@@ -2613,11 +2650,18 @@ def _grade_goal_leg(kind, market, team, fx):
     return None
 
 
+def _en_name(name: str) -> str:
+    """Localized national-team name → API-Football English name (else unchanged)."""
+    return COUNTRY_NAME_EN.get(_norm(name or ""), name)
+
+
 def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict = None):
     """Robust fallback: scan ALL fixtures on the kickoff date and match BOTH team
     names (either orientation). Independent of team-id/season resolution, which
     fails for many summer-qualifier leagues (diacritics, city suffixes). Returns a
     finished-fixture dict like find_finished_fixture, else None."""
+    home_name = _en_name(home_name)
+    away_name = _en_name(away_name)
     for date in dates:
         try:
             int(date[:4])
@@ -2653,6 +2697,7 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
 
 
 def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
+    opponent_name = _en_name(opponent_name)
     for date in dates:
         try:
             yr = int(date[:4])
@@ -5888,21 +5933,12 @@ async def _cleanup_smart_junk():
                  {"status": "void"},
              ]}
         )
-        # Owner (2026-07-15): a pending Smart Pick whose match kicked off long ago and
-        # never auto-settled (e.g. no API fixture / friendly) must NOT linger until the
-        # 36h purge. Drop any pending smart pick > 8h past kickoff.
-        stuck = 0
-        now = datetime.now(timezone.utc)
-        async for t in db.tips.find({"source": "smart", "status": "pending"},
-                                    {"id": 1, "match_time": 1}):
-            ko = _parse_kickoff(t.get("match_time"))
-            if ko and ko < now - timedelta(hours=8):
-                await db.tips.delete_one({"id": t["id"]})
-                stuck += 1
-        if blank.deleted_count or stale_reports.deleted_count or stuck:
+        if blank.deleted_count or stale_reports.deleted_count:
             logger.info(f"Smart cleanup: {blank.deleted_count} blank ideas, "
-                        f"{stale_reports.deleted_count} stale/void reports, "
-                        f"{stuck} stuck expired smart picks removed")
+                        f"{stale_reports.deleted_count} stale/void smart reports removed")
+        # Drop failed team-name resolutions so the localized-name map (Frankreich→France)
+        # takes effect on the next settlement pass.
+        await db.team_cache.delete_many({"team_id": None})
     except Exception as e:
         logger.error(f"Smart cleanup failed: {e}")
 
