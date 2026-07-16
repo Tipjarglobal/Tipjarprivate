@@ -6919,6 +6919,37 @@ async def _delete_stuck_makara_pick():
         logger.error(f"Makara cleanup failed: {e}")
 
 
+async def _delete_owner_flagged_tips():
+    """Owner-requested removals (2026-07-16), runs on every startup incl. production;
+    idempotent — only deletes when the flagged records still exist.
+    1) A garbled 'Makara/Mascara' slip in Community (member picks only, never HQ/AI).
+    2) A stale 'Frankreich' (France / Marokko) pick in Smart Picks."""
+    try:
+        # 1) Community 'mascara/makara' member slip
+        mrx = {"$regex": "makar|mascar|masoyk", "$options": "i"}
+        member_q = {
+            "source": {"$nin": ["hq-auto", "hq-system", "hq-live", "smart"]},
+            "$or": [{"home_team": mrx}, {"away_team": mrx},
+                    {"legs.match": mrx}, {"market": mrx}],
+        }
+        mids = [t["id"] for t in await db.tips.find(member_q, {"id": 1}).to_list(100)]
+        # 2) Smart 'Frankreich / France / Marokko' pick
+        frx = {"$regex": "frankreich|france|marokko|morocco", "$options": "i"}
+        smart_q = {
+            "source": "smart",
+            "$or": [{"home_team": frx}, {"away_team": frx},
+                    {"legs.match": frx}, {"market": frx}, {"ai_analysis": frx}],
+        }
+        sids = [t["id"] for t in await db.tips.find(smart_q, {"id": 1}).to_list(100)]
+        ids = list(set(mids + sids))
+        if ids:
+            await db.tips.delete_many({"id": {"$in": ids}})
+            await db.tip_ratings.delete_many({"tip_id": {"$in": ids}})
+            logger.info(f"Owner-flagged cleanup: removed {len(mids)} community + {len(sids)} smart pick(s)")
+    except Exception as e:
+        logger.error(f"Owner-flagged cleanup failed: {e}")
+
+
 async def _backfill_inbox():
     """Idempotently give existing regular members a welcome + Expert-invite in their
     mailbox (runs on startup, incl. production). Admins and users already seeded are skipped."""
@@ -6938,6 +6969,7 @@ async def _startup_seed():
     try:
         await purge_demo_tips()
         await _delete_stuck_makara_pick()
+        await _delete_owner_flagged_tips()
         admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
         admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
         existing = await db.users.find_one({"email": admin_email})
