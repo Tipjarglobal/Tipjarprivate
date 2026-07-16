@@ -3,7 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Toaster, toast } from "sonner";
-import { Sparkles, Star, Loader2, CheckCircle2, MailWarning, X, Coins } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, MailWarning, X, Coins } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
 import { AuthProvider, useAuth } from "./auth";
@@ -256,10 +256,6 @@ function Home() {
               <button data-testid="hero-submit-btn" onClick={() => setSubmitOpen(true)}
                 className="flex items-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_30px_rgba(225,255,0,0.3)]">
                 <Sparkles size={18} /> {t("hero.cta.submit")}
-              </button>
-              <button data-testid="hero-rate-btn" onClick={() => setTipsOpen(true)}
-                className="flex items-center gap-2 rounded-full border border-elevated text-white font-bold px-6 py-3.5 hover:border-volt/60 hover:bg-white/5 active:scale-95 transition-all">
-                <Star size={18} /> {t("hero.cta.rate")}
               </button>
               <button data-testid="hero-earn-btn" onClick={() => setWinOpen(true)}
                 className="flex items-center gap-2 rounded-full border border-volt/40 bg-volt/10 text-volt font-bold px-6 py-3.5 hover:bg-volt/20 active:scale-95 transition-all">
