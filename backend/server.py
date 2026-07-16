@@ -3159,11 +3159,15 @@ def _grade_goal_leg(kind, market, team, fx):
         return ag >= hg
     if k == "dc_12":
         return hg != ag
-    if k in ("ht_o05", "ht_o15", "ht_o25", "sh_o05", "o05_each", "ht_u25", "ht_u35", "ht1_win"):
+    if k in ("ht_o05", "ht_o15", "ht_o25", "sh_o05", "o05_each", "ht_u25", "ht_u35", "ht1_win", "btts_ht", "btts_sh"):
         if not ht_known:
             return None                  # no half-time data → don't guess
         if k == "ht_o05":
             return ht_total >= 1
+        if k == "btts_ht":
+            return hth >= 1 and hta >= 1
+        if k == "btts_sh":
+            return (hg - hth) >= 1 and (ag - hta) >= 1
         if k == "ht_o15":
             return ht_total >= 2
         if k == "ht_o25":
@@ -4737,6 +4741,9 @@ def _forebet_candidates(r: dict) -> list[dict]:
         avg = float((r.get("avg") or "0").replace(",", "."))
     except Exception:
         avg = 0.0
+    # Expected total goals from Forebet ("avg"). Used to gate aggressive over/first-half
+    # markets so a weak, low-scoring fixture never anchors a "2 goals in the 1st half" bet.
+    xg = avg if (avg and avg > 0) else 0.0
     if sc:
         ph, pa = sc
         total = ph + pa
