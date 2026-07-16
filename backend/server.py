@@ -6713,9 +6713,28 @@ async def _migrate_stars_and_categories():
         logger.error(f"Star/category migration failed: {e}")
 
 
+async def _delete_stuck_makara_pick():
+    """One-off (owner request 2026-07-16): remove james76's unresolvable live slip
+    'Makara – Masoyk Royna'. Matched narrowly on username + garbled team text so
+    nothing else is touched. Runs on deploy; safe/idempotent."""
+    try:
+        rx = {"$regex": "makar|masoyk|royna", "$options": "i"}
+        q = {"username": {"$regex": "^james", "$options": "i"},
+             "$or": [{"home_team": rx}, {"away_team": rx},
+                     {"legs.match": rx}]}
+        ids = [t["id"] for t in await db.tips.find(q, {"id": 1}).to_list(50)]
+        if ids:
+            await db.tips.delete_many({"id": {"$in": ids}})
+            await db.tip_ratings.delete_many({"tip_id": {"$in": ids}})
+            logger.info(f"Deleted stuck Makara pick(s): {len(ids)}")
+    except Exception as e:
+        logger.error(f"Makara cleanup failed: {e}")
+
+
 async def _startup_seed():
     try:
         await purge_demo_tips()
+        await _delete_stuck_makara_pick()
         admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
         admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
         existing = await db.users.find_one({"email": admin_email})

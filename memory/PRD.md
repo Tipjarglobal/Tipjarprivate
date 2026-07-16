@@ -577,3 +577,6 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Neuer Endpoint POST /tips/{id}/clarify (ClarifyInput: league/match_time/home_team/away_team, owner/admin-only): fuellt Felder, aktualisiert 1-Spiel-Parlay-Leg (match/league/kickoff), setzt needs_clarification=False + enrich_tries=0 (Auto-Enrichment retry).
 - Frontend SubmitTipModal: nach Publish wenn data.needs_clarification -> ClarifyPanel (statt schliessen) fragt freundlich nur die fehlenden Felder ab (Teams/Liga/Datum-Uhrzeit) mit Speichern/Spaeter. i18n clarify.* (EN+DE). Tipp ist bereits gepostet (onPublished refresh), Klaerung optional.
 - VERIFIZIERT E2E via curl: POST /tips (Makara/Masoyk, kein Datum) -> needs_clarification True, fields [teams,league,datetime]; /clarify -> Felder gefuellt, Flag zurueckgesetzt. Frontend kompiliert. Braucht Re-Deploy.
+
+## Changelog — 2026-07-16 (Stuck Makara-Schein loeschen)
+- Owner-Request: james76 Live-Schein "Makara – Masoyk Royna" (nicht aufloesbar) loeschen. Prod-DB kein Zugriff -> Startup-Cleanup _delete_stuck_makara_pick() in _startup_seed. Matcht eng: username ^james + (home/away/legs.match regex makar|masoyk|royna). Loescht tips + tip_ratings. VERIFIZIERT: loescht nur die 2 Makara-Scheine, andere james76-Scheine + Fremd-Nutzer bleiben. Laeuft beim naechsten Deploy automatisch. Idempotent.
