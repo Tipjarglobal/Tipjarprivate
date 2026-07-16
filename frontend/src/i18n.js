@@ -74,7 +74,25 @@ export function localizeMarket(market, t) {
 //  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
 //  - already-correct German markets pass through localizeMarket unchanged.
 export function formatSelection(sel, t) {
-  return toLatin(_formatSelection(sel, t));
+  return normalizeBetTerms(toLatin(_formatSelection(sel, t)));
+}
+
+// Clean up phonetically-transliterated foreign betting terms into proper German so a
+// member's Greek slip ("Over 3.5 Korner (1o Imihrono)") reads "Über 3.5 Ecken (1. Halbzeit)".
+function normalizeBetTerms(s) {
+  if (!s || typeof s !== "string") return s;
+  let m = s;
+  m = m.replace(/(\d+)\s*o\s+imi?[hx]?rono/gi, "$1. Halbzeit");   // 1o Imihrono → 1. Halbzeit
+  m = m.replace(/\bimi?[hx]?rono\b/gi, "Halbzeit");
+  m = m.replace(/\bkorners?\b/gi, "Ecken");
+  m = m.replace(/\bgkol[s]?\b/gi, "Tore");
+  m = m.replace(/\bgol[s]?\b/gi, "Tore");
+  // drop the redundant trailing "- Over/Under" market-type label
+  m = m.replace(/\s*[-·]?\s*(over|über|ueber)\s*\/\s*(under|unter)\s*$/i, "");
+  m = m.replace(/\bover\b/gi, "Über");
+  m = m.replace(/\bunder\b/gi, "Unter");
+  m = m.replace(/\s{2,}/g, " ").trim();
+  return m;
 }
 function _formatSelection(sel, t) {
   if (!sel || typeof sel !== "string") return sel;
