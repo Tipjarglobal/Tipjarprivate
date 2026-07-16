@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Star } from "lucide-react";
+import { Bell, BellRing, Star, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
+import { isMobileDevice } from "../coinSound";
 import { useI18n, toLatin } from "../i18n";
 
 function anonId() {
@@ -110,6 +111,15 @@ export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => {
+    try { return localStorage.getItem("tj_sound") !== "off"; } catch { return true; }
+  });
+  const mobile = isMobileDevice();
+  const toggleSound = () => setSoundOn((v) => {
+    const nx = !v;
+    try { localStorage.setItem("tj_sound", nx ? "on" : "off"); } catch { /* ignore */ }
+    return nx;
+  });
   const seen = useRef(null);
   const seenLive = useRef(null);
   const lastSystems = useRef(null);
@@ -397,6 +407,30 @@ export default function NotificationBell() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Sound — on mobile it always follows the phone's ring/silent switch */}
+            <div className="mt-3 pt-3 border-t border-elevated" data-testid="bell-sound-section">
+              {mobile ? (
+                <p className="text-[11px] text-zinc-400 leading-snug flex items-start gap-1.5" data-testid="bell-sound-mobile-note">
+                  <VolumeX size={13} className="mt-0.5 shrink-0 text-zinc-500" />
+                  {t("bell.sound_mobile")}
+                </p>
+              ) : (
+                <label className="flex items-center justify-between py-1 cursor-pointer" data-testid="bell-sound-toggle-row">
+                  <span className="text-sm text-zinc-300 flex items-center gap-2">
+                    {soundOn ? <Volume2 size={15} className="text-bell" /> : <VolumeX size={15} className="text-zinc-500" />}
+                    {t("bell.sound")}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={soundOn}
+                    onChange={toggleSound}
+                    data-testid="bell-sound-toggle"
+                    className="accent-bell w-4 h-4 cursor-pointer"
+                  />
+                </label>
+              )}
             </div>
 
             {on && <p className="text-[11px] text-bell mt-2">{t("bell.on")}</p>}

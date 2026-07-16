@@ -13,6 +13,24 @@ const SRC = {
 
 const _cache = {};
 
+// The phone's mute/ring switch is NOT readable from JavaScript. Our own
+// `new Audio().play()` bypasses it, so on touch/mobile devices we NEVER play a
+// custom sound — the system push notification (which DOES respect mute / Do Not
+// Disturb) is the single source of sound there. On desktop we honour an explicit
+// user preference (tj_sound).
+export function isMobileDevice() {
+  if (typeof window === "undefined") return false;
+  try {
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+  } catch { /* ignore */ }
+  return /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini/i.test(navigator.userAgent || "");
+}
+
+export function soundsEnabled() {
+  if (isMobileDevice()) return false;
+  try { return localStorage.getItem("tj_sound") !== "off"; } catch { return true; }
+}
+
 function getAudio(kind) {
   const src = SRC[kind] || SRC.coin;
   if (!_cache[src]) {
@@ -25,6 +43,7 @@ function getAudio(kind) {
 }
 
 export function playCoin(kind = "coin") {
+  if (!soundsEnabled()) return;
   try {
     const a = getAudio(kind);
     a.currentTime = 0;
