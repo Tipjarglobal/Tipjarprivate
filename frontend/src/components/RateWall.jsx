@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -788,6 +788,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
     }
   };
   const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart"].includes(tip.source);
+  const isExpert = !!tip.is_expert;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
@@ -795,7 +796,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       id={`pick-${tip.id}`}
       data-testid={`tip-card-${tip.id}`}
       className={`rounded-xl border p-4 hover:-translate-y-1 transition-all flex flex-col scroll-mt-24 ${
-        isMemberPick
+        isExpert
+          ? "bg-[#2a1a08] border-orange-500/45 hover:border-orange-400/80 shadow-[0_0_18px_rgba(249,115,22,0.18)]"
+          : isMemberPick
           ? "bg-[#1b1030] border-purple-500/25 hover:border-purple-400/70"
           : "bg-surface border-elevated hover:border-volt/50"
       }`}
@@ -814,6 +817,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{toLatin(tip.username)}</span></span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
+          {isExpert && (
+            <span data-testid="expert-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40">
+              <Star size={10} /> Experte
+            </span>
+          )}
           {isShareable && (
             <button
               onClick={doShare}

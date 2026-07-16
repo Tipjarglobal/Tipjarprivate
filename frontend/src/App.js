@@ -231,6 +231,7 @@ function Home() {
         onViewLive={() => openTipsView("live")}
         onViewSmart={() => openTipsView("smart")}
         onViewSettled={() => openTipsView("settled")}
+        onExpertClick={openProfile}
         counts={counts}
         newCounts={newCounts}
       />

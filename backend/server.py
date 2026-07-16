@@ -185,11 +185,52 @@ def public_user(user: dict) -> dict:
         "received_credits": user.get("received_credits", 0),
         "streak": user.get("streak", 0),
         "apex_flame": user.get("apex_flame", False),
+        "expert_trial": user.get("expert_trial", False),
         "ratings_given": user.get("ratings_given", 0),
         "email_verified": user.get("email_verified", False),
         "referral_code": user.get("referral_code"),
         "created_at": user.get("created_at"),
     }
+
+
+WELCOME_INBOX_TITLE = "Willkommen bei TipJar! 🎉"
+WELCOME_INBOX_BODY = ("Schön, dass du dabei bist! Poste deine Tipps, bewerte die Picks der Community "
+                      "und sichere dir Credits. Viel Erfolg! ⚽")
+EXPERT_INVITE_TITLE = "Werde TipJar-Experte 🎯"
+EXPERT_INVITE_BODY = ("Wir suchen Experten! Als Experte werden deine Tipps hervorgehoben und für die "
+                      "ganze Community sichtbar. Möchtest du Experte werden? (Es gilt eine Probezeit.)")
+
+
+async def _seed_inbox_for_new_user(user: dict, with_invite: bool = True):
+    """Drop a welcome message (and an optional Expert invitation) into a user's mailbox."""
+    now = datetime.now(timezone.utc).isoformat()
+    msgs = [{
+        "id": str(uuid.uuid4()), "user_id": user["id"], "type": "welcome",
+        "title": WELCOME_INBOX_TITLE, "body": WELCOME_INBOX_BODY,
+        "cta": None, "read": False, "handled": False, "created_at": now,
+    }]
+    if with_invite:
+        msgs.append({
+            "id": str(uuid.uuid4()), "user_id": user["id"], "type": "expert_invite",
+            "title": EXPERT_INVITE_TITLE, "body": EXPERT_INVITE_BODY,
+            "cta": "expert_invite", "read": False, "handled": False, "created_at": now,
+        })
+    await db.inbox_messages.insert_many(msgs)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"inbox_seeded": True}})
+
+
+async def _tag_expert(tips: list) -> list:
+    """Flag tips authored by an Expert so the UI can render them with the orange theme."""
+    uids = list({t.get("user_id") for t in tips if t.get("user_id")})
+    if not uids:
+        return tips
+    experts = await db.users.find(
+        {"id": {"$in": uids}, "role": "expert"}, {"_id": 0, "id": 1}).to_list(len(uids))
+    eset = {e["id"] for e in experts}
+    for t in tips:
+        if t.get("user_id") in eset:
+            t["is_expert"] = True
+    return tips
 
 
 async def get_current_user(request: Request) -> dict:
@@ -759,6 +800,7 @@ async def register(inp: RegisterInput):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
+    await _seed_inbox_for_new_user(user)
     token = create_access_token(user["id"], email or username)
     resp = {"token": token, "user": public_user(user)}
     if has_email:
@@ -1277,7 +1319,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     if source == "ai" and sort not in ("top", "hype"):
         far = datetime.max.replace(tzinfo=timezone.utc)
         tips.sort(key=lambda t: _kickoff_dt(t.get("match_time")) or far)
-    return tips[:limit]
+    return await _tag_expert(tips[:limit])
 
 
 def _in_kickoff_window(match_time: str, window: str, now) -> bool:
@@ -1698,9 +1740,8 @@ def _tip_to_render_legs(tip: dict) -> list:
 
 
 def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None) -> bytes:
-    """Render a standardised, TipJar-branded bet slip from the extracted data — so we
-    NEVER show a random bookmaker screenshot, only our own elegant black-green TipJar
-    slip. live_info={'minute':int,'score':'1:0'} shows a LIVE badge for in-play tips."""
+    """Render a clean, TipJar-branded bet slip — our own elegant black/green card design,
+    never a raw bookmaker screenshot. live_info={'minute':int,'score':'1:0'} adds a LIVE badge."""
     from PIL import Image, ImageDraw, ImageFont
     import io
     FB = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
@@ -1712,20 +1753,35 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             return ImageFont.truetype(path, sz)
         except Exception:
             return ImageFont.load_default()
-    f_logo = font(FB, 92)
-    f_tag = font(FR, 38)
-    f_badge = font(FB, 56)
-    f_match = font(FB, 72)
-    f_sub = font(FR, 44)
-    f_live = font(FB, 48)
-    f_market = font(FR, 62)
-    f_odds = font(FB, 64)
-    f_big = font(FB, 96)
-    f_label = font(FB, 62)
-    f_lbl = font(FR, 46)
-    f_user = font(FB, 54)
-    f_win = font(FB, 58)
+
     _scratch = ImageDraw.Draw(Image.new("RGB", (4, 4)))
+
+    # ---- palette ----------------------------------------------------------
+    VOID, CARD, CARD2 = (10, 11, 14), (22, 24, 30), (30, 33, 41)
+    GREEN, VOLT, LIVE_RED = (46, 204, 87), (225, 255, 0), (240, 68, 60)
+    WHITE, GREY, SOFT, LINE = (245, 246, 248), (150, 153, 161), (203, 206, 212), (48, 51, 60)
+    won = ctype not in ("pending", "live_pending")
+    ACCENT = GREEN if won else VOLT
+    has_live = bool(live_info)
+
+    W = 1080
+    pad = 56           # outer margin
+    cpad = 34          # inner card padding
+    inner_w = W - 2 * pad - 2 * cpad
+
+    # ---- fonts ------------------------------------------------------------
+    f_logo = font(FB, 84)
+    f_tag = font(FR, 32)
+    f_badge = font(FB, 46)
+    f_pill = font(FB, 30)
+    f_sub = font(FR, 36)
+    f_market = font(FR, 48)
+    f_odds = font(FB, 54)
+    f_live = font(FB, 40)
+    f_total = font(FB, 88)
+    f_label = font(FB, 54)
+    f_small = font(FR, 40)
+    f_user = font(FB, 50)
 
     def fit_font(txt, hi, lo, maxw):
         for sz in range(hi, lo - 1, -2):
@@ -1733,11 +1789,23 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             if _scratch.textlength(txt, font=f) <= maxw:
                 return f, sz
         return font(FB, lo), lo
-    W, pad, head_h, foot_h = 1080, 60, 212, 344
-    won = ctype not in ("pending", "live_pending")
-    has_live = bool(live_info)
+
+    def wrap(txt, fnt, maxw):
+        words = (txt or "").split()
+        lines, cur = [], ""
+        for w in words:
+            test = (cur + " " + w).strip()
+            if not cur or _scratch.textlength(test, font=fnt) <= maxw:
+                cur = test
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines or [""]
+
+    # ---- group legs by match so each fixture is titled once ---------------
     legs = legs[:10]
-    # group legs by match so the same fixture is only titled ONCE
     groups, gidx = [], {}
     for l in legs:
         k = _match_key(l.get("home", ""), l.get("away", ""))
@@ -1748,47 +1816,84 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
                            "time": l.get("time", ""), "mkts": []})
         groups[gidx[k]]["mkts"].append(l)
 
-    def _subline(g):
-        parts = [p for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p]
-        return "   ·   ".join(parts)
-    # Team names must be FULLY visible: shrink the title to fit on one line, and if
-    # it still won't fit, wrap to two lines (home / vs away) — never truncate.
-    _tmaxw = W - 2 * pad
+    def _clean_part(p):
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})", p or "")
+        if m:
+            return f"{m.group(3)}.{m.group(2)}.{m.group(1)}  {m.group(4)}:{m.group(5)}"
+        return p
+
+    def subline(g):
+        return "   ·   ".join(_clean_part(p) for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p)
+
+    # ---- pre-measure every card so the canvas height is exact -------------
+    ODDS_COL = 190      # reserved width on the right for the odds value
+    LINE_H = 60
     for g in groups:
+        # title: one line if it fits, else home / vs away on two lines
         title = f"{g['home']}  vs  {g['away']}"
-        tf, _ = fit_font(title, 72, 42, _tmaxw)
-        if _scratch.textlength(title, font=tf) <= _tmaxw:
-            g["tlines"] = [(title, tf, 72)]
+        tf, ts = fit_font(title, 56, 40, inner_w)
+        if _scratch.textlength(title, font=tf) <= inner_w:
+            g["tlines"] = [(title, tf, ts)]
         else:
-            f1, s1 = fit_font(g["home"], 64, 34, _tmaxw)
-            f2, s2 = fit_font(f"vs {g['away']}", 64, 34, _tmaxw)
+            f1, s1 = fit_font(g["home"], 52, 34, inner_w)
+            f2, s2 = fit_font(f"vs {g['away']}", 52, 34, inner_w)
             g["tlines"] = [(g["home"], f1, s1), (f"vs {g['away']}", f2, s2)]
-        g["hdr_h"] = sum(sz + 16 for _, _, sz in g["tlines"])
-    mrow_h, gap, sub_h, live_h = 76, 22, 46, 76
-    H = head_h + (live_h if has_live else 0) + sum(
-        g["hdr_h"] + (sub_h if _subline(g) else 0) + len(g["mkts"]) * mrow_h + gap
-        for g in groups) + foot_h
-    VOID, CARD, GREEN = (9, 9, 11), (22, 23, 27), (46, 204, 87)
-    WHITE, GREY, LINE = (244, 244, 246), (156, 158, 164), (40, 42, 48)
-    VOLT, LIVE_RED = (225, 255, 0), (240, 68, 60)
-    ACCENT = GREEN if won else VOLT
+        # markets: wrap (never truncate); odds sits on the first line
+        rows = []
+        for l in g["mkts"]:
+            mlines = wrap(l.get("market", "") or "", f_market, inner_w - ODDS_COL)
+            od = l.get("odds") or 0
+            odt = f"{od:.2f}" if od else ("✓" if won else "offen")
+            rows.append({"lines": mlines, "odds": odt})
+        g["rows"] = rows
+        h = cpad
+        h += sum(sz + 14 for _, _, sz in g["tlines"])
+        if subline(g):
+            h += 52
+        if has_live:
+            h += 74
+        for r in rows:
+            h += len(r["lines"]) * LINE_H + 18
+        h += cpad - 8
+        g["card_h"] = h
+
+    head_h = 216
+    gap = 22
+    content_h = sum(g["card_h"] + gap for g in groups)
+    foot_h = 300
+    H = head_h + content_h + foot_h + 40
+
     img = Image.new("RGB", (W, H), VOID)
     d = ImageDraw.Draw(img)
 
-    # subtle TipJar crest watermark — capped so it never clips the canvas
-    try:
-        crest = Image.open(CREST).convert("RGBA")
-        cw = int(W * 0.58)
-        ch = int(cw * crest.height / crest.width)
-        maxh = int(H * 0.46)
-        if ch > maxh:
-            ch = maxh
-            cw = int(ch * crest.width / crest.height)
-        crest = crest.resize((cw, ch))
-        crest.putalpha(crest.split()[3].point(lambda a: int(a * 0.06)))
-        img.paste(crest, ((W - cw) // 2, (H - ch) // 2), crest)
-    except Exception:
-        pass
+    def check(cx, cy, sz, col, wdt=7):
+        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=wdt)
+        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=wdt)
+
+    # ---- header -----------------------------------------------------------
+    d.text((pad, 44), "Tip", font=f_logo, fill=WHITE)
+    tw = d.textlength("Tip", font=f_logo)
+    d.text((pad + tw, 44), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + 4, 140), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
+    # status badge (top-right)
+    badge = "WON" if won else "OFFEN"
+    bw = d.textlength(badge, font=f_badge)
+    b_extra = 78 if won else 44
+    bx0 = W - pad - bw - b_extra
+    d.rounded_rectangle([bx0, 44, W - pad, 116], 18, fill=ACCENT)
+    tx = bx0 + 24
+    if won:
+        check(bx0 + 26, 82, 22, VOID)
+        tx = bx0 + 60
+    d.text((tx, 56), badge, font=f_badge, fill=VOID)
+    # channel pill (which area the slip comes from)
+    area = {"pending": "COMMUNITY PICK", "live_pending": "LIVE PICK"}.get(ctype)
+    if area:
+        aw = d.textlength(area, font=f_pill)
+        ax0 = W - pad - aw - 36
+        d.rounded_rectangle([ax0, 128, W - pad, 178], 14, outline=ACCENT, width=3)
+        d.text((ax0 + 18, 136), area, font=f_pill, fill=ACCENT)
+    d.line([pad, head_h - 24, W - pad, head_h - 24], fill=LINE, width=3)
 
     def trunc(txt, fnt, maxw):
         txt = txt or ""
@@ -1798,39 +1903,22 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             txt = txt[:-1]
         return txt + "…"
 
-    def check(cx, cy, sz, col):
-        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=7)
-        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=7)
-    # header: TipJar logo (Tip white / Jar green) + tagline
-    d.text((pad, 34), "Tip", font=f_logo, fill=WHITE)
-    tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 34), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 4, 138), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
-    badge = "WON" if won else "OFFEN"
-    bw = d.textlength(badge, font=f_badge)
-    bx0 = W - pad - bw - (92 if won else 52)
-    d.rounded_rectangle([bx0, 40, W - pad, 122], 20, fill=ACCENT)
-    tx = bx0 + 26
-    if won:
-        check(bx0 + 24, 84, 24, VOID)
-        tx = bx0 + 66
-    d.text((tx, 58), badge, font=f_badge, fill=VOID)
-    # area pill (which channel the slip comes from)
-    area = {"pending": "COMMUNITY PICK", "live_pending": "LIVE PICK"}.get(ctype)
-    if area:
-        aw = d.textlength(area, font=f_tag)
-        ax0 = W - pad - aw - 40
-        d.rounded_rectangle([ax0, 134, W - pad, 186], 16, outline=ACCENT, width=3)
-        d.text((ax0 + 20, 142), area, font=f_tag, fill=ACCENT)
-    d.line([pad, head_h - 20, W - pad, head_h - 20], fill=LINE, width=3)
-    # legs grouped by match
+    # ---- match cards ------------------------------------------------------
     y = head_h
     for g in groups:
-        ty = y + 6
+        cx0, cy0, cx1, cy1 = pad, y, W - pad, y + g["card_h"]
+        d.rounded_rectangle([cx0, cy0, cx1, cy1], 26, fill=CARD)
+        # accent rail on the left edge
+        d.rounded_rectangle([cx0, cy0, cx0 + 10, cy1], 26, fill=ACCENT)
+        tx0 = pad + cpad
+        ty = y + cpad - 4
         for txt, tfont, tsz in g["tlines"]:
-            d.text((pad, ty), txt, font=tfont, fill=WHITE)
-            ty += tsz + 16
-        y += g["hdr_h"]
+            d.text((tx0, ty), txt, font=tfont, fill=WHITE)
+            ty += tsz + 14
+        sub = subline(g)
+        if sub:
+            d.text((tx0, ty), trunc(sub, f_sub, inner_w), font=f_sub, fill=GREY)
+            ty += 52
         if has_live:
             mn, sc = live_info.get("minute"), live_info.get("score")
             lt = "LIVE"
@@ -1839,48 +1927,49 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             if sc:
                 lt += f"   ·   {sc}"
             lw = d.textlength(lt, font=f_live)
-            d.rounded_rectangle([pad, y - 6, pad + lw + 84, y + 62], 18, fill=LIVE_RED)
-            d.ellipse([pad + 26, y + 18, pad + 50, y + 42], fill=WHITE)
-            d.text((pad + 66, y + 4), lt, font=f_live, fill=WHITE)
-            y += live_h
-            has_live = False  # only under the first match
-        sub = _subline(g)
-        if sub:
-            d.text((pad, y - 4), trunc(sub, f_sub, W - 2 * pad), font=f_sub, fill=GREY)
-            y += sub_h
-        for l in g["mkts"]:
-            od = l.get("odds") or 0
-            odt = f"{od:.2f}" if od else ("gewonnen" if won else "offen")
-            ow = d.textlength(odt, font=f_odds)
-            mkx = pad + 28
-            d.text((mkx, y + 6), trunc(l.get("market", "") or "", f_market, W - pad - mkx - ow - 72), font=f_market, fill=(214, 216, 220))
-            d.text((W - pad - ow, y + 2), odt, font=f_odds, fill=ACCENT)
+            d.rounded_rectangle([tx0, ty, tx0 + lw + 78, ty + 58], 16, fill=LIVE_RED)
+            d.ellipse([tx0 + 22, ty + 18, tx0 + 44, ty + 40], fill=WHITE)
+            d.text((tx0 + 58, ty + 8), lt, font=f_live, fill=WHITE)
+            ty += 74
+            has_live = False
+        for r in g["rows"]:
+            ow = d.textlength(r["odds"], font=f_odds)
+            oy = ty + (LINE_H * len(r["lines"]) - 54) // 2
+            # bullet
+            d.ellipse([tx0, ty + 22, tx0 + 14, ty + 36], fill=ACCENT)
+            for li, line in enumerate(r["lines"]):
+                d.text((tx0 + 32, ty + 4), line, font=f_market, fill=SOFT)
+                ty += LINE_H
+            d.text((W - pad - cpad - ow, oy), r["odds"], font=f_odds, fill=ACCENT)
             if won:
-                check(W - pad - ow - 52, y + 30, 24, GREEN)
-            y += mrow_h
-        d.line([pad, y + 2, W - pad, y + 2], fill=LINE, width=2)
-        y += gap
-    # footer card
-    fy = y + 20
-    d.rounded_rectangle([pad, fy, W - pad, H - 34], 28, fill=CARD)
+                check(W - pad - cpad - ow - 46, oy + 28, 22, GREEN)
+            ty += 18
+        y = cy1 + gap
+
+    # ---- footer summary card ---------------------------------------------
+    fy = y + 6
+    fcard_bottom = fy + foot_h - 24
+    d.rounded_rectangle([pad, fy, W - pad, fcard_bottom], 26, fill=CARD2)
+    d.rounded_rectangle([pad, fy, pad + 10, fcard_bottom], 26, fill=ACCENT)
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
-             "cashed": "Ausgezahlt",
-             "live_pending": "Live-Pick", "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + 40, fy + 30), label, font=f_label, fill=ACCENT)
-    d.text((pad + 40, fy + 108), "Gesamtquote", font=f_lbl, fill=GREY)
+             "cashed": "Ausgezahlt", "live_pending": "Live-Pick",
+             "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
+    d.text((pad + cpad, fy + 28), label, font=f_label, fill=ACCENT)
+    d.text((pad + cpad, fy + 98), "Gesamtquote", font=f_small, fill=GREY)
     ot = f"{total_odds:.2f}" if total_odds else "—"
-    otw = d.textlength(ot, font=f_big)
-    d.rounded_rectangle([W - pad - otw - 76, fy + 26, W - pad - 40, fy + 140], 20, fill=ACCENT)
-    d.text((W - pad - otw - 58, fy + 34), ot, font=f_big, fill=VOID)
-    d.text((pad + 40, fy + 160), f"@{username}", font=f_user, fill=WHITE)
+    otw = d.textlength(ot, font=f_total)
+    op_x0 = W - pad - cpad - otw - 40
+    d.rounded_rectangle([op_x0, fy + 24, W - pad - cpad, fy + 136], 18, fill=ACCENT)
+    d.text((op_x0 + 20, fy + 32), ot, font=f_total, fill=VOID)
+    d.text((pad + cpad, fy + 150), f"@{username}", font=f_user, fill=WHITE)
     if stake:
         stt = f"Einsatz: {stake}"
-        d.text((W - pad - d.textlength(stt, font=f_lbl) - 40, fy + 166), stt, font=f_lbl, fill=GREY)
+        d.text((W - pad - cpad - d.textlength(stt, font=f_small), fy + 158), stt, font=f_small, fill=SOFT)
     if winnings:
         wt = (f"Ausgezahlt: {winnings}" if ctype == "cashed" else f"Gewinn: {winnings}") if won else f"Möglicher Gewinn: {winnings}"
-        d.text((pad + 40, fy + 224), wt, font=f_win, fill=ACCENT)
+        d.text((pad + cpad, fy + 210), wt, font=f_user, fill=ACCENT)
     out = io.BytesIO()
-    img.save(out, format="WEBP", quality=90)
+    img.save(out, format="WEBP", quality=92)
     return out.getvalue()
 
 
@@ -2460,9 +2549,77 @@ async def public_profile(username: str):
         "received_credits": u.get("received_credits", 0),
         "streak": u.get("streak", 0),
         "apex_flame": u.get("apex_flame", False),
+        "role": u.get("role", "user"),
+        "expert_trial": u.get("expert_trial", False),
         "tips_count": tips_count,
         "wins_count": wins_count,
     }
+
+
+@api_router.get("/experts")
+async def list_experts():
+    """Public list of Experts for the site-wide banner."""
+    experts = await db.users.find(
+        {"role": "expert"}, {"_id": 0, "id": 1, "username": 1, "apex_flame": 1}).to_list(50)
+    out = []
+    for e in experts:
+        tips_count = await db.tips.count_documents({"user_id": e["id"]})
+        out.append({"username": e.get("username"), "apex_flame": e.get("apex_flame", False),
+                    "tips_count": tips_count})
+    out.sort(key=lambda x: x["tips_count"], reverse=True)
+    return {"experts": out}
+
+
+@api_router.get("/inbox")
+async def get_inbox(user: dict = Depends(get_current_user)):
+    msgs = await db.inbox_messages.find(
+        {"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    unread = sum(1 for m in msgs if not m.get("read"))
+    return {"messages": msgs, "unread": unread}
+
+
+@api_router.post("/inbox/{msg_id}/read")
+async def mark_inbox_read(msg_id: str, user: dict = Depends(get_current_user)):
+    await db.inbox_messages.update_one(
+        {"id": msg_id, "user_id": user["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
+@api_router.post("/inbox/read-all")
+async def mark_inbox_read_all(user: dict = Depends(get_current_user)):
+    await db.inbox_messages.update_many(
+        {"user_id": user["id"], "read": {"$ne": True}}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
+@api_router.post("/inbox/expert-accept")
+async def inbox_expert_accept(user: dict = Depends(get_current_user)):
+    """User accepts the Expert invitation -> becomes Expert immediately (trial)."""
+    now = datetime.now(timezone.utc).isoformat()
+    if user.get("role") == "user":
+        await db.users.update_one({"id": user["id"]},
+            {"$set": {"role": "expert", "expert_since": now, "expert_trial": True}})
+    await db.inbox_messages.update_many(
+        {"user_id": user["id"], "cta": "expert_invite"},
+        {"$set": {"read": True, "handled": True, "cta": None}})
+    await db.inbox_messages.insert_one({
+        "id": str(uuid.uuid4()), "user_id": user["id"], "type": "expert_welcome",
+        "title": "Du bist jetzt Experte! 🎯",
+        "body": ("Herzlichen Glückwunsch! Deine Tipps werden ab sofort als Experten-Tipps "
+                 "hervorgehoben. Die Probezeit läuft — zeig der Community, was du drauf hast! 🔥"),
+        "cta": None, "read": False, "handled": False, "created_at": now,
+    })
+    fresh = await db.users.find_one({"id": user["id"]})
+    return {"ok": True, "user": public_user(fresh)}
+
+
+@api_router.post("/inbox/expert-decline")
+async def inbox_expert_decline(user: dict = Depends(get_current_user)):
+    await db.inbox_messages.update_many(
+        {"user_id": user["id"], "cta": "expert_invite"},
+        {"$set": {"read": True, "handled": True, "cta": None}})
+    return {"ok": True}
+
 
 
 @api_router.post("/tips/{tip_id}/share-image")
@@ -6762,6 +6919,21 @@ async def _delete_stuck_makara_pick():
         logger.error(f"Makara cleanup failed: {e}")
 
 
+async def _backfill_inbox():
+    """Idempotently give existing regular members a welcome + Expert-invite in their
+    mailbox (runs on startup, incl. production). Admins and users already seeded are skipped."""
+    try:
+        users = await db.users.find(
+            {"inbox_seeded": {"$ne": True}, "role": "user"},
+            {"_id": 0, "id": 1}).to_list(10000)
+        for u in users:
+            await _seed_inbox_for_new_user(u)
+        if users:
+            logger.info(f"Backfilled mailbox for {len(users)} users")
+    except Exception as e:
+        logger.error(f"Inbox backfill failed: {e}")
+
+
 async def _startup_seed():
     try:
         await purge_demo_tips()
@@ -6788,6 +6960,13 @@ async def _startup_seed():
         for oe in owner_emails:
             await db.users.update_one({"email": oe.lower(), "role": {"$ne": "admin"}},
                                       {"$set": {"role": "admin"}})
+        # Promote the community expert(s) (owner request): Ragazzi becomes an Expert.
+        await db.users.update_many(
+            {"username": {"$regex": "^ragazzi$", "$options": "i"}, "role": "user"},
+            {"$set": {"role": "expert", "expert_trial": True,
+                      "expert_since": datetime.now(timezone.utc).isoformat()}})
+        # Backfill mailbox (welcome + expert invite) for existing users who never got one.
+        await _backfill_inbox()
         await seed_showcase()
         await _migrate_stars_and_categories()
         await _cleanup_smart_junk()

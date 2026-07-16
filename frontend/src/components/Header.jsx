@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle } from "lucide-react";
+import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Star } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
-import { useI18n, LANGUAGES } from "../i18n";
+import Mailbox from "./Mailbox";
+import api from "../api";
+import { useI18n, LANGUAGES, toLatin } from "../i18n";
 import { useAuth } from "../auth";
 
 function InstallAppButton() {
@@ -46,7 +48,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewSettled, counts = {}, newCounts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewSettled, onExpertClick, counts = {}, newCounts = {} }) {
   const { t, lang, setLang } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -82,6 +84,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
         <div className="flex items-center gap-2 sm:gap-3">
           <InstallAppButton />
           <NotificationBell />
+          <Mailbox />
 
           {/* language switcher */}
           <div className="relative" ref={langRef}>
@@ -147,6 +150,9 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
         </div>
       </div>
 
+      {/* Expert banner — under the logo, site-wide */}
+      <ExpertBanner onExpertClick={onExpertClick} />
+
       {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
       <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-6 gap-2">
@@ -204,6 +210,46 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
     </button>
   );
   return btn;
+}
+
+function ExpertBanner({ onExpertClick }) {
+  const [experts, setExperts] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    api.get("/experts").then((r) => { if (alive) setExperts(r.data.experts || []); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return (
+    <div
+      data-testid="expert-banner"
+      className="border-t border-white/5 bg-gradient-to-r from-orange-500/15 via-amber-500/5 to-transparent px-4 sm:px-6 py-2.5"
+    >
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="flex items-center gap-1.5 text-sm font-heading font-black text-orange-400">
+          <Star size={15} /> Wir suchen Experten!
+        </span>
+        <span className="text-xs text-zinc-400">Bist du Experte? Das sind unsere Experten:</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {experts.length === 0 ? (
+            <span className="text-xs text-zinc-600">Noch keine Experten</span>
+          ) : experts.map((e) => (
+            <button
+              key={e.username}
+              type="button"
+              data-testid={`expert-chip-${e.username}`}
+              onClick={() => onExpertClick?.(e.username)}
+              className="flex items-center gap-1.5 rounded-full bg-orange-500/15 border border-orange-500/40 px-2.5 py-1 text-xs font-bold text-orange-300 hover:bg-orange-500/25 active:scale-95 transition-all"
+            >
+              <span className="w-4 h-4 rounded-full bg-orange-500 text-void flex items-center justify-center text-[9px] font-black">
+                {e.username?.[0]?.toUpperCase() || "?"}
+              </span>
+              {toLatin(e.username)}{e.apex_flame ? " 🔥" : ""}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MenuItem({ icon: Icon, label, onClick, testId }) {

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import Modal from "./Modal";
 import api from "../api";
 import { useI18n, toLatin } from "../i18n";
-import { Gift, Calendar, Trophy, TrendingUp, Coins, Flame } from "lucide-react";
+import { Gift, Calendar, Trophy, TrendingUp, Coins, Flame, Star } from "lucide-react";
 
 export default function PublicProfileModal({ open, username, onClose, onGift }) {
   const { t } = useI18n();
@@ -37,6 +37,11 @@ export default function PublicProfileModal({ open, username, onClose, onGift }) 
           {username?.[0]?.toUpperCase() || "?"}
         </div>
         <h3 className="mt-3 text-xl font-black text-white" data-testid="profile-username">@{toLatin(username)}</h3>
+        {p?.role === "expert" && (
+          <div data-testid="profile-expert-badge" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 border border-orange-500/40 px-3 py-1 text-xs font-black text-orange-400">
+            <Star size={14} /> TipJar Experte{p?.expert_trial ? " · Probezeit" : ""}
+          </div>
+        )}
         {p?.apex_flame && (
           <div data-testid="profile-apex-flame" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-bell/15 border border-bell/40 px-3 py-1 text-xs font-black text-bell">
             <Flame size={14} /> {t("profile.apexFlame")}
