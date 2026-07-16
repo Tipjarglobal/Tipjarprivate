@@ -1764,24 +1764,24 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     ACCENT = GREEN if won else VOLT
     has_live = bool(live_info)
 
-    W = 1080
-    pad = 56           # outer margin
-    cpad = 34          # inner card padding
+    W = 1000
+    pad = 40           # outer margin (tighter)
+    cpad = 28          # inner card padding
     inner_w = W - 2 * pad - 2 * cpad
 
-    # ---- fonts ------------------------------------------------------------
-    f_logo = font(FB, 84)
-    f_tag = font(FR, 32)
-    f_badge = font(FB, 46)
-    f_pill = font(FB, 30)
-    f_sub = font(FR, 36)
-    f_market = font(FR, 48)
-    f_odds = font(FB, 54)
-    f_live = font(FB, 40)
-    f_total = font(FB, 88)
-    f_label = font(FB, 54)
-    f_small = font(FR, 40)
-    f_user = font(FB, 50)
+    # ---- fonts (much larger for readability in small Hall-of-Fame cards) ---
+    f_logo = font(FB, 92)
+    f_tag = font(FR, 34)
+    f_badge = font(FB, 56)
+    f_pill = font(FB, 34)
+    f_sub = font(FR, 46)
+    f_market = font(FB, 68)
+    f_odds = font(FB, 78)
+    f_live = font(FB, 50)
+    f_total = font(FB, 120)
+    f_label = font(FB, 70)
+    f_small = font(FR, 48)
+    f_user = font(FB, 68)
 
     def fit_font(txt, hi, lo, maxw):
         for sz in range(hi, lo - 1, -2):
@@ -1826,17 +1826,17 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         return "   ·   ".join(_clean_part(p) for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p)
 
     # ---- pre-measure every card so the canvas height is exact -------------
-    ODDS_COL = 190      # reserved width on the right for the odds value
-    LINE_H = 60
+    ODDS_COL = 250      # reserved width on the right for the (large) odds value
+    LINE_H = 88
     for g in groups:
         # title: one line if it fits, else home / vs away on two lines
         title = f"{g['home']}  vs  {g['away']}"
-        tf, ts = fit_font(title, 56, 40, inner_w)
+        tf, ts = fit_font(title, 70, 46, inner_w)
         if _scratch.textlength(title, font=tf) <= inner_w:
             g["tlines"] = [(title, tf, ts)]
         else:
-            f1, s1 = fit_font(g["home"], 52, 34, inner_w)
-            f2, s2 = fit_font(f"vs {g['away']}", 52, 34, inner_w)
+            f1, s1 = fit_font(g["home"], 64, 42, inner_w)
+            f2, s2 = fit_font(f"vs {g['away']}", 64, 42, inner_w)
             g["tlines"] = [(g["home"], f1, s1), (f"vs {g['away']}", f2, s2)]
         # markets: wrap (never truncate); odds sits on the first line
         rows = []
@@ -1847,21 +1847,21 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             rows.append({"lines": mlines, "odds": odt})
         g["rows"] = rows
         h = cpad
-        h += sum(sz + 14 for _, _, sz in g["tlines"])
+        h += sum(sz + 10 for _, _, sz in g["tlines"])
         if subline(g):
-            h += 52
+            h += 62
         if has_live:
-            h += 74
+            h += 86
         for r in rows:
-            h += len(r["lines"]) * LINE_H + 18
+            h += len(r["lines"]) * LINE_H + 12
         h += cpad - 8
         g["card_h"] = h
 
-    head_h = 216
-    gap = 22
+    head_h = 210
+    gap = 14
     content_h = sum(g["card_h"] + gap for g in groups)
-    foot_h = 300
-    H = head_h + content_h + foot_h + 40
+    foot_h = 388
+    H = head_h + content_h + foot_h + 30
 
     img = Image.new("RGB", (W, H), VOID)
     d = ImageDraw.Draw(img)
@@ -1871,29 +1871,29 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=wdt)
 
     # ---- header -----------------------------------------------------------
-    d.text((pad, 44), "Tip", font=f_logo, fill=WHITE)
+    d.text((pad, 40), "Tip", font=f_logo, fill=WHITE)
     tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 44), "Jar", font=f_logo, fill=GREEN)
-    d.text((pad + 4, 140), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
+    d.text((pad + tw, 40), "Jar", font=f_logo, fill=GREEN)
+    d.text((pad + 4, 142), "Post it. Rate it. Cash it.", font=f_tag, fill=GREY)
     # status badge (top-right)
     badge = "WON" if won else "OFFEN"
     bw = d.textlength(badge, font=f_badge)
-    b_extra = 78 if won else 44
+    b_extra = 92 if won else 52
     bx0 = W - pad - bw - b_extra
-    d.rounded_rectangle([bx0, 44, W - pad, 116], 18, fill=ACCENT)
-    tx = bx0 + 24
+    d.rounded_rectangle([bx0, 38, W - pad, 122], 18, fill=ACCENT)
+    tx = bx0 + 28
     if won:
-        check(bx0 + 26, 82, 22, VOID)
-        tx = bx0 + 60
-    d.text((tx, 56), badge, font=f_badge, fill=VOID)
+        check(bx0 + 28, 84, 26, VOID)
+        tx = bx0 + 70
+    d.text((tx, 52), badge, font=f_badge, fill=VOID)
     # channel pill (which area the slip comes from)
     area = {"pending": "COMMUNITY PICK", "live_pending": "LIVE PICK"}.get(ctype)
     if area:
         aw = d.textlength(area, font=f_pill)
-        ax0 = W - pad - aw - 36
-        d.rounded_rectangle([ax0, 128, W - pad, 178], 14, outline=ACCENT, width=3)
-        d.text((ax0 + 18, 136), area, font=f_pill, fill=ACCENT)
-    d.line([pad, head_h - 24, W - pad, head_h - 24], fill=LINE, width=3)
+        ax0 = W - pad - aw - 40
+        d.rounded_rectangle([ax0, 134, W - pad, 188], 14, outline=ACCENT, width=3)
+        d.text((ax0 + 20, 142), area, font=f_pill, fill=ACCENT)
+    d.line([pad, head_h - 20, W - pad, head_h - 20], fill=LINE, width=3)
 
     def trunc(txt, fnt, maxw):
         txt = txt or ""
@@ -1914,11 +1914,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         ty = y + cpad - 4
         for txt, tfont, tsz in g["tlines"]:
             d.text((tx0, ty), txt, font=tfont, fill=WHITE)
-            ty += tsz + 14
+            ty += tsz + 10
         sub = subline(g)
         if sub:
             d.text((tx0, ty), trunc(sub, f_sub, inner_w), font=f_sub, fill=GREY)
-            ty += 52
+            ty += 62
         if has_live:
             mn, sc = live_info.get("minute"), live_info.get("score")
             lt = "LIVE"
@@ -1927,23 +1927,23 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             if sc:
                 lt += f"   ·   {sc}"
             lw = d.textlength(lt, font=f_live)
-            d.rounded_rectangle([tx0, ty, tx0 + lw + 78, ty + 58], 16, fill=LIVE_RED)
-            d.ellipse([tx0 + 22, ty + 18, tx0 + 44, ty + 40], fill=WHITE)
-            d.text((tx0 + 58, ty + 8), lt, font=f_live, fill=WHITE)
-            ty += 74
+            d.rounded_rectangle([tx0, ty, tx0 + lw + 92, ty + 70], 16, fill=LIVE_RED)
+            d.ellipse([tx0 + 26, ty + 24, tx0 + 52, ty + 50], fill=WHITE)
+            d.text((tx0 + 66, ty + 8), lt, font=f_live, fill=WHITE)
+            ty += 86
             has_live = False
         for r in g["rows"]:
             ow = d.textlength(r["odds"], font=f_odds)
-            oy = ty + (LINE_H * len(r["lines"]) - 54) // 2
+            oy = ty + (LINE_H * len(r["lines"]) - 78) // 2
             # bullet
-            d.ellipse([tx0, ty + 22, tx0 + 14, ty + 36], fill=ACCENT)
+            d.ellipse([tx0, ty + 32, tx0 + 18, ty + 50], fill=ACCENT)
             for li, line in enumerate(r["lines"]):
-                d.text((tx0 + 32, ty + 4), line, font=f_market, fill=SOFT)
+                d.text((tx0 + 40, ty + 4), line, font=f_market, fill=SOFT)
                 ty += LINE_H
             d.text((W - pad - cpad - ow, oy), r["odds"], font=f_odds, fill=ACCENT)
             if won:
-                check(W - pad - cpad - ow - 46, oy + 28, 22, GREEN)
-            ty += 18
+                check(W - pad - cpad - ow - 54, oy + 40, 26, GREEN)
+            ty += 12
         y = cy1 + gap
 
     # ---- footer summary card ---------------------------------------------
@@ -1954,20 +1954,20 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
              "cashed": "Ausgezahlt", "live_pending": "Live-Pick",
              "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + cpad, fy + 28), label, font=f_label, fill=ACCENT)
-    d.text((pad + cpad, fy + 98), "Gesamtquote", font=f_small, fill=GREY)
+    d.text((pad + cpad, fy + 30), label, font=f_label, fill=ACCENT)
+    d.text((pad + cpad, fy + 118), "Gesamtquote", font=f_small, fill=GREY)
     ot = f"{total_odds:.2f}" if total_odds else "—"
     otw = d.textlength(ot, font=f_total)
-    op_x0 = W - pad - cpad - otw - 40
-    d.rounded_rectangle([op_x0, fy + 24, W - pad - cpad, fy + 136], 18, fill=ACCENT)
-    d.text((op_x0 + 20, fy + 32), ot, font=f_total, fill=VOID)
-    d.text((pad + cpad, fy + 150), f"@{username}", font=f_user, fill=WHITE)
+    op_x0 = W - pad - cpad - otw - 44
+    d.rounded_rectangle([op_x0, fy + 22, W - pad - cpad, fy + 170], 20, fill=ACCENT)
+    d.text((op_x0 + 22, fy + 28), ot, font=f_total, fill=VOID)
+    d.text((pad + cpad, fy + 188), f"@{username}", font=f_user, fill=WHITE)
     if stake:
         stt = f"Einsatz: {stake}"
-        d.text((W - pad - cpad - d.textlength(stt, font=f_small), fy + 158), stt, font=f_small, fill=SOFT)
+        d.text((W - pad - cpad - d.textlength(stt, font=f_small), fy + 200), stt, font=f_small, fill=SOFT)
     if winnings:
         wt = (f"Ausgezahlt: {winnings}" if ctype == "cashed" else f"Gewinn: {winnings}") if won else f"Möglicher Gewinn: {winnings}"
-        d.text((pad + cpad, fy + 210), wt, font=f_user, fill=ACCENT)
+        d.text((pad + cpad, fy + 270), wt, font=f_user, fill=ACCENT)
     out = io.BytesIO()
     img.save(out, format="WEBP", quality=92)
     return out.getvalue()
@@ -2393,6 +2393,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
         stars = min(stars, 7)
         return {"title": "🔵 LIVE-Pick", "body": detail, "url": f"/?pick={pid}&area=live",
                 "kind": "live", "sound": "coin", "pick_id": pid, "area": area,
+                "actions": [{"action": "open", "title": "Zum Pick →"}],
                 "icon": "/push-live.png", "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
     if src == "hq-auto":
@@ -2411,6 +2412,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
     # notification (newest wins) instead of stacking → no endless-swipe. Deep-link via ?pick=.
     return {"title": title, "body": detail, "url": f"/?pick={pid}&area={area}", "kind": "tip",
             "sound": sound, "pick_id": pid, "area": area,
+            "actions": [{"action": "open", "title": "Zum Pick →"}],
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
 
 
@@ -2425,8 +2427,9 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
     names = [_short(t) for t in tips[:3]]
     body = " · ".join(names) + (f" +{n - 3} mehr" if n > 3 else "")
     title = f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else "")
-    return {"title": title, "body": body, "url": "/", "kind": "digest", "sound": "coin",
-            "area": area,
+    return {"title": title, "body": body, "url": f"/?area={area}" if area else "/",
+            "kind": "digest", "sound": "coin", "area": area,
+            "actions": [{"action": "open", "title": "Ansehen →"}],
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
 
 
@@ -6704,13 +6707,13 @@ async def _regenerate_win_slips_once():
     await asyncio.sleep(20)
     try:
         claims = await db.win_claims.find(
-            {"status": "approved", "slip_v2": {"$ne": True}},
+            {"status": "approved", "slip_v3": {"$ne": True}},
             {"_id": 0}).to_list(200)
         n = 0
         for c in claims:
             legs = c.get("legs") or []
             if not legs:
-                await db.win_claims.update_one({"id": c["id"]}, {"$set": {"slip_v2": True}})
+                await db.win_claims.update_one({"id": c["id"]}, {"$set": {"slip_v3": True}})
                 continue
             try:
                 img = await asyncio.to_thread(
@@ -6725,7 +6728,7 @@ async def _regenerate_win_slips_once():
                     "owner": c.get("user_id", "system"), "is_deleted": False,
                     "created_at": datetime.now(timezone.utc).isoformat()})
                 await db.win_claims.update_one(
-                    {"id": c["id"]}, {"$set": {"image_path": res["path"], "slip_v2": True}})
+                    {"id": c["id"]}, {"$set": {"image_path": res["path"], "slip_v3": True}})
                 n += 1
             except Exception as ex:
                 logger.error(f"regenerate slip {c.get('id')} failed: {ex}")

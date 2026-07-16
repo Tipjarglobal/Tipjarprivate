@@ -15,7 +15,7 @@ function anonId() {
   return id;
 }
 
-async function pushNotify(title, body) {
+async function pushNotify(title, body, url) {
   try {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     if (navigator.serviceWorker) {
@@ -26,6 +26,8 @@ async function pushNotify(title, body) {
         badge: "/tipjar-crest.png",
         tag: "tipjar-tip",
         renotify: true,
+        data: { url: url || "/" },
+        actions: url ? [{ action: "open", title: "Zum Pick →" }] : [],
       });
     } else {
       new Notification(title, { body });
@@ -171,7 +173,7 @@ export default function NotificationBell() {
       ? `\uD83D\uDD34 ${t("bell.new.live")} — ${areaLabel}`
       : `${t(`bell.new.${area}`)}`;
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
-    pushNotify(title, body);
+    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/");
     toast[isLive ? "message" : "success"](title, {
       description: body,
       duration: isLive ? 15000 : 10000,

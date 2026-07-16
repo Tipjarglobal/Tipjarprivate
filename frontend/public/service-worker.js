@@ -49,6 +49,9 @@ self.addEventListener("push", (event) => {
     renotify: true,
     vibrate: data.kind === "live" ? [80, 40, 80, 40, 120] : [60, 30, 60],
     data: { url: data.url || "/", kind: data.kind || "tip" },
+    actions: (data.actions && data.actions.length)
+      ? data.actions
+      : [{ action: "open", title: "Zum Pick →" }],
   };
   event.waitUntil(self.registration.showNotification(title, options));
   // Best-effort: nudge any open tab to play the coin ding (SWs can't play audio).

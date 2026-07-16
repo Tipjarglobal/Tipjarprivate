@@ -205,8 +205,12 @@ function Home() {
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const pick = sp.get("pick");
+    const area = sp.get("area");
     if (pick) {
-      jumpToPick(sp.get("area") || "ai", pick);
+      jumpToPick(area || "ai", pick);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (area) {
+      openTipsView(area === "live_ai" ? "live" : area);
       window.history.replaceState({}, "", window.location.pathname);
     }
     const h = (e) => jumpToPick(e.detail?.area, e.detail?.id);

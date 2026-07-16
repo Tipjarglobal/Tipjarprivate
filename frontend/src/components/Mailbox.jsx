@@ -87,7 +87,7 @@ export default function Mailbox() {
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             data-testid="mailbox-panel"
-            className="fixed sm:absolute left-1/2 sm:left-auto sm:right-0 -translate-x-1/2 sm:translate-x-0 top-20 sm:top-auto sm:mt-2 z-[60] w-[92vw] sm:w-[22rem] max-w-[26rem] rounded-2xl bg-surface border border-elevated shadow-2xl overflow-hidden"
+            className="fixed left-4 right-4 top-20 w-auto max-w-sm mx-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mx-0 sm:mt-2 sm:w-[22rem] sm:max-w-none z-[60] rounded-2xl bg-surface border border-elevated shadow-2xl overflow-hidden"
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b border-elevated">
               <Mail size={16} className="text-volt" />
