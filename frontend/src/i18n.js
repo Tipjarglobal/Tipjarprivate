@@ -74,23 +74,25 @@ export function localizeMarket(market, t) {
 //  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
 //  - already-correct German markets pass through localizeMarket unchanged.
 export function formatSelection(sel, t) {
-  return normalizeBetTerms(toLatin(_formatSelection(sel, t)));
+  return normalizeBetTerms(toLatin(_formatSelection(sel, t)), t);
 }
 
-// Clean up phonetically-transliterated foreign betting terms into proper German so a
-// member's Greek slip ("Over 3.5 Korner (1o Imihrono)") reads "Über 3.5 Ecken (1. Halbzeit)".
-function normalizeBetTerms(s) {
+// Clean up phonetically-transliterated foreign betting terms into the reader's language
+// so a member's Greek slip ("Over 3.5 Korner (1o Imihrono)") reads correctly in ANY
+// language (DE "Über 3.5 Ecken (1. Halbzeit)", EN "Over 3.5 Corners (1. Half)", …).
+function normalizeBetTerms(s, t) {
   if (!s || typeof s !== "string") return s;
+  const tr = (typeof t === "function") ? t : ((k) => k);
   let m = s;
-  m = m.replace(/(\d+)\s*o\s+imi?[hx]?rono/gi, "$1. Halbzeit");   // 1o Imihrono → 1. Halbzeit
-  m = m.replace(/\bimi?[hx]?rono\b/gi, "Halbzeit");
-  m = m.replace(/\bkorners?\b/gi, "Ecken");
-  m = m.replace(/\bgkol[s]?\b/gi, "Tore");
-  m = m.replace(/\bgol[s]?\b/gi, "Tore");
+  m = m.replace(/(\d+)\s*o\s+imi?[hx]?rono/gi, (_, n) => `${n}. ${tr("mkt.half")}`);
+  m = m.replace(/\bimi?[hx]?rono\b/gi, tr("mkt.half"));
+  m = m.replace(/\bkorners?\b/gi, tr("mkt.corners"));
+  m = m.replace(/\b(gkol|gol)s?\b/gi, tr("mkt.goals"));
   // drop the redundant trailing "- Over/Under" market-type label
   m = m.replace(/\s*[-·]?\s*(over|über|ueber)\s*\/\s*(under|unter)\s*$/i, "");
-  m = m.replace(/\bover\b/gi, "Über");
-  m = m.replace(/\bunder\b/gi, "Unter");
+  m = m.replace(/\bover\b/gi, tr("mkt.ovr"));
+  m = m.replace(/\bunder\b/gi, tr("mkt.und"));
+  m = m.replace(/\bueber\b/gi, tr("mkt.ovr"));
   m = m.replace(/\s{2,}/g, " ").trim();
   return m;
 }
@@ -434,6 +436,8 @@ const T = {
     "mkt.ovr": "Over",
     "mkt.und": "Under",
     "mkt.corners": "Corners",
+    "mkt.goals": "Goals",
+    "mkt.half": "Half",
     "mkt.btts": "Both Teams to Score (BTTS)",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Double Chance 1X",
@@ -1025,6 +1029,8 @@ const T = {
     "mkt.ovr": "Über",
     "mkt.und": "Unter",
     "mkt.corners": "Ecken",
+    "mkt.goals": "Tore",
+    "mkt.half": "Halbzeit",
     "mkt.btts": "Beide Teams treffen (BTTS)",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Doppelte Chance 1X",

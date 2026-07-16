@@ -6255,28 +6255,64 @@ async def live_loop():
 MEMBER_LIVE_POLL_SECONDS = 90
 
 
+def _is_member_tip(t: dict) -> bool:
+    """A pick posted by a real human member (not KI/HQ)."""
+    return (t.get("source") not in ("hq-auto", "hq-live", "hq-system", "smart")
+            and t.get("username") not in ("TipJarHQ", "TipJarHQ System"))
+
+
+def _tip_match_teams(t: dict):
+    """Home/away teams for a tip — from the fields, or parsed from a single-game
+    parlay's leg (\"A – B\"). Returns (None, None) for multi-game parlays."""
+    if t.get("home_team") and t.get("away_team"):
+        return t["home_team"], t["away_team"]
+    legs = t.get("legs") or []
+    if len(legs) == 1:
+        mt = legs[0].get("match") or ""
+        for sep in (" \u2013 ", " - ", " vs ", " v "):
+            if sep in mt:
+                a, b = mt.split(sep, 1)
+                return a.strip(), b.strip()
+    return None, None
+
+
 async def live_annotate_sync() -> dict:
     if not API_FOOTBALL_KEY:
-        return {"annotated": 0, "cleared": 0}
+        return {"annotated": 0, "cleared": 0, "to_live": 0}
     live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
     tips = await db.tips.find(
-        {"status": {"$in": ["pending", "live"]}, "is_parlay": {"$ne": True},
+        {"status": {"$in": ["pending", "live"]},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1}).to_list(1500)
-    annotated = cleared = 0
-    for t in tips:
-        fx = _find_live_fixture(live, t["home_team"], t["away_team"])
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1,
+         "is_parlay": 1, "source": 1, "username": 1, "status": 1}).to_list(1500)
+    # single-game member parlays too (home_team empty, teams live inside the one leg)
+    parlays = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
+         "$or": [{"home_team": {"$in": ["", None]}}, {"away_team": {"$in": ["", None]}}]},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1,
+         "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
+    annotated = cleared = to_live = 0
+    for t in tips + parlays:
+        home, away = _tip_match_teams(t)
+        fx = _find_live_fixture(live, home, away) if (home and away) else None
         if fx:
             g = fx.get("goals") or {}
             st = {"minute": ((fx.get("fixture") or {}).get("status") or {}).get("elapsed"),
                   "score": f"{g.get('home') or 0}:{g.get('away') or 0}"}
+            upd = {}
             if t.get("live_state") != st:
-                await db.tips.update_one({"id": t["id"]}, {"$set": {"live_state": st}})
+                upd["live_state"] = st
+            # A live member pick belongs in the LIVE area, not Community → flip status.
+            if _is_member_tip(t) and t.get("status") != "live":
+                upd["status"] = "live"
+                to_live += 1
+            if upd:
+                await db.tips.update_one({"id": t["id"]}, {"$set": upd})
             annotated += 1
         elif t.get("live_state"):
             await db.tips.update_one({"id": t["id"]}, {"$unset": {"live_state": ""}})
             cleared += 1
-    return {"annotated": annotated, "cleared": cleared}
+    return {"annotated": annotated, "cleared": cleared, "to_live": to_live}
 
 
 async def member_live_loop():
