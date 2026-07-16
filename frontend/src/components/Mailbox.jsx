@@ -4,9 +4,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
+
+const MSG_KEYS = {
+  welcome: ["mailbox.welcome.title", "mailbox.welcome.body"],
+  expert_invite: ["mailbox.invite.title", "mailbox.invite.body"],
+  expert_welcome: ["mailbox.expertwin.title", "mailbox.expertwin.body"],
+};
 
 export default function Mailbox() {
   const { user, setUser } = useAuth();
+  const { t } = useI18n();
+  const msgText = (m) => {
+    const k = MSG_KEYS[m.type];
+    return k ? { title: t(k[0]), body: t(k[1]) } : { title: m.title, body: m.body };
+  };
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unread, setUnread] = useState(0);
@@ -52,7 +64,7 @@ export default function Mailbox() {
     try {
       const { data } = await api.post("/inbox/expert-accept");
       if (data.user) setUser(data.user);
-      toast.success("Du bist jetzt Experte! 🎯");
+      toast.success(t("mailbox.accepted"));
       await load();
     } catch (e) { toast.error(apiErr(e)); } finally { setBusy(false); }
   };
@@ -91,12 +103,12 @@ export default function Mailbox() {
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b border-elevated">
               <Mail size={16} className="text-volt" />
-              <span className="font-heading font-black text-white text-sm uppercase tracking-wide">Postfach</span>
+              <span className="font-heading font-black text-white text-sm uppercase tracking-wide">{t("mailbox.title")}</span>
             </div>
             <div className="max-h-[70vh] overflow-y-auto p-2 space-y-2">
               {messages.length === 0 ? (
                 <p className="text-zinc-500 text-sm py-8 text-center" data-testid="mailbox-empty">
-                  Keine Nachrichten.
+                  {t("mailbox.empty")}
                 </p>
               ) : messages.map((m) => (
                 <div
@@ -109,8 +121,8 @@ export default function Mailbox() {
                   <div className="flex items-start gap-2">
                     {m.cta === "expert_invite" && <Star size={15} className="text-orange-400 mt-0.5 shrink-0" />}
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-white">{m.title}</p>
-                      <p className="text-xs text-zinc-300 mt-1 leading-snug">{m.body}</p>
+                      <p className="text-sm font-bold text-white">{msgText(m).title}</p>
+                      <p className="text-xs text-zinc-300 mt-1 leading-snug">{msgText(m).body}</p>
                       {m.cta === "expert_invite" && (
                         <div className="flex items-center gap-2 mt-3">
                           <button
@@ -119,7 +131,7 @@ export default function Mailbox() {
                             disabled={busy}
                             className="flex items-center gap-1.5 rounded-lg bg-orange-500 text-void font-bold text-xs px-3 py-1.5 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                           >
-                            <Check size={13} /> Ja, Experte werden
+                            <Check size={13} /> {t("mailbox.accept")}
                           </button>
                           <button
                             data-testid="expert-decline-btn"
@@ -127,7 +139,7 @@ export default function Mailbox() {
                             disabled={busy}
                             className="flex items-center gap-1.5 rounded-lg bg-elevated text-zinc-300 font-bold text-xs px-3 py-1.5 hover:bg-white/10 active:scale-95 transition-all disabled:opacity-50"
                           >
-                            <X size={13} /> Nein danke
+                            <X size={13} /> {t("mailbox.decline")}
                           </button>
                         </div>
                       )}
