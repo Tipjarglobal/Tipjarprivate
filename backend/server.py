@@ -2542,7 +2542,11 @@ async def public_profile(username: str):
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
     tips_count = await db.tips.count_documents({"user_id": u["id"]})
-    wins_count = await db.win_claims.count_documents({"user_id": u["id"]})
+    # "Gewinne" = the member's own tips that landed as won/cashed-out + any win-claim trophies
+    won_tips = await db.tips.count_documents(
+        {"user_id": u["id"], "status": {"$in": ["won", "cashed_out"]}})
+    win_claims_n = await db.win_claims.count_documents({"user_id": u["id"]})
+    wins_count = won_tips + win_claims_n
     return {
         "username": u.get("username"),
         "created_at": u.get("created_at"),
@@ -6694,6 +6698,43 @@ async def member_live_loop():
 
 
 
+async def _regenerate_win_slips_once():
+    """Re-render existing Hall-of-Fame win-claim slips with the current, far more
+    readable renderer. Idempotent via a 'slip_v2' flag so it only runs once per slip."""
+    await asyncio.sleep(20)
+    try:
+        claims = await db.win_claims.find(
+            {"status": "approved", "slip_v2": {"$ne": True}},
+            {"_id": 0}).to_list(200)
+        n = 0
+        for c in claims:
+            legs = c.get("legs") or []
+            if not legs:
+                await db.win_claims.update_one({"id": c["id"]}, {"$set": {"slip_v2": True}})
+                continue
+            try:
+                img = await asyncio.to_thread(
+                    _render_slip_image, legs, c.get("total_odds") or 0, c.get("stake", ""),
+                    c.get("winnings", ""), c.get("username", "TipJar"), c.get("type", "played"))
+                res = await asyncio.to_thread(
+                    put_object, f"{APP_NAME}/wins/{c.get('user_id', 'x')}/{uuid.uuid4()}.webp",
+                    img, "image/webp")
+                await db.files.insert_one({
+                    "id": str(uuid.uuid4()), "storage_path": res["path"],
+                    "original_filename": "win.webp", "content_type": "image/webp",
+                    "owner": c.get("user_id", "system"), "is_deleted": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()})
+                await db.win_claims.update_one(
+                    {"id": c["id"]}, {"$set": {"image_path": res["path"], "slip_v2": True}})
+                n += 1
+            except Exception as ex:
+                logger.error(f"regenerate slip {c.get('id')} failed: {ex}")
+        if n:
+            logger.info(f"Regenerated {n} Hall-of-Fame slip(s) with v2 renderer")
+    except Exception as e:
+        logger.error(f"regenerate win slips failed: {e}")
+
+
 async def backfill_leg_odds_once():
     """One-time-ish: fill missing per-leg odds on existing member parlay tips by
     re-reading their stored slip image (idempotent — skips tips that already have odds)."""
@@ -6772,6 +6813,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
+    _BG_TASKS.append(asyncio.create_task(_regenerate_win_slips_once()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

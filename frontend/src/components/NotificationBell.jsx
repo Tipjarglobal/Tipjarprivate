@@ -287,7 +287,7 @@ export default function NotificationBell() {
         onClick={() => setOpen((o) => { const nx = !o; if (nx) setUnseen(0); return nx; })}
         whileTap={{ scale: 0.9 }}
         title={t("bell.tooltip")}
-        className={`relative flex items-center gap-2 rounded-full pl-3 pr-4 py-2 font-semibold text-sm transition-colors ${
+        className={`relative flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:pl-3 sm:pr-4 py-1.5 sm:py-2 font-semibold text-sm transition-colors ${
           on
             ? "bg-bell text-white shadow-[0_0_20px_rgba(255,30,86,0.55)]"
             : "bg-bell/15 text-bell hover:bg-bell/25 animate-pulse-glow"
@@ -297,7 +297,8 @@ export default function NotificationBell() {
           animate={on ? { rotate: [0, 14, -14, 10, -8, 0] } : {}}
           transition={{ duration: 1, repeat: on ? Infinity : 0, repeatDelay: 2.5 }}
         >
-          {on ? <BellRing size={18} /> : <Bell size={18} />}
+          {on ? <BellRing size={16} className="sm:hidden" /> : <Bell size={16} className="sm:hidden" />}
+          {on ? <BellRing size={18} className="hidden sm:block" /> : <Bell size={18} className="hidden sm:block" />}
         </motion.span>
         <span className="hidden sm:inline">{on ? t("bell.enabled") : t("bell.enable")}</span>
         {on && (

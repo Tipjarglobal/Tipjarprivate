@@ -41,9 +41,9 @@ function InstallAppButton() {
     <button
       data-testid="download-app-btn"
       onClick={click}
-      className="flex items-center gap-1.5 rounded-full border border-volt/50 bg-volt/10 text-volt font-bold text-sm px-3 py-2 hover:bg-volt/20 active:scale-95 transition-all"
+      className="flex items-center gap-1.5 rounded-full border border-volt/50 bg-volt/10 text-volt font-bold text-sm px-2 py-1.5 sm:px-3 sm:py-2 hover:bg-volt/20 active:scale-95 transition-all"
     >
-      <Download size={16} /> <span className="hidden sm:inline">{t("nav.download")}</span>
+      <Download size={15} className="sm:hidden" /><Download size={16} className="hidden sm:block" /> <span className="hidden sm:inline">{t("nav.download")}</span>
     </button>
   );
 }
@@ -81,7 +81,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <a href="#invite" className="hover:text-volt transition-colors" data-testid="nav-invite">{t("nav.invite")}</a>
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2.5">
           <InstallAppButton />
           <NotificationBell />
           <Mailbox />
@@ -89,8 +89,8 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           {/* language switcher */}
           <div className="relative" ref={langRef}>
             <button data-testid="language-switcher" onClick={() => setLangOpen(!langOpen)}
-              className="flex items-center gap-1.5 rounded-full border border-elevated px-2.5 py-2 text-sm text-zinc-300 hover:border-volt/50 transition-colors">
-              <Globe size={16} /> <span className="hidden sm:inline">{cur.flag}</span> <ChevronDown size={14} />
+              className="flex items-center gap-1 rounded-full border border-elevated px-2 py-1.5 sm:px-2.5 sm:py-2 text-sm text-zinc-300 hover:border-volt/50 transition-colors">
+              <Globe size={15} /> <span className="hidden sm:inline">{cur.flag}</span> <ChevronDown size={13} />
             </button>
             <AnimatePresence>
               {langOpen && (
@@ -110,13 +110,13 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           {user ? (
             <>
               <button data-testid="wallet-chip" onClick={onWallet}
-                className="flex items-center gap-1.5 rounded-full bg-volt/10 border border-volt/30 px-3 py-2 hover:bg-volt/20 transition-colors">
+                className="flex items-center gap-1.5 rounded-full bg-volt/10 border border-volt/30 px-2 py-1.5 sm:px-3 sm:py-2 hover:bg-volt/20 transition-colors">
                 <Wallet size={15} className="text-volt" />
                 <span className="font-mono font-bold text-volt text-sm" data-testid="header-credits">{user.credits}</span>
               </button>
               <div className="relative" ref={menuRef}>
                 <button data-testid="user-menu" onClick={() => setMenuOpen(!menuOpen)}
-                  className="w-9 h-9 rounded-full bg-elevated border border-zinc-600 flex items-center justify-center font-bold text-white hover:border-volt transition-colors">
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-elevated border border-zinc-600 flex items-center justify-center font-bold text-sm text-white hover:border-volt transition-colors">
                   {user.username?.[0]?.toUpperCase() || "U"}
                 </button>
                 <AnimatePresence>
@@ -144,7 +144,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           )}
 
           <button data-testid="header-submit-btn" onClick={onSubmit}
-            className="flex items-center gap-1.5 rounded-full border border-volt/40 text-volt font-bold text-sm px-3 py-2 hover:bg-volt/10 active:scale-95 transition-all">
+            className="flex items-center gap-1.5 rounded-full border border-volt/40 text-volt font-bold text-sm px-2.5 py-1.5 sm:px-3 sm:py-2 hover:bg-volt/10 active:scale-95 transition-all">
             <Plus size={16} /> <span className="hidden md:inline">{t("nav.submit")}</span>
           </button>
         </div>

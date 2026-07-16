@@ -71,9 +71,10 @@ export default function Mailbox() {
         data-testid="mailbox-btn"
         onClick={toggle}
         title="Postfach"
-        className="relative flex items-center justify-center w-9 h-9 rounded-full border border-elevated text-zinc-300 hover:border-volt/50 hover:text-volt transition-colors"
+        className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-elevated text-zinc-300 hover:border-volt/50 hover:text-volt transition-colors"
       >
-        <Mail size={18} />
+        <Mail size={16} className="sm:hidden" />
+        <Mail size={18} className="hidden sm:block" />
         {unread > 0 && (
           <span data-testid="mailbox-unread"
             className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-black leading-none border-2 border-void animate-pulse">
@@ -86,7 +87,7 @@ export default function Mailbox() {
           <motion.div
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             data-testid="mailbox-panel"
-            className="absolute right-0 mt-2 z-[60] w-[22rem] max-w-[92vw] rounded-2xl bg-surface border border-elevated shadow-2xl overflow-hidden"
+            className="fixed sm:absolute left-1/2 sm:left-auto sm:right-0 -translate-x-1/2 sm:translate-x-0 top-20 sm:top-auto sm:mt-2 z-[60] w-[92vw] sm:w-[22rem] max-w-[26rem] rounded-2xl bg-surface border border-elevated shadow-2xl overflow-hidden"
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b border-elevated">
               <Mail size={16} className="text-volt" />
