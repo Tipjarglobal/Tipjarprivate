@@ -82,15 +82,17 @@ async function disableWebPush() {
 }
 
 // Which picks area does a tip belong to (for area-targeted alerts)?
+// Live is split: KI-live (live_ai) vs community-live (live).
 function tipArea(tp) {
-  if (tp.status === "live") return "live";
+  const isAI = ["hq-auto", "hq-live", "hq-system", "smart"].includes(tp.source);
+  if (tp.status === "live") return isAI ? "live_ai" : "live";
   if (tp.source === "hq-auto") return "ai";
   if (tp.source === "smart") return "smart";
   return "members";
 }
 
-const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true };
-const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive" };
+const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true, live_ai: true };
+const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive", live_ai: "viewlive" };
 
 function loadAreas() {
   try {
@@ -148,25 +150,27 @@ export default function NotificationBell() {
   }, []);
 
   const fireAlert = (tp, area) => {
+    const isLive = area === "live" || area === "live_ai";
+    const navArea = area === "live_ai" ? "live" : area;
     const areaLabel = t(`bell.area.${area}`);
     const name = tp.is_parlay
       ? `${(tp.legs || []).length}-leg parlay`
       : `${toLatin(tp.home_team) || "Tip"}${tp.away_team ? " vs " + toLatin(tp.away_team) : ""}`;
     const rating = tipRating(tp);
-    const title = area === "live"
+    const title = isLive
       ? `\uD83D\uDD34 ${t("bell.new.live")} — ${areaLabel}`
       : `${t(`bell.new.${area}`)}`;
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
     pushNotify(title, body);
-    toast[area === "live" ? "message" : "success"](title, {
+    toast[isLive ? "message" : "success"](title, {
       description: body,
-      duration: area === "live" ? 15000 : 10000,
+      duration: isLive ? 15000 : 10000,
       action: {
         label: tp.id ? t("bell.view_pick") : t(`nav.${VIEW_KEY[area] || "viewtips"}`),
         onClick: () => window.dispatchEvent(
           tp.id
-            ? new CustomEvent("tj-open-pick", { detail: { area, id: tp.id } })
-            : new CustomEvent("tj-open-view", { detail: area })
+            ? new CustomEvent("tj-open-pick", { detail: { area: navArea, id: tp.id } })
+            : new CustomEvent("tj-open-view", { detail: navArea })
         ),
       },
     });
@@ -189,8 +193,9 @@ export default function NotificationBell() {
           for (const tp of data) {
             if (!seen.current.has(tp.id)) {
               const area = tipArea(tp);
+              const isLive = area === "live" || area === "live_ai";
               if (onRef.current && (areasRef.current[area] !== false) &&
-                  (area === "live" || tipRating(tp) >= minRef.current)) {
+                  (isLive || tipRating(tp) >= minRef.current)) {
                 fireAlert(tp, area);
               }
               seen.current.add(tp.id);
@@ -206,8 +211,9 @@ export default function NotificationBell() {
         } else {
           for (const tp of live.data) {
             if (!seenLive.current.has(tp.id)) {
-              if (onRef.current && areasRef.current.live !== false) {
-                fireAlert({ ...tp, status: "live" }, "live");
+              const larea = tipArea({ ...tp, status: "live" });
+              if (onRef.current && areasRef.current[larea] !== false) {
+                fireAlert({ ...tp, status: "live" }, larea);
               }
               seenLive.current.add(tp.id);
             }
@@ -349,10 +355,9 @@ export default function NotificationBell() {
 
             <div className="mt-3 pt-3 border-t border-elevated">
               <p className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("bell.areas")}</p>
-              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["members", "bell.area.members"], ["live", "bell.area.live"]].map(([k, lbl]) => (
+              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["members", "bell.area.members"]].map(([k, lbl]) => (
                 <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1.5 cursor-pointer">
                   <span className="text-sm text-zinc-300 flex items-center gap-2">
-                    {k === "live" && <span className="w-2 h-2 rounded-full bg-live animate-pulse" />}
                     {t(lbl)}
                   </span>
                   <input
@@ -364,6 +369,33 @@ export default function NotificationBell() {
                   />
                 </label>
               ))}
+              {/* Live is the only area where KI + Community post together → double box:
+                  orange "KI Tipps" (live_ai) next to the red community-live box. */}
+              <div data-testid="bell-area-live" className="flex items-center justify-between py-1.5">
+                <span className="text-sm text-zinc-300 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-live animate-pulse" />
+                  {t("bell.area.live")}
+                </span>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer" data-testid="bell-area-live_ai">
+                    <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wide">{t("bell.area.live_ai")}</span>
+                    <input
+                      type="checkbox"
+                      checked={areas.live_ai !== false}
+                      onChange={(e) => setAreas((a) => ({ ...a, live_ai: e.target.checked }))}
+                      data-testid="bell-area-toggle-live_ai"
+                      className="w-4 h-4 cursor-pointer accent-orange-500"
+                    />
+                  </label>
+                  <input
+                    type="checkbox"
+                    checked={areas.live !== false}
+                    onChange={(e) => setAreas((a) => ({ ...a, live: e.target.checked }))}
+                    data-testid="bell-area-toggle-live"
+                    className="w-4 h-4 cursor-pointer accent-bell"
+                  />
+                </div>
+              </div>
             </div>
 
             {on && <p className="text-[11px] text-bell mt-2">{t("bell.on")}</p>}

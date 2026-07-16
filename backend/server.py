@@ -2198,8 +2198,11 @@ async def notify_all_push(payload: dict):
 
 
 def _tip_push_area(tip: dict) -> str:
+    is_ai = tip.get("source") in ("hq-auto", "hq-live", "hq-system", "smart")
     if tip.get("status") == "live" or tip.get("source") == "hq-live":
-        return "live"
+        # Live is the only area where KI and Community post together → split so a user
+        # can (un)subscribe to AI-live and community-live separately.
+        return "live_ai" if is_ai else "live"
     src = tip.get("source")
     return "ai" if src == "hq-auto" else ("smart" if src == "smart" else "members")
 
@@ -2222,13 +2225,13 @@ def _push_payload_for_tip(tip: dict) -> dict:
     is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
     pid = tip.get("id")
     src = tip.get("source")
-    area = "live" if is_live else ("ai" if src == "hq-auto" else ("smart" if src == "smart" else "members"))
+    area = _tip_push_area(tip)
     if is_live:
         # Owner (2026-07-10): live in-play bets are never "impossible to lose" — cap at
         # 7★ and never fire the 9/10★ explosion sound.
         stars = min(stars, 7)
         return {"title": "🔵 LIVE-Pick", "body": detail, "url": f"/?pick={pid}&area=live",
-                "kind": "live", "sound": "coin", "pick_id": pid, "area": "live",
+                "kind": "live", "sound": "coin", "pick_id": pid, "area": area,
                 "icon": "/push-live.png", "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
     if src == "hq-auto":
