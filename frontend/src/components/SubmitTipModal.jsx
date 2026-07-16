@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Modal, { Field, inputCls, btnPrimary } from "./Modal";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw } from "lucide-react";
+import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle } from "lucide-react";
 import api, { apiErr } from "../api";
 import StarRating from "./StarRating";
 import { useI18n, formatSelection } from "../i18n";
@@ -59,11 +59,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   const [detected, setDetected] = useState(null);
   const [selfStars, setSelfStars] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [clarify, setClarify] = useState(null);
   const inputRef = useRef();
 
   const reset = () => {
     setFiles([]); setPreviews([]); setText(""); setDetected(null); setSelfStars(0);
-    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload");
+    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload"); setClarify(null);
   };
   const close = () => { reset(); onClose(); };
 
@@ -120,7 +121,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
       });
       toast.success(t("submit.published"));
       onPublished && onPublished(data);
-      close();
+      if (data.needs_clarification) {
+        toast.message(t("clarify.toast"));
+        setClarify({ tipId: data.id, fields: data.clarification_fields || [] });
+      } else {
+        close();
+      }
     } catch (err) {
       toast.error(apiErr(err));
     } finally {
@@ -128,10 +134,30 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     }
   };
 
+  const saveClarify = async (values) => {
+    if (!clarify) return;
+    setPublishing(true);
+    try {
+      await api.post(`/tips/${clarify.tipId}/clarify`, values);
+      toast.success(t("clarify.saved"));
+      onPublished && onPublished({});
+      close();
+    } catch (err) {
+      toast.error(apiErr(err));
+    } finally {
+      setPublishing(false);
+    }
+  };
+  const skipClarify = () => close();
+
   const ex = TUTORIAL[tutStep];
 
   return (
     <Modal open={open} onClose={close} title={t("submit.title")} maxWidth="max-w-xl" testId="submit-modal">
+      {clarify ? (
+        <ClarifyPanel fields={clarify.fields} onSave={saveClarify} onSkip={skipClarify} saving={publishing} t={t} />
+      ) : (
+      <>
       {/* tabs */}
       <div className="flex gap-2 mb-5 p-1 bg-void rounded-xl border border-elevated">
         <button
@@ -315,7 +341,63 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
           )}
         </div>
       )}
+      </>
+      )}
     </Modal>
+  );
+}
+
+function ClarifyPanel({ fields, onSave, onSkip, saving, t }) {
+  const [league, setLeague] = useState("");
+  const [matchTime, setMatchTime] = useState("");
+  const [home, setHome] = useState("");
+  const [away, setAway] = useState("");
+  const need = (k) => (fields || []).includes(k);
+  return (
+    <div data-testid="clarify-panel" className="space-y-4">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-volt/15 flex items-center justify-center shrink-0">
+          <HelpCircle size={18} className="text-volt" />
+        </div>
+        <div>
+          <h4 className="font-heading font-black text-white text-lg">{t("clarify.title")}</h4>
+          <p className="text-sm text-zinc-400">{t("clarify.intro")}</p>
+        </div>
+      </div>
+      {need("teams") && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("clarify.home")}>
+            <input data-testid="clarify-home" value={home} onChange={(e) => setHome(e.target.value)} className={inputCls} placeholder="Blumenau SC" />
+          </Field>
+          <Field label={t("clarify.away")}>
+            <input data-testid="clarify-away" value={away} onChange={(e) => setAway(e.target.value)} className={inputCls} placeholder="Metropolitano" />
+          </Field>
+        </div>
+      )}
+      {need("league") && (
+        <Field label={t("clarify.league")}>
+          <input data-testid="clarify-league" value={league} onChange={(e) => setLeague(e.target.value)} className={inputCls} placeholder="Brasileiro Série C" />
+        </Field>
+      )}
+      {need("datetime") && (
+        <Field label={t("clarify.datetime")}>
+          <input data-testid="clarify-datetime" value={matchTime} onChange={(e) => setMatchTime(e.target.value)} className={inputCls} placeholder="TT/MM/JJJJ HH:MM" />
+        </Field>
+      )}
+      <div className="flex gap-3 pt-1">
+        <button data-testid="clarify-skip" onClick={onSkip} className="rounded-lg border border-elevated px-4 py-3 text-sm font-semibold text-zinc-400 hover:text-white transition-colors">
+          {t("clarify.skip")}
+        </button>
+        <button
+          data-testid="clarify-save"
+          onClick={() => onSave({ league, match_time: matchTime, home_team: home, away_team: away })}
+          disabled={saving}
+          className={btnPrimary}
+        >
+          {saving ? t("common.loading") : t("clarify.save")}
+        </button>
+      </div>
+    </div>
   );
 }
 

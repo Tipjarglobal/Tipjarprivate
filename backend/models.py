@@ -104,3 +104,10 @@ class PushSubIn(BaseModel):
 class PushPrefsIn(BaseModel):
     endpoint: str
     areas: dict
+
+
+class ClarifyInput(BaseModel):
+    league: Optional[str] = None
+    match_time: Optional[str] = None
+    home_team: Optional[str] = None
+    away_team: Optional[str] = None

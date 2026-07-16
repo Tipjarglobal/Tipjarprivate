@@ -34,7 +34,7 @@ from predictz import scrape_predictz, parse_pred_score
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
-    IdeaRateInput, VisitInput, PushSubIn, PushPrefsIn,
+    IdeaRateInput, VisitInput, PushSubIn, PushPrefsIn, ClarifyInput,
 )
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest,
@@ -999,6 +999,38 @@ def _looks_live_now(match_time: str, legs, now) -> bool:
 
 
 
+async def _slip_needs_clarification(tip: dict) -> list:
+    """Which fields the AI couldn't confidently resolve (teams / league / datetime).
+    Used to ask the member a friendly follow-up instead of rejecting the slip."""
+    need = []
+    home, away = _tip_match_teams(tip)
+    teams_ok = False
+    if home and away and API_FOOTBALL_KEY:
+        try:
+            tid = await resolve_team_id(home)
+            if tid:
+                meta = await asyncio.to_thread(find_upcoming_fixture, tid, away)
+                if not meta:
+                    live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+                    meta = _find_live_fixture(live, home, away)
+                teams_ok = bool(meta)
+        except Exception:
+            teams_ok = False
+    elif home and away and not API_FOOTBALL_KEY:
+        teams_ok = True  # can't verify without a key → don't nag
+    if not (home and away) or not teams_ok:
+        need.append("teams")
+    league = (tip.get("league") or "").strip()
+    leg_leagues = any((l.get("league") or "").strip() for l in (tip.get("legs") or []))
+    if not league and not leg_leagues:
+        need.append("league")
+    mt = (tip.get("match_time") or "").strip()
+    leg_ko = any((l.get("kickoff") or "").strip() for l in (tip.get("legs") or []))
+    if (not mt or mt == "Multibet") and not leg_ko:
+        need.append("datetime")
+    return need
+
+
 @api_router.post("/tips")
 async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     legs = _sanitize_legs(inp.legs)
@@ -1018,7 +1050,9 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
             # Multibet: no single kickoff — take the first leg that carries a date/time.
             match_time = next((lg["kickoff"] for lg in legs if lg.get("kickoff")), "") or "Multibet"
         else:
-            raise HTTPException(status_code=400, detail="Tip needs a match date & time — add the kickoff to publish.")
+            # Don't reject — accept the slip and ask the member to clarify the kickoff
+            # afterwards (so players don't give up).
+            match_time = ""
     dup = await db.tips.find_one({
         "user_id": user["id"],
         "home_team": inp.home_team,
@@ -1066,6 +1100,11 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "avg_rating": float(inp.self_rating),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Ask the member a friendly follow-up (never reject) when the AI struggled to
+    # resolve teams/league/kickoff — so players don't give up.
+    clarify = await _slip_needs_clarification(tip)
+    tip["needs_clarification"] = bool(clarify)
+    tip["clarification_fields"] = clarify
     await db.tips.insert_one(tip)
     # record the owner's own rating so it counts and shows as "your rating"
     await db.tip_ratings.insert_one({
@@ -1076,7 +1115,35 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     return tip
 
 
-def _clean_tip(t: dict) -> dict:
+@api_router.post("/tips/{tip_id}/clarify")
+async def clarify_tip(tip_id: str, inp: ClarifyInput, user: dict = Depends(get_current_user)):
+    """Member fills in the fields the AI couldn't resolve (teams/league/kickoff).
+    Clears the clarification flag and lets the enrichment retry."""
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    if tip.get("user_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not your tip")
+    upd = {"needs_clarification": False, "clarification_fields": [], "enrich_tries": 0}
+    if inp.league and inp.league.strip():
+        upd["league"] = inp.league.strip()
+    if inp.match_time and inp.match_time.strip():
+        upd["match_time"] = inp.match_time.strip()
+    legs = tip.get("legs") or []
+    if inp.home_team and inp.away_team and inp.home_team.strip() and inp.away_team.strip():
+        upd["home_team"] = inp.home_team.strip()
+        upd["away_team"] = inp.away_team.strip()
+        if len(legs) == 1:
+            legs[0]["match"] = f"{inp.home_team.strip()} \u2013 {inp.away_team.strip()}"
+    if len(legs) == 1:
+        if upd.get("league"):
+            legs[0]["league"] = upd["league"]
+        if upd.get("match_time"):
+            legs[0]["kickoff"] = upd["match_time"]
+    if legs:
+        upd["legs"] = legs
+    await db.tips.update_one({"id": tip_id}, {"$set": upd})
+    return {"ok": True}
     t.pop("_id", None)
     return t
 
