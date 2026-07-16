@@ -1066,7 +1066,8 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     # LIVE at post time: a bet counts as live only if its match is IN-PLAY when posted
     # (kickoff window OR — reliably, ignoring slip-timezone quirks — API-Football live list).
     now_dt = datetime.now(timezone.utc)
-    is_live_post = _looks_live_now(match_time, legs, now_dt)
+    timing = (inp.timing or "").strip().lower()
+    is_live_post = _looks_live_now(match_time, legs, now_dt) or timing == "live"
     if not is_live_post and API_FOOTBALL_KEY and inp.home_team and inp.away_team:
         try:
             live_fx = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"})
@@ -1095,6 +1096,7 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "stake": inp.stake,
         "potential_return": compute_return(inp.stake, inp.odds, inp.potential_return),
         "status": "live" if is_live_post else "pending",
+        "member_timing": timing or None,
         "sum_stars": inp.self_rating,
         "ratings_count": 1,
         "avg_rating": float(inp.self_rating),
@@ -1103,6 +1105,9 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     # Ask the member a friendly follow-up (never reject) when the AI struggled to
     # resolve teams/league/kickoff — so players don't give up.
     clarify = await _slip_needs_clarification(tip)
+    # If the member already told us the timing (live/today/later), don't nag for kickoff.
+    if timing in ("live", "today", "later") and "datetime" in clarify:
+        clarify.remove("datetime")
     tip["needs_clarification"] = bool(clarify)
     tip["clarification_fields"] = clarify
     await db.tips.insert_one(tip)

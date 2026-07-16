@@ -58,6 +58,7 @@ class TipSaveInput(BaseModel):
     potential_return: str = ""
     self_rating: int = 0
     image_paths: Optional[List[str]] = None
+    timing: Optional[str] = None  # member-chosen: "live" | "today" | "later"
 
 
 class RateInput(BaseModel):

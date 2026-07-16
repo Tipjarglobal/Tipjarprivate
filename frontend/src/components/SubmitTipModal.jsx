@@ -60,11 +60,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   const [selfStars, setSelfStars] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [clarify, setClarify] = useState(null);
+  const [timing, setTiming] = useState(null);
   const inputRef = useRef();
 
   const reset = () => {
     setFiles([]); setPreviews([]); setText(""); setDetected(null); setSelfStars(0);
-    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload"); setClarify(null);
+    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload"); setClarify(null); setTiming(null);
   };
   const close = () => { reset(); onClose(); };
 
@@ -118,6 +119,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
         legs: detected.legs, is_parlay: detected.is_parlay,
         stake: detected.stake, potential_return: detected.potential_return,
         self_rating: selfStars,
+        timing,
       });
       toast.success(t("submit.published"));
       onPublished && onPublished(data);
@@ -327,6 +329,28 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 <p className="text-xs text-zinc-400 mb-3">{t("submit.rateHint")}</p>
                 <StarRating value={selfStars} onRate={setSelfStars} size={26} />
                 {!selfStars && <p className="text-[11px] text-lost mt-2" data-testid="stars-required">{t("submit.needStars")}</p>}
+              </div>
+
+              <div className="mt-4" data-testid="timing-block">
+                <p className="text-sm font-bold text-white mb-2">{t("submit.timing")}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { k: "live", label: t("submit.timing.live"), on: "border-live bg-live/15 text-live", dot: "bg-live animate-pulse" },
+                    { k: "today", label: t("submit.timing.today"), on: "border-volt bg-volt/15 text-volt", dot: "bg-volt" },
+                    { k: "later", label: t("submit.timing.later"), on: "border-zinc-400 bg-zinc-700/30 text-white", dot: "bg-zinc-400" },
+                  ].map((o) => (
+                    <button
+                      key={o.k}
+                      type="button"
+                      data-testid={`timing-${o.k}`}
+                      onClick={() => setTiming(timing === o.k ? null : o.k)}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${timing === o.k ? o.on : "border-elevated text-zinc-400 hover:text-white hover:border-zinc-500"}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${timing === o.k ? o.dot : "bg-zinc-600"}`} />
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 mt-4">

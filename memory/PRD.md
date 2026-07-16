@@ -586,3 +586,8 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - _purge_unclarified_slips() (laeuft in member_live_loop): loescht Mitglieder-Tipps mit needs_clarification=True UND "teams" in clarification_fields UND created_at > 12h (+ tip_ratings). Nur-Liga/Datum-fehlt oder HQ/KI-Quellen werden NICHT geloescht.
 - enrich_member_picks setzt bei erfolgreicher Aufloesung needs_clarification=False + clarification_fields=[] -> ein Schein, dessen Teams doch noch erkannt werden, wird NICHT geloescht.
 - VERIFIZIERT: alt+teams-unbekannt geloescht; frisch/nur-liga/HQ bleiben. Braucht Re-Deploy.
+
+## Changelog — 2026-07-16 (Zeit-Auswahl beim Hochladen: Live/Heute/Spaeter)
+- TipSaveInput.timing (live|today|later). create_tip: timing==live -> is_live_post -> status=live (Live-Bereich). member_timing gespeichert. Wenn timing gesetzt -> datetime aus clarification_fields entfernt (kein Anstoss-Nachfragen noetig).
+- Frontend SubmitTipModal: 3-Button-Selektor (Live rot / Heute volt / Spaeter grau, toggle) unter Self-Rating; timing in /tips-Payload. i18n submit.timing(.live/today/later) EN+DE. reset() setzt timing=null.
+- VERIFIZIERT: timing=live -> status live + keine datetime-Rueckfrage; timing=today -> pending + member_timing + datetime entfaellt. Frontend kompiliert. Braucht Re-Deploy.
