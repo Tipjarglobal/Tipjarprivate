@@ -2770,6 +2770,21 @@ def _teams_match(a: str, b: str) -> bool:
     return False
 
 
+# API-Football returns HTTP 200 with an `errors` payload (not a 4xx) when the daily /
+# per-minute request quota is exhausted. We track that here so the settlement engine can
+# PAUSE instead of silently treating every empty response as "match not found" — which
+# would wrongly burn each tip's `settle_attempts` budget and give the admin no feedback.
+_API_QUOTA = {"exhausted": False, "at": None, "msg": ""}
+
+
+def _api_quota_exhausted() -> bool:
+    return _API_QUOTA["exhausted"]
+
+
+def _reset_api_quota_flag():
+    _API_QUOTA.update({"exhausted": False, "at": None, "msg": ""})
+
+
 def _apifootball(path: str, params: dict):
     if not API_FOOTBALL_KEY:
         return None
@@ -2777,7 +2792,15 @@ def _apifootball(path: str, params: dict):
         r = requests.get(f"{API_FOOTBALL_BASE}{path}", params=params,
                          headers={"x-apisports-key": API_FOOTBALL_KEY}, timeout=20)
         r.raise_for_status()
-        return r.json().get("response", [])
+        j = r.json()
+        errs = j.get("errors")
+        if isinstance(errs, dict) and (errs.get("requests") or errs.get("rateLimit")):
+            _API_QUOTA.update({"exhausted": True,
+                               "at": datetime.now(timezone.utc).isoformat(),
+                               "msg": errs.get("requests") or errs.get("rateLimit")})
+            logger.warning(f"API-Football quota exhausted: {_API_QUOTA['msg']}")
+            return None
+        return j.get("response", [])
     except Exception as e:
         logger.error(f"API-Football {path} failed: {e}")
         return None
@@ -3324,7 +3347,10 @@ async def settle_pending_tips() -> dict:
     finished.sort(key=lambda x: x[0])  # oldest finished first
     checked, settled, details = 0, 0, []
     date_cache = {}
+    _reset_api_quota_flag()
     for ko, tip in finished[:SETTLE_BATCH_CAP]:
+        if _api_quota_exhausted():
+            break  # daily API quota gone → stop; retry next run (budget not burned)
         checked += 1
         dates = [ko.date().isoformat(),
                  (ko + timedelta(days=1)).date().isoformat(),
@@ -3339,6 +3365,9 @@ async def settle_pending_tips() -> dict:
             # Fallback: scan the date's fixtures and match both team names directly.
             fx = _datescan_fixture(tip["home_team"], tip["away_team"], dates, date_cache)
         if not fx:
+            if _api_quota_exhausted():
+                checked -= 1
+                break  # quota ran out mid-lookup → don't burn this tip's retry budget
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         outcome_market = tip.get("market", "")
@@ -3373,7 +3402,8 @@ async def settle_pending_tips() -> dict:
         settled += 1
         details.append({"tip": tip["id"], "match": f"{tip['home_team']} vs {tip['away_team']}",
                         "score": f"{fx['home_goals']}-{fx['away_goals']}", "result": new_status})
-    return {"ok": True, "checked": checked, "settled": settled, "details": details}
+    return {"ok": True, "checked": checked, "settled": settled, "details": details,
+            "quota_exhausted": _api_quota_exhausted(), "quota_msg": _API_QUOTA["msg"]}
 
 
 async def settle_hq_combos() -> dict:
@@ -3389,6 +3419,8 @@ async def settle_hq_combos() -> dict:
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled = 0
     for tip in combos:
+        if _api_quota_exhausted():
+            break
         if tip.get("settle_attempts", 0) >= SETTLE_MAX_ATTEMPTS:
             continue
         ko = _parse_kickoff(tip.get("match_time"))
@@ -3407,6 +3439,8 @@ async def settle_hq_combos() -> dict:
         if not fx:
             fx = _datescan_fixture(home, away, dates)
         if not fx:
+            if _api_quota_exhausted():
+                break
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
@@ -3450,7 +3484,7 @@ async def settle_hq_combos() -> dict:
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
         }})
         settled += 1
-    return {"ok": True, "settled": settled}
+    return {"ok": True, "settled": settled, "quota_exhausted": _api_quota_exhausted()}
 
 
 PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota guard)
@@ -3511,6 +3545,8 @@ async def settle_multimatch_parlays() -> dict:
     settled, judged = 0, 0
     scan_cache = {}
     for tip in parlays:
+        if _api_quota_exhausted():
+            break  # daily API quota gone → stop; don't burn parlay retry budgets
         is_cashed = tip.get("status") == "cashed_out"
         legs = tip.get("legs") or []
         # Only enforce the retry cap once EVERY match is over. A slip created ~1h before
@@ -3595,13 +3631,15 @@ async def settle_multimatch_parlays() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$set": upd})
         if new_status and not is_cashed:
             settled += 1
-        elif due and not (all_resolved and is_cashed):
+        elif due and not (all_resolved and is_cashed) and not _api_quota_exhausted():
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
-    return {"ok": True, "settled": settled, "judged": judged}
+    return {"ok": True, "settled": settled, "judged": judged,
+            "quota_exhausted": _api_quota_exhausted()}
 
 
 @api_router.post("/admin/settle-now")
 async def settle_now(admin: dict = Depends(require_admin)):
+    _reset_api_quota_flag()
     res = await settle_pending_tips()
     res["systems_snapshot"] = await snapshot_systems()
     res["combos"] = await settle_hq_combos()
@@ -3610,6 +3648,13 @@ async def settle_now(admin: dict = Depends(require_admin)):
         res["live"] = await live_autopost()
     except Exception as e:
         res["live"] = {"error": str(e)}
+    # If the daily API-Football quota is exhausted no fixture can be resolved, so tell the
+    # admin exactly why nothing settled instead of showing a misleading "0 settled".
+    if _api_quota_exhausted():
+        res["ok"] = False
+        res["reason"] = ("API-Football Tageslimit erreicht – Abrechnung pausiert. "
+                         "Sobald das Kontingent zurückgesetzt ist, werden alle fertigen "
+                         "Spiele automatisch abgerechnet (kein Versuch geht verloren).")
     return res
 
 
