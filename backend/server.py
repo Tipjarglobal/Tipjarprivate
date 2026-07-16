@@ -2341,7 +2341,37 @@ async def search_users(q: str = "", limit: int = 15):
             "streak": u.get("streak", 0),
             "tips_count": await db.tips.count_documents({"user_id": u.get("id")}),
         })
-    return {"results": results}
+
+    # Also search active picks by team/league (with transliteration) so a user can find
+    # a game like "Makara" even though it's not a member name.
+    games, seen_g = [], set()
+    qforms = {_norm(x) for x in _latin_variants(q)}
+    active = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1,
+         "market": 1, "status": 1, "source": 1, "legs": 1, "username": 1}).to_list(3000)
+    for tp in active:
+        hay = " ".join(str(tp.get(k) or "") for k in ("home_team", "away_team", "league"))
+        legs = tp.get("legs") or []
+        hay += " " + " ".join(str(l.get("match") or "") for l in legs)
+        hay_forms = {_norm(x) for x in _latin_variants(hay)}
+        if any(qf and any(qf in hf for hf in hay_forms) for qf in qforms):
+            if tp["id"] in seen_g:
+                continue
+            seen_g.add(tp["id"])
+            h, a = _tip_match_teams(tp)
+            games.append({
+                "id": tp["id"],
+                "home_team": h or tp.get("home_team") or "",
+                "away_team": a or tp.get("away_team") or "",
+                "league": tp.get("league") or "",
+                "status": tp.get("status"),
+                "source": tp.get("source"),
+                "username": tp.get("username"),
+            })
+        if len(games) >= limit:
+            break
+    return {"results": results, "games": games}
 
 
 # ------------------------------------------------------------------ files

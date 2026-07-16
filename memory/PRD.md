@@ -559,3 +559,8 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Backend _tip_push_area: live -> live_ai wenn AI-Quelle (hq-live/hq-auto/hq-system/smart) sonst live. _push_payload_for_tip nutzt _tip_push_area (url bleibt area=live fuer Navigation). notify_all_push filtert live_ai/live getrennt.
 - Frontend NotificationBell: tipArea splittet live_ai/live; DEFAULT_AREAS+VIEW_KEY um live_ai erweitert (view=live); fireAlert isLive/navArea (live_ai -> Live-View); poll gated pro Sub-Area. i18n bell.area.live_ai (EN AI Picks / DE KI Tipps).
 - VERIFIZIERT: _tip_push_area (hq-live->live_ai, member-live->live); Screenshot zeigt Single-Picks + orange KI-TIPPS-Box neben roter Live-Box. Braucht Re-Deploy.
+
+## Changelog — 2026-07-16 (Suche findet auch Spiele/Teams)
+- Problem: Suchleiste fand nur Mitglieder (Nutzernamen). Nutzer suchte Team "Makara" -> nichts.
+- /users/search gibt jetzt zusaetzlich games zurueck: aktive Tipps (pending/live) gematcht auf home_team/away_team/league + Leg-Match, mit Transliteration (_latin_variants). Teams via _tip_match_teams (auch 1-Spiel-Parlays).
+- MemberSearch (RateWall): zeigt Abschnitt SPIELE (klickbar -> tj-open-pick area+id -> jumpToPick) + Abschnitt MITGLIEDER. Live-Spiele mit pulsierendem Punkt. i18n wall.gamesLabel/membersLabel, Placeholder "Mitglieder oder Spiele suchen". VERIFIZIERT: Backend q=makara/masoyk findet Spiel; Screenshot zeigt SPIELE-Treffer. Braucht Re-Deploy.

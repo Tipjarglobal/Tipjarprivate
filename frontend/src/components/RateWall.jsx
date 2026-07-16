@@ -682,19 +682,28 @@ function SmartLab({ t, user, onCreated }) {
 function MemberSearch({ onUserClick, t }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
+  const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
-    if (q.trim().length < 2) { setResults([]); return; }
+    if (q.trim().length < 2) { setResults([]); setGames([]); return; }
     setLoading(true);
     const id = setTimeout(async () => {
       try {
         const { data } = await api.get(`/users/search?q=${encodeURIComponent(q.trim())}`);
         setResults(data.results || []);
-      } catch { setResults([]); }
+        setGames(data.games || []);
+      } catch { setResults([]); setGames([]); }
       finally { setLoading(false); }
     }, 300);
     return () => clearTimeout(id);
   }, [q]);
+  const gameArea = (tp) => tp.status === "live" ? "live"
+    : (tp.source === "hq-auto" ? "ai"
+      : (tp.source === "smart" ? "smart"
+        : (tp.source === "hq-system" ? "systems" : "members")));
+  const openGame = (tp) => window.dispatchEvent(
+    new CustomEvent("tj-open-pick", { detail: { area: gameArea(tp), id: tp.id } }));
+  const empty = q.trim().length >= 2 && !loading && results.length === 0 && games.length === 0;
   return (
     <div className="mb-6" data-testid="member-search">
       <div className="relative">
@@ -708,26 +717,55 @@ function MemberSearch({ onUserClick, t }) {
         />
       </div>
       {q.trim().length >= 2 && (
-        <div className="mt-2 rounded-xl bg-surface border border-elevated divide-y divide-elevated overflow-hidden" data-testid="member-search-results">
+        <div className="mt-2 rounded-xl bg-surface border border-elevated overflow-hidden" data-testid="member-search-results">
           {loading && <p className="px-4 py-3 text-sm text-zinc-500">{t("wall.searching")}</p>}
-          {!loading && results.length === 0 && <p className="px-4 py-3 text-sm text-zinc-500" data-testid="member-search-empty">{t("wall.noMembers")}</p>}
-          {results.map((m) => (
-            <button
-              key={m.username}
-              type="button"
-              data-testid={`member-result-${m.username}`}
-              onClick={() => onUserClick?.(m.username)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-elevated transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0">
-                {toLatin(m.username)?.[0]?.toUpperCase() || "?"}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-white font-semibold truncate">{toLatin(m.username)}{m.apex_flame ? " 🔥" : ""}</p>
-                <p className="text-[11px] text-zinc-500">{m.tips_count} {t("wall.tipsLabel")} · {m.received_credits} Credits</p>
-              </div>
-            </button>
-          ))}
+          {empty && <p className="px-4 py-3 text-sm text-zinc-500" data-testid="member-search-empty">{t("wall.noMembers")}</p>}
+          {games.length > 0 && (
+            <div className="border-b border-elevated">
+              <p className="px-4 pt-2.5 pb-1 text-[10px] uppercase tracking-widest text-volt/80 font-bold">{t("wall.gamesLabel")}</p>
+              {games.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  data-testid={`game-result-${g.id}`}
+                  onClick={() => openGame(g)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-elevated transition-colors"
+                >
+                  {g.status === "live"
+                    ? <span className="w-2 h-2 rounded-full bg-live animate-pulse shrink-0" />
+                    : <span className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white font-semibold truncate">
+                      {displayTeam(g.home_team, g.home_team_latin)}{g.away_team ? ` vs ${displayTeam(g.away_team, g.away_team_latin)}` : ""}
+                    </p>
+                    <p className="text-[11px] text-zinc-500 truncate">{toLatin(g.league)}{g.status === "live" ? " · LIVE" : ""}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {results.length > 0 && (
+            <div>
+              <p className="px-4 pt-2.5 pb-1 text-[10px] uppercase tracking-widest text-zinc-500 font-bold">{t("wall.membersLabel")}</p>
+              {results.map((m) => (
+                <button
+                  key={m.username}
+                  type="button"
+                  data-testid={`member-result-${m.username}`}
+                  onClick={() => onUserClick?.(m.username)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-elevated transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0">
+                    {toLatin(m.username)?.[0]?.toUpperCase() || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white font-semibold truncate">{toLatin(m.username)}{m.apex_flame ? " 🔥" : ""}</p>
+                    <p className="text-[11px] text-zinc-500">{m.tips_count} {t("wall.tipsLabel")} · {m.received_credits} Credits</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
