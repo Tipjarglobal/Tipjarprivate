@@ -281,6 +281,21 @@ function Home() {
         </div>
       </section>
 
+      {/* INTRO VIDEO — right under the logo / Tipjarglobal.com */}
+      <section className="relative max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-10" data-testid="intro-video-section">
+        <div className="rounded-3xl overflow-hidden border border-volt/25 bg-black shadow-[0_0_40px_rgba(225,255,0,0.12)]">
+          <video
+            data-testid="intro-video"
+            src="/tipjar-intro.mp4"
+            poster="/tipjar-crest.png"
+            controls
+            playsInline
+            preload="metadata"
+            className="w-full h-auto block"
+          />
+        </div>
+      </section>
+
       {/* STORY */}
       <section id="how" className="relative max-w-4xl mx-auto px-4 sm:px-6 py-16 scroll-mt-20">
         <div className="rounded-3xl bg-surface border border-elevated p-8 md:p-12">
