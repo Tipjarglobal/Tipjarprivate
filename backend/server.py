@@ -6348,6 +6348,76 @@ async def live_annotate_sync() -> dict:
     return {"annotated": annotated, "cleared": cleared, "to_live": to_live}
 
 
+async def enrich_member_picks() -> dict:
+    """Member slips are AI-transliterated (e.g. Greek → 'Makara – Masoyk Royna') and
+    often lack league / kickoff. Resolve the real fixture via API-Football and fill the
+    canonical team names, league and match_time so the slip reads correctly for everyone."""
+    if not API_FOOTBALL_KEY:
+        return {"enriched": 0}
+    picks = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]},
+         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart"]},
+         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
+         "$or": [{"home_team_latin": {"$in": [None, ""]}},
+                 {"league": {"$in": [None, ""]}},
+                 {"match_time": {"$in": [None, "", "Multibet"]}}]},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1,
+         "match_time": 1, "legs": 1, "enrich_tries": 1}).to_list(400)
+    live = None
+    enriched = 0
+    for t in picks:
+        if (t.get("enrich_tries") or 0) >= 6:
+            continue
+        home, away = _tip_match_teams(t)
+        if not home or not away:
+            await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
+            continue
+        meta = None
+        tid = await resolve_team_id(home)
+        if tid:
+            meta = await asyncio.to_thread(find_upcoming_fixture, tid, away)
+        if not meta:  # currently in-play?
+            if live is None:
+                live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+            fx = _find_live_fixture(live, home, away)
+            if fx:
+                meta = {"home_name": (fx.get("teams", {}).get("home", {}) or {}).get("name", ""),
+                        "away_name": (fx.get("teams", {}).get("away", {}) or {}).get("name", ""),
+                        "date_iso": (fx.get("fixture") or {}).get("date"),
+                        "league": _fixture_league_label(fx)}
+        if not meta or not meta.get("home_name"):
+            await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
+            continue
+        if _teams_match(meta["away_name"], home) or _teams_match(meta["home_name"], away):
+            hl, al = meta["away_name"], meta["home_name"]   # tip is reversed vs fixture
+        else:
+            hl, al = meta["home_name"], meta["away_name"]   # default: fixture home/away order
+        upd = {"home_team_latin": hl, "away_team_latin": al}
+        league_val = (meta.get("league") or "").strip()
+        kickoff_val = ""
+        if meta.get("date_iso"):
+            try:
+                ko = datetime.fromisoformat(meta["date_iso"].replace("Z", "+00:00"))
+                kickoff_val = ko.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                kickoff_val = ""
+        if league_val and not (t.get("league") or "").strip():
+            upd["league"] = league_val
+        if kickoff_val and (t.get("match_time") or "").strip() in ("", "Multibet"):
+            upd["match_time"] = kickoff_val
+        legs = t.get("legs") or []
+        if len(legs) == 1:
+            legs[0]["match"] = f"{hl} \u2013 {al}"
+            if league_val and not (legs[0].get("league") or "").strip():
+                legs[0]["league"] = league_val
+            if kickoff_val and not (legs[0].get("kickoff") or "").strip():
+                legs[0]["kickoff"] = kickoff_val
+            upd["legs"] = legs
+        await db.tips.update_one({"id": t["id"]}, {"$set": upd, "$inc": {"enrich_tries": 1}})
+        enriched += 1
+    return {"enriched": enriched}
+
+
 async def member_live_loop():
     while True:
         if not _is_leader():
@@ -6357,6 +6427,9 @@ async def member_live_loop():
             res = await live_annotate_sync()
             if res["annotated"] or res["cleared"]:
                 logger.info(f"Live annotate: {res}")
+            enr = await enrich_member_picks()
+            if enr["enriched"]:
+                logger.info(f"Member enrich: {enr}")
         except Exception as e:
             logger.error(f"live_annotate_loop error: {e}")
         await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)

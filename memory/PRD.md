@@ -564,3 +564,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Problem: Suchleiste fand nur Mitglieder (Nutzernamen). Nutzer suchte Team "Makara" -> nichts.
 - /users/search gibt jetzt zusaetzlich games zurueck: aktive Tipps (pending/live) gematcht auf home_team/away_team/league + Leg-Match, mit Transliteration (_latin_variants). Teams via _tip_match_teams (auch 1-Spiel-Parlays).
 - MemberSearch (RateWall): zeigt Abschnitt SPIELE (klickbar -> tj-open-pick area+id -> jumpToPick) + Abschnitt MITGLIEDER. Live-Spiele mit pulsierendem Punkt. i18n wall.gamesLabel/membersLabel, Placeholder "Mitglieder oder Spiele suchen". VERIFIZIERT: Backend q=makara/masoyk findet Spiel; Screenshot zeigt SPIELE-Treffer. Braucht Re-Deploy.
+
+## Changelog — 2026-07-16 (Mitglieder-Scheine anreichern: Namen/Liga/Anstoss)
+- Problem: AI-transliterierte Mitglieder-Scheine haben falsch geschriebene Teamnamen (z.B. "Makara – Masoyk Royna"), fehlende Liga und fehlendes Datum/Uhrzeit.
+- FIX: neue enrich_member_picks() (laeuft in member_live_loop). Sucht Mitglieder-Picks (pending/live, single+1-Spiel-Parlay) denen home_team_latin/league/match_time fehlt; resolve_team_id + find_upcoming_fixture (sonst _find_live_fixture fuer laufende Spiele). Fuellt home_team_latin/away_team_latin (kanonisch, orientiert nach Fixture-Reihenfolge), league und match_time (dd/mm/YYYY HH:MM). Fuer 1-Spiel-Parlays: legs[0].match -> kanonisch, legs[0].league + legs[0].kickoff gefuellt. enrich_tries-Cap (6). 
+- Frontend zeigt bereits league (Karte), match_time (Single), leg.league/leg.kickoff (Parlay) + displayTeam(home_team_latin) -> kein FE-Change.
+- VERIFIZIERT: mock upcoming fixture -> leg.match "Blumenau SC – Metropolitano", league+kickoff gesetzt, korrekte Orientierung. resolve "Makara"->6282 real. Limitierung: nur wenn Fixture (upcoming/live) via API aufloesbar. Braucht Re-Deploy.
