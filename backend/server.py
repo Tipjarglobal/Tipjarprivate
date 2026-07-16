@@ -480,7 +480,10 @@ async def tips_counts():
         {"source": "hq-auto", "status": "pending"}, {"match_time": 1}).to_list(1000)
     ai = len(ai_docs)
     ai_total = ai
-    members = await db.tips.count_documents({"source": {"$nin": ["hq-auto", "smart"]}, "status": "pending"})
+    members = await db.tips.count_documents({
+        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]},
+        "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
+        "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}})
@@ -1163,7 +1166,10 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     elif source == "smart":
         q["source"] = "smart"
     elif source == "members":
-        q["source"] = {"$nin": ["hq-auto", "smart"]}
+        # Community = ONLY real member picks. All KI/HQ sources (AI singles, systems,
+        # live-AI, smart) are excluded so the AI never posts into Community.
+        q["source"] = {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}
+        q["username"] = {"$nin": ["TipJarHQ", "TipJarHQ System"]}
     elif source == "bestwon":
         # "Best Won" bucket (owner): all winning Smart + Risk-single + Community +
         # System picks — the special wins the owner wants to track (esp. systems).
@@ -4099,6 +4105,26 @@ async def build_systems() -> dict:
         systems.insert(0, _finalize_system(
             hour, 0, "hour", "System der Stunde",
             "Το Σύστημα της Ώρας · startet ~1 Std. vor Anpfiff · Gesamtquote 3.6+", "value"))
+
+    # Time bucket per slip so the UI can split System Picks into
+    # "Fängt jetzt an" / "Heute" / "Diese Woche". Every slip lands in EXACTLY one.
+    now_b = datetime.now(timezone.utc)
+    def _system_time_bucket(sys):
+        if sys.get("key") == "hour":
+            return "now"
+        kos = [ko for sel in (sys.get("selections") or [])
+               if (ko := _parse_kickoff(sel.get("match_time")))]
+        if not kos:
+            return "week"
+        upcoming = [k for k in kos if k >= now_b - timedelta(hours=3)]
+        ref = min(upcoming) if upcoming else min(kos)
+        if ref <= now_b + timedelta(hours=3):
+            return "now"
+        if ref.date() == now_b.date():
+            return "today"
+        return "week"
+    for s in systems:
+        s["time_bucket"] = _system_time_bucket(s)
 
     return {
         "week": datetime.now(timezone.utc).strftime("%d.%m.%Y"),

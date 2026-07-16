@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, TrendingUp, Flame, Dices, Layers } from "lucide-react";
+import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange } from "lucide-react";
 import { OddsValue } from "./OddsValue";
 import { useI18n, localizeMarket, formatSelection, toLatin } from "../i18n";
 import api from "../api";
@@ -127,14 +127,36 @@ export const Systems = () => {
     && (s.selections.length >= 2 || s.selections.some((sel) => sel.combo_markets)));
   if (visible.length === 0) return null;
 
+  // Split slips into time buckets — every slip lands in exactly one.
+  const BUCKETS = [
+    { k: "now", label: "sys.bucket.now", Icon: Timer },
+    { k: "today", label: "sys.bucket.today", Icon: CalendarDays },
+    { k: "week", label: "sys.bucket.week", Icon: CalendarRange },
+  ];
+  const grouped = BUCKETS.map((b) => ({
+    ...b,
+    items: visible.filter((s) => (s.time_bucket || "week") === b.k),
+  })).filter((b) => b.items.length > 0);
+
   return (
     <section id="systeme" data-testid="systems-section" className="mb-10 scroll-mt-24">
       <div className="flex items-center gap-2.5 mb-5">
         <Layers className="text-volt" size={22} />
         <h3 className="font-heading font-black text-white text-2xl tracking-tight">{t("sys.heading")}</h3>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {visible.map((s) => <SystemCard key={s.key} system={s} />)}
+      <div className="space-y-8">
+        {grouped.map((b) => (
+          <div key={b.k} data-testid={`systems-bucket-${b.k}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <b.Icon size={16} className="text-volt" />
+              <h4 className="font-heading font-black uppercase tracking-widest text-sm text-volt">{t(b.label)}</h4>
+              <span className="text-[11px] text-zinc-500 font-mono">({b.items.length})</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {b.items.map((s) => <SystemCard key={s.key} system={s} />)}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
