@@ -213,6 +213,7 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
 }
 
 function ExpertBanner({ onExpertClick }) {
+  const { t } = useI18n();
   const [experts, setExperts] = useState([]);
   useEffect(() => {
     let alive = true;
@@ -226,12 +227,12 @@ function ExpertBanner({ onExpertClick }) {
     >
       <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="flex items-center gap-1.5 text-sm font-heading font-black text-orange-400">
-          <Star size={15} /> Wir suchen Experten!
+          <Star size={15} /> {t("expert.banner.title")}
         </span>
-        <span className="text-xs text-zinc-400">Bist du Experte? Das sind unsere Experten:</span>
+        <span className="text-xs text-zinc-400">{t("expert.banner.sub")}</span>
         <div className="flex items-center gap-2 flex-wrap">
           {experts.length === 0 ? (
-            <span className="text-xs text-zinc-600">Noch keine Experten</span>
+            <span className="text-xs text-zinc-600">{t("expert.banner.none")}</span>
           ) : experts.map((e) => (
             <button
               key={e.username}
