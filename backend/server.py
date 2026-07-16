@@ -1991,18 +1991,30 @@ async def notif_stats():
 
 
 @api_router.post("/track/visit")
-async def track_visit(inp: VisitInput):
+async def track_visit(inp: VisitInput, request: Request):
     """Anonymous, cookieless visit ping (visitor_id is a random localStorage id).
-    Deduped per visitor per day so we can report both hits and unique visitors."""
+    Deduped per visitor per day so we can report both hits and unique visitors.
+    Admin visits are flagged (and never counted) — the owner opens the site hourly
+    and must not inflate the analytics."""
     vid = (inp.visitor_id or "").strip()[:64]
     if not vid:
         return {"ok": True}
+    user = None
+    try:
+        user = await get_current_user(request)
+    except Exception:
+        user = None
+    is_admin = bool(user and user.get("role") == "admin")
     now = datetime.now(timezone.utc)
     day = now.strftime("%Y-%m-%d")
+    if is_admin:
+        # retroactively flag every past visit from this device so the owner's own
+        # hourly opens drop out of the historical counts too.
+        await db.visits.update_many({"visitor_id": vid}, {"$set": {"is_admin": True}})
     await db.visits.update_one(
         {"visitor_id": vid, "day": day},
         {"$inc": {"hits": 1},
-         "$set": {"last_ts": now.isoformat(), "path": (inp.path or "")[:120]},
+         "$set": {"last_ts": now.isoformat(), "path": (inp.path or "")[:120], "is_admin": is_admin},
          "$setOnInsert": {"first_ts": now.isoformat()}},
         upsert=True,
     )
@@ -2011,16 +2023,18 @@ async def track_visit(inp: VisitInput):
 
 @api_router.get("/admin/visits")
 async def admin_visits(admin: dict = Depends(require_admin)):
-    """Private analytics — admin only. Never exposed publicly."""
+    """Private analytics — admin only. Never exposed publicly. Admin/owner visits
+    are excluded (is_admin flag)."""
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
+    not_admin = {"is_admin": {"$ne": True}}
     daily = []
     for d in days:
-        docs = await db.visits.find({"day": d}, {"_id": 0, "hits": 1}).to_list(100000)
+        docs = await db.visits.find({"day": d, **not_admin}, {"_id": 0, "hits": 1}).to_list(100000)
         daily.append({"day": d, "unique": len(docs), "hits": sum(x.get("hits", 0) for x in docs)})
-    total_unique = len(await db.visits.distinct("visitor_id"))
-    all_docs = await db.visits.find({}, {"_id": 0, "hits": 1}).to_list(200000)
+    total_unique = len(await db.visits.distinct("visitor_id", not_admin))
+    all_docs = await db.visits.find(not_admin, {"_id": 0, "hits": 1}).to_list(200000)
     total_hits = sum(x.get("hits", 0) for x in all_docs)
     today_row = next((x for x in daily if x["day"] == today), {"unique": 0, "hits": 0})
     week = daily[-7:]
