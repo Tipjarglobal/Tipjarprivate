@@ -6459,7 +6459,8 @@ async def enrich_member_picks() -> dict:
             hl, al = meta["away_name"], meta["home_name"]   # tip is reversed vs fixture
         else:
             hl, al = meta["home_name"], meta["away_name"]   # default: fixture home/away order
-        upd = {"home_team_latin": hl, "away_team_latin": al}
+        upd = {"home_team_latin": hl, "away_team_latin": al,
+               "needs_clarification": False, "clarification_fields": []}
         league_val = (meta.get("league") or "").strip()
         kickoff_val = ""
         if meta.get("date_iso"):
@@ -6485,6 +6486,30 @@ async def enrich_member_picks() -> dict:
     return {"enriched": enriched}
 
 
+async def _purge_unclarified_slips() -> int:
+    """Auto-delete member slips whose teams the AI never understood and that the
+    member didn't clarify within 12h (owner request 2026-07-16). Only fires when
+    'teams' is still unresolved — enrichment clears the flag once teams are known."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
+    q = {"needs_clarification": True, "clarification_fields": "teams",
+         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart"]}}
+    stale = []
+    for t in await db.tips.find(q, {"id": 1, "created_at": 1}).to_list(500):
+        try:
+            created = datetime.fromisoformat((t.get("created_at") or "").replace("Z", "+00:00"))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created <= cutoff:
+                stale.append(t["id"])
+        except Exception:
+            continue
+    if stale:
+        await db.tips.delete_many({"id": {"$in": stale}})
+        await db.tip_ratings.delete_many({"tip_id": {"$in": stale}})
+        logger.info(f"Purged {len(stale)} unclarified slip(s) (teams unknown >12h)")
+    return len(stale)
+
+
 async def member_live_loop():
     while True:
         if not _is_leader():
@@ -6497,6 +6522,7 @@ async def member_live_loop():
             enr = await enrich_member_picks()
             if enr["enriched"]:
                 logger.info(f"Member enrich: {enr}")
+            await _purge_unclarified_slips()
         except Exception as e:
             logger.error(f"live_annotate_loop error: {e}")
         await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)

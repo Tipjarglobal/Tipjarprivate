@@ -580,3 +580,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 
 ## Changelog — 2026-07-16 (Stuck Makara-Schein loeschen)
 - Owner-Request: james76 Live-Schein "Makara – Masoyk Royna" (nicht aufloesbar) loeschen. Prod-DB kein Zugriff -> Startup-Cleanup _delete_stuck_makara_pick() in _startup_seed. Matcht eng: username ^james + (home/away/legs.match regex makar|masoyk|royna). Loescht tips + tip_ratings. VERIFIZIERT: loescht nur die 2 Makara-Scheine, andere james76-Scheine + Fremd-Nutzer bleiben. Laeuft beim naechsten Deploy automatisch. Idempotent.
+
+## Changelog — 2026-07-16 (Auto-Loeschung unklarer Scheine nach 12h)
+- Owner-Request: Scheine, deren Teams die KI nicht versteht und die nicht geklaert werden, nach 12h automatisch loeschen.
+- _purge_unclarified_slips() (laeuft in member_live_loop): loescht Mitglieder-Tipps mit needs_clarification=True UND "teams" in clarification_fields UND created_at > 12h (+ tip_ratings). Nur-Liga/Datum-fehlt oder HQ/KI-Quellen werden NICHT geloescht.
+- enrich_member_picks setzt bei erfolgreicher Aufloesung needs_clarification=False + clarification_fields=[] -> ein Schein, dessen Teams doch noch erkannt werden, wird NICHT geloescht.
+- VERIFIZIERT: alt+teams-unbekannt geloescht; frisch/nur-liga/HQ bleiben. Braucht Re-Deploy.
