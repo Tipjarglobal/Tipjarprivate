@@ -3668,8 +3668,16 @@ async def settle_now(admin: dict = Depends(require_admin)):
     return res
 
 
-@api_router.get("/admin/league-health")
-async def admin_league_health(admin: dict = Depends(require_admin)):
+@api_router.get("/admin/cleanup-log")
+async def admin_cleanup_log(admin: dict = Depends(require_admin)):
+    """Log of abgelaufene-Picks-Bereinigungen — entries exist ONLY for runs that actually
+    cleaned something (no empty/zero rows). Shows counts + affected leagues so the owner can
+    spot leagues that repeatedly can't settle (candidates to drop from the scraper)."""
+    rows = await db.cleanup_log.find({}, {"_id": 0}).sort("at", -1).to_list(100)
+    return {"count": len(rows), "entries": rows}
+
+
+
     """Auto-learning league blacklist: which leagues never settle (uncoverable by
     API-Football) and were auto-blocked, plus the raw hit/miss counters."""
     rows = await db.league_settle_health.find({}, {"_id": 0}).sort("misses", -1).to_list(500)
@@ -3747,8 +3755,10 @@ async def expire_stale_pending() -> dict:
     cutoff = now - timedelta(hours=EXPIRE_GRACE_HOURS)
     docs = await db.tips.find(
         {"status": {"$in": ["pending", "live"]}},
-        {"_id": 0, "id": 1, "source": 1, "match_time": 1, "legs": 1}).to_list(5000)
-    ai_ids, member_ids = [], []
+        {"_id": 0, "id": 1, "source": 1, "match_time": 1, "legs": 1,
+         "home_team": 1, "away_team": 1, "league": 1, "league_code": 1}).to_list(5000)
+    ai_ids, member_ids, affected = [], [], []
+    league_hits = {}
     ai_src = ("hq-auto", "smart", "hq-live", "hq-system")
     for d in docs:
         legs = d.get("legs") or []
@@ -3757,6 +3767,11 @@ async def expire_stale_pending() -> dict:
         if not latest or latest >= cutoff:
             continue
         (ai_ids if d.get("source") in ai_src else member_ids).append(d["id"])
+        match = f"{d.get('home_team', '?')} – {d.get('away_team', '?')}"
+        lg = d.get("league") or d.get("league_code") or ""
+        affected.append({"match": match, "league": lg, "source": d.get("source", "")})
+        if lg:
+            league_hits[lg] = league_hits.get(lg, 0) + 1
     if ai_ids:
         await db.tips.delete_many({"id": {"$in": ai_ids}})
         await db.tip_ratings.delete_many({"tip_id": {"$in": ai_ids}})
@@ -3765,8 +3780,16 @@ async def expire_stale_pending() -> dict:
             {"id": {"$in": member_ids}},
             {"$set": {"status": "void", "settled_by": "expired",
                       "settled_at": now.isoformat()}})
+    # Only write a cleanup-log entry when something was ACTUALLY cleaned — no empty/zero noise.
     if ai_ids or member_ids:
         logger.info(f"Expired stale picks: deleted {len(ai_ids)} AI, voided {len(member_ids)} member")
+        await db.cleanup_log.insert_one({
+            "id": str(uuid.uuid4()), "at": now.isoformat(),
+            "deleted": len(ai_ids), "voided": len(member_ids),
+            "grace_hours": EXPIRE_GRACE_HOURS,
+            "leagues": sorted(league_hits.items(), key=lambda x: -x[1]),
+            "matches": affected[:40],
+        })
     return {"deleted": len(ai_ids), "voided": len(member_ids)}
 
 

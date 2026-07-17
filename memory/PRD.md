@@ -659,3 +659,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - NEU expire_stale_pending(): pending/live Picks, deren (letzter) Anstoss > EXPIRE_GRACE_HOURS(30h) zurueckliegt -> AI-Picks (hq-auto/smart/hq-live/hq-system) werden GELOESCHT, Member/Community-Picks werden auf 'void' (settled_by='expired') gesetzt. 30h > 24h Quota-Ausfall, damit keine noch-abrechenbaren Picks faelschlich weg.
 - Eingebunden in: settlement_loop (alle 15 Min, zuverlaessig), settle_now (Sync-Button), tips_counts (bei jedem Homepage-Badge-Aufruf -> sofortige Bereinigung). cashed_out wird NICHT angetastet.
 - VERIFIZIERT: expire loeschte 2 AI-Picks in Preview; danach 0 pending Picks aelter als 30h. Backend 200. BRAUCHT RE-DEPLOY.
+
+## Changelog — 2026-07-18 (Bereinigungs-Log: nur echte Einträge)
+- User: Admin-Log fuer abgelaufene Picks bauen, ABER Eintrag nur zeigen wenn logischerweise etwas bereinigt wurde (kein Null-Rauschen).
+- expire_stale_pending schreibt jetzt einen db.cleanup_log-Eintrag NUR wenn deleted>0 ODER voided>0. Eintrag: at, deleted, voided, grace_hours, leagues (sortiert nach Haeufigkeit), matches[:40].
+- NEU Endpoint GET /api/admin/cleanup-log (admin) -> letzte 100 echte Bereinigungslaeufe, inkl. betroffener Ligen (Basis um Ligen aus Scraper zu nehmen).
+- VERIFIZIERT: leerer Lauf=0 Eintraege; echter Lauf=1 Eintrag mit Ligen ECL/TestLiga; AI geloescht, Member void. Backend 200. BRAUCHT RE-DEPLOY.
