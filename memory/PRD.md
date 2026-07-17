@@ -610,3 +610,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - SCHAERFUNG HOT-Builder (Über 1.5 Tore 1.HZ + BTTS + Über 2.5): zusaetzliches Gate xg/avg >= 3.4, damit schwache/torarme Teams (Dila Gori 0:0) den aggressiven 1.-Halbzeit-Bet NICHT mehr ankern (vorher nur total>=4 aus lopsided 3:1).
 - BUGFIX _grade_goal_leg: generische "beide teams treffen"-String-Pruefung schloss frueher HZ-Markets faelschlich ein -> jetzt "halbzeit"/"hz" ausgeschlossen. btts_ht/btts_sh Grading via kind (HT+FT-Score), deterministisch.
 - VERIFIZIERT (Mock): Grading btts_ht/btts_sh korrekt, HT-Market nicht mehr gehijackt; Generator erzeugt btts2h+HOT nur bei xg>=3.5/3.4, NICHT bei niedrigem xg. Braucht Re-Deploy.
+
+## Changelog — 2026-07-17 (Abrechnung: Root-Cause-Analyse + 3 Fixes für "viele Spiele nicht abgerechnet")
+- URSACHE 1 (primaer): API-Football Tageslimit war erschoepft -> nichts rechnet ab, Rueckstand haeuft sich. Quota resettet taeglich; Anti-Burn-Fix (16.07) sorgt dafuer, dass kein settle_attempts verbrannt wird.
+- URSACHE 2: Fixture-Aufloesung zu fragil. FIX find_finished_fixture(): match per Gegner-TEAM-ID (robust gg. Umbenennung, z.B. Henan Jianye->Henan Songshan Longmen) + Fallback "1 Verein = max 1 Spiel/Tag" (genau 1 finished Fixture am exakten KO-Datum -> akzeptieren). 3 Aufrufer uebergeben jetzt opponent_id.
+- URSACHE 3: unabgedeckte Ligen (Chinese SL 2026, obskure UEFA-Quali wie CS Univ Craiova/MKK-Dnepr) sind GAR NICHT in API-Football -> nie abrechenbar. FIX purge_expired_autotips(): pending hq-system-Slips >48h nach letztem Anstoss werden entfernt (haeuften sich vorher ewig an).
+- BUGFIX settle_hq_combos(): Combo mit 1 definitiv VERLORENEM Bein + 1 nicht-bewertbarem Bein (fehlende HZ-Daten) blieb ewig pending. Jetzt: any_lost -> sofort "lost"; nur ein WIN braucht alle Beine bewertbar. (2 zuvor blockierte Combos sofort abgerechnet.)
+- VERIFIZIERT: Quota reset (3172/7500). Realer Lauf: 1 Single + 12 Combos + 18 Parlays abgerechnet; Pending 128->79. ID/Single-Fixture-Fallback per Mock bestaetigt. Combo-Fix: +2 abgerechnet. Backend 200. BRAUCHT RE-DEPLOY.
+- BLEIBT (Datengrenze): Spiele in nicht von API-Football abgedeckten Ligen koennen nie auto-abrechnen (werden jetzt aber bereinigt/retried). Empfehlung: solche Ligen aus FOREBET_SLIP_CODES-Whitelist nehmen, damit erst gar keine unabrechenbaren Tipps entstehen.

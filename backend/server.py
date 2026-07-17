@@ -3258,9 +3258,9 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
     return None
 
 
-def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
+def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponent_id: int = None):
     opponent_name = _en_name(opponent_name)
-    for date in dates:
+    for di, date in enumerate(dates):
         try:
             yr = int(date[:4])
         except (ValueError, TypeError):
@@ -3269,23 +3269,39 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list):
             fixtures = _apifootball("/fixtures", {"team": team_id, "date": date, "season": season})
             if not fixtures:
                 continue
-            for fx in fixtures:
+            finished = [fx for fx in fixtures
+                        if fx.get("fixture", {}).get("status", {}).get("short") in FINISHED_STATUSES]
+            chosen = None
+            for fx in finished:
                 th = fx.get("teams", {}).get("home", {}).get("name", "")
                 ta = fx.get("teams", {}).get("away", {}).get("name", "")
-                if _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
-                    status = fx.get("fixture", {}).get("status", {}).get("short")
-                    if status in FINISHED_STATUSES:
-                        ht = fx.get("score", {}).get("halftime", {}) or {}
-                        return {
-                            "home_name": th, "away_name": ta,
-                            "fixture_id": fx.get("fixture", {}).get("id"),
-                            "home_goals": fx.get("goals", {}).get("home"),
-                            "away_goals": fx.get("goals", {}).get("away"),
-                            "ht_home": ht.get("home"), "ht_away": ht.get("away"),
-                            "home_winner": fx.get("teams", {}).get("home", {}).get("winner"),
-                            "away_winner": fx.get("teams", {}).get("away", {}).get("winner"),
-                            "status": status,
-                        }
+                hid = fx.get("teams", {}).get("home", {}).get("id")
+                aid = fx.get("teams", {}).get("away", {}).get("id")
+                # Match by opponent TEAM-ID first (robust against Forebet↔API-Football naming
+                # differences, e.g. 'Henan Jianye' vs 'Henan Songshan Longmen'), else by name.
+                if (opponent_id and opponent_id in (hid, aid)) or \
+                   _teams_match(th, opponent_name) or _teams_match(ta, opponent_name):
+                    chosen = fx
+                    break
+            # Fallback: a club plays at most ONE match per calendar day. If neither id nor
+            # name matched the opponent but the resolved team has exactly ONE finished fixture
+            # on its EXACT kickoff date, that game IS the match → settle it.
+            if chosen is None and di == 0 and len(finished) == 1:
+                chosen = finished[0]
+            if chosen is not None:
+                th = chosen.get("teams", {}).get("home", {}).get("name", "")
+                ta = chosen.get("teams", {}).get("away", {}).get("name", "")
+                ht = chosen.get("score", {}).get("halftime", {}) or {}
+                return {
+                    "home_name": th, "away_name": ta,
+                    "fixture_id": chosen.get("fixture", {}).get("id"),
+                    "home_goals": chosen.get("goals", {}).get("home"),
+                    "away_goals": chosen.get("goals", {}).get("away"),
+                    "ht_home": ht.get("home"), "ht_away": ht.get("away"),
+                    "home_winner": chosen.get("teams", {}).get("home", {}).get("winner"),
+                    "away_winner": chosen.get("teams", {}).get("away", {}).get("winner"),
+                    "status": chosen.get("fixture", {}).get("status", {}).get("short"),
+                }
             break  # this season had data for the date; no need to probe the other season
     return None
 
@@ -3360,7 +3376,8 @@ async def settle_pending_tips() -> dict:
         if not team_id:
             team_id = await resolve_team_id(tip["away_team"])
             opponent = tip["home_team"]
-        fx = find_finished_fixture(team_id, opponent, dates) if team_id else None
+        opponent_id = await resolve_team_id(opponent)
+        fx = find_finished_fixture(team_id, opponent, dates, opponent_id) if team_id else None
         if not fx:
             # Fallback: scan the date's fixtures and match both team names directly.
             fx = _datescan_fixture(tip["home_team"], tip["away_team"], dates, date_cache)
@@ -3435,7 +3452,8 @@ async def settle_hq_combos() -> dict:
         if not team_id:
             team_id = await resolve_team_id(away)
             opponent = home
-        fx = find_finished_fixture(team_id, opponent, dates) if team_id else None
+        opponent_id = await resolve_team_id(opponent)
+        fx = find_finished_fixture(team_id, opponent, dates, opponent_id) if team_id else None
         if not fx:
             fx = _datescan_fixture(home, away, dates)
         if not fx:
@@ -3463,7 +3481,7 @@ async def settle_hq_combos() -> dict:
             if not pmap:
                 await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
                 continue
-        all_won, ok = True, True
+        all_won, any_lost, ungradeable = True, False, False
         for lg in combo_legs:
             lg.setdefault("home", home)
             lg.setdefault("away", away)
@@ -3471,15 +3489,24 @@ async def settle_hq_combos() -> dict:
             if res is None:
                 res = _grade_player_leg(lg, pmap or {}, team_cards or {}, fx)
             if res is None:
-                ok = False
-                break
-            if not res:
+                ungradeable = True   # e.g. missing half-time data for an obscure league
                 all_won = False
-        if not ok:
+                continue
+            if not res:
+                any_lost = True
+                all_won = False
+        # A single LOST leg loses the whole builder immediately — even if another leg can't
+        # be graded yet (owner bug 2026-07-17: combos with 1 lost + 1 ungradeable leg used to
+        # get stuck 'pending' forever). Only a WIN needs every leg to be gradeable.
+        if any_lost:
+            new_status = "lost"
+        elif ungradeable:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
+        else:
+            new_status = "won"
         await db.tips.update_one({"id": tip["id"]}, {"$set": {
-            "status": "won" if all_won else "lost",
+            "status": new_status,
             "final_home": hg, "final_away": ag,
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
         }})
@@ -3584,7 +3611,8 @@ async def settle_multimatch_parlays() -> dict:
             if not team_id:
                 team_id = await resolve_team_id(away)
                 opp = home
-            fx = find_finished_fixture(team_id, opp, dates) if team_id else None
+            opp_id = await resolve_team_id(opp)
+            fx = find_finished_fixture(team_id, opp, dates, opp_id) if team_id else None
             if not fx:
                 # robust fallback for obscure clubs (diacritics, city suffixes, season
                 # detection): scan all fixtures on the date and match both team names.
@@ -4044,12 +4072,28 @@ async def purge_expired_autotips() -> int:
              if (ko := _parse_kickoff(d.get("match_time"))) and ko < cutoff]
     if stale:
         await db.tips.delete_many({"id": {"$in": stale}})
+    # hq-system AI slips (multi-match parlays) for leagues API-Football doesn't cover can
+    # NEVER auto-settle, so they'd otherwise pile up as "pending" forever. Remove them once
+    # their LATEST leg kicked off > 48h ago (generous — plenty of time for FT to publish).
+    sys_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    sys_docs = await db.tips.find(
+        {"source": "hq-system", "status": {"$in": ["pending", "live"]}},
+        {"id": 1, "match_time": 1, "legs": 1}).to_list(1000)
+    sys_stale = []
+    for d in sys_docs:
+        kos = [k for k in (_parse_kickoff(l.get("kickoff")) for l in (d.get("legs") or [])) if k]
+        latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
+        if latest and latest < sys_cutoff:
+            sys_stale.append(d["id"])
+    if sys_stale:
+        await db.tips.delete_many({"id": {"$in": sys_stale}})
+        logger.info(f"Purged {len(sys_stale)} stale unsettleable hq-system slips (>48h past kickoff)")
     preds = await db.match_predictions.find({}, {"id": 1, "kickoff": 1}).to_list(1000)
     stale_p = [p["id"] for p in preds
                if (ko := _parse_kickoff(p.get("kickoff"))) and ko < cutoff]
     if stale_p:
         await db.match_predictions.delete_many({"id": {"$in": stale_p}})
-    return len(stale)
+    return len(stale) + len(sys_stale)
 
 
 async def _dedupe_hq_tips() -> int:
