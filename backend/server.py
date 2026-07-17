@@ -3167,7 +3167,7 @@ def _grade_goal_leg(kind, market, team, fx):
         if _teams_match(fx.get("away_name", ""), team):
             return ag >= 1
         return hg >= 1 or ag >= 1
-    if k == "btts" or "beide teams treffen" in m:
+    if k == "btts" or ("beide teams treffen" in m and "halbzeit" not in m and "hz" not in m):
         return hg >= 1 and ag >= 1
     # full-time result / double chance (computed straight from the final score)
     if k == "res_1":
@@ -4854,7 +4854,12 @@ def _forebet_candidates(r: dict) -> list[dict]:
         # (a2) HOT high-scoring "Anderlecht-style" builder (owner 2026-07-11): for open,
         # goal-heavy games → Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore.
         # Higher odds/risk; every leg settles deterministically (ht_o15 / btts / o25).
-        if sc and total >= 4 and ph >= 1 and pa >= 1:
+        # Owner (2026-07-16): the aggressive "2 Tore in der 1. Halbzeit" leg must NEVER be
+        # anchored by a weak, low-scoring side (e.g. Dila Gori 0:0). A lopsided predicted
+        # scoreline alone (total>=4 from a 3:1) is not enough — we now ALSO require a genuinely
+        # high goal expectation from Forebet (xg/avg >= 3.4), so only true high-scoring, open
+        # games (Iceland/Australia/Norway-style) qualify.
+        if sc and total >= 4 and ph >= 1 and pa >= 1 and xg >= 3.4:
             opts.append({
                 "sfx": "-hot", "combo": True, "hot": True, "rating": 7.0, "winprob": 0.40,
                 "market": "Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore (3er-Bet-Builder)",
@@ -4862,6 +4867,20 @@ def _forebet_candidates(r: dict) -> list[dict]:
                     {"market": "Über 1.5 Tore 1. Halbzeit", "base_odd": 2.60, "kind": "ht_o15"},
                     {"market": "Beide Teams treffen", "base_odd": 1.80, "kind": "btts"},
                     {"market": "Über 2.5 Tore", "base_odd": 1.85, "kind": "o25"},
+                ],
+            })
+        # (a3) RISK: "Beide Teams treffen in JEDER Halbzeit" (both sides score in BOTH halves).
+        # Owner idea (2026-07-16): the smart high-scoring-league risk bet. Only for genuinely
+        # goal-heavy, open games where BOTH teams are predicted to score AND the goal
+        # expectation is very high (xg/avg >= 3.5). Very tough → lives in the RISK filter with
+        # big odds. Both legs settle deterministically from the HT + FT score (btts_ht / btts_sh).
+        if sc and ph >= 1 and pa >= 1 and xg >= 3.5:
+            opts.append({
+                "sfx": "-btts2h", "combo": True, "hot": True, "rating": 6.5, "winprob": 0.22,
+                "market": "Beide Teams treffen 1. Halbzeit + Beide Teams treffen 2. Halbzeit (Risk-Bet-Builder)",
+                "legs": [
+                    {"market": "Beide Teams treffen 1. Halbzeit", "base_odd": 2.60, "kind": "btts_ht"},
+                    {"market": "Beide Teams treffen 2. Halbzeit", "base_odd": 2.50, "kind": "btts_sh"},
                 ],
             })
         # (b) Über 2.5 Tore + Doppelte Chance 12 (high-scoring game, draw unlikely)
