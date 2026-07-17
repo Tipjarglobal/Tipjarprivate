@@ -632,3 +632,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIX purge_settled_tips: gewonnene Community-/Mitglieder-Scheine (source NICHT in hq-auto/smart/hq-live) bleiben jetzt DAUERHAFT (wie hq-system won). AI-Auto-Wins (hq-auto/smart/hq-live) + alle lost/void weiterhin Purge nach 24h.
 - VERIFIZIERT (7 Faelle): member won=keep, member lost/void=purge, hq-system won=keep, hq-auto/smart/hq-live won=purge. Backend 200.
 - HINWEIS: bereits geloeschter Produktions-Schein ist unwiederbringlich (Prod-DB, kein Zugriff). Fix verhindert kuenftigen Verlust. BRAUCHT RE-DEPLOY.
+
+## Changelog — 2026-07-17 (Hall of Fame: neues helles Slip-Rendering v4 + tipjarlogic-Schein)
+- _render_slip_image komplett neu (v4): heller/cremefarbener Buchmacher-Stil. Dunkles TipJar-Header-Band (Wortmarke + n-fach), farbiges Status-Band GEWONNEN(gruen)/VERLOREN(rot) mit ✓ + Gesamtquote, weisse Match-Panels mit Status-Leiste, Ergebnis-Chip (z.B. 2:1), Liga · Datum · Zeit Subline, gruene ✓ + Markt + gruene Quote je Wette, dunkler Footer (Label, @user, grosse Gesamtquote, Einsatz, Gewinn). ZENTRALES, dezentes TipJar-Crest-Wasserzeichen (alpha 0.08). Gleiche Signatur wie vorher.
+- _regenerate_win_slips_once: Flag slip_v3 -> slip_v4 => alle bestehenden approved win_claims werden beim Start einmalig mit v4 neu gerendert.
+- NEU _seed_hof_showcase_slip() (im _startup_seed): fuegt idempotent (fixe id seed-tipjarlogic-treble-5199919010) den gewonnenen 3-fach von @tipjarlogic ein: Dynamo Kyiv qualif.@1.36(0:0, UCL-Quali), CRB Ueber0,5+1,5@1.35(2:1, Brasilien Serie B), Valerenga DC12@1.19(6:1, Norwegen Eliteserien); Quote 2.19, Einsatz 20,00€, Gewinn 43,83€, mitgespielt. user_id via username-Lookup.
+- Fixes: leere Quote zeigt nichts (statt fehlendem ✓-Glyph); Ergebnis-Chip nur bei echter Ergebniszahl (won/lost/offen ausgeschlossen).
+- VERIFIZIERT: Render-Preview + Frontend-Screenshot (#hall-of-fame) zeigen beide Scheine korrekt im neuen Design; /api/wins/hall-of-fame liefert tipjarlogic-Schein mit Bild. Backend 200. BRAUCHT RE-DEPLOY.
+- HINWEIS: HoF sortiert nach total_odds desc, limit 24. Der 2.19-Schein rankt niedrig -> auf Produktion evtl. nicht in Top-24 sichtbar, falls viele hoeher-Quoten-Scheine existieren.
