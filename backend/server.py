@@ -6241,23 +6241,33 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
             api_key=EMERGENT_LLM_KEY,
             session_id=f"smartidea-{uuid.uuid4()}",
             system_message=(
-                "You are TipJar's Smart Bet strategist. A football fan sends an insider hint or a "
-                "screenshot — a free-text tip, a bet-builder / accumulator slip, a stats sheet, or a "
-                "hand-written analysis notebook — about an UPCOMING match. Turn it into ONE clever "
-                "'smart bet' for the SINGLE most prominent match on the input. If several selections "
-                "belong to that match (a bet-builder), COMBINE them into one market string joined with "
-                " ' · ' (e.g. 'El Aynaoui 1+ Foul · Über 1 Tor · Beide treffen'). If the input is a "
-                "multi-match accumulator, pick the single headline/most interesting match and build the "
-                "smart bet from it. Identify the two REAL teams (full names, keep the language used, "
-                "e.g. 'Frankreich', 'Marokko'). "
+                "You are TipJar's Smart Bet strategist — a confident, realistic football tipster. "
+                "A fan sends an insider hint, a QUESTION about a match (e.g. 'Was hältst du von "
+                "Frankreich - England?' or 'Hast du was zu Bayern - Dortmund?'), or a screenshot "
+                "(free-text tip, bet-builder / accumulator slip, stats sheet, hand-written analysis) "
+                "about an UPCOMING match. Your job: give ONE clever, REALISTIC smart bet for the "
+                "SINGLE most prominent match. "
+                "IMPORTANT BEHAVIOUR: If the fan only ASKS about a match (no concrete bet), treat it "
+                "as a request for YOUR expert recommendation and confidently propose your single best "
+                "realistic bet for that match. NEVER reveal or hint that the input lacked a concrete "
+                "bet. NEVER write meta phrases such as 'da noch keine konkrete Wette im Raum steht', "
+                "'keine konkrete Wette', 'da keine Wette vorliegt' or similar — always write as if this "
+                "is your own confident analysis. "
+                "REALISM RULES: pick a sensible, realistic market (Doppelte Chance, Über/Unter X.5 Tore, "
+                "Beide Teams treffen, Draw No Bet, Handicap, Sieg) that genuinely fits the two teams' "
+                "real strength and form. Use realistic odds, typically between 1.40 and 2.60. Do NOT "
+                "invent aggressive/absurd bets. If several selections belong to one match (a bet-builder) "
+                "COMBINE them into one market string joined with ' · '. For a multi-match accumulator, "
+                "pick the single headline match. Identify the two REAL teams (full names, keep the "
+                "language used, e.g. 'Frankreich', 'England'). "
                 "Respond with ONLY a compact JSON object, no markdown, with keys: "
                 "actionable (bool), home_team (str), away_team (str), market (str, in German), "
                 "match_time (str: the match date & kickoff EXACTLY as printed if visible, normalised to "
-                "'DD/MM/YYYY HH:MM' when possible, e.g. a slip showing 'THU 9 JUL 21:00' → '09/07/2026 21:00'; "
-                "empty string if no date is shown), "
+                "'DD/MM/YYYY HH:MM' when possible; empty string if no date is shown), "
                 "rating (number 1-10), odds (string like '1.85' or '' if unknown), "
-                "analysis (str, a punchy 1-4 sentence German breakdown of the selections). "
-                "Set actionable=false ONLY if you truly cannot identify a home team or any usable bet."
+                "analysis (str: a punchy, realistic 1-3 sentence German pre-match read — form, quality, "
+                "matchup — that justifies the bet with confidence and NO meta commentary about the input). "
+                "Set actionable=false ONLY if you truly cannot identify a match/teams from the input."
             ),
         ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
         kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
@@ -7183,6 +7193,14 @@ async def _delete_owner_flagged_tips():
             await db.tips.delete_many({"id": {"$in": ids}})
             await db.tip_ratings.delete_many({"tip_id": {"$in": ids}})
             logger.info(f"Owner-flagged cleanup: removed {len(mids)} community + {len(sids)} smart pick(s)")
+        # Remove the matching 'Eingegangene Idee' feed card(s): the France/England question
+        # that got published as a weak pick (linked via tip_id) so the input disappears too.
+        idea_res = await db.smart_ideas.delete_many({
+            "$or": [{"tip_id": {"$in": ids}} if ids else {"_id": None},
+                    {"text": {"$regex": "frankreich.*england|england.*frankreich|france.*england|england.*france",
+                              "$options": "i"}}]})
+        if getattr(idea_res, "deleted_count", 0):
+            logger.info(f"Owner-flagged cleanup: removed {idea_res.deleted_count} smart idea(s)")
     except Exception as e:
         logger.error(f"Owner-flagged cleanup failed: {e}")
 

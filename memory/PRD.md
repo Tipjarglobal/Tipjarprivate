@@ -647,3 +647,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Viewer (HallOfFame.jsx): Bild in voller Breite in scrollbarer Box max-h-80vh (statt object-contain-Shrink) -> ~5 Wetten sichtbar, nur wenig Scrollen bei grossen Scheinen, kein starkes Reinzoomen. Karten-Thumbnails: max-h-400px object-cover object-top (einheitliche Hoehe).
 - Regenerate-Flag -> slip_v5 (alle approved Scheine werden beim Start mit v5 neu gerendert).
 - VERIFIZIERT: 7-fach + 3-fach Render lesbar (Screenshots), Viewer mobil klar lesbar, Share/User-Buttons overlay korrekt. Frontend kompiliert. BRAUCHT RE-DEPLOY.
+
+## Changelog — 2026-07-17 (Smart-Lab: KI antwortet realistisch, kein Meta-Leak; Fehl-Pick löschen)
+- BUG (Produktion): Nutzer reichte FRAGE ein ('Hast du schon etwas zu Frankreich - England?'); KI veroeffentlichte stumpf einen Smart-Pick mit schwacher Meta-Begruendung ('da noch keine konkrete Wette im Raum steht...').
+- FIX generate_smart_from_idea Prompt: Fragen werden als Bitte um Expertentipp behandelt -> KI gibt IMMER eine realistische, konkrete Wette (sinnvoller Markt, Quote 1.40-2.60) mit selbstbewusster, realistischer Vor-Spiel-Begruendung. VERBOTEN: Meta-Saetze wie 'keine konkrete Wette/im Raum steht'. Verifiziert (Frankreich-England -> BTTS@1.80; Bayern-Dortmund -> Sieg+Ueber2.5@1.65, kein Meta-Leak).
+- CLEANUP _delete_owner_flagged_tips: loescht zusaetzlich die verknuepfte 'Eingegangene Idee' (smart_ideas) per tip_id + Frankreich/England-Textregex, damit die Eingabe-Karte verschwindet. Laeuft beim Start/Deploy, idempotent. (Bestehender france-Regex loescht bereits den Fehl-Tip.)
+- BRAUCHT RE-DEPLOY (Produktion). Backend 200.
