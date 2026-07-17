@@ -626,3 +626,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - PRE-SEED: 'cn1' (Chinesische Liga, verifiziert unabgedeckt: Teams loesen auf, 0 Fixtures 2026) via $setOnInsert beim Start blockiert (respektiert spaetere manuelle Freigabe).
 - NEU Admin-Endpoints: GET /api/admin/league-health (blockierte Ligen + hit/miss-Zaehler), POST /api/admin/league-health/unblock {code} (Reset + Freigabe).
 - VERIFIZIERT: cn1(6 miss,0 hit)->blockiert; ecl(2 hit,5 miss)->NICHT; _slip_eligible/forebet ueberspringt cn1; Refresh persistiert; unblock funktioniert; Startup-Seed + GET-Endpoint live bestaetigt (curl). Backend 200. BRAUCHT RE-DEPLOY.
+
+## Changelog — 2026-07-17 (Fix: gewonnene Community-Scheine verschwanden nach 24h)
+- USER-REPORT (Produktion): gewonnener Community-Schein von Tipster 'tipjarlogic' war weg. URSACHE: purge_settled_tips loeschte ALLE abgerechneten Scheine 24h nach Abrechnung, Ausnahme nur hq-system won.
+- FIX purge_settled_tips: gewonnene Community-/Mitglieder-Scheine (source NICHT in hq-auto/smart/hq-live) bleiben jetzt DAUERHAFT (wie hq-system won). AI-Auto-Wins (hq-auto/smart/hq-live) + alle lost/void weiterhin Purge nach 24h.
+- VERIFIZIERT (7 Faelle): member won=keep, member lost/void=purge, hq-system won=keep, hq-auto/smart/hq-live won=purge. Backend 200.
+- HINWEIS: bereits geloeschter Produktions-Schein ist unwiederbringlich (Prod-DB, kein Zugriff). Fix verhindert kuenftigen Verlust. BRAUCHT RE-DEPLOY.
