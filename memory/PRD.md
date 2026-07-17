@@ -640,3 +640,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Fixes: leere Quote zeigt nichts (statt fehlendem ✓-Glyph); Ergebnis-Chip nur bei echter Ergebniszahl (won/lost/offen ausgeschlossen).
 - VERIFIZIERT: Render-Preview + Frontend-Screenshot (#hall-of-fame) zeigen beide Scheine korrekt im neuen Design; /api/wins/hall-of-fame liefert tipjarlogic-Schein mit Bild. Backend 200. BRAUCHT RE-DEPLOY.
 - HINWEIS: HoF sortiert nach total_odds desc, limit 24. Der 2.19-Schein rankt niedrig -> auf Produktion evtl. nicht in Top-24 sichtbar, falls viele hoeher-Quoten-Scheine existieren.
+
+## Changelog — 2026-07-17 (HoF-Rendering v5: kompaktes dunkles Design + Viewer-Scroll + Share)
+- User-Feedback: v4 (hell) auf Handy unlesbar (7-fach zu lang -> im Viewer winzig gequetscht). Wahl C: komplett neues, kompaktes DUNKLES Design.
+- _render_slip_image v5: dunkle Karte (void), kompakte 2-Zeilen-Rows pro Wette (Match+Quote / Markt + Liga·Datum), gruene ✓, volt-Quoten, Ergebnis-Chip, Status-Pill GEWONNEN/VERLOREN, dunkler Footer (@user, Gesamtquote, Einsatz/Gewinn), faint zentrales Crest-WZ. 7-fach jetzt 1000x1762 (vorher ~2530).
+- Viewer (HallOfFame.jsx): Bild in voller Breite in scrollbarer Box max-h-80vh (statt object-contain-Shrink) -> ~5 Wetten sichtbar, nur wenig Scrollen bei grossen Scheinen, kein starkes Reinzoomen. Karten-Thumbnails: max-h-400px object-cover object-top (einheitliche Hoehe).
+- Regenerate-Flag -> slip_v5 (alle approved Scheine werden beim Start mit v5 neu gerendert).
+- VERIFIZIERT: 7-fach + 3-fach Render lesbar (Screenshots), Viewer mobil klar lesbar, Share/User-Buttons overlay korrekt. Frontend kompiliert. BRAUCHT RE-DEPLOY.

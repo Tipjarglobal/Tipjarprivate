@@ -111,7 +111,7 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
                   <button type="button" onClick={() => setViewer(w)} data-testid={`hof-open-${i}`}
                     className="block w-full text-left">
                     <img src={fileUrl(w.image_path)} alt="win" data-testid={`hof-img-${i}`}
-                      className="w-full object-contain bg-black/40 cursor-pointer hover:opacity-90 transition-opacity" />
+                      className="w-full max-h-[400px] object-cover object-top bg-black/40 cursor-pointer hover:opacity-90 transition-opacity" />
                   </button>
                 ) : (
                   <div className="p-4">
@@ -160,15 +160,17 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
           >
             <X size={26} />
           </button>
-          <div className="relative max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             {viewer.image_path && (
-              <img
-                src={fileUrl(viewer.image_path)}
-                alt="win full view"
-                data-testid="hof-viewer-img"
-                className="w-full h-auto max-h-[86vh] object-contain rounded-2xl shadow-2xl select-none"
-                draggable={false}
-              />
+              <div className="rounded-2xl overflow-y-auto max-h-[80vh] shadow-2xl bg-black/40 no-scrollbar">
+                <img
+                  src={fileUrl(viewer.image_path)}
+                  alt="win full view"
+                  data-testid="hof-viewer-img"
+                  className="w-full h-auto block select-none"
+                  draggable={false}
+                />
+              </div>
             )}
             <button
               type="button"

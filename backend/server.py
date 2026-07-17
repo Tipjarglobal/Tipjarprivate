@@ -1740,10 +1740,9 @@ def _tip_to_render_legs(tip: dict) -> list:
 
 
 def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None) -> bytes:
-    """Render a clean, LIGHT bookmaker-style TipJar bet slip (v4). Cream card, coloured
-    status band (green GEWONNEN / red VERLOREN), a green check per selection, per-game
-    scoreline chip, league + date sub-line, and a subtle centred TipJar crest watermark.
-    live_info={'minute':int,'score':'1:0'} adds a LIVE badge on the first match."""
+    """Compact, mobile-first DARK TipJar bet slip (v5). Tight two-line rows so even a
+    7-leg slip stays short and legible; volt accents, green/red status, per-game score
+    chip and a faint centred crest watermark. Same signature as before."""
     from PIL import Image, ImageDraw, ImageFont
     import io
     FB = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
@@ -1758,62 +1757,51 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
 
     _scratch = ImageDraw.Draw(Image.new("RGB", (4, 4)))
 
-    # ---- light palette ----------------------------------------------------
-    CREAM, PANEL = (249, 245, 237), (255, 255, 255)
-    BRAND, VOLT = (16, 17, 21), (225, 255, 0)
-    INK, INK_SOFT, MUTE = (26, 28, 34), (92, 96, 106), (150, 154, 164)
-    GREEN, GREEN_DK = (34, 168, 83), (24, 132, 64)
-    RED, LIVE_RED = (211, 60, 52), (240, 68, 60)
-    LINE, CHIP = (231, 226, 215), (238, 233, 222)
+    # ---- dark palette -----------------------------------------------------
+    BG, ROW = (14, 15, 19), (22, 24, 30)
+    INK, MUTE, FAINT = (242, 243, 246), (150, 154, 165), (108, 112, 122)
+    VOLT = (225, 255, 0)
+    GREEN, RED, AMBER = (46, 204, 113), (240, 74, 66), (240, 190, 40)
+    LINE = (40, 42, 50)
     won = ctype not in ("pending", "live_pending")
-    STATUS = GREEN if won else (200, 160, 20)
+    STATUS = GREEN if won else (AMBER if ctype in ("pending", "live_pending") else RED)
     status_txt = {"pending": "OFFEN", "live_pending": "LIVE"}.get(ctype, "GEWONNEN")
-    has_live = bool(live_info)
 
     W = 1000
-    pad = 34
-    cpad = 30
-    inner_w = W - 2 * pad - 2 * cpad
-    ODDS_COL = 200
-    LINE_H = 74
+    pad = 40
+    inner_w = W - 2 * pad
+    f_logo = font(FB, 74)
+    f_tag = font(FR, 26)
+    f_status = font(FB, 40)
+    f_match = font(FB, 46)
+    f_odds = font(FB, 50)
+    f_market = font(FR, 40)
+    f_meta = font(FR, 30)
+    f_score = font(FB, 34)
+    f_flabel = font(FR, 30)
+    f_fval = font(FB, 54)
+    f_total = font(FB, 92)
+    f_user = font(FB, 48)
+    f_live = font(FB, 34)
 
-    f_logo = font(FB, 84)
-    f_tag = font(FR, 30)
-    f_status = font(FB, 60)
-    f_title = font(FB, 58)
-    f_sub = font(FR, 38)
-    f_market = font(FB, 54)
-    f_odds = font(FB, 62)
-    f_score = font(FB, 48)
-    f_live = font(FB, 44)
-    f_flabel = font(FR, 42)
-    f_fval = font(FB, 58)
-    f_total = font(FB, 104)
-    f_user = font(FB, 56)
+    def tw(txt, fnt):
+        return _scratch.textlength(txt, font=fnt)
 
-    def fit_font(txt, hi, lo, maxw):
+    def fit(txt, hi, lo, maxw):
         for sz in range(hi, lo - 1, -2):
             f = font(FB, sz)
-            if _scratch.textlength(txt, font=f) <= maxw:
-                return f, sz
-        return font(FB, lo), lo
+            if tw(txt, f) <= maxw:
+                return f
+        return font(FB, lo)
 
-    def wrap(txt, fnt, maxw):
-        words = (txt or "").split()
-        lines, cur = [], ""
-        for w in words:
-            test = (cur + " " + w).strip()
-            if not cur or _scratch.textlength(test, font=fnt) <= maxw:
-                cur = test
-            else:
-                lines.append(cur)
-                cur = w
-        if cur:
-            lines.append(cur)
-        return lines or [""]
+    def _clean(p):
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})", p or "")
+        if m:
+            return f"{m.group(3)}.{m.group(2)}.{m.group(1)} {m.group(4)}:{m.group(5)}"
+        return p or ""
 
     # ---- group legs by match ---------------------------------------------
-    legs = legs[:10]
+    legs = legs[:12]
     groups, gidx = [], {}
     for l in legs:
         k = _match_key(l.get("home", ""), l.get("away", ""))
@@ -1829,170 +1817,124 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
                 groups[gidx[k]]["result"] = r
         groups[gidx[k]]["mkts"].append(l)
 
-    def _clean_part(p):
-        m = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})", p or "")
-        if m:
-            return f"{m.group(3)}.{m.group(2)}.{m.group(1)}  {m.group(4)}:{m.group(5)}"
-        return p
+    ROW_A, ROW_M, ROW_META, ROW_PAD = 58, 50, 38, 20
 
-    def subline(g):
-        return "   ·   ".join(_clean_part(p) for p in (g.get("league", ""), g.get("date", ""), g.get("time", "")) if p)
-
-    # ---- pre-measure so the canvas height is exact ------------------------
     for g in groups:
-        title = f"{g['home']}  vs  {g['away']}"
-        tf, ts = fit_font(title, 56, 34, inner_w - 170)
-        if _scratch.textlength(title, font=tf) <= inner_w - 170:
-            g["tlines"] = [(title, tf, ts)]
-        else:
-            f1, s1 = fit_font(g["home"], 54, 34, inner_w - 170)
-            f2, s2 = fit_font(f"vs {g['away']}", 54, 34, inner_w - 170)
-            g["tlines"] = [(g["home"], f1, s1), (f"vs {g['away']}", f2, s2)]
-        rows = []
-        for l in g["mkts"]:
-            mlines = wrap(l.get("market", "") or "", f_market, inner_w - ODDS_COL - 60)
-            od = l.get("odds") or 0
-            odt = f"{float(od):.2f}" if od else ""
-            rows.append({"lines": mlines, "odds": odt})
-        g["rows"] = rows
-        h = cpad + 6
-        h += sum(sz + 8 for _, _, sz in g["tlines"])
-        if subline(g):
-            h += 54
-        if has_live:
-            h += 78
-        for r in rows:
-            h += len(r["lines"]) * LINE_H + 14
-        h += cpad - 6
-        g["card_h"] = h
+        n_mkt = len(g["mkts"])
+        meta = " · ".join(x for x in (g.get("league", ""), _clean(g.get("date", "")), g.get("time", "")) if x)
+        g["meta"] = meta
+        h = ROW_PAD + ROW_A + n_mkt * ROW_M
+        if meta:
+            h += ROW_META
+        h += ROW_PAD
+        g["h"] = h
 
-    head_h = 150
-    status_h = 92
-    gap = 16
-    content_h = sum(g["card_h"] + gap for g in groups)
-    foot_h = 300
-    H = head_h + status_h + content_h + foot_h + pad
+    head_h = 128
+    gap = 12
+    content_h = sum(g["h"] + gap for g in groups)
+    foot_h = 208
+    H = head_h + content_h + foot_h + pad
 
-    base = Image.new("RGB", (W, H), CREAM)
-    # centred, faint crest watermark behind the body
+    base = Image.new("RGB", (W, H), BG)
     try:
         crest = Image.open(CREST).convert("RGBA")
-        cw = 620
+        cw = 540
         crest = crest.resize((cw, int(cw * crest.height / crest.width)))
-        a = crest.split()[3].point(lambda v: int(v * 0.08))
+        a = crest.split()[3].point(lambda v: int(v * 0.06))
         crest.putalpha(a)
-        body_top = head_h + status_h
-        wx = (W - crest.width) // 2
-        wy = body_top + max(0, (content_h - crest.height) // 2)
-        base.paste(crest, (wx, wy), crest)
+        wy = head_h + max(0, (content_h - crest.height) // 2)
+        base.paste(crest, ((W - crest.width) // 2, wy), crest)
     except Exception:
         pass
     d = ImageDraw.Draw(base)
 
-    def check(cx, cy, sz, col, wdt=6):
-        d.line([(cx, cy), (cx + sz * 0.32, cy + sz * 0.42)], fill=col, width=wdt)
-        d.line([(cx + sz * 0.32, cy + sz * 0.42), (cx + sz, cy - sz * 0.5)], fill=col, width=wdt)
+    def check(cx, cy, sz, col, wd=6):
+        d.line([(cx, cy), (cx + sz * 0.34, cy + sz * 0.44)], fill=col, width=wd)
+        d.line([(cx + sz * 0.34, cy + sz * 0.44), (cx + sz, cy - sz * 0.5)], fill=col, width=wd)
 
     def trunc(txt, fnt, maxw):
         txt = txt or ""
-        if d.textlength(txt, font=fnt) <= maxw:
+        if tw(txt, fnt) <= maxw:
             return txt
-        while txt and d.textlength(txt + "\u2026", font=fnt) > maxw:
+        while txt and tw(txt + "…", fnt) > maxw:
             txt = txt[:-1]
-        return txt + "\u2026"
+        return txt + "…"
 
-    # ---- header (brand band) ---------------------------------------------
-    d.rectangle([0, 0, W, head_h], fill=BRAND)
-    d.text((pad, 30), "Tip", font=f_logo, fill=PANEL)
-    tw = d.textlength("Tip", font=f_logo)
-    d.text((pad + tw, 30), "Jar", font=f_logo, fill=VOLT)
-    d.text((pad + 4, 118), "Post it. Rate it. Cash it.", font=f_tag, fill=(170, 173, 181))
-    legs_txt = f"{len(groups)}-fach" if len(groups) > 1 else "Einzelwette"
-    lw = d.textlength(legs_txt, font=f_tag)
-    d.text((W - pad - lw, 118), legs_txt, font=f_tag, fill=(170, 173, 181))
-
-    # ---- status band ------------------------------------------------------
-    sy0 = head_h
-    d.rectangle([0, sy0, W, sy0 + status_h], fill=STATUS)
+    # ---- header -----------------------------------------------------------
+    d.text((pad, 26), "Tip", font=f_logo, fill=INK)
+    lw = tw("Tip", f_logo)
+    d.text((pad + lw, 26), "Jar", font=f_logo, fill=VOLT)
+    d.text((pad + 2, 100), "Post it. Rate it. Cash it.", font=f_tag, fill=FAINT)
+    # status pill (right)
+    st_w = tw(status_txt, f_status)
+    pill_w = st_w + (86 if won else 56)
+    px1 = W - pad
+    d.rounded_rectangle([px1 - pill_w, 34, px1, 34 + 60], 30, fill=STATUS)
+    tx = px1 - pill_w + 26
     if won:
-        check(pad + 6, sy0 + status_h // 2 - 4, 34, PANEL, 8)
-    d.text((pad + (68 if won else 6), sy0 + (status_h - 60) // 2 - 4), status_txt, font=f_status, fill=PANEL)
+        check(tx, 34 + 30 - 4, 24, BG, 7)
+        tx += 44
+    d.text((tx, 34 + 8), status_txt, font=f_status, fill=BG)
     if total_odds:
         ot = f"{float(total_odds):.2f}"
-        otw = d.textlength(ot, font=f_status)
-        d.text((W - pad - otw, sy0 + (status_h - 60) // 2 - 4), ot, font=f_status, fill=PANEL)
+        d.text((px1 - tw(f"Quote {ot}", f_tag), 104), f"Quote {ot}", font=f_tag, fill=FAINT)
 
-    # ---- match panels -----------------------------------------------------
-    y = sy0 + status_h + gap - 6
+    # ---- leg rows ---------------------------------------------------------
+    y = head_h
     for g in groups:
-        cx0, cy0, cx1, cy1 = pad, y, W - pad, y + g["card_h"]
-        d.rounded_rectangle([cx0, cy0, cx1, cy1], 22, fill=PANEL, outline=LINE, width=2)
-        d.rounded_rectangle([cx0, cy0, cx0 + 8, cy1], 22, fill=STATUS)
-        tx0 = pad + cpad
-        ty = y + cpad
-        # score chip (top-right of the panel)
+        d.rounded_rectangle([pad, y, W - pad, y + g["h"]], 18, fill=ROW)
+        d.rounded_rectangle([pad, y, pad + 7, y + g["h"]], 18, fill=STATUS)
+        ix = pad + 30
+        ty = y + ROW_PAD
+        # match title + score chip on the right
+        title = f"{g['home']}  vs  {g['away']}"
+        chip_x1 = W - pad - 26
         if g["result"]:
             sc = g["result"]
-            scw = d.textlength(sc, font=f_score)
-            chip_x1 = W - pad - cpad
-            d.rounded_rectangle([chip_x1 - scw - 40, ty - 2, chip_x1, ty + 62], 16, fill=CHIP)
-            d.text((chip_x1 - scw - 20, ty + 4), sc, font=f_score, fill=INK)
-        for txt, tfont, tsz in g["tlines"]:
-            d.text((tx0, ty), trunc(txt, tfont, inner_w - 170), font=tfont, fill=INK)
-            ty += tsz + 8
-        sub = subline(g)
-        if sub:
-            d.text((tx0, ty), trunc(sub, f_sub, inner_w), font=f_sub, fill=MUTE)
-            ty += 54
-        if has_live:
-            mn, sc2 = live_info.get("minute"), live_info.get("score")
-            lt = "LIVE"
-            if mn:
-                lt += f"  {mn}'"
-            if sc2:
-                lt += f"   \u00b7   {sc2}"
-            lw2 = d.textlength(lt, font=f_live)
-            d.rounded_rectangle([tx0, ty, tx0 + lw2 + 84, ty + 62], 14, fill=LIVE_RED)
-            d.ellipse([tx0 + 22, ty + 20, tx0 + 44, ty + 42], fill=PANEL)
-            d.text((tx0 + 58, ty + 6), lt, font=f_live, fill=PANEL)
-            ty += 78
-            has_live = False
-        for r in g["rows"]:
-            ow = d.textlength(r["odds"], font=f_odds)
-            oy = ty + (LINE_H * len(r["lines"]) - 66) // 2
-            check(tx0, ty + 40, 24, GREEN, 6)
-            for line in r["lines"]:
-                d.text((tx0 + 46, ty + 6), line, font=f_market, fill=INK_SOFT)
-                ty += LINE_H
-            d.text((W - pad - cpad - ow, oy), r["odds"], font=f_odds, fill=GREEN_DK)
-            ty += 14
-        y = cy1 + gap
+            scw = tw(sc, f_score)
+            d.rounded_rectangle([chip_x1 - scw - 28, ty - 2, chip_x1, ty + 46], 12, fill=(34, 37, 45))
+            d.text((chip_x1 - scw - 14, ty + 3), sc, font=f_score, fill=INK)
+            title_max = chip_x1 - scw - 28 - ix - 16
+        else:
+            title_max = inner_w - 90
+        mf = fit(title, 46, 32, title_max)
+        d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
+        ty += ROW_A
+        # each market: ✓ + text (left), odds (volt, right)
+        for l in g["mkts"]:
+            od = l.get("odds") or 0
+            odt = f"{float(od):.2f}" if od else ""
+            ow = tw(odt, f_odds)
+            check(ix, ty + 26, 22, GREEN if won else FAINT, 6)
+            mtxt = trunc(l.get("market", "") or "", f_market, inner_w - 120 - ow)
+            d.text((ix + 42, ty + 4), mtxt, font=f_market, fill=(206, 210, 218))
+            if odt:
+                d.text((W - pad - 26 - ow, ty), odt, font=f_odds, fill=VOLT)
+            ty += ROW_M
+        if g["meta"]:
+            d.text((ix + 42, ty - 4), trunc(g["meta"], f_meta, inner_w - 100), font=f_meta, fill=FAINT)
+        y += g["h"] + gap
 
-    # ---- footer summary ---------------------------------------------------
-    fy = y + 4
-    fcard_bottom = fy + foot_h - 20
-    d.rounded_rectangle([pad, fy, W - pad, fcard_bottom], 22, fill=BRAND)
+    # ---- footer -----------------------------------------------------------
+    fy = y + 2
+    d.rounded_rectangle([pad, fy, W - pad, fy + foot_h - 16], 20, fill=(20, 21, 27), outline=LINE, width=2)
     label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
              "cashed": "Ausgezahlt", "live_pending": "Live-Pick",
              "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + cpad, fy + 26), label, font=f_flabel, fill=VOLT)
-    d.text((pad + cpad, fy + 92), f"@{username}", font=f_user, fill=PANEL)
-    # right column: big total odds
-    ot = f"{float(total_odds):.2f}" if total_odds else "\u2014"
-    otw = d.textlength(ot, font=f_total)
-    d.text((W - pad - cpad - otw, fy + 24), ot, font=f_total, fill=VOLT)
-    d.text((W - pad - cpad - d.textlength("Gesamtquote", font=f_tag), fy + 136), "Gesamtquote", font=f_tag, fill=(170, 173, 181))
-    # bottom row: stake + winnings
-    row_y = fy + 190
+    d.text((pad + 28, fy + 22), label, font=f_tag, fill=VOLT)
+    d.text((pad + 28, fy + 58), f"@{username}", font=f_user, fill=INK)
+    ot = f"{float(total_odds):.2f}" if total_odds else "—"
+    d.text((W - pad - 28 - tw(ot, f_total), fy + 16), ot, font=f_total, fill=VOLT)
+    d.text((W - pad - 28 - tw("Gesamtquote", f_tag), fy + 118), "Gesamtquote", font=f_tag, fill=FAINT)
+    row_y = fy + 130
     if stake:
-        d.text((pad + cpad, row_y), "Einsatz", font=f_tag, fill=(170, 173, 181))
-        d.text((pad + cpad, row_y + 34), str(stake), font=f_fval, fill=PANEL)
+        d.text((pad + 28, row_y), "Einsatz", font=f_tag, fill=FAINT)
+        d.text((pad + 28, row_y + 30), str(stake), font=f_fval, fill=INK)
     if winnings:
         wlabel = "Ausgezahlt" if ctype == "cashed" else ("Gewinn" if won else "Möglicher Gewinn")
         wt = str(winnings)
-        wtw = d.textlength(wt, font=f_fval)
-        d.text((W - pad - cpad - d.textlength(wlabel, font=f_tag), row_y), wlabel, font=f_tag, fill=(170, 173, 181))
-        d.text((W - pad - cpad - wtw, row_y + 34), wt, font=f_fval, fill=VOLT)
+        d.text((pad + 300, row_y), wlabel, font=f_tag, fill=FAINT)
+        d.text((pad + 300, row_y + 30), wt, font=f_fval, fill=VOLT)
 
     out = io.BytesIO()
     base.save(out, format="WEBP", quality=92)
@@ -6940,17 +6882,17 @@ async def member_live_loop():
 
 async def _regenerate_win_slips_once():
     """Re-render existing Hall-of-Fame win-claim slips with the current renderer.
-    Idempotent via a 'slip_v4' flag so it only runs once per slip per renderer version."""
+    Idempotent via a 'slip_v5' flag so it only runs once per slip per renderer version."""
     await asyncio.sleep(20)
     try:
         claims = await db.win_claims.find(
-            {"status": "approved", "slip_v4": {"$ne": True}},
+            {"status": "approved", "slip_v5": {"$ne": True}},
             {"_id": 0}).to_list(200)
         n = 0
         for c in claims:
             legs = c.get("legs") or []
             if not legs:
-                await db.win_claims.update_one({"id": c["id"]}, {"$set": {"slip_v4": True}})
+                await db.win_claims.update_one({"id": c["id"]}, {"$set": {"slip_v5": True}})
                 continue
             try:
                 img = await asyncio.to_thread(
@@ -6965,7 +6907,7 @@ async def _regenerate_win_slips_once():
                     "owner": c.get("user_id", "system"), "is_deleted": False,
                     "created_at": datetime.now(timezone.utc).isoformat()})
                 await db.win_claims.update_one(
-                    {"id": c["id"]}, {"$set": {"image_path": res["path"], "slip_v4": True}})
+                    {"id": c["id"]}, {"$set": {"image_path": res["path"], "slip_v5": True}})
                 n += 1
             except Exception as ex:
                 logger.error(f"regenerate slip {c.get('id')} failed: {ex}")
@@ -7300,7 +7242,7 @@ async def _seed_hof_showcase_slip():
         "id": claim_id, "user_id": uid, "username": uname, "type": "played",
         "image_path": image_path, "legs": legs, "legs_count": 3, "matched_legs": 3,
         "total_odds": total_odds, "stake": stake, "winnings": winnings, "credits": 0,
-        "status": "approved", "slip_v4": True,
+        "status": "approved", "slip_v5": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }}, upsert=True)
     logger.info("Seeded Hall-of-Fame showcase slip for @tipjarlogic")
