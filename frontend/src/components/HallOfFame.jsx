@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Coins, Radio, Users, Award, X, Gift, Banknote } from "lucide-react";
+import { Trophy, Coins, Radio, Users, Award, X, Gift, Banknote, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import api, { fileUrl } from "../api";
 import { useI18n, toLatin } from "../i18n";
 
@@ -15,6 +16,38 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
   const { t } = useI18n();
   const [items, setItems] = useState([]);
   const [viewer, setViewer] = useState(null);
+  const [sharing, setSharing] = useState(false);
+
+  const shareSlip = async (w) => {
+    if (!w?.image_path || sharing) return;
+    setSharing(true);
+    try {
+      const res = await fetch(fileUrl(w.image_path));
+      const blob = await res.blob();
+      const file = new File([blob], `tipjar-win-${toLatin(w.username || "slip")}.webp`,
+        { type: blob.type || "image/webp" });
+      const odds = w.total_odds ? `${w.total_odds.toFixed(2)}` : "";
+      const text = odds
+        ? `🏆 ${odds} gewonnen auf TipJar Global! Post it. Rate it. Cash it. → tipjarglobal.com`
+        : `🏆 Gewonnen auf TipJar Global! → tipjarglobal.com`;
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: "TipJar Global", text, files: [file] });
+      } else if (navigator.share) {
+        await navigator.share({ title: "TipJar Global", text, url: "https://tipjarglobal.com" });
+      } else {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = file.name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast.success(t("win.hof.downloaded"));
+      }
+    } catch (e) {
+      if (e?.name !== "AbortError") toast.error(t("wall.shareErr"));
+    } finally {
+      setSharing(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -61,6 +94,18 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
               >
                 {i < 3 && (
                   <span className="absolute top-2 right-2 z-10 text-xs font-black text-void bg-volt rounded-full px-2.5 py-0.5 shadow-lg">#{i + 1}</span>
+                )}
+                {w.image_path && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); shareSlip(w); }}
+                    data-testid={`hof-share-${i}`}
+                    title={t("wall.share")}
+                    aria-label={t("wall.share")}
+                    className="absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-full bg-black/70 backdrop-blur px-3 py-1.5 text-xs font-bold text-white hover:text-volt hover:bg-black/85 active:scale-90 transition-all shadow-lg"
+                  >
+                    <Share2 size={14} /> {t("wall.share")}
+                  </button>
                 )}
                 {w.image_path ? (
                   <button type="button" onClick={() => setViewer(w)} data-testid={`hof-open-${i}`}
@@ -137,6 +182,16 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
               </span>
               @{toLatin(viewer.username)}
               <Gift size={14} className="text-volt" />
+            </button>
+            <button
+              type="button"
+              onClick={() => shareSlip(viewer)}
+              disabled={sharing}
+              data-testid="hof-viewer-share"
+              title={t("wall.share")}
+              className="absolute bottom-3 right-3 flex items-center gap-2 rounded-full bg-volt text-void font-bold px-4 py-2 text-sm hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_24px_rgba(225,255,0,0.35)] disabled:opacity-60"
+            >
+              <Share2 size={16} /> {t("wall.share")}
             </button>
           </div>
         </div>
