@@ -3417,6 +3417,7 @@ async def settle_pending_tips() -> dict:
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
         }})
         settled += 1
+        await _record_league_hit(tip.get("league_code"))
         details.append({"tip": tip["id"], "match": f"{tip['home_team']} vs {tip['away_team']}",
                         "score": f"{fx['home_goals']}-{fx['away_goals']}", "result": new_status})
     return {"ok": True, "checked": checked, "settled": settled, "details": details,
@@ -3511,6 +3512,7 @@ async def settle_hq_combos() -> dict:
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
         }})
         settled += 1
+        await _record_league_hit(tip.get("league_code"))
     return {"ok": True, "settled": settled, "quota_exhausted": _api_quota_exhausted()}
 
 
@@ -3684,6 +3686,28 @@ async def settle_now(admin: dict = Depends(require_admin)):
                          "Sobald das Kontingent zurückgesetzt ist, werden alle fertigen "
                          "Spiele automatisch abgerechnet (kein Versuch geht verloren).")
     return res
+
+
+@api_router.get("/admin/league-health")
+async def admin_league_health(admin: dict = Depends(require_admin)):
+    """Auto-learning league blacklist: which leagues never settle (uncoverable by
+    API-Football) and were auto-blocked, plus the raw hit/miss counters."""
+    rows = await db.league_settle_health.find({}, {"_id": 0}).sort("misses", -1).to_list(500)
+    return {"blocked": sorted(_BLOCKED_LEAGUES), "min_misses_to_block": _LEAGUE_BLOCK_MIN_MISSES,
+            "leagues": rows}
+
+
+@api_router.post("/admin/league-health/unblock")
+async def admin_unblock_league(payload: dict, admin: dict = Depends(require_admin)):
+    """Manually re-enable a league (e.g. once API-Football adds coverage). Resets counters."""
+    code = (payload.get("code") or "").strip().lower()
+    if not code:
+        return {"ok": False, "reason": "code required"}
+    await db.league_settle_health.update_one(
+        {"code": code}, {"$set": {"blocked": False, "hits": 0, "misses": 0}}, upsert=True)
+    _BLOCKED_LEAGUES.discard(code)
+    return {"ok": True, "code": code}
+
 
 
 @api_router.post("/admin/live-run")
@@ -3898,6 +3922,55 @@ FOREBET_SLIP_CODES = {
     "jp1", "kr1", "ko1", "cn1", "sa1", "qa1", "ae1",
 }
 
+
+# ── Auto-learning league blacklist ───────────────────────────────────────────
+# Some whitelisted Forebet leagues (e.g. the current Chinese Super League) simply are NOT
+# in API-Football, so their tips can never auto-settle. Instead of hand-maintaining the
+# whitelist we LEARN it: every scraper tip that settles is a "hit" for its league; every
+# finished scraper tip that had to be purged still-unsettled is a "miss". A league with
+# several misses and ZERO hits is uncoverable → we stop posting new tips from it. A league
+# that settles fine (e.g. 'ecl') is never blocked even if the odd fixture fails on naming.
+_LEAGUE_BLOCK_MIN_MISSES = 6
+_BLOCKED_LEAGUES: set = set()
+
+
+async def _refresh_blocked_leagues():
+    global _BLOCKED_LEAGUES
+    try:
+        docs = await db.league_settle_health.find({"blocked": True}, {"_id": 0, "code": 1}).to_list(500)
+        _BLOCKED_LEAGUES = {d["code"] for d in docs if d.get("code")}
+    except Exception as e:
+        logger.error(f"refresh blocked leagues: {e}")
+
+
+def _is_league_auto_blocked(code: str) -> bool:
+    return bool(code) and code.strip().lower() in _BLOCKED_LEAGUES
+
+
+async def _record_league_hit(code: str):
+    code = (code or "").strip().lower()
+    if not code:
+        return
+    await db.league_settle_health.update_one({"code": code}, {"$inc": {"hits": 1}}, upsert=True)
+
+
+async def _record_league_miss(code: str):
+    code = (code or "").strip().lower()
+    if not code:
+        return
+    await db.league_settle_health.update_one({"code": code}, {"$inc": {"misses": 1}}, upsert=True)
+    doc = await db.league_settle_health.find_one({"code": code})
+    if doc and not doc.get("blocked") and doc.get("hits", 0) == 0 \
+            and doc.get("misses", 0) >= _LEAGUE_BLOCK_MIN_MISSES:
+        await db.league_settle_health.update_one(
+            {"code": code},
+            {"$set": {"blocked": True, "blocked_at": datetime.now(timezone.utc).isoformat()}})
+        _BLOCKED_LEAGUES.add(code)
+        logger.warning(f"Auto-blocked uncoverable league '{code}' "
+                       f"({doc.get('misses')} misses, 0 settled)")
+
+
+
 SLIP_LEAGUE_KEYWORDS = (
     "champions league", "europa league", "conference league", "europa conference",
     "uefa", "world cup", "nations league", "qualif", "copa america",
@@ -3952,7 +4025,8 @@ def _slip_eligible(tip: dict) -> bool:
         return False
     tid = tip.get("id", "")
     if tid.startswith("hqtip-a"):  # forebet -> whitelist by league short-code
-        return (tip.get("league_code") or "").strip().lower() in FOREBET_SLIP_CODES
+        lc = (tip.get("league_code") or "").strip().lower()
+        return lc in FOREBET_SLIP_CODES and not _is_league_auto_blocked(lc)
     # predictz (hqtip-b) -> whitelist by readable league name
     return any(k in league for k in SLIP_LEAGUE_KEYWORDS)
 
@@ -4067,11 +4141,18 @@ async def purge_expired_autotips() -> int:
     grace = timedelta(hours=36) if API_FOOTBALL_KEY else timedelta(hours=3)
     cutoff = datetime.now(timezone.utc) - grace
     docs = await db.tips.find(
-        {"source": {"$in": ["hq-auto", "smart"]}, "status": "pending"}, {"id": 1, "match_time": 1}).to_list(1000)
-    stale = [d["id"] for d in docs
-             if (ko := _parse_kickoff(d.get("match_time"))) and ko < cutoff]
+        {"source": {"$in": ["hq-auto", "smart"]}, "status": "pending"},
+        {"id": 1, "match_time": 1, "league_code": 1, "source": 1}).to_list(1000)
+    stale_docs = [d for d in docs
+                  if (ko := _parse_kickoff(d.get("match_time"))) and ko < cutoff]
+    stale = [d["id"] for d in stale_docs]
     if stale:
         await db.tips.delete_many({"id": {"$in": stale}})
+        # A finished scraper tip that never settled before purge = the league couldn't be
+        # resolved in API-Football → count a "miss" so uncoverable leagues get auto-blocked.
+        for d in stale_docs:
+            if d.get("source") == "hq-auto":
+                await _record_league_miss(d.get("league_code"))
     # hq-system AI slips (multi-match parlays) for leagues API-Football doesn't cover can
     # NEVER auto-settle, so they'd otherwise pile up as "pending" forever. Remove them once
     # their LATEST leg kicked off > 48h ago (generous — plenty of time for FT to publish).
@@ -5021,6 +5102,7 @@ async def forebet_autopost() -> dict:
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
+    await _refresh_blocked_leagues()
     # Only auto-post from the start of TOMORROW (UTC) — today stays curated.
     _now = datetime.now(timezone.utc)
     _AUTOPOST_MIN_KO = (_now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -5084,6 +5166,10 @@ async def forebet_autopost() -> dict:
         # owner: only give picks from recognised, bookmaker-available leagues (same
         # whitelist as the system slips) — no Somalia/obscure lower divisions.
         if (r.get("lcode") or "").strip().lower() not in FOREBET_SLIP_CODES:
+            continue
+        # skip leagues we've LEARNED are uncoverable by API-Football (never settle → no point
+        # posting tips that would only pile up as permanently 'pending').
+        if _is_league_auto_blocked(r.get("lcode")):
             continue
         # VALUE + BANKER gate (owner): apply real bookmaker odds; keep VALUE picks
         # (≥72% win AND odd≥1.60) or, as a separate safe category, BANKER picks (≥85%
@@ -6921,6 +7007,19 @@ async def startup():
         logger.error(f"Storage init failed: {e}")
     # Run purge/admin-seed/showcase-seed in the background so the readiness probe
     # is never blocked by DB/storage latency (prevents deploy timeouts).
+    # Pre-seed the one league we've CONFIRMED is uncoverable by API-Football (current Chinese
+    # Super League 'cn1' — teams resolve but have zero fixtures). $setOnInsert keeps it a
+    # one-time seed so a later manual unblock (if API-Football adds coverage) is respected.
+    try:
+        await db.league_settle_health.update_one(
+            {"code": "cn1"},
+            {"$setOnInsert": {"code": "cn1", "blocked": True, "hits": 0, "misses": 999,
+                              "blocked_at": datetime.now(timezone.utc).isoformat(),
+                              "note": "auto-seed: not covered by API-Football"}},
+            upsert=True)
+    except Exception as e:
+        logger.error(f"cn1 blacklist seed: {e}")
+    await _refresh_blocked_leagues()
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))

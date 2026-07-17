@@ -618,3 +618,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - BUGFIX settle_hq_combos(): Combo mit 1 definitiv VERLORENEM Bein + 1 nicht-bewertbarem Bein (fehlende HZ-Daten) blieb ewig pending. Jetzt: any_lost -> sofort "lost"; nur ein WIN braucht alle Beine bewertbar. (2 zuvor blockierte Combos sofort abgerechnet.)
 - VERIFIZIERT: Quota reset (3172/7500). Realer Lauf: 1 Single + 12 Combos + 18 Parlays abgerechnet; Pending 128->79. ID/Single-Fixture-Fallback per Mock bestaetigt. Combo-Fix: +2 abgerechnet. Backend 200. BRAUCHT RE-DEPLOY.
 - BLEIBT (Datengrenze): Spiele in nicht von API-Football abgedeckten Ligen koennen nie auto-abrechnen (werden jetzt aber bereinigt/retried). Empfehlung: solche Ligen aus FOREBET_SLIP_CODES-Whitelist nehmen, damit erst gar keine unabrechenbaren Tipps entstehen.
+
+## Changelog — 2026-07-17 (Auto-Blacklist gegen unabrechenbare Ligen)
+- ZIEL (User): keine unabrechenbaren Tipps mehr erzeugen. Statische Whitelist-Kuerzung war zu riskant (z.B. 'ecl'=38 Tipps, rechnet meist ab; nur Namensaufloesung scheiterte). Forebet-Codes lassen sich nicht sicher auf API-Football-Ligen mappen.
+- NEU: Selbstlernende Liga-Blacklist (db.league_settle_health). Jede abgerechnete Scraper-Wette = 'hit' fuer ihre Liga; jede fertige, nie abgerechnete + gepurgte hq-auto-Wette = 'miss'. Liga mit >=6 misses UND 0 hits -> auto-blockiert. Ligen mit hits werden NIE blockiert (schuetzt ecl/mls/...).
+- Integration: _record_league_hit (settle_pending_tips + settle_hq_combos), _record_league_miss (purge_expired_autotips fuer stale hq-auto), _is_league_auto_blocked in forebet_autopost + _slip_eligible. Refresh beim Start + bei jedem forebet_autopost.
+- PRE-SEED: 'cn1' (Chinesische Liga, verifiziert unabgedeckt: Teams loesen auf, 0 Fixtures 2026) via $setOnInsert beim Start blockiert (respektiert spaetere manuelle Freigabe).
+- NEU Admin-Endpoints: GET /api/admin/league-health (blockierte Ligen + hit/miss-Zaehler), POST /api/admin/league-health/unblock {code} (Reset + Freigabe).
+- VERIFIZIERT: cn1(6 miss,0 hit)->blockiert; ecl(2 hit,5 miss)->NICHT; _slip_eligible/forebet ueberspringt cn1; Refresh persistiert; unblock funktioniert; Startup-Seed + GET-Endpoint live bestaetigt (curl). Backend 200. BRAUCHT RE-DEPLOY.
