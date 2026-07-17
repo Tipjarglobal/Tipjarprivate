@@ -513,6 +513,7 @@ async def tips_counts():
     """Post counts per picks area — powers the homepage badges & area alerts.
     The AI badge reflects the next-24h picks (the default view) so it stays realistic."""
     await purge_expired_autotips()
+    await expire_stale_pending()
     await purge_settled_tips()
     now = datetime.now(timezone.utc)
     # AI badge = every pending Single-Game pick (singles + bet-builder combos, all
@@ -3652,6 +3653,7 @@ async def settle_now(admin: dict = Depends(require_admin)):
     res["systems_snapshot"] = await snapshot_systems()
     res["combos"] = await settle_hq_combos()
     res["parlays"] = await settle_multimatch_parlays()
+    res["expired"] = await expire_stale_pending()
     try:
         res["live"] = await live_autopost()
     except Exception as e:
@@ -3733,6 +3735,42 @@ async def admin_live_health(admin: dict = Depends(require_admin)):
 
 
 
+EXPIRE_GRACE_HOURS = 30  # > 24h so a daily API-quota outage can't delete a still-settleable pick
+
+
+async def expire_stale_pending() -> dict:
+    """Any pick still 'pending'/'live' long after its (last) kickoff can't be settled
+    (obscure league not in API-Football, missing stats, …). Leaving them OFFEN forever is
+    unacceptable — so AI picks (hq-*/smart) are DELETED and member/community picks are VOIDed
+    (moved to 'Abgerechnet' as void). Runs on every settlement cycle so nothing lingers."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=EXPIRE_GRACE_HOURS)
+    docs = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "id": 1, "source": 1, "match_time": 1, "legs": 1}).to_list(5000)
+    ai_ids, member_ids = [], []
+    ai_src = ("hq-auto", "smart", "hq-live", "hq-system")
+    for d in docs:
+        legs = d.get("legs") or []
+        kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
+        latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
+        if not latest or latest >= cutoff:
+            continue
+        (ai_ids if d.get("source") in ai_src else member_ids).append(d["id"])
+    if ai_ids:
+        await db.tips.delete_many({"id": {"$in": ai_ids}})
+        await db.tip_ratings.delete_many({"tip_id": {"$in": ai_ids}})
+    if member_ids:
+        await db.tips.update_many(
+            {"id": {"$in": member_ids}},
+            {"$set": {"status": "void", "settled_by": "expired",
+                      "settled_at": now.isoformat()}})
+    if ai_ids or member_ids:
+        logger.info(f"Expired stale picks: deleted {len(ai_ids)} AI, voided {len(member_ids)} member")
+    return {"deleted": len(ai_ids), "voided": len(member_ids)}
+
+
+
 async def settlement_loop():
     while True:
         await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
@@ -3744,9 +3782,11 @@ async def settlement_loop():
                 result = await settle_pending_tips()
                 combos = await settle_hq_combos()
                 parlays = await settle_multimatch_parlays()
+                expired = await expire_stale_pending()
                 purged = await purge_settled_tips()
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
-                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; systems snap {snap}; purged24h {purged}")
+                            f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; systems snap {snap}; "
+                            f"expired {expired}; purged24h {purged}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")
 

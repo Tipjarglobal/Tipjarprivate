@@ -653,3 +653,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIX generate_smart_from_idea Prompt: Fragen werden als Bitte um Expertentipp behandelt -> KI gibt IMMER eine realistische, konkrete Wette (sinnvoller Markt, Quote 1.40-2.60) mit selbstbewusster, realistischer Vor-Spiel-Begruendung. VERBOTEN: Meta-Saetze wie 'keine konkrete Wette/im Raum steht'. Verifiziert (Frankreich-England -> BTTS@1.80; Bayern-Dortmund -> Sieg+Ueber2.5@1.65, kein Meta-Leak).
 - CLEANUP _delete_owner_flagged_tips: loescht zusaetzlich die verknuepfte 'Eingegangene Idee' (smart_ideas) per tip_id + Frankreich/England-Textregex, damit die Eingabe-Karte verschwindet. Laeuft beim Start/Deploy, idempotent. (Bestehender france-Regex loescht bereits den Fehl-Tip.)
 - BRAUCHT RE-DEPLOY (Produktion). Backend 200.
+
+## Changelog — 2026-07-18 (Abgelaufene OFFENE Picks werden automatisch bereinigt)
+- USER-REPORT (Prod): unabrechenbarer Pick 'Yelimay Semey – Alashkert' (16.07.) stand ~49h auf OFFEN. Ursache: purge_expired_autotips lief nur beim Start + alle 3h im forebet_loop (pausiert bei curated mode) -> Picks blieben haengen.
+- NEU expire_stale_pending(): pending/live Picks, deren (letzter) Anstoss > EXPIRE_GRACE_HOURS(30h) zurueckliegt -> AI-Picks (hq-auto/smart/hq-live/hq-system) werden GELOESCHT, Member/Community-Picks werden auf 'void' (settled_by='expired') gesetzt. 30h > 24h Quota-Ausfall, damit keine noch-abrechenbaren Picks faelschlich weg.
+- Eingebunden in: settlement_loop (alle 15 Min, zuverlaessig), settle_now (Sync-Button), tips_counts (bei jedem Homepage-Badge-Aufruf -> sofortige Bereinigung). cashed_out wird NICHT angetastet.
+- VERIFIZIERT: expire loeschte 2 AI-Picks in Preview; danach 0 pending Picks aelter als 30h. Backend 200. BRAUCHT RE-DEPLOY.
