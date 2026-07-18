@@ -1,0 +1,33 @@
+{
+  "summary": "End-to-end test of the new Banker/Value/Banger LIVE sub-tabs. Backend: 11/11 pytest cases pass (category filter partitioning, admin/live-run backfill, /admin/live-run auth-required, and _live_bet_landed for 'Asian Über 2.0 Tore' returning True/None/False at 3+/exactly 2/<=1 goals, plus _live_odd staying in [1.05, 15.0]). Frontend: three sub-tabs render with correct count pills (Banker 7 · Value 3 · Banger 0), explainer box (data-testid=live-cat-explain) changes text per sub-tab and resets to the default 'Live-Picks' copy when the active tab is clicked again, category badges on TipCards match the selected sub-tab (all BANKER on banker view, none of BANKER/BANGER on value view). Banger=0 is expected per review note (situational). live-run returned {posted:0, closed:0, live:0} and every live tip has category ∈ {banker,value,banger,risk} after the run.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter36_live_categories.py",
+    "/app/test_reports/pytest/iter36.xml",
+    "/app/test_reports/iter36_live_all.png",
+    "/app/test_reports/iter36_live_banker.png",
+    "/app/test_reports/iter36_live_value.png",
+    "/app/test_reports/iter36_live_banger.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 7494 lines — well past the 700-line threshold. Live channel (live_autopost + helpers), settlement, admin endpoints, and the tips CRUD should be split into their own modules for maintainability. Not blocking, but the surface area for regressions keeps growing.",
+    "Block 4 (banger generation) reuses `stat_calls` counter from block 3 with the same LIVE_STAT_CALL_CAP. On a busy live day the fresh-picks loop will exhaust the cap before the banger loop even runs one iteration — consider a separate small budget for bangers (e.g. cap/2 each) so the banger channel never starves.",
+    "list_tips category filter treats 'value' as NOT IN [banker,risk,banger]. This means any tip with category=null or missing category also falls into 'value'. That is intentional per the comment, but front-end loadLiveCounts bins the SAME way (line 174), so member-posted live tips without a category will silently increment the Value pill. Fine today, worth documenting.",
+    "TipCard badge map (RateWall.jsx line 987-988) uses the same orange color for 'risk' and 'banger'. Since risk is a pre-match single-only concept and banger is live-only they never collide on the same card, but colour reuse could confuse an owner reviewing analytics. Consider distinct hues.",
+    "live_autopost block 1 backfills category based on `id.startswith('hqlive-banger-')` OR odds threshold. That is fine but means a legacy live pick posted before this iteration will be classified purely by odds — no `ai_analysis` update. Acceptable, but be aware old cards will now show a BANKER/VALUE badge that was never in the original analysis text."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter36_live_categories.py"],
+  "success_rate": { "backend": "100% (11/11)", "frontend": "100% (all sub-tab, explainer, filter and badge assertions passed)" },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! — POST /api/auth/login body field 'username', response field 'token'.",
+  "seed_data_creation": "None. Used only whatever the live_autopost had already produced (7 banker + 3 value + 0 banger).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The Banger sub-tab correctly shows 0 in the preview environment because block 4 needs an in-play fixture (min 15-72) with <=1 goal, strong shot/corner pressure AND odds 1.40-2.60. Do NOT flag 0 as a bug — verify the code path returns JSON via /api/admin/live-run and every remaining live tip has category populated. Frontend load() adds category param only for view=='live' (RateWall.jsx L85), and loadLiveCounts fetches all live tips and buckets client-side (L168-179).",
+  "rca of the issue": "N/A — feature works as designed. Owner-verified behaviour confirmed: category filter partitioning is consistent, live-run backfill leaves no legacy null-category live tips, Asian Über 2.0 settlement returns None (push/void) at exactly 2 goals, True at 3+, False at 0-1, and the three UI sub-tabs filter correctly with contextual explainer copy in German."
+}

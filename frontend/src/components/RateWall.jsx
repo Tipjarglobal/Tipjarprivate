@@ -17,6 +17,18 @@ const FILTERS = [
   { k: "hype", label: "wall.filter.hype" },
   { k: "top", label: "wall.filter.top" },
 ];
+// Live sub-categories — the KI posts all of these automatically (nothing is manual).
+const LIVE_CATS = [
+  ["banker", "Banker", "bg-cyan-400 text-void border-cyan-400", "text-cyan-300 border-cyan-400/40"],
+  ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
+  ["banger", "Banger", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
+];
+const LIVE_CAT_INFO = {
+  all: ["Live-Picks", "Alle Live-Tipps der KI in 3 Klassen: Banker (sicher), Value (schönere Quoten ab 1,60) und Banger (die smarten Recovery-/Asian-Wetten). Tippe auf eine Klasse, um zu filtern."],
+  banker: ["Banker", "Sichere Live-Wetten mit niedriger Quote – z. B. „Über 0,5 Tore“ oder Doppelte Chance/1X auf einen klaren Favoriten. Hohe Trefferchance, ideal als Basis."],
+  value: ["Value", "Schönere Quoten ab 1,60 – etwas mehr Risiko, dafür echter Wert. Oft mit Timing-Hinweis (z. B. „erst nach der 70. Minute spielen“)."],
+  banger: ["Banger", "Die smarten Recovery-/Asian-Wetten: 9+ Sterne, Quote ab 1,40. Z. B. „Asian Über 2.0“, wenn ein Favorit zurückliegt und Druck macht – bei genau 2 Toren gibt's den Einsatz zurück."],
+};
 const SMART_IDEA_STATUS = {
   pending: { label: "in Prüfung", cls: "bg-amber-500/15 text-amber-400" },
   used: { label: "als Pick veröffentlicht", cls: "bg-[#2ECC57]/15 text-[#2ECC57]" },
@@ -44,6 +56,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [status, setStatus] = useState(view === "live" ? "live" : "pending");
   const [win, setWin] = useState("24");
   const [cat, setCat] = useState(null);
+  const [liveCat, setLiveCat] = useState(null);
+  const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0 });
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -57,6 +71,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
+    setLiveCat(null);
   }, [view]);
 
   const load = useCallback(async (silent) => {
@@ -67,12 +82,13 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
+      else if (view === "live") { if (liveCat) params.category = liveCat; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
-  }, [sort, status, view, win, cat]);
+  }, [sort, status, view, win, cat, liveCat]);
 
   useEffect(() => {
     load();
@@ -147,6 +163,26 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     const iv = setInterval(loadSettled, 20000);
     return () => clearInterval(iv);
   }, [view, refreshKey, loadSettled]);
+
+  // ── Live sub-tab counts (Banker / Value / Banger) — the KI posts all of these ──
+  const loadLiveCounts = useCallback(async () => {
+    if (view !== "live") return;
+    try {
+      const { data } = await api.get("/tips", { params: { status: "live", limit: 200 } });
+      const c = { banker: 0, value: 0, banger: 0 };
+      data.forEach((tp) => {
+        const b = tp.category === "banker" ? "banker" : tp.category === "banger" ? "banger" : "value";
+        c[b] += 1;
+      });
+      setLiveCounts(c);
+    } catch { /* ignore */ }
+  }, [view]);
+  useEffect(() => {
+    if (view !== "live") return;
+    loadLiveCounts();
+    const iv = setInterval(loadLiveCounts, 20000);
+    return () => clearInterval(iv);
+  }, [view, refreshKey, loadLiveCounts]);
 
   const rate = async (tip, stars) => {
     if (!user) { requireLogin(); return; }
@@ -403,6 +439,15 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               )}
             </button>
           ))
+        ) : view === "live" ? (
+          LIVE_CATS.map(([v, lbl, on, off]) => (
+            <button key={v} data-testid={`live-cat-${v}`}
+              onClick={() => setLiveCat((c) => (c === v ? null : v))}
+              className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${liveCat === v ? on : `bg-surface ${off} hover:text-white`}`}>
+              {lbl}
+              <span className={`ml-2 text-[11px] font-mono rounded-full px-1.5 ${liveCat === v ? "bg-black/25" : "bg-void/60"}`}>{liveCounts[v] || 0}</span>
+            </button>
+          ))
         ) : (
           <>
             {FILTERS.map((f) => (
@@ -414,6 +459,16 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           </>
         )}
       </div>
+      )}
+
+      {/* Live category explainer — every Banker/Value/Banger pick is posted automatically by the KI */}
+      {view === "live" && (
+        <div data-testid="live-cat-explain" className="mb-6 rounded-xl border border-live/25 bg-live/5 px-4 py-3">
+          <p className="text-sm text-zinc-300 leading-snug">
+            <span className="font-heading font-black text-live">{LIVE_CAT_INFO[liveCat || "all"][0]}</span>
+            {" — "}{LIVE_CAT_INFO[liveCat || "all"][1]}
+          </p>
+        </div>
       )}
 
       {view === "ai" && (
@@ -930,6 +985,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               banker: ["BANKER", "bg-cyan-400/15 text-cyan-300"],
               value: ["VALUE", "bg-volt/15 text-volt"],
               risk: ["RISK", "bg-orange-500/15 text-orange-400"],
+              banger: ["BANGER", "bg-orange-500/15 text-orange-400"],
             }[cat] || ["VALUE", "bg-volt/15 text-volt"];
             return (
               <div className="flex items-center gap-2 mt-1.5" data-testid={`pick-type-${cat}`}>

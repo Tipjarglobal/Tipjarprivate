@@ -1274,8 +1274,10 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["category"] = "banker"
     elif category == "risk":
         q["category"] = "risk"
+    elif category == "banger":
+        q["category"] = "banger"
     elif category == "value":
-        q["category"] = {"$nin": ["banker", "risk"]}
+        q["category"] = {"$nin": ["banker", "risk", "banger"]}
     if source == "ai":
         q["source"] = "hq-auto"
     elif source == "smart":
@@ -6430,6 +6432,14 @@ def _live_bet_landed(market: str, hg, ag, home: str, away: str):
     m = (market or "").lower()
     hg, ag = hg or 0, ag or 0
     total = hg + ag
+    # Asian Über 2.0 Tore ("Banger"): won at 3+ goals, PUSH (stake back → void) at
+    # exactly 2 goals, lost at <= 1 goal. None here means "push/void" at full-time.
+    if "asian" in m and ("über 2.0" in m or "über 2 tore" in m or "over 2.0" in m):
+        if total >= 3:
+            return True
+        if total == 2:
+            return None
+        return False
     if any(k in m for k in ("draw no bet", "doppelte chance", "genaues ergebnis", "unentschieden")):
         return None
     if "über 2.5" in m and ("beide" in m or "btts" in m):
@@ -6471,7 +6481,12 @@ def _live_odd(market: str, minute: int, total_goals: int = 0) -> float:
     RATE_TOTAL = 0.034   # total goals per minute in a live, pressure-checked game
     RATE_TEAM = 0.018    # a single specific team scoring, per minute
     gm = re.search(r"über\s+(\d+)\.5", m)
-    if gm and "über 0.5" not in m and "beide" not in m and "btts" not in m:
+    if "asian" in m and ("über 2.0" in m or "über 2 tore" in m):
+        # Asian Über 2.0: full win at 3+ goals; the exact-2 push protects part of the
+        # stake, so the effective win probability is a bit higher than a hard "3+" line.
+        needed = max(1, 3 - int(total_goals or 0))
+        p = min(0.96, _poisson_at_least(needed, RATE_TOTAL * rem) + 0.10)
+    elif gm and "über 0.5" not in m and "beide" not in m and "btts" not in m:
         line = int(gm.group(1))
         needed = (line + 1) - int(total_goals or 0)
         p = _poisson_at_least(needed, RATE_TOTAL * rem)
@@ -6585,6 +6600,18 @@ async def live_autopost() -> dict:
     closed = 0
     existing = await db.tips.find({"source": "hq-live", "status": "live"}, {"_id": 0}).to_list(200)
     now_dt = datetime.now(timezone.utc)
+    # Backfill a category on any live pick that predates the Banker/Value/Banger split so
+    # the 3 Live sub-tabs populate immediately (banger picks already carry theirs).
+    for lt in existing:
+        if lt.get("category") in ("banker", "value", "banger"):
+            continue
+        try:
+            _od = float(str(lt.get("odds") or "0").replace(",", "."))
+        except Exception:
+            _od = 0.0
+        _cat = "banger" if (lt.get("id", "").startswith("hqlive-banger-")) else ("value" if _od >= 1.60 else "banker")
+        await db.tips.update_one({"id": lt["id"]}, {"$set": {"category": _cat}})
+        lt["category"] = _cat
     for lt in existing:
         fid = str(lt.get("fixture_id") or "")
         f0 = live_by_id.get(fid)
@@ -6685,6 +6712,7 @@ async def live_autopost() -> dict:
             "$set": {
                 "market": t.get("market"), "odds": f"{odd:.2f}",
                 "ai_rating": min(7.0, float(t.get("ai_rating") or 7.0)), "win_prob": 0.7,
+                "category": ("value" if odd >= 1.60 else "banker"),
                 "ai_analysis": analysis, "status": "live", "match_time": t.get("match_time"),
                 "league": t.get("league") or "Live-Spiel",
                 "country": t.get("country", ""), "league_code": t.get("league_code", ""),
@@ -6748,6 +6776,7 @@ async def live_autopost() -> dict:
                 "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.0,
                 "ai_analysis": analysis, "status": "live",
                 "win_prob": 0.7,
+                "category": ("value" if odd >= 1.60 else "banker"),
                 "league": _fixture_league_label(fx),
                 "country": _fixture_country(fx),
                 "league_code": "",
@@ -6766,6 +6795,76 @@ async def live_autopost() -> dict:
         }, upsert=True)
         posted += 1
         logger.info(f"LIVE fresh: {home} vs {away} — {market} @ {odd} ({minute}')")
+
+    # 4) BANGER picks (owner): the smartest in-play "Recovery"/Asian bet. When a game is
+    #    still open (<= 1 goal) but under heavy scoring pressure, an "Asian Über 2.0 Tore"
+    #    is near-certain (money back at EXACTLY 2 goals) → 9★, odds >= 1.40. If a side
+    #    trails by one it doubles as a recovery angle (the underdog/favourite pushes back).
+    for fx in live:
+        if posted >= LIVE_MAX_TIPS or stat_calls >= LIVE_STAT_CALL_CAP:
+            break
+        fid = str((fx.get("fixture") or {}).get("id") or "")
+        if not fid:
+            continue
+        banger_id = f"hqlive-banger-{fid}"
+        if await db.tips.find_one({"id": banger_id, "status": "live"}, {"_id": 1}):
+            continue
+        minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+        if minute < 15 or minute > 72:
+            continue
+        teams = fx.get("teams") or {}
+        home = ((teams.get("home") or {}).get("name")) or ""
+        away = ((teams.get("away") or {}).get("name")) or ""
+        if not home or not away or _team_or_league_blocked(home, away, ""):
+            continue
+        goals = fx.get("goals") or {}
+        gh, ag = goals.get("home") or 0, goals.get("away") or 0
+        total = gh + ag
+        if total > 1:
+            continue  # need an open, low-scoring game for a "sure 2 more goals" banger
+        stats = _apifootball("/fixtures/statistics", {"fixture": fid})
+        stat_calls += 1
+        sog, corners, shots = _live_stat_totals(stats)
+        # STRICT pressure gate — a banger must be a genuinely likely goal-fest.
+        strong = (sog >= 3 or corners >= 6 or shots >= 10) if minute <= 55 else (sog >= 5 or corners >= 9)
+        if not strong:
+            continue
+        market = "Asian Über 2.0 Tore"
+        odd = _live_odd(market, minute, total)
+        if odd < 1.40 or odd > 2.60:
+            continue  # owner rule: a banger pays >= 1.40, but must stay a confident pick
+        if total == 1:
+            trailing = away if gh > ag else home
+            reco = f"{trailing} liegt zurück und drückt auf den Ausgleich — "
+        else:
+            reco = "Beide Teams drücken bei 0:0 — "
+        analysis = (
+            f"BANGER ({minute}'): {market} — Stand {gh}:{ag}. {reco}"
+            f"Druck vorhanden: {sog} Schüsse aufs Tor · {corners} Ecken. "
+            f"Wir sind fast sicher, dass noch 2 Tore fallen — bei GENAU 2 Toren gibt's den Einsatz "
+            f"zurück (Asian-Absicherung). Live zu {odd}. Timing: am besten sofort spielen, solange "
+            f"die Quote hoch ist."
+        )
+        await db.tips.update_one({"id": banger_id}, {
+            "$set": {
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": 9.0,
+                "ai_analysis": analysis, "status": "live", "win_prob": 0.9,
+                "category": "banger",
+                "league": _fixture_league_label(fx), "country": _fixture_country(fx),
+                "league_code": "", "live_minute": minute, "live_score": f"{gh}:{ag}",
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": banger_id, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+                "match_time": ((fx.get("fixture") or {}).get("date") or ""),
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-live", "fixture_id": fid, "created_at": now,
+            },
+        }, upsert=True)
+        posted += 1
+        logger.info(f"LIVE banger: {home} vs {away} — {market} @ {odd} ({minute}')")
     return {"posted": posted, "closed": closed, "live": len(live)}
 
 
