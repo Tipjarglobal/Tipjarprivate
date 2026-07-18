@@ -9,6 +9,15 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-18b — Live-Bereich in 3 Klassen: Banker / Value / Banger (voll automatisch)
+- Owner-Wunsch: Live-Picks in 3 KI-gepostete Klassen aufteilen, jede mit Erklärung — nichts manuell.
+  - **Banker**: sichere Live-Wetten, niedrige Quote (< 1,60) — z. B. "Über 0,5 Tore", DC/1X auf Favorit.
+  - **Value**: Quote ≥ 1,60 — schönere Tipps mit etwas mehr Risiko/Wert.
+  - **Banger**: die smarten Recovery-/Asian-Wetten, 9★, Quote 1,40–2,60 — neue Generierung "Asian Über 2.0 Tore" für offene (≤1 Tor), druckvolle Live-Spiele (Min. 15–72, starke Schüsse/Ecken); bei genau 2 Toren Einsatz zurück; wenn ein Team zurückliegt → Recovery-Framing.
+- Backend (server.py): `live_autopost` — Block 1 backfillt Kategorie auf Alt-Picks (Quote-basiert) + settelt; Block 2/3 setzen Kategorie beim Posten; NEU Block 4 = Banger-Generierung (eigenes Stat-Call-Budget, damit Banger nicht verhungern). `_live_bet_landed` Asian-Über-2.0: 3+=won, genau 2=None→**void/Einsatz zurück**, ≤1=lost. `_live_odd` Asian-Pricing. `/api/tips` category-Filter unterstützt jetzt banker/value/banger (value schließt banger aus). Analysetexte sind Vorlagen-basiert (kein KI-Guthaben-Verbrauch), inkl. flexiblem Timing-Hinweis.
+- Frontend (RateWall.jsx): Live-Tab mit 3 Unter-Tabs (data-testid live-cat-banker/value/banger) + Count-Pills + Erklärungsbox (live-cat-explain, Text wechselt je Klasse); Filter per Klick, TipCard-Badge um "BANGER" erweitert.
+- VERIFIZIERT: testing_agent iteration_36 — Backend 11/11 (Filter-Partitionierung, Backfill, Asian-Settlement True/None/False, Pricing), Frontend 100% (Sub-Tabs, Explainer, Filter, Badges). Banger=0 im Preview ist erwartet (situativ). Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-18 — Eigenständige "Über 0,5 Tore"-Wetten verboten (nur noch als Zweit-Leg)
 - Owner-Regel: eine reine Full-Match "Über 0,5 Tore" ist als Haupt-/Einzelwette wertlos → darf NUR noch als sekundäres Leg in einem Bet-Builder erscheinen. Team-spezifisches "<Team> Über 0,5 Tore" (dieses Team trifft) bleibt als Primär-Wette erlaubt.
 - `_predictz_candidates` (server.py ~5504): erzeugt kein eigenständiges "Über 0,5 Tore" mehr (nur noch Über 2.5 / BTTS supplementär).

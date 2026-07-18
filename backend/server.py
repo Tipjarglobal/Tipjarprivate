@@ -6800,8 +6800,9 @@ async def live_autopost() -> dict:
     #    still open (<= 1 goal) but under heavy scoring pressure, an "Asian Über 2.0 Tore"
     #    is near-certain (money back at EXACTLY 2 goals) → 9★, odds >= 1.40. If a side
     #    trails by one it doubles as a recovery angle (the underdog/favourite pushes back).
+    banger_calls = 0
     for fx in live:
-        if posted >= LIVE_MAX_TIPS or stat_calls >= LIVE_STAT_CALL_CAP:
+        if posted >= LIVE_MAX_TIPS or banger_calls >= max(4, LIVE_STAT_CALL_CAP // 2):
             break
         fid = str((fx.get("fixture") or {}).get("id") or "")
         if not fid:
@@ -6824,6 +6825,7 @@ async def live_autopost() -> dict:
             continue  # need an open, low-scoring game for a "sure 2 more goals" banger
         stats = _apifootball("/fixtures/statistics", {"fixture": fid})
         stat_calls += 1
+        banger_calls += 1
         sog, corners, shots = _live_stat_totals(stats)
         # STRICT pressure gate — a banger must be a genuinely likely goal-fest.
         strong = (sog >= 3 or corners >= 6 or shots >= 10) if minute <= 55 else (sog >= 5 or corners >= 9)
