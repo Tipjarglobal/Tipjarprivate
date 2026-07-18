@@ -5501,10 +5501,9 @@ def _predictz_candidates(r: dict) -> list[dict]:
     tip columns, all capped low."""
     conf = r.get("conf")
     out = []
-    # 1) Only the safe 1+ goal market from the (unreliable) predicted score
-    ps = parse_pred_score(r.get("pred"))
-    if ps and (ps[0] + ps[1]) >= 1:
-        out.append({"sfx": "-g", "market": "Über 0.5 Tore", "odds": "1.08", "rating": _conf_adj(8.0, conf)})
+    # Owner rule (2026-07-18): NEVER post a standalone full-match "Über 0.5 Tore" — it is
+    # near-certain and worthless as a headline bet. It may only ever appear as a SECONDARY
+    # leg inside a bet-builder (handled by _forebet_candidates), never as a single here.
     # 2) Over 2.5 tip (predictz O/U page) — capped, supplementary
     if (r.get("ou_tip") or "").strip().lower() == "over 2.5":
         out.append({"sfx": "-o25", "market": "Über 2.5 Tore", "odds": "1.55", "rating": _conf_adj(7.5, conf)})
@@ -6316,13 +6315,26 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
                 "bet. NEVER write meta phrases such as 'da noch keine konkrete Wette im Raum steht', "
                 "'keine konkrete Wette', 'da keine Wette vorliegt' or similar — always write as if this "
                 "is your own confident analysis. "
-                "REALISM RULES: pick a sensible, realistic market (Doppelte Chance, Über/Unter X.5 Tore, "
-                "Beide Teams treffen, Draw No Bet, Handicap, Sieg) that genuinely fits the two teams' "
-                "real strength and form. Use realistic odds, typically between 1.40 and 2.60. Do NOT "
-                "invent aggressive/absurd bets. If several selections belong to one match (a bet-builder) "
-                "COMBINE them into one market string joined with ' · '. For a multi-match accumulator, "
-                "pick the single headline match. Identify the two REAL teams (full names, keep the "
-                "language used, e.g. 'Frankreich', 'England'). "
+                "REALISM RULES: pick a sensible, realistic market that genuinely fits the two "
+                "teams' real strength and form. Use realistic odds, typically 1.40–2.60. Do NOT "
+                "invent aggressive/absurd bets. "
+                "BET-QUALITY RULES (owner, very important): give a SPECIFIC, insightful primary "
+                "bet — NOT a lazy generic one. Prefer, depending on your read of the match: "
+                "(1) a CONCRETE team to score ('<Team> trifft / <Team> Über 0.5 Tore') when a side "
+                "is clearly too strong to be kept scoreless; (2) DOPPELTE CHANCE ('<Team> Doppelte "
+                "Chance 1X/X2') when a team realistically cannot lose; (3) HANDICAP ('<Team> "
+                "Handicap +1.5') when the underdog at worst loses by one; (4) a goal in the 2nd half "
+                "or a team scoring before minute 70; (5) Draw No Bet or a clear match result. State "
+                "clearly WHICH team won't lose or WHICH team will surely score. "
+                "STRICT: NEVER make a plain full-match 'Über 0.5 Tore' (whole game) the bet — it is "
+                "near-certain and worthless alone. A full-match 'Über 0.5 Tore' may ONLY appear as a "
+                "SECOND leg in a bet-builder, combined with a strong primary selection (e.g. '<Team> "
+                "Doppelte Chance 1X · Über 0.5 Tore'). Team-specific '<Team> Über 0.5 Tore' (that team "
+                "scores) IS allowed as a primary bet. "
+                "If several selections belong to one match (a bet-builder) COMBINE them into one "
+                "market string joined with ' · '. For a multi-match accumulator, pick the single "
+                "headline match. Identify the two REAL teams (full names, keep the language used, "
+                "e.g. 'Frankreich', 'England'). "
                 "Respond with ONLY a compact JSON object, no markdown, with keys: "
                 "actionable (bool), home_team (str), away_team (str), market (str, in German), "
                 "match_time (str: the match date & kickoff EXACTLY as printed if visible, normalised to "
