@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-18c — Live-Benachrichtigungen nach Klasse + neue Häkchen (Banker/Value/Banger)
+- Owner-Wunsch: jede Live-Klasse eine eigene Benachrichtigungsart, Mitglieder-Posts eine eigene, plus 3 neue Häkchen (Banker/Value/Banger) in jeder Sprache.
+- Backend (server.py): `_tip_push_area` teilt KI-Live in `live_banker`/`live_value`/`live_banger` (Community-Live bleibt `live`). `_push_payload_for_tip` liefert pro Klasse eigenen Titel/Emoji/Sound: 🔥 BANGER LIVE (fire), 🟢 LIVE-Banker, 🔵 LIVE-Value, 🔴 LIVE-Pick. Community-Posts bekommen eigenen Push-Tag `tipjar-community` (überschreiben KI-Picks nicht mehr). `notify_all_push` filtert bereits pro Area → die neuen Häkchen wirken auch für echte Web-Pushes.
+- Frontend (NotificationBell.jsx): `tipArea` granular; 3 neue Toggles (Banker cyan / Value volt / Banger orange) unter „Live Picks“ + separater Community-Live-Toggle; `fireAlert` mit Emoji je Klasse; localStorage + `/push/preferences` Sync.
+- i18n.js: `bell.area.live_banker/value/banger` in ALLEN 8 Sprachen (EN/ES/DE/EL/FR/IT/AR/TR).
+- VERIFIZIERT: Backend-Unit-Tests (Area-Klassifizierung + distinkte Payload-Titel/Tags), UI-Screenshot (3 farbige Häkchen), Toggle-Persistenz (live_banger:false in localStorage). HINWEIS: echte OS-Push-Zustellung nur auf echtem Gerät testbar. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-18b — Live-Bereich in 3 Klassen: Banker / Value / Banger (voll automatisch)
 - Owner-Wunsch: Live-Picks in 3 KI-gepostete Klassen aufteilen, jede mit Erklärung — nichts manuell.
   - **Banker**: sichere Live-Wetten, niedrige Quote (< 1,60) — z. B. "Über 0,5 Tore", DC/1X auf Favorit.

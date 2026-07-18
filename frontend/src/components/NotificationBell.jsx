@@ -85,17 +85,25 @@ async function disableWebPush() {
 }
 
 // Which picks area does a tip belong to (for area-targeted alerts)?
-// Live is split: KI-live (live_ai) vs community-live (live).
+// Live is split: KI-live by category (live_banker / live_value / live_banger) vs
+// community-live (live). Each live class fires its OWN kind of notification.
 function tipArea(tp) {
   const isAI = ["hq-auto", "hq-live", "hq-system", "smart"].includes(tp.source);
-  if (tp.status === "live") return isAI ? "live_ai" : "live";
+  if (tp.status === "live") {
+    if (!isAI) return "live";
+    const c = (tp.category || "").toLowerCase();
+    if (c === "banker" || c === "value" || c === "banger") return `live_${c}`;
+    return "live_value";
+  }
   if (tp.source === "hq-auto") return "ai";
   if (tp.source === "smart") return "smart";
   return "members";
 }
 
-const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true, live_ai: true };
-const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive", live_ai: "viewlive" };
+const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true, live_banker: true, live_value: true, live_banger: true };
+const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive", live_banker: "viewlive", live_value: "viewlive", live_banger: "viewlive" };
+// Distinct emoji per live class so each alert type is instantly recognisable.
+const LIVE_EMOJI = { live: "🔴", live_banker: "🟢", live_value: "🔵", live_banger: "🔥" };
 
 function loadAreas() {
   try {
@@ -162,15 +170,15 @@ export default function NotificationBell() {
   }, []);
 
   const fireAlert = (tp, area) => {
-    const isLive = area === "live" || area === "live_ai";
-    const navArea = area === "live_ai" ? "live" : area;
+    const isLive = area.startsWith("live");
+    const navArea = area.startsWith("live") ? "live" : area;
     const areaLabel = t(`bell.area.${area}`);
     const name = tp.is_parlay
       ? `${(tp.legs || []).length}-leg parlay`
       : `${toLatin(tp.home_team) || "Tip"}${tp.away_team ? " vs " + toLatin(tp.away_team) : ""}`;
     const rating = tipRating(tp);
     const title = isLive
-      ? `\uD83D\uDD34 ${t("bell.new.live")} — ${areaLabel}`
+      ? `${LIVE_EMOJI[area] || "🔴"} ${t("bell.new.live")} — ${areaLabel}`
       : `${t(`bell.new.${area}`)}`;
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
     pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/");
@@ -205,7 +213,7 @@ export default function NotificationBell() {
           for (const tp of data) {
             if (!seen.current.has(tp.id)) {
               const area = tipArea(tp);
-              const isLive = area === "live" || area === "live_ai";
+              const isLive = area.startsWith("live");
               if (onRef.current && (areasRef.current[area] !== false) &&
                   (isLive || tipRating(tp) >= minRef.current)) {
                 fireAlert(tp, area);
@@ -382,31 +390,41 @@ export default function NotificationBell() {
                   />
                 </label>
               ))}
-              {/* Live is the only area where KI + Community post together → double box:
-                  orange "KI Tipps" (live_ai) next to the red community-live box. */}
-              <div data-testid="bell-area-live" className="flex items-center justify-between py-1.5">
-                <span className="text-sm text-zinc-300 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-live animate-pulse" />
-                  {t("bell.area.live")}
-                </span>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 cursor-pointer" data-testid="bell-area-live_ai">
-                    <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wide">{t("bell.area.live_ai")}</span>
+              {/* Live is the only area where KI + Community post together. The KI-live
+                  side is split into three notification classes (Banker / Value / Banger),
+                  each with its own alert type; the community-live box stays separate. */}
+              <div data-testid="bell-area-live" className="py-1.5 border-t border-elevated/60 mt-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-zinc-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-live animate-pulse" />
+                    {t("bell.area.live")}
+                  </span>
+                  <label className="flex items-center gap-1.5 cursor-pointer" data-testid="bell-area-live-community">
+                    <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wide">{t("bell.area.members")}</span>
                     <input
                       type="checkbox"
-                      checked={areas.live_ai !== false}
-                      onChange={(e) => setAreas((a) => ({ ...a, live_ai: e.target.checked }))}
-                      data-testid="bell-area-toggle-live_ai"
-                      className="w-4 h-4 cursor-pointer accent-orange-500"
+                      checked={areas.live !== false}
+                      onChange={(e) => setAreas((a) => ({ ...a, live: e.target.checked }))}
+                      data-testid="bell-area-toggle-live"
+                      className="w-4 h-4 cursor-pointer accent-bell"
                     />
                   </label>
-                  <input
-                    type="checkbox"
-                    checked={areas.live !== false}
-                    onChange={(e) => setAreas((a) => ({ ...a, live: e.target.checked }))}
-                    data-testid="bell-area-toggle-live"
-                    className="w-4 h-4 cursor-pointer accent-bell"
-                  />
+                </div>
+                <div className="mt-1.5 ml-4 space-y-1">
+                  {[["live_banker", "Banker", "text-cyan-300", "accent-cyan-400"],
+                    ["live_value", "Value", "text-[#E1FF00]", "accent-[#E1FF00]"],
+                    ["live_banger", "Banger", "text-orange-400", "accent-orange-500"]].map(([k, lbl, txt, acc]) => (
+                    <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1 cursor-pointer">
+                      <span className={`text-[13px] font-bold uppercase tracking-wide ${txt}`}>{lbl}</span>
+                      <input
+                        type="checkbox"
+                        checked={areas[k] !== false}
+                        onChange={(e) => setAreas((a) => ({ ...a, [k]: e.target.checked }))}
+                        data-testid={`bell-area-toggle-${k}`}
+                        className={`w-4 h-4 cursor-pointer ${acc}`}
+                      />
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>

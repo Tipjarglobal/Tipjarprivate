@@ -2332,9 +2332,15 @@ async def notify_all_push(payload: dict):
 def _tip_push_area(tip: dict) -> str:
     is_ai = tip.get("source") in ("hq-auto", "hq-live", "hq-system", "smart")
     if tip.get("status") == "live" or tip.get("source") == "hq-live":
-        # Live is the only area where KI and Community post together → split so a user
-        # can (un)subscribe to AI-live and community-live separately.
-        return "live_ai" if is_ai else "live"
+        # Live is the only area where KI and Community post together. KI-live is further
+        # split by category so a user can (un)subscribe to Banker / Value / Banger live
+        # alerts separately; community-live stays its own area.
+        if is_ai:
+            cat = (tip.get("category") or "").lower()
+            if cat in ("banker", "value", "banger"):
+                return f"live_{cat}"
+            return "live_value"
+        return "live"
     src = tip.get("source")
     return "ai" if src == "hq-auto" else ("smart" if src == "smart" else "members")
 
@@ -2360,12 +2366,22 @@ def _push_payload_for_tip(tip: dict) -> dict:
     area = _tip_push_area(tip)
     if is_live:
         # Owner (2026-07-10): live in-play bets are never "impossible to lose" — cap at
-        # 7★ and never fire the 9/10★ explosion sound.
+        # 7★ and never fire the 9/10★ explosion sound. Each live class gets its OWN look
+        # so Banker / Value / Banger alerts are instantly distinguishable.
         stars = min(stars, 7)
-        return {"title": "🔵 LIVE-Pick", "body": detail, "url": f"/?pick={pid}&area=live",
-                "kind": "live", "sound": "coin", "pick_id": pid, "area": area,
+        cat = (tip.get("category") or "").lower()
+        if cat == "banger":
+            l_title, l_icon, l_sound = "🔥 BANGER LIVE", "/push-live.png", "fire"
+        elif cat == "banker":
+            l_title, l_icon, l_sound = "🟢 LIVE-Banker", "/push-live.png", "coin"
+        elif cat == "value":
+            l_title, l_icon, l_sound = "🔵 LIVE-Value", "/push-live.png", "coin"
+        else:
+            l_title, l_icon, l_sound = "🔴 LIVE-Pick", "/push-live.png", "coin"
+        return {"title": l_title, "body": detail, "url": f"/?pick={pid}&area=live",
+                "kind": "live", "sound": l_sound, "pick_id": pid, "area": area,
                 "actions": [{"action": "open", "title": "Zum Pick →"}],
-                "icon": "/push-live.png", "badge": "/push-live.png", "tag": "tipjar-live"}
+                "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
     if src == "hq-auto":
         if cat == "banker" and stars >= 10:
@@ -2379,12 +2395,15 @@ def _push_payload_for_tip(tip: dict) -> dict:
         title = "🧠 Neuer Smart-Pick"
     else:
         title = "👥 Neuer Community-Tipp"
-    # Fixed tag ('tipjar-pick') so a burst of queued pushes COLLAPSES into one visible
-    # notification (newest wins) instead of stacking → no endless-swipe. Deep-link via ?pick=.
+    # Fixed tag so a burst of queued pushes COLLAPSES into one visible notification
+    # (newest wins) instead of stacking → no endless-swipe. Community picks use their OWN
+    # tag so a member post never overwrites/merges with a KI pick (owner: distinct alert).
+    community = src not in ("hq-auto", "smart", "hq-system")
+    tag = "tipjar-community" if community else "tipjar-pick"
     return {"title": title, "body": detail, "url": f"/?pick={pid}&area={area}", "kind": "tip",
             "sound": sound, "pick_id": pid, "area": area,
             "actions": [{"action": "open", "title": "Zum Pick →"}],
-            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
+            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": tag}
 
 
 def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
