@@ -5074,8 +5074,11 @@ def _forebet_candidates(r: dict) -> list[dict]:
         # total goals (lam), so 'Über 2.5' in a 1.5-goal game and a 3.5-goal game get
         # very different, believable prices instead of a fixed fantasy number. ──
         lam = avg if (avg and avg > 0) else float(total)
-        # Over lines
-        for line, sfx, rt in ((0.5, "-g", 8.5), (1.5, "-o15", 8.0), (2.5, "-o25", 7.5)):
+        # Over lines. Owner rule (2026-07-18): a plain full-match "Über 0.5 Tore" is
+        # worthless as a standalone headline bet — it may ONLY appear as a SECONDARY leg
+        # inside a bet-builder (handled above). So the 0.5 line is no longer offered as a
+        # single here; keep the team-specific "<Team> Über 0.5 Tore" primary (line ~4969).
+        for line, sfx, rt in ((1.5, "-o15", 8.0), (2.5, "-o25", 7.5)):
             od, p = _pois_line_odds(lam, line, over=True)
             opts.append({"sfx": sfx, "market": f"Über {line} Tore", "odds": f"{od:.2f}",
                          "rating": rt, "winprob": p})

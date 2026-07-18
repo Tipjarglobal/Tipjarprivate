@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-18 — Eigenständige "Über 0,5 Tore"-Wetten verboten (nur noch als Zweit-Leg)
+- Owner-Regel: eine reine Full-Match "Über 0,5 Tore" ist als Haupt-/Einzelwette wertlos → darf NUR noch als sekundäres Leg in einem Bet-Builder erscheinen. Team-spezifisches "<Team> Über 0,5 Tore" (dieses Team trifft) bleibt als Primär-Wette erlaubt.
+- `_predictz_candidates` (server.py ~5504): erzeugt kein eigenständiges "Über 0,5 Tore" mehr (nur noch Über 2.5 / BTTS supplementär).
+- `_forebet_candidates` (server.py ~5078): die 0.5-Over-Line aus der Single-Over-Schleife entfernt (nur 1.5/2.5 bleiben als Singles). Über-0,5-Legs in Kombis (favbb/favdc/o05each) unverändert.
+- Smart-KI-Prompt (server.py ~6329): STRICT-Regel — nie plain Full-Match "Über 0,5" als Wette; nur als 2. Leg im Builder.
+- VERIFIZIERT per Testskript: `_forebet_candidates` & `_predictz_candidates` liefern 0 eigenständige plain "Über 0,5 Tore", Team-spezifische + Combo-Legs bleiben erhalten; Backend syntax-clean, /api/tips/counts HTTP 200. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-16 — Expert System + Mailbox + redesigned share images
 - **Expert role (P0):** new `role: "expert"`. Ragazzi auto-promoted on startup (`_startup_seed`, idempotent, production-safe). Expert tips flagged via `_tag_expert` (read-time enrichment in `/api/tips`) → `is_expert`. TipCard renders them with an orange theme + "EXPERTE" badge. `GET /api/experts` powers the site-wide banner under the logo ("Wir suchen Experten! ... Das sind unsere Experten") with clickable expert chips → profile. PublicProfileModal shows an Expert badge (+Probezeit).
 - **User Mailbox (P0, separate from push/alarms):** `inbox_messages` collection. New users get a welcome message + Expert invitation (Ja/Nein) on register; existing users backfilled on startup (`_backfill_inbox`, idempotent via `inbox_seeded`). Endpoints: `GET /api/inbox`, `POST /api/inbox/{id}/read`, `POST /api/inbox/read-all`, `POST /api/inbox/expert-accept` (→ instant Expert, trial), `POST /api/inbox/expert-decline`. Mail icon w/ unread badge in Header → dropdown panel (`Mailbox.jsx`). Accept sets `role=expert, expert_trial=true` immediately (owner choice: probation, no admin approval).
