@@ -15,8 +15,11 @@ function anonId() {
   return id;
 }
 
-async function pushNotify(title, body, url) {
+async function pushNotify(title, body, url, vibrate) {
   try {
+    // Foreground buzz: showNotification's vibrate is often ignored while the tab is
+    // focused, so trigger the device vibration directly too (mobile only).
+    if (vibrate && navigator.vibrate) { try { navigator.vibrate(vibrate); } catch { /* ignore */ } }
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     if (navigator.serviceWorker) {
       const reg = await navigator.serviceWorker.ready;
@@ -26,6 +29,7 @@ async function pushNotify(title, body, url) {
         badge: "/tipjar-crest.png",
         tag: "tipjar-tip",
         renotify: true,
+        vibrate: vibrate || [60, 30, 60],
         data: { url: url || "/" },
         actions: url ? [{ action: "open", title: "Zum Pick →" }] : [],
       });
@@ -181,7 +185,8 @@ export default function NotificationBell() {
       ? `${LIVE_EMOJI[area] || "🔴"} ${t("bell.new.live")} — ${areaLabel}`
       : `${t(`bell.new.${area}`)}`;
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
-    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/");
+    const vibrate = area === "live_banger" ? [200, 80, 200, 80, 300] : undefined;
+    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate);
     toast[isLive ? "message" : "success"](title, {
       description: body,
       duration: isLive ? 15000 : 10000,

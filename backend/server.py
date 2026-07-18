@@ -2372,14 +2372,19 @@ def _push_payload_for_tip(tip: dict) -> dict:
         cat = (tip.get("category") or "").lower()
         if cat == "banger":
             l_title, l_icon, l_sound = "🔥 BANGER LIVE", "/push-live.png", "fire"
+            l_vibrate = [200, 80, 200, 80, 300]
         elif cat == "banker":
             l_title, l_icon, l_sound = "🟢 LIVE-Banker", "/push-live.png", "coin"
+            l_vibrate = [80, 40, 80, 40, 120]
         elif cat == "value":
             l_title, l_icon, l_sound = "🔵 LIVE-Value", "/push-live.png", "coin"
+            l_vibrate = [80, 40, 80, 40, 120]
         else:
             l_title, l_icon, l_sound = "🔴 LIVE-Pick", "/push-live.png", "coin"
+            l_vibrate = [80, 40, 80, 40, 120]
         return {"title": l_title, "body": detail, "url": f"/?pick={pid}&area=live",
                 "kind": "live", "sound": l_sound, "pick_id": pid, "area": area,
+                "vibrate": l_vibrate,
                 "actions": [{"action": "open", "title": "Zum Pick →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()

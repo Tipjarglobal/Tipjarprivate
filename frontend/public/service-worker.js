@@ -1,4 +1,4 @@
-const CACHE = "tipjar-shell-v2";
+const CACHE = "tipjar-shell-v3";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -47,7 +47,7 @@ self.addEventListener("push", (event) => {
     badge: data.badge || "/icon-192.png",
     tag: data.tag || "tipjar",
     renotify: true,
-    vibrate: data.kind === "live" ? [80, 40, 80, 40, 120] : [60, 30, 60],
+    vibrate: data.vibrate || (data.kind === "live" ? [80, 40, 80, 40, 120] : [60, 30, 60]),
     data: { url: data.url || "/", kind: data.kind || "tip" },
     actions: (data.actions && data.actions.length)
       ? data.actions
