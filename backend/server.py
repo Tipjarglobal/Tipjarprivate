@@ -6349,6 +6349,18 @@ async def smart_autopost() -> dict:
     return {"posted": posted, "matches": scanned, "candidates": candidates}
 
 
+def _parse_smart_json(resp) -> dict | None:
+    """Extract the JSON object from an LLM Smart-Bet reply (tolerates markdown/prose)."""
+    raw = (resp if isinstance(resp, str) else str(resp)).strip()
+    s, e = raw.find("{"), raw.rfind("}")
+    if s == -1 or e == -1:
+        return None
+    try:
+        return json.loads(raw[s:e + 1])
+    except Exception:
+        return None
+
+
 async def generate_smart_from_idea(text: str, images_b64: list | None = None) -> dict | None:
     """Turn a fan's free-text insider hint (optionally with stat/table screenshots) into
     a clever 'Smart Bet'. The KI decides the teams, a smart low/mid-risk market, a rating
@@ -6399,21 +6411,33 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
                 "rating (number 1-10), odds (string like '1.85' or '' if unknown), "
                 "analysis (str: a punchy, realistic 1-3 sentence German pre-match read — form, quality, "
                 "matchup — that justifies the bet with confidence and NO meta commentary about the input). "
-                "Set actionable=false ONLY if you truly cannot identify a match/teams from the input."
+                "ALWAYS give a tip: set actionable=false ONLY if the input has absolutely nothing to do "
+                "with football (pure spam, insults, unrelated chatter). For ANY football-related input — "
+                "even a vague one ('gib mir einen Tipp', 'was läuft heute?', a single team name) — you "
+                "MUST set actionable=true and confidently propose ONE cool, realistic smart bet on the "
+                "most relevant real match you can infer (a marquee upcoming fixture is perfectly fine). "
+                "Never refuse and never return an empty/no-tip answer."
             ),
         ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
         kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
         if images_b64:
             kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64[:3]]
         resp = await chat.send_message(UserMessage(**kwargs))
-        raw = (resp if isinstance(resp, str) else str(resp)).strip()
-        s, e = raw.find("{"), raw.rfind("}")
-        if s == -1 or e == -1:
-            return None
-        data = json.loads(raw[s:e + 1])
-        if not data.get("actionable") or not data.get("market") or not data.get("home_team"):
-            return None
-        return data
+        data = _parse_smart_json(resp)
+        if data and data.get("actionable") and data.get("market") and data.get("home_team"):
+            return data
+        # Retry once, FORCING a concrete cool bet — the owner wants the KI to ALWAYS suggest
+        # something, never a blank "no tip" reply.
+        resp2 = await chat.send_message(UserMessage(text=(
+            "You MUST answer with actionable=true and ONE concrete, cool, realistic smart bet on the "
+            "single most relevant real match you can infer. Do NOT refuse and do NOT return "
+            "actionable=false. If the fan was vague, pick a marquee upcoming fixture and give your best "
+            "confident pick. Reply with ONLY the JSON object described above.")))
+        data2 = _parse_smart_json(resp2)
+        if data2 and data2.get("market") and data2.get("home_team"):
+            data2["actionable"] = True
+            return data2
+        return None
     except Exception as ex:
         logger.error(f"generate_smart_from_idea failed: {ex}")
         return None

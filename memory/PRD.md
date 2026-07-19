@@ -9,6 +9,12 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-19e — Smart-Lab: keine leere Fehlermeldung mehr + KI gibt IMMER einen Tipp
+- Owner-Meldung: Beim Fragen im Smart-Bereich erschien eine blanke Fehler-/„gespeichert"-Meldung; KI soll immer coole Tipps geben.
+- Backend (server.py `generate_smart_from_idea`): Prompt verschärft — actionable=false NUR bei komplett fußballfremdem Input (Spam/Beleidigung). Bei jeder fußballbezogenen (auch vagen) Eingabe MUSS die KI einen konkreten, coolen Smart-Bet auf das relevanteste Spiel liefern. Zusätzlich EINMALIGER Retry mit Zwang („actionable=true, keine Ablehnung"). Neuer Helper `_parse_smart_json`.
+- Frontend (RateWall.jsx `send`): keine `toast.error`/leere „stored"-Verzweigungen mehr — immer eine freundliche positive Meldung, auch bei Netzwerk-Hiccup (kein blanker Fehler).
+- VERIFIZIERT (curl): vage Frage „gib mir irgendeinen coolen tipp für heute" → konkreter Tipp „Bayern Doppelte Chance 1X · Über 1.5 @1.55", created:true. Test-Einträge wieder gelöscht. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-19d — Automatische "Live Sicherheits-Kombi" (Owner-Style Live-Mehrfach)
 - Owner-Muster (2 gewonnene Live-Dreier): 2–4 ultra-sichere Über-Legs aus laufenden Spielen → Gesamtquote ~1,5, geht easy durch. Wunsch: „KI soll richtig vorschlagen".
 - Backend (server.py `live_autopost`, neuer Block 5): baut EINEN aktiven Live-Mehrfach aus verschiedenen In-Play-Spielen, die BEREITS ein Tor haben → „Über 0,5/1,5/2,5" ist bereits erfüllt = gesperrt (eine Über-Linie kann nach einem Tor nie mehr verloren gehen). Legs @ ~1,13–1,22, gebündelt bis Gesamtquote ~1,45–1,75 (max 4 Legs, min 2). Brasilien/gesperrte Ligen ausgeschlossen. Quota-frei (keine Stat-Calls). Kategorie „banker", erscheint im Live→Banker-Tab als Parlay.

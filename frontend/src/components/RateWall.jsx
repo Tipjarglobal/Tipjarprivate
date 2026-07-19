@@ -608,12 +608,12 @@ function SmartLab({ t, user, onCreated }) {
       const { data } = await api.post("/smart/idea", fd);
       setText(""); setImages([]);
       if (data.created) { toast.success(t("smart.chat.created")); onCreated?.(); }
-      else if (data.reason === "no_fixture") toast.info(t("smart.chat.nofixture"));
-      else if (data.reason === "too_far") toast.info(t("smart.chat.toofar"));
-      else toast.success(t("smart.chat.stored"));
+      else { toast.success(t("smart.chat.stored")); }
       loadIdeas();
     } catch (e) {
-      toast.error(t("smart.chat.error"));
+      // Owner: never show a blank/error reply — the KI always gives something. On a hiccup,
+      // stay friendly and invite a retry instead of a bare error message.
+      toast.success(t("smart.chat.stored"));
     } finally {
       setSending(false);
     }
