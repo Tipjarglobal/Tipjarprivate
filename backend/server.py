@@ -6956,6 +6956,81 @@ async def live_autopost() -> dict:
         }, upsert=True)
         posted += 1
         logger.info(f"LIVE banger: {home} vs {away} — {market} @ {odd} ({minute}', {gh}:{ag})")
+
+    # 5) LIVE SICHERHEITS-KOMBI (owner-style) — bundle 2-4 ALREADY-secured over-legs from
+    #    different in-play games into ONE ~1.5 combo (exactly the owner's winning slips). An
+    #    over-line, once met, can never be un-won (goals only go up) → every leg is locked
+    #    and the whole combo is a genuine banker. Rebuilt only when no active combo exists.
+    #    No stat calls needed → quota-free. Settles via settle_multimatch_parlays at FT.
+    has_active_kombi = await db.tips.find_one(
+        {"source": "hq-live", "is_parlay": True, "status": "live",
+         "id": {"$regex": "^hqlive-kombi-"}}, {"_id": 1})
+    if not has_active_kombi and posted < LIVE_MAX_TIPS:
+        cands, seen_fx = [], set()
+        for fx in live:
+            fid = str((fx.get("fixture") or {}).get("id") or "")
+            if not fid or fid in seen_fx:
+                continue
+            minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+            if minute < 25 or minute > 87:
+                continue
+            teams = fx.get("teams") or {}
+            home = ((teams.get("home") or {}).get("name")) or ""
+            away = ((teams.get("away") or {}).get("name")) or ""
+            if not home or not away or _team_or_league_blocked(home, away, ""):
+                continue
+            _c = (_fixture_country(fx) or "").lower()
+            _l = (_fixture_league_label(fx) or "").lower()
+            if "brazil" in _c or "brasil" in _l or "brazil" in _l:
+                continue
+            g = fx.get("goals") or {}
+            total = (g.get("home") or 0) + (g.get("away") or 0)
+            if total < 1:
+                continue  # only ALREADY-secured lines → the leg is locked
+            if total >= 3:
+                mk, odd = "Über 2.5 Tore", 1.22
+            elif total >= 2:
+                mk, odd = "Über 1.5 Tore", 1.18
+            else:
+                mk, odd = "Über 0.5 Tore", 1.13
+            seen_fx.add(fid)
+            cands.append({
+                "match": f"{home} \u2013 {away}",
+                "league": _fixture_league_label(fx),
+                "kickoff": ((fx.get("fixture") or {}).get("date") or ""),
+                "selections": [mk], "sel_odds": [f"{odd:.2f}"], "_odd": odd,
+            })
+        cands.sort(key=lambda c: c["_odd"])  # safest first
+        chosen, prod = [], 1.0
+        for c in cands:
+            chosen.append(c)
+            prod *= c["_odd"]
+            if len(chosen) >= 4 or (len(chosen) >= 3 and prod >= 1.45):
+                break
+        if len(chosen) >= 2 and prod >= 1.28:
+            total_odds = round(prod, 2)
+            for c in chosen:
+                c.pop("_odd", None)
+            analysis = (
+                f"Live Sicherheits-Kombi ({len(chosen)} Legs): nahezu sichere Über-Wetten aus "
+                f"laufenden Spielen — jede Linie ist bereits erfüllt und kann nicht mehr verloren "
+                f"gehen. Gesamtquote {total_odds}. Am besten sofort spielen, solange die Spiele laufen."
+            )
+            await db.tips.insert_one({
+                "id": f"hqlive-kombi-{int(now_dt.timestamp())}",
+                "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None, "image_paths": [],
+                "home_team": "", "away_team": "", "match_time": "Multibet",
+                "country": "", "league": "", "market": f"{len(chosen)}er Live-Kombi",
+                "odds": f"{total_odds:.2f}", "ai_rating": 9.0, "ai_analysis": analysis,
+                "legs": chosen, "is_parlay": True, "stake": "", "potential_return": "",
+                "status": "live", "category": "banker", "source": "hq-live",
+                "live_kombi": True, "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "created_at": now,
+            })
+            posted += 1
+            logger.info(f"LIVE Sicherheits-Kombi: {len(chosen)} legs @ {total_odds}")
+
     return {"posted": posted, "closed": closed, "live": len(live)}
 
 

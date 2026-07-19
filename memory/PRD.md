@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-19d — Automatische "Live Sicherheits-Kombi" (Owner-Style Live-Mehrfach)
+- Owner-Muster (2 gewonnene Live-Dreier): 2–4 ultra-sichere Über-Legs aus laufenden Spielen → Gesamtquote ~1,5, geht easy durch. Wunsch: „KI soll richtig vorschlagen".
+- Backend (server.py `live_autopost`, neuer Block 5): baut EINEN aktiven Live-Mehrfach aus verschiedenen In-Play-Spielen, die BEREITS ein Tor haben → „Über 0,5/1,5/2,5" ist bereits erfüllt = gesperrt (eine Über-Linie kann nach einem Tor nie mehr verloren gehen). Legs @ ~1,13–1,22, gebündelt bis Gesamtquote ~1,45–1,75 (max 4 Legs, min 2). Brasilien/gesperrte Ligen ausgeschlossen. Quota-frei (keine Stat-Calls). Kategorie „banker", erscheint im Live→Banker-Tab als Parlay.
+- Nur EIN aktiver Kombi gleichzeitig (Regex-Check `^hqlive-kombi-`); nach Abrechnung baut die KI im nächsten Zyklus einen neuen.
+- Abrechnung: via bestehendes `settle_multimatch_parlays` (Multi-Match-Parlay mit `legs`, ohne `combo_legs`) nach Spielende — Block 1 fasst den Multibet-Schein nicht an (match_time „Multibet" → nicht stale → übersprungen, wird nicht fälschlich void).
+- VERIFIZIERT: Live-Run baute „3er Live-Kombi @ 1.57" (Džiugas–Banga Über 0,5; Sochi–Kostroma Über 1,5; KR Reykjavik–Stjarnan Über 1,5); Screenshot zeigt Karte „PARLAY · 3 SPIELE" im Banker-Tab mit korrektem Analysetext + 9★. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-19c — Live-Mehrfachwetten (Dreier) landen im Live-Bereich statt Community
 - Owner-Meldung: ein von TipjarLogic geposteter Dreier ist eine Live-Wette, wurde aber im Community-Bereich statt im Live-Bereich angezeigt.
 - Ursache: bei MEHR-Spiel-Parlays (Dreier) liefert `_tip_match_teams` (None, None) → weder Post-Zeit-Erkennung noch `live_annotate_sync` erkannten sie als live → Status blieb "pending" → Community.
