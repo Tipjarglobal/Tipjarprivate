@@ -4599,6 +4599,26 @@ async def build_systems() -> dict:
         if len(picked) >= 2 and _prod(picked) > 3.6:
             hour = picked
 
+    # 6) TIPJARLOGIC-KOMBI — the owner's proven "safe slip" style: 3 tiny legs (each
+    #    ~1.10-1.20) from different high-scoring games that combine to ~1.4-1.6 total and
+    #    "just go through". Über 1.5 Tore in torreiche Spiele + Über 0.5 Tore als Absicherung.
+    #    Every leg settles deterministically from the final score.
+    tjlogic, used_tj = [], set()
+    for p in goals_sorted:
+        if p["id"] in used_tj:
+            continue
+        t_goals = p.get("total") or 0
+        if t_goals >= 3:
+            mk, base, rt = "Über 1.5 Tore", 1.18, 8.5
+        elif t_goals >= 2:
+            mk, base, rt = "Über 0.5 Tore", 1.08, 9.0
+        else:
+            continue
+        used_tj.add(p["id"])
+        tjlogic.append(_apply_real(_sel(p, mk, base, rt)))
+        if len(tjlogic) >= 3:
+            break
+
     systems = [
         _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
                          "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
@@ -4611,6 +4631,10 @@ async def build_systems() -> dict:
         _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi des Tages",
                          "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
     ]
+    if len(tjlogic) >= 2:
+        systems.insert(0, _finalize_system(
+            tjlogic, len(tjlogic), "tjlogic", "TipJarLogic Sicherheits-Kombi",
+            "3 Mini-Quoten aus Top-Spielen · ~1,5 gesamt · gebaut zum Durchgehen", "safe"))
     if hour:
         systems.insert(0, _finalize_system(
             hour, 0, "hour", "System der Stunde",

@@ -9,6 +9,13 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-19 — Neue "TipJarLogic Sicherheits-Kombi" (Owner-Style Safe-Slip)
+- Owner-Wunsch (nach eigenem 150€-Gewinn): die KI soll automatisch sichere ~1,5-Kombis bauen — 3 Mini-Quoten (je ~1,10-1,20), die easy durchgehen.
+- Backend (server.py `build_systems`): neuer System-Typ `tjlogic` = 3 Legs aus den torreichsten vorhergesagten Spielen — "Über 1.5 Tore" (torreich, ~1,18) bzw. "Über 0.5 Tore" (Absicherung, ~1,08), Gesamtquote ~1,4-1,7. Erscheint als ERSTER Schein in den KI-System-Picks. Jedes Leg rechnet sich deterministisch über die bestehende Tor-Engine ab (wie die bestehende Sicherheits-Kombi) → kann nicht hängen bleiben.
+- Frontend: rendert automatisch über die generische Systems.jsx (risk=safe). i18n `sys.title.tjlogic` + `sys.sub.tjlogic` in ALLEN 8 Sprachen.
+- BEWUSSTE ENTSCHEIDUNG: Legs sind Tor-Linien (immer abrechenbar), NICHT gemischte Spieler-Props (Mbappé-Schüsse), da diese im Sommer kaum verfügbar sind und Picks hängen lassen würden. Sobald Top-Ligen laufen, können Spieler-Prop-Legs ergänzt werden.
+- VERIFIZIERT: /api/systems liefert tjlogic zuerst (3× Über 1.5 @1.18 = 1.64), UI-Screenshot zeigt die Karte oben mit korrektem Titel/Untertitel/Legs. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-18c — Live-Benachrichtigungen nach Klasse + neue Häkchen (Banker/Value/Banger)
 - Owner-Wunsch: jede Live-Klasse eine eigene Benachrichtigungsart, Mitglieder-Posts eine eigene, plus 3 neue Häkchen (Banker/Value/Banger) in jeder Sprache.
 - Backend (server.py): `_tip_push_area` teilt KI-Live in `live_banker`/`live_value`/`live_banger` (Community-Live bleibt `live`). `_push_payload_for_tip` liefert pro Klasse eigenen Titel/Emoji/Sound: 🔥 BANGER LIVE (fire), 🟢 LIVE-Banker, 🔵 LIVE-Value, 🔴 LIVE-Pick. Community-Posts bekommen eigenen Push-Tag `tipjar-community` (überschreiben KI-Picks nicht mehr). `notify_all_push` filtert bereits pro Area → die neuen Häkchen wirken auch für echte Web-Pushes.
