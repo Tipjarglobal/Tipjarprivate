@@ -9,6 +9,15 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-19c — Live-Mehrfachwetten (Dreier) landen im Live-Bereich statt Community
+- Owner-Meldung: ein von TipjarLogic geposteter Dreier ist eine Live-Wette, wurde aber im Community-Bereich statt im Live-Bereich angezeigt.
+- Ursache: bei MEHR-Spiel-Parlays (Dreier) liefert `_tip_match_teams` (None, None) → weder Post-Zeit-Erkennung noch `live_annotate_sync` erkannten sie als live → Status blieb "pending" → Community.
+- Fix (server.py): neue Helper `_leg_teams(leg)` + `_parlay_live_fixture(live, legs)`. Ein Multi-Spiel-Parlay gilt jetzt als LIVE, wenn IRGENDEIN Leg gerade in-play ist.
+  - `create_tip`: Post-Zeit-Live-Check prüft jetzt auch die Legs eines Parlays.
+  - `live_annotate_sync` (läuft periodisch in `live_annotate_loop`): promotet Multi-Spiel-Member-Parlays mit einem Live-Leg zu status="live" → wandert automatisch von Community in den Live-Bereich (Community-Query = status=pending, Live-Query = status=live).
+- Bestehender Produktions-Schein korrigiert sich nach Deploy selbst beim nächsten Annotate-Lauf (sofern Legs noch laufen; sonst wird er abgerechnet).
+- VERIFIZIERT: Unit-Tests (`_leg_teams` parst „A – B/vs", `_parlay_live_fixture` findet Live-Leg im Dreier). Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-19b — Banger v2: Goal-Fest-Momentum + Brasilien/defensive Ligen raus
 - Owner-Feedback (2 verlorene/kleine Scheine): Brasilien ist eine schlechte Über-Liga (spielen nichts, Tor erst in Nachspielzeit); bessere 10★-Banger gewünscht, wie France–England 4:6 → „Über 6 aufs 0:3" wäre ideal gewesen.
 - Backend (server.py `live_autopost` Banger-Block v2):

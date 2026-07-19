@@ -1111,11 +1111,15 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     now_dt = datetime.now(timezone.utc)
     timing = (inp.timing or "").strip().lower()
     is_live_post = _looks_live_now(match_time, legs, now_dt) or timing == "live"
-    if not is_live_post and API_FOOTBALL_KEY and inp.home_team and inp.away_team:
+    if not is_live_post and API_FOOTBALL_KEY:
         try:
             live_fx = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"})
-            if live_fx and _find_live_fixture(live_fx, inp.home_team, inp.away_team):
-                is_live_post = True
+            if live_fx:
+                # Single match OR any leg of a parlay (treble) currently in-play → LIVE slip.
+                if inp.home_team and inp.away_team and _find_live_fixture(live_fx, inp.home_team, inp.away_team):
+                    is_live_post = True
+                elif legs and _parlay_live_fixture(live_fx, legs):
+                    is_live_post = True
         except Exception:
             pass
     tip = {
@@ -6998,6 +7002,28 @@ def _tip_match_teams(t: dict):
     return None, None
 
 
+def _leg_teams(leg: dict):
+    """Parse (home, away) from a parlay leg's \"A – B\" match string."""
+    mt = (leg or {}).get("match") or ""
+    for sep in (" \u2013 ", " - ", " vs ", " v "):
+        if sep in mt:
+            a, b = mt.split(sep, 1)
+            return a.strip(), b.strip()
+    return None, None
+
+
+def _parlay_live_fixture(live, legs):
+    """For a MULTI-game parlay: return the first leg's fixture that is currently in-play
+    (so an in-play treble is routed to the LIVE area, not Community)."""
+    for lg in (legs or []):
+        lh, la = _leg_teams(lg)
+        if lh and la:
+            fx = _find_live_fixture(live, lh, la)
+            if fx:
+                return fx
+    return None
+
+
 async def live_annotate_sync() -> dict:
     if not API_FOOTBALL_KEY:
         return {"annotated": 0, "cleared": 0, "to_live": 0}
@@ -7017,6 +7043,9 @@ async def live_annotate_sync() -> dict:
     for t in tips + parlays:
         home, away = _tip_match_teams(t)
         fx = _find_live_fixture(live, home, away) if (home and away) else None
+        # Multi-game parlay (no single home/away): live if ANY leg is currently in-play.
+        if not fx and (t.get("legs") or []):
+            fx = _parlay_live_fixture(live, t.get("legs"))
         if fx:
             g = fx.get("goals") or {}
             st = {"minute": ((fx.get("fixture") or {}).get("status") or {}).get("elapsed"),
