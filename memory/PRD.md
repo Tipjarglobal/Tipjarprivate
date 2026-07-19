@@ -9,6 +9,16 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-19b — Banger v2: Goal-Fest-Momentum + Brasilien/defensive Ligen raus
+- Owner-Feedback (2 verlorene/kleine Scheine): Brasilien ist eine schlechte Über-Liga (spielen nichts, Tor erst in Nachspielzeit); bessere 10★-Banger gewünscht, wie France–England 4:6 → „Über 6 aufs 0:3" wäre ideal gewesen.
+- Backend (server.py `live_autopost` Banger-Block v2):
+  - **Goal-Fest-Continuation** (Live-Stand total ≥ 3, Druck vorhanden): reitet das Momentum → höchste Über-Linie im Banger-Fenster (`Über (total+1).5` bzw. `Über total.5`), Quote 1,40–3,20, **10★**. Beispiel: 0:3/40' → „Über 4.5 Tore" @~1,97.
+  - **Offenes Spiel** (0/1 Tor, starker Druck): weiterhin „Asian Über 2.0 Tore" (Push bei genau 2), 9★.
+  - Exakt 2 Tore → kein sauberer Banger, wird übersprungen.
+  - **Brasilien/defensive Ligen ausgeschlossen** — sowohl im Banger- als auch im Fresh-Over-Block (verhinderte den 0:0-Verlust in Atletico).
+- `_live_bet_landed`: neuer generischer Full-Match-Grader „Über N.5 Tore" (N beliebig, z. B. 3.5/4.5/6.5) → total ≥ N+1; team-spezifische Linien unberührt. `_live_odd` bepreist höhere Linien bereits generisch.
+- VERIFIZIERT: Unit-Tests (Über 3.5/4.5/6.5 Settlement korrekt, team-spez. 0.5 unberührt, Asian-Push=None, Pricing höherer Linien), Live-Loop läuft ohne Crash (12 gepostet). Banger sind situativ. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-19 — Neue "TipJarLogic Sicherheits-Kombi" (Owner-Style Safe-Slip)
 - Owner-Wunsch (nach eigenem 150€-Gewinn): die KI soll automatisch sichere ~1,5-Kombis bauen — 3 Mini-Quoten (je ~1,10-1,20), die easy durchgehen.
 - Backend (server.py `build_systems`): neuer System-Typ `tjlogic` = 3 Legs aus den torreichsten vorhergesagten Spielen — "Über 1.5 Tore" (torreich, ~1,18) bzw. "Über 0.5 Tore" (Absicherung, ~1,08), Gesamtquote ~1,4-1,7. Erscheint als ERSTER Schein in den KI-System-Picks. Jedes Leg rechnet sich deterministisch über die bestehende Tor-Engine ab (wie die bestehende Sicherheits-Kombi) → kann nicht hängen bleiben.

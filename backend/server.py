@@ -6494,6 +6494,11 @@ def _live_bet_landed(market: str, hg, ag, home: str, away: str):
         return total >= 3 and hg >= 1 and ag >= 1
     if "beide teams treffen" in m or "btts" in m:
         return hg >= 1 and ag >= 1
+    # Generic FULL-MATCH over-line "Über N.5 Tore" (N up to any number → goal-fest bangers
+    # like 'Über 3.5/4.5/6.5 Tore'). Team-specific lines fall through to the team branch.
+    _gm = re.search(r"über\s+(\d+)\.5", m)
+    if _gm and "über 0.5" not in m and _market_team_side(market, home, away) is None:
+        return total >= int(_gm.group(1)) + 1
     if "über 2.5" in m:
         return total >= 3
     if "über 1.5" in m:
@@ -6801,6 +6806,12 @@ async def live_autopost() -> dict:
             continue
         if _team_or_league_blocked(home, away, ""):
             continue
+        # Owner rule: skip Brazil / defensive leagues for live over-picks — they play
+        # nothing and then a goal drops in stoppage time (traps for "Über X" bets).
+        _c = (_fixture_country(fx) or "").lower()
+        _l = (_fixture_league_label(fx) or "").lower()
+        if "brazil" in _c or "brasil" in _l or "brazil" in _l:
+            continue
         goals = fx.get("goals") or {}
         total = (goals.get("home") or 0) + (goals.get("away") or 0)
         if total > 1:
@@ -6844,10 +6855,13 @@ async def live_autopost() -> dict:
         posted += 1
         logger.info(f"LIVE fresh: {home} vs {away} — {market} @ {odd} ({minute}')")
 
-    # 4) BANGER picks (owner): the smartest in-play "Recovery"/Asian bet. When a game is
-    #    still open (<= 1 goal) but under heavy scoring pressure, an "Asian Über 2.0 Tore"
-    #    is near-certain (money back at EXACTLY 2 goals) → 9★, odds >= 1.40. If a side
-    #    trails by one it doubles as a recovery angle (the underdog/favourite pushes back).
+    # 4) BANGER picks (owner, v2) — genuine 10★ in-play "goal-fest" bets.
+    #    • Goal-fest continuation (total >= 3): the game is already a shootout (France–England
+    #      4:6 style) → ride the momentum with a HIGHER over-line that's still very likely.
+    #    • Open game (total <= 1) under heavy pressure → "Asian Über 2.0 Tore" (money back at
+    #      exactly 2 goals; recovery angle if a side trails).
+    #    Low-scoring/defensive leagues (Brazil especially — nothing happens, then a stoppage-time
+    #    goal) are SKIPPED: over-bangers there are traps.
     banger_calls = 0
     for fx in live:
         if posted >= LIVE_MAX_TIPS or banger_calls >= max(4, LIVE_STAT_CALL_CAP // 2):
@@ -6869,8 +6883,14 @@ async def live_autopost() -> dict:
         goals = fx.get("goals") or {}
         gh, ag = goals.get("home") or 0, goals.get("away") or 0
         total = gh + ag
-        if total > 1:
-            continue  # need an open, low-scoring game for a "sure 2 more goals" banger
+        if total == 2:
+            continue  # no clean banger line at exactly 2 goals
+        # Owner rule: skip low-scoring / defensive leagues (Brazil above all — they play
+        # nothing, then a goal drops in stoppage time). Over-bangers there are traps.
+        _country = (_fixture_country(fx) or "").lower()
+        _lg = (_fixture_league_label(fx) or "").lower()
+        if "brazil" in _country or "brasil" in _lg or "brazil" in _lg:
+            continue
         stats = _apifootball("/fixtures/statistics", {"fixture": fid})
         stat_calls += 1
         banger_calls += 1
@@ -6879,26 +6899,43 @@ async def live_autopost() -> dict:
         strong = (sog >= 3 or corners >= 6 or shots >= 10) if minute <= 55 else (sog >= 5 or corners >= 9)
         if not strong:
             continue
-        market = "Asian Über 2.0 Tore"
-        odd = _live_odd(market, minute, total)
-        if odd < 1.40 or odd > 2.60:
-            continue  # owner rule: a banger pays >= 1.40, but must stay a confident pick
-        if total == 1:
-            trailing = away if gh > ag else home
-            reco = f"{trailing} liegt zurück und drückt auf den Ausgleich — "
+        if total >= 3:
+            # GOAL-FEST continuation → pick the highest over-line still in the banger window.
+            best = None
+            for line in (total + 1, total):
+                m_try = f"Über {line}.5 Tore"
+                o_try = _live_odd(m_try, minute, total)
+                if 1.40 <= o_try <= 3.20:
+                    best = (m_try, o_try)
+                    break
+            if not best:
+                continue
+            market, odd = best
+            rating, wp = 10.0, 0.92
+            note = (f"Tor-Festival! Schon {total} Tore gefallen — das Spiel ist offen und schnell, "
+                    f"da kommt fast sicher noch was.")
         else:
-            reco = "Beide Teams drücken bei 0:0 — "
+            # OPEN game (0 or 1 goal) → Asian Über 2.0 (money back at exactly 2 goals).
+            market = "Asian Über 2.0 Tore"
+            odd = _live_odd(market, minute, total)
+            if odd < 1.40 or odd > 2.60:
+                continue
+            rating, wp = 9.0, 0.9
+            if total == 1:
+                trailing = away if gh > ag else home
+                note = (f"{trailing} liegt zurück und drückt auf den Ausgleich — bei GENAU 2 Toren "
+                        f"gibt's den Einsatz zurück (Asian-Absicherung).")
+            else:
+                note = "Beide drücken bei 0:0 — bei GENAU 2 Toren gibt's den Einsatz zurück (Asian-Absicherung)."
         analysis = (
-            f"BANGER ({minute}'): {market} — Stand {gh}:{ag}. {reco}"
-            f"Druck vorhanden: {sog} Schüsse aufs Tor · {corners} Ecken. "
-            f"Wir sind fast sicher, dass noch 2 Tore fallen — bei GENAU 2 Toren gibt's den Einsatz "
-            f"zurück (Asian-Absicherung). Live zu {odd}. Timing: am besten sofort spielen, solange "
-            f"die Quote hoch ist."
+            f"BANGER ({minute}'): {market} — Stand {gh}:{ag}. {note} "
+            f"Druck: {sog} Schüsse aufs Tor · {corners} Ecken. Live zu {odd}. "
+            f"Timing: am besten sofort spielen, solange die Quote hoch ist."
         )
         await db.tips.update_one({"id": banger_id}, {
             "$set": {
-                "market": market, "odds": f"{odd:.2f}", "ai_rating": 9.0,
-                "ai_analysis": analysis, "status": "live", "win_prob": 0.9,
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": rating,
+                "ai_analysis": analysis, "status": "live", "win_prob": wp,
                 "category": "banger",
                 "league": _fixture_league_label(fx), "country": _fixture_country(fx),
                 "league_code": "", "live_minute": minute, "live_score": f"{gh}:{ag}",
@@ -6914,7 +6951,7 @@ async def live_autopost() -> dict:
             },
         }, upsert=True)
         posted += 1
-        logger.info(f"LIVE banger: {home} vs {away} — {market} @ {odd} ({minute}')")
+        logger.info(f"LIVE banger: {home} vs {away} — {market} @ {odd} ({minute}', {gh}:{ag})")
     return {"posted": posted, "closed": closed, "live": len(live)}
 
 
