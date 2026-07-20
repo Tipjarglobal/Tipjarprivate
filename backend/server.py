@@ -508,6 +508,70 @@ async def systems():
     return await build_systems()
 
 
+@api_router.get("/scorers/today")
+async def scorers_today():
+    """"Wer trifft heute?" — Torjäger-Radar. Ranks the teams most likely to SCORE in
+    today's (and tonight's) matches, derived purely from the stored Forebet/Predictz
+    predictions (no extra API-Football quota). Owner idea: just tell me who scores."""
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find(
+        {"status": "pending"}, {"_id": 0}).to_list(1500)
+    out = []
+    seen = set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        # today window: from 3h ago (in-play) up to +20h (tonight's late games)
+        if ko is not None and not (now - timedelta(hours=3) <= ko <= now + timedelta(hours=20)):
+            continue
+        home, away = p.get("home"), p.get("away")
+        ph, pa = p.get("ph"), p.get("pa")
+        if not home or not away or ph is None or pa is None:
+            continue
+        conf = p.get("conf")
+        try:
+            conf_val = int(float(str(conf)))
+        except Exception:
+            conf_val = None
+        btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        league = p.get("league") or ""
+        ko_iso = ko.isoformat() if ko else ""
+        for team, pg, opp in ((home, ph, away), (away, pa, home)):
+            key = f"{team}|{opp}"
+            if key in seen:
+                continue
+            # confidence that THIS team scores >= 1 goal
+            if pg >= 2:
+                c = 88
+            elif pg >= 1:
+                c = 78
+            else:
+                c = 46
+            if btts:
+                c += 6
+            if over25:
+                c += 3
+            if conf_val:
+                c = int(0.6 * c + 0.4 * min(conf_val, 95))
+            c = max(30, min(97, c))
+            if c < 68:
+                continue  # only confident "will score" calls
+            seen.add(key)
+            out.append({
+                "team": team, "opponent": opp, "league": league,
+                "kickoff": ko_iso, "confidence": c,
+                "predicted": f"{ph}-{pa}", "btts": btts, "over25": over25,
+                "reason": (
+                    f"Vorhersage {ph}:{pa}"
+                    + (" · beide treffen" if btts else "")
+                    + (" · über 2,5 Tore" if over25 else "")
+                ),
+            })
+    out.sort(key=lambda x: (-x["confidence"], x["kickoff"] or "z"))
+    return {"count": len(out), "scorers": out[:60], "generated_at": now.isoformat()}
+
+
 @api_router.get("/tips/counts")
 async def tips_counts():
     """Post counts per picks area — powers the homepage badges & area alerts.

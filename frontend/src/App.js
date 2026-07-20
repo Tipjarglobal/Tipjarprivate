@@ -13,6 +13,7 @@ import Header from "./components/Header";
 import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
+import ScorerRadar from "./components/ScorerRadar";
 import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
@@ -234,6 +235,7 @@ function Home() {
         onViewMembers={() => openTipsView("members")}
         onViewLive={() => openTipsView("live")}
         onViewSmart={() => openTipsView("smart")}
+        onViewScorers={() => openTipsView("scorers")}
         onViewSettled={() => openTipsView("settled")}
         onExpertClick={openProfile}
         counts={counts}
@@ -346,13 +348,15 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["scorers", "nav.viewscorers"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "members") {
                   cls = active ? "bg-[#FFC02E] text-black shadow-[0_0_14px_rgba(255,192,46,0.45)]" : "bg-[#FFC02E]/15 border border-[#FFC02E]/40 text-[#FFC02E] hover:bg-[#FFC02E]/25";
                 } else if (v === "live") {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
+                } else if (v === "scorers") {
+                  cls = active ? "bg-[#2ECC57] text-black shadow-[0_0_14px_rgba(46,204,87,0.4)]" : "bg-[#2ECC57]/15 border border-[#2ECC57]/40 text-[#2ECC57] hover:bg-[#2ECC57]/25";
                 } else if (v === "settled") {
                   cls = active ? "bg-white text-black shadow-[0_0_14px_rgba(255,255,255,0.35)]" : "bg-surface border border-white/40 text-white hover:bg-white/10";
                 } else {
@@ -377,7 +381,11 @@ function Home() {
             </div>
           </div>
           <DisclaimerBar />
-          <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onUserClick={openProfile} />
+          {tipsView === "scorers" ? (
+            <ScorerRadar />
+          ) : (
+            <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onUserClick={openProfile} />
+          )}
         </div>
       )}
 
