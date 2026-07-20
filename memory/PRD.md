@@ -9,6 +9,15 @@ Languages: EN, DE (primary), EL, FR, IT. Auto results engine (API-Football Pro) 
 Automated betting tips scraped from Forebet/Predictz ("TipJarHQ Picks"). System bets. Player-prop
 "Smart Bets" from API-Football stats. USER LANGUAGE = GERMAN (respond in German).
 
+### CHANGELOG 2026-07-20 — "Stop dumb tips" + Owner-Notizen + Brasilien zurück
+- Owner-Feedback (mehrere schlechte Tipps): DC-Banker in Skandinavien verloren (Ilves), Handicaps +2,5/+3,5 wertlos (Quoten ~1,005), Brasilien versehentlich aus Live entfernt.
+- Backend (server.py `_forebet_candidates`):
+  - Neuer Helper `_is_scandinavian()`; in skandinavischen/nordischen Ligen (Allsvenskan, Veikkausliiga, Eliteserien, …) werden **Doppelte Chance (1X/X2) UND DC12 nicht mehr angeboten** (zu unberechenbar für Banker).
+  - **Handicaps +2,5 und +3,5 komplett entfernt** (wertlose Quoten). Nur noch +1,5 (echter Value ~1,55).
+- Brasilien-Sperre aus allen 3 Live-Blöcken (Banger/Fresh/Kombi) **wieder entfernt** — Brasilien wird NICHT gelöscht (Owner-Wunsch). Top-Ligen bleiben bettbar; nur obskure Staatsmeisterschaften bleiben geblockt (unverändert, pre-existing).
+- Neue Datei `/app/memory/betting_notes.md` — private Owner-Lernnotizen (harte Regeln + Muster-Wissen: Torteams jagen à la Göteborg, 0:0-Historie-Muster, kein Lotto-1X, Unter 2,5 + 1X statt BTTS-Lotto, „Wer trifft heute?"-Radar als Backlog).
+- VERIFIZIERT (Unit): skandinavisches Spiel → 0 eigenständige DC-Märkte, keine +2,5/+3,5; nicht-skandinavisch behält DC; Backend `/api/tips/counts` 200. Greift auf Produktion nach **Deploy**.
+
 ### CHANGELOG 2026-07-19e — Smart-Lab: keine leere Fehlermeldung mehr + KI gibt IMMER einen Tipp
 - Owner-Meldung: Beim Fragen im Smart-Bereich erschien eine blanke Fehler-/„gespeichert"-Meldung; KI soll immer coole Tipps geben.
 - Backend (server.py `generate_smart_from_idea`): Prompt verschärft — actionable=false NUR bei komplett fußballfremdem Input (Spam/Beleidigung). Bei jeder fußballbezogenen (auch vagen) Eingabe MUSS die KI einen konkreten, coolen Smart-Bet auf das relevanteste Spiel liefern. Zusätzlich EINMALIGER Retry mit Zwang („actionable=true, keine Ablehnung"). Neuer Helper `_parse_smart_json`.

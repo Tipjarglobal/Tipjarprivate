@@ -4956,6 +4956,23 @@ def _pois_line_odds(lam, line, over=True, margin=0.95):
     return round(max(1.01, (1.0 / p) * margin), 2), round(p, 3)
 
 
+_SCAND_KEYS = (
+    "allsvenskan", "superettan", "veikkausliiga", "veikkausliga", "ykkonen", "ykkönen",
+    "ykkosliiga", "ykkösliiga", "eliteserien", "obos-ligaen", "obos ligaen",
+    "superligaen", "danish superliga", "besta deild", "úrvalsdeild", "urvalsdeild",
+    "1. deild", "norway", "sweden", "finland", "denmark", "iceland",
+    "norwegen", "schweden", "finnland", "dänemark", "danemark", "island", "suomi",
+)
+
+
+def _is_scandinavian(*vals) -> bool:
+    """True if any of the given league/country strings looks Scandinavian/Nordic.
+    Owner rule: these leagues are too unpredictable for Double-Chance bankers."""
+    s = " ".join(str(v or "").lower() for v in vals)
+    return any(k in s for k in _SCAND_KEYS)
+
+
+
 def _forebet_candidates(r: dict) -> list[dict]:
     """Return ALL viable market options for a match, each with an estimated win
     probability ('winprob'). forebet_autopost then applies REAL bookmaker odds and
@@ -4967,34 +4984,33 @@ def _forebet_candidates(r: dict) -> list[dict]:
     home, away = r.get("home"), r.get("away")
     draw = probs[1] if len(probs) >= 2 else 0
     # Favourite markets: Double Chance (draw counts as win) + Draw No Bet
+    scand = _is_scandinavian(r.get("league"), r.get("lcode"))
     if pred in ("1", "2") and len(probs) >= 3:
         if pred == "1":
             win, loss, team, dc = probs[0], probs[2], home, "1X"
         else:
             win, loss, team, dc = probs[2], probs[0], away, "X2"
         if win >= FOREBET_MIN_PROB:
-            dc_wp = min(0.97, (win + draw) / 100.0)
-            opts.append({"sfx": "-dc", "market": f"{team} Doppelte Chance {dc}",
-                         "odds": f"{max(1.05, 1 / max(dc_wp, 0.01)):.2f}",
-                         "rating": 8.5, "winprob": dc_wp})
+            # Owner rule (2026-07-20): NO Double Chance (1X/X2) in Scandinavian leagues —
+            # they are far too unpredictable for a "team doesn't win" banker (Ilves lost us one).
+            if not scand:
+                dc_wp = min(0.97, (win + draw) / 100.0)
+                opts.append({"sfx": "-dc", "market": f"{team} Doppelte Chance {dc}",
+                             "odds": f"{max(1.05, 1 / max(dc_wp, 0.01)):.2f}",
+                             "rating": 8.5, "winprob": dc_wp})
             dnb_wp = win / max(win + loss, 1)
             opts.append({"sfx": "-dnb", "market": f"{team} (Draw No Bet)",
                          "odds": f"{max(1.05, 1 / max(dnb_wp, 0.01)):.2f}",
                          "rating": 8.5 if win >= 72 else 8.0 if win >= 63 else 7.5,
                          "winprob": dnb_wp})
-        # Underdog handicap (owner: safer than Unter X.5 — it survives high-scoring
-        # games as long as the weak side isn't thrashed). Offered for ANY favourite,
-        # not just strong ones, since +3.5/+2.5 rarely lose. +3.5/+2.5 = bankers.
+        # Underdog handicap +1.5 ONLY. Owner rule (2026-07-20): +2.5/+3.5 handicaps are
+        # WORTHLESS (real odds ~1.005–1.05) — no value, dropped. +1.5 keeps real value (~1.55).
         und = away if pred == "1" else home
-        opts.append({"sfx": "-hcp35", "market": f"{und} Handicap +3.5",
-                     "odds": "1.15", "rating": 8.5, "winprob": 0.92})
-        opts.append({"sfx": "-hcp25", "market": f"{und} Handicap +2.5",
-                     "odds": "1.30", "rating": 8.0, "winprob": 0.87})
         opts.append({"sfx": "-hcp15", "market": f"{und} Handicap +1.5",
                      "odds": "1.55", "rating": 7.5, "winprob": 0.73})
     # Doppelte Chance 12 (Heim ODER Auswärts, kein Remis) — value when a draw is
-    # unlikely; the real bookmaker odd decides if it passes the 1.60 value gate.
-    if len(probs) >= 3:
+    # unlikely. Owner rule: skip in Scandinavian leagues (draws are too common there).
+    if len(probs) >= 3 and not scand:
         dc12_wp = min(0.97, (probs[0] + probs[2]) / 100.0)
         if dc12_wp >= 0.60:
             opts.append({"sfx": "-dc12", "market": "Doppelte Chance 12",
@@ -6834,12 +6850,6 @@ async def live_autopost() -> dict:
             continue
         if _team_or_league_blocked(home, away, ""):
             continue
-        # Owner rule: skip Brazil / defensive leagues for live over-picks — they play
-        # nothing and then a goal drops in stoppage time (traps for "Über X" bets).
-        _c = (_fixture_country(fx) or "").lower()
-        _l = (_fixture_league_label(fx) or "").lower()
-        if "brazil" in _c or "brasil" in _l or "brazil" in _l:
-            continue
         goals = fx.get("goals") or {}
         total = (goals.get("home") or 0) + (goals.get("away") or 0)
         if total > 1:
@@ -6913,12 +6923,6 @@ async def live_autopost() -> dict:
         total = gh + ag
         if total == 2:
             continue  # no clean banger line at exactly 2 goals
-        # Owner rule: skip low-scoring / defensive leagues (Brazil above all — they play
-        # nothing, then a goal drops in stoppage time). Over-bangers there are traps.
-        _country = (_fixture_country(fx) or "").lower()
-        _lg = (_fixture_league_label(fx) or "").lower()
-        if "brazil" in _country or "brasil" in _lg or "brazil" in _lg:
-            continue
         stats = _apifootball("/fixtures/statistics", {"fixture": fid})
         stat_calls += 1
         banger_calls += 1
@@ -7002,10 +7006,6 @@ async def live_autopost() -> dict:
             home = ((teams.get("home") or {}).get("name")) or ""
             away = ((teams.get("away") or {}).get("name")) or ""
             if not home or not away or _team_or_league_blocked(home, away, ""):
-                continue
-            _c = (_fixture_country(fx) or "").lower()
-            _l = (_fixture_league_label(fx) or "").lower()
-            if "brazil" in _c or "brasil" in _l or "brazil" in _l:
                 continue
             g = fx.get("goals") or {}
             total = (g.get("home") or 0) + (g.get("away") or 0)
