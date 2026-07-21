@@ -1,5 +1,12 @@
 # TipJar — Product Requirements & Progress
 
+### CHANGELOG 2026-07-20b — Verlängerung ausgeschlossen + Tor-Prognose-Tabelle + Systeme-Meta
+- **Verlängerung zählt NICHT (Owner-Regel):** Alle Tor-/Über-Märkte + Spieler-Props gelten nur für die reguläre 90-Min-Zeit. Neuer Helper `_reg_goals()` liest `score.fulltime` statt `goals` (API-Football zählt bei AET/PEN die Verlängerung mit). Angewandt in `find_finished_fixture`, `_datescan_fixture`, `_align_goals`. Bei Live-Spielen (fulltime=null) Fallback auf aktuellen Stand → keine Regression. Rest-Datenlücke: /fixtures/players trennt ET-Schüsse nicht.
+- **Tor-Prognose-Tabelle (neu):** `GET /api/goals-forecast` liefert pro Spiel die vorhergesagten Tore je Team (aus ph/pa, NICHT aus der Quote). Frontend ScorerRadar hat jetzt 2 Tabs: "Tor-Prognose" (⚽ pro Tor, Owner-Format Ajax⚽⚽⚽) + "Wer trifft?" (bestehender Radar). 0:0-erwartete Spiele werden ehrlich als "kein Tor erwartet" markiert. i18n in 8 Sprachen.
+- **Systeme-Bug:** Datum/Uhrzeit/Liga fehlten in der Anzeige. Frontend Systems.jsx: neue `LegMeta`-Zeile (📅 Datum · 🕐 Uhrzeit · 🏆 Liga) auf JEDEM Leg, robuster Kickoff-Parser (dd/mm/yyyy hh:mm + "21. Jul 2026"). Backend lieferte die Daten bereits.
+- VERIFIZIERT: goals-forecast 18 Spiele (curl), Systeme + Radar per Screenshot, Backend 200 ohne Fehler. Greift auf Produktion nach **Deploy**.
+
+
 ## Problem Statement (verbatim intent)
 Global community platform "TipJar" where people worldwide post football/sports betting tips.
 AI auto-rates each tip; users rate them on a Rate Wall (Apex Scale 1–10). Animated jar + alarm bell

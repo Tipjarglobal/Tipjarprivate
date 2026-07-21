@@ -572,6 +572,64 @@ async def scorers_today():
     return {"count": len(out), "scorers": out[:60], "generated_at": now.isoformat()}
 
 
+@api_router.get("/goals-forecast")
+async def goals_forecast():
+    """Tor-Prognose-Tabelle — zeigt pro Spiel, wie viele Tore JEDES Team laut
+    Vorhersage schießt (⚽ = 1 vorhergesagtes Tor). Kommt ausschließlich aus den
+    gespeicherten Forebet/Predictz-Vorhersagescores (ph/pa) — NICHT aus der Quote.
+    Owner-Regel: keine Bälle nur weil ein Favorit @1.20 steht; die Prognose muss passen.
+    0:0-anfällige Spiele (beide 0) werden ehrlich als 'kein Tor erwartet' gezeigt."""
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find(
+        {"status": "pending"}, {"_id": 0}).to_list(1500)
+    out, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if ko is not None and not (now - timedelta(hours=3) <= ko <= now + timedelta(hours=30)):
+            continue
+        home, away = p.get("home"), p.get("away")
+        ph, pa = p.get("ph"), p.get("pa")
+        if not home or not away or ph is None or pa is None:
+            continue
+        key = _match_key(home, away)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            ph, pa = int(round(float(ph))), int(round(float(pa)))
+        except Exception:
+            continue
+        ph, pa = max(0, min(ph, 6)), max(0, min(pa, 6))
+        total = ph + pa
+        try:
+            conf_val = int(float(str(p.get("conf"))))
+        except Exception:
+            conf_val = None
+        btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        if total == 0:
+            note = "Torlos erwartet — 0:0 möglich, Vorsicht mit Über-Wetten"
+        elif ph == 0 or pa == 0:
+            scorer = home if ph > 0 else away
+            note = f"Nur {scorer} trifft laut Prognose"
+        elif btts:
+            note = "Beide Teams treffen"
+        else:
+            note = "Torreiches Spiel erwartet" if total >= 3 else "Wenige Tore erwartet"
+        out.append({
+            "home": home, "away": away,
+            "home_goals": ph, "away_goals": pa, "total": total,
+            "league": p.get("league") or "", "kickoff": ko.isoformat() if ko else "",
+            "btts": btts, "over25": over25,
+            "confidence": max(30, min(97, conf_val)) if conf_val else None,
+            "note": note,
+        })
+    out.sort(key=lambda x: (-x["total"], x["kickoff"] or "z"))
+    return {"count": len(out), "matches": out[:80], "generated_at": now.isoformat()}
+
+
+
 @api_router.get("/tips/counts")
 async def tips_counts():
     """Post counts per picks area — powers the homepage badges & area alerts.
@@ -3280,6 +3338,19 @@ def _en_name(name: str) -> str:
     return COUNTRY_NAME_EN.get(_norm(name or ""), name)
 
 
+def _reg_goals(fx: dict):
+    """Regulation-time (90') goals, EXCLUDING extra time / penalties. Owner rule:
+    Über/Unter-Tore und Spieler-Props (z.B. 'Über 1.5 Tore', 'Messi Über 0.5 Torschüsse')
+    gelten NUR für die reguläre Spielzeit. API-Football `goals` enthält bei AET/PEN die
+    Verlängerung; `score.fulltime` ist der Stand nach 90 Minuten. Fällt auf `goals` zurück,
+    wenn fulltime fehlt (z.B. laufende Spiele)."""
+    ft = (fx.get("score") or {}).get("fulltime") or {}
+    g = fx.get("goals") or {}
+    hg = ft.get("home") if ft.get("home") is not None else g.get("home")
+    ag = ft.get("away") if ft.get("away") is not None else g.get("away")
+    return hg, ag
+
+
 def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict = None):
     """Robust fallback: scan ALL fixtures on the kickoff date and match BOTH team
     names (either orientation). Independent of team-id/season resolution, which
@@ -3308,11 +3379,12 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
             status = fx.get("fixture", {}).get("status", {}).get("short")
             if status in FINISHED_STATUSES:
                 ht = fx.get("score", {}).get("halftime", {}) or {}
+                _rhg, _rag = _reg_goals(fx)
                 return {
                     "home_name": th, "away_name": ta,
                     "fixture_id": fx.get("fixture", {}).get("id"),
-                    "home_goals": fx.get("goals", {}).get("home"),
-                    "away_goals": fx.get("goals", {}).get("away"),
+                    "home_goals": _rhg,
+                    "away_goals": _rag,
                     "ht_home": ht.get("home"), "ht_away": ht.get("away"),
                     "home_winner": fx.get("teams", {}).get("home", {}).get("winner"),
                     "away_winner": fx.get("teams", {}).get("away", {}).get("winner"),
@@ -3355,11 +3427,12 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
                 th = chosen.get("teams", {}).get("home", {}).get("name", "")
                 ta = chosen.get("teams", {}).get("away", {}).get("name", "")
                 ht = chosen.get("score", {}).get("halftime", {}) or {}
+                _rhg, _rag = _reg_goals(chosen)
                 return {
                     "home_name": th, "away_name": ta,
                     "fixture_id": chosen.get("fixture", {}).get("id"),
-                    "home_goals": chosen.get("goals", {}).get("home"),
-                    "away_goals": chosen.get("goals", {}).get("away"),
+                    "home_goals": _rhg,
+                    "away_goals": _rag,
                     "ht_home": ht.get("home"), "ht_away": ht.get("away"),
                     "home_winner": chosen.get("teams", {}).get("home", {}).get("winner"),
                     "away_winner": chosen.get("teams", {}).get("away", {}).get("winner"),
@@ -6699,8 +6772,8 @@ def _align_goals(fx, home_team):
     teams = fx.get("teams") or {}
     th = (teams.get("home") or {}).get("name") or ""
     ta = (teams.get("away") or {}).get("name") or ""
-    g = fx.get("goals") or {}
-    gh, ga = g.get("home") or 0, g.get("away") or 0
+    gh, ga = _reg_goals(fx)
+    gh, ga = gh or 0, ga or 0
     ho = _sig_tokens(home_team)
     hh = len(_sig_tokens(th) & ho)
     ha = len(_sig_tokens(ta) & ho)

@@ -5,7 +5,14 @@ Erfahrung des Owners wider und sollen die KI-Tippgenerierung steuern. IMMER hier
 bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
 
 ## Harte Regeln (in Code umgesetzt)
-1. **Keine Doppelte Chance (1X/X2) als Banker in Skandinavien/Nordics.** Diese Ligen
+1. **Verlängerung zählt NICHT.** Alle Tor-Märkte (Über/Unter) und Spieler-Props
+   (z.B. "Messi Über 0,5 Torschüsse", "Über 1,5 Tore") gelten NUR für die reguläre
+   Spielzeit (90 Min). → Helper `_reg_goals()` nutzt `score.fulltime` statt `goals`
+   (API-Football zählt bei AET/PEN die Verlängerung mit). Angewandt in
+   `find_finished_fixture`, `_datescan_fixture`, `_align_goals`. (2026-07-20)
+   HINWEIS: Spieler-Schuss-Statistiken (/fixtures/players) trennen ET nicht separat —
+   dort bleibt eine kleine Datenlücke bei K.-o.-Spielen mit Verlängerung.
+2. **Keine Doppelte Chance (1X/X2) als Banker in Skandinavien/Nordics.** Diese Ligen
    (Allsvenskan, Superettan, Veikkausliiga, Eliteserien, Superligaen, Úrvalsdeild, …) sind
    zu unberechenbar. Beispiel-Verlust: "Ilves gewinnt nicht" → Ilves gewann 3:1.
    → `_is_scandinavian()` in `_forebet_candidates`: DC-Option wird dort übersprungen. (2026-07-20)
@@ -20,6 +27,14 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
    pauschal ausschließen. (Hard-Exclusion 2026-07-20 wieder entfernt.)
 
 ## Muster-Wissen (für zukünftige Features / KI-Prompts)
+- **0:0 in Skandinavien real (2026-07-20 bestätigt):** Örgryte–Djurgården endete 0:0,
+  Hafnarfjörður–Breidablik endete 0:0. Beweis, dass 0:0 dort möglich ist → bei Über-Wetten
+  in nordischen Ligen vorsichtig, torlose Spiele ehrlich als solche kennzeichnen.
+  → Tor-Prognose-Tabelle zeigt 0:0-erwartete Spiele als "kein Tor erwartet".
+- **Tor-Prognose-Tabelle (umgesetzt 2026-07-20):** `/api/goals-forecast` zeigt pro Spiel,
+  wie viele Tore jedes Team laut Vorhersagescore (ph/pa) schießt (⚽ = 1 Tor). WICHTIG:
+  Bälle kommen aus der PROGNOSE, nicht aus der Quote — kein Ball nur weil ein Favorit @1.20
+  steht. Ein Team mit 0 vorhergesagten Toren bekommt 0 Bälle.
 - **"Hungrige" Torteams jagen:** Wenn ein Team wie **Göteborg** in einem Spiel gar nicht trifft,
   trifft es sehr wahrscheinlich im nächsten. Solche Teams gezielt auf "Team trifft" backen.
 - **0:0-Historie:**
