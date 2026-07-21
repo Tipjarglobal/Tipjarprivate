@@ -3308,6 +3308,10 @@ def _grade_goal_leg(kind, market, team, fx):
     gm = re.search(r"über\s+(\d+)\.5", m)
     if gm and not team and "halbzeit" not in m and "hz" not in m:
         return total >= int(gm.group(1)) + 1
+    # full-time UNDER line, e.g. "Unter 3.5 Tore" (goals capped)
+    um = re.search(r"unter\s+(\d+)\.5", m)
+    if um and not team and "halbzeit" not in m and "hz" not in m:
+        return total <= int(um.group(1))
     if k == "team_o05" or ("über 0.5" in m and team):
         if _teams_match(fx.get("home_name", ""), team):
             return hg >= 1
@@ -4836,25 +4840,26 @@ async def build_systems() -> dict:
         return f"{team} Doppelte Chance {dc}", (1.28 if (p.get("fav_prob") or 0) >= 55 else 1.34)
 
     pepper_sels, used_pw = [], set()
-    # 6 BANKER = 2-leg pepper combos, varied per game for more "Pfeffer"
+    # 6 BANKER = 2-leg pepper combos. Owner-Stil (2026-07-21): eine Über-Linie KOMBINIERT
+    # mit einer Unter-Linie als Tor-Range (Pivot ~2.5), oder Favorit-Doppelte-Chance dazu.
+    _bi = 0
     for p in pepper_pool:
         if len(pepper_sels) >= 6 or p["id"] in used_pw:
             continue
         total = p.get("total") or 0
         dc = _pepper_dc(p)
         fav_prob = p.get("fav_prob") or 0
-        if dc and fav_prob >= 55:
-            # bet365-Stil: Favorit verliert nicht + beide treffen
-            legA, legB = dc, ("Beide Teams treffen", 1.75)
+        # jeder 3. Banker mit klarem Favoriten: bet365-Stil DC + Über-Linie
+        if dc and fav_prob >= 58 and _bi % 3 == 2:
+            over_mk, over_od = ("Über 1.5 Tore", 1.30) if total >= 3 else ("Über 0.5 Tore", 1.08)
+            legA, legB = dc, (over_mk, over_od)
         elif total >= 4:
-            # Torfest: Tor in jeder Halbzeit + Über 2.5
-            legA, legB = ("Tor in jeder Halbzeit", 1.80), ("Über 2.5 Tore", 1.70)
-        elif p.get("btts"):
-            legA, legB = ("Tor in jeder Halbzeit", 1.80), ("Beide Teams treffen", 1.75)
-        elif dc:
-            legA, legB = ("Tor in jeder Halbzeit", 1.80), dc
+            legA, legB = ("Über 2.5 Tore", 1.75), ("Unter 5.5 Tore", 1.28)   # 3–5 Tore
+        elif total == 3:
+            legA, legB = ("Über 1.5 Tore", 1.30), ("Unter 4.5 Tore", 1.32)    # 2–4 Tore
         else:
-            legA, legB = ("Tor in jeder Halbzeit", 1.80), ("Über 2.5 Tore", 1.85)
+            legA, legB = ("Über 0.5 Tore", 1.10), ("Unter 3.5 Tore", 1.30)    # 1–3 Tore
+        _bi += 1
         used_pw.add(p["id"])
         sel = _sel(p, f"{legA[0]} + {legB[0]}", round(legA[1] * legB[1], 2), 8.0)
         sel["combo_markets"] = [legA[0], legB[0]]

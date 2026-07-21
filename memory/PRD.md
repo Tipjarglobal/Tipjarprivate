@@ -1,6 +1,11 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-21c — Wochen-Pfeffer-Kombi (Di→Fr) mit 15 Spielen / 6 Banker
+### CHANGELOG 2026-07-21d — Pfeffer-Banker als Tor-Range (Über-Linie + Unter-Linie)
+- Owner-Verfeinerung: Banker-Kombis kombinieren jetzt eine Über- mit einer Unter-Linie (Tor-Range), Pivot ~2.5. Torfest→„Über 2.5 + Unter 5.5" (3–5), mittel→„Über 1.5 + Unter 4.5" (2–4), niedrig→„Über 0.5 + Unter 3.5" (1–3). Jeder 3. Banker mit klarem Favoriten: „Favorit Doppelte Chance + Über-Linie".
+- Grader `_grade_goal_leg`: neue text-abrechenbare UNTER-Linie („Unter N.5 Tore" → total ≤ N).
+- VERIFIZIERT: /systems pepper zeigt Range-Banker (Über 2.5 + Unter 5.5 @2,24), Gesamtquote ~6.500x, alle Legs settlebar. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Wunsch: ein großer Kombi-Schein Di→Fr 12:00, 6 beste Banker mit „Pfeffer" (2-Leg-Kombis, KEIN Über 0,5), insgesamt 15 Spiele.
 - Backend `build_systems`: neues System key `pepper` „Wochen-Pfeffer-Kombi (Di→Fr)" ganz oben. Fenster: jetzt−3h → kommender Freitag 12:00. Nur 0:0-sichere Spiele (`over_safe`). 6 Banker als 2-Leg-Kombis (variiert: „Tor in jeder Halbzeit + Über 2.5" / bet365-Stil „Favorit Doppelte Chance + Beide treffen"), 9 Value-Legs → 15 Spiele, Gesamtquote als Produkt.
 - Grader `_grade_goal_leg`: neue text-abrechenbare Märkte „Tor in jeder Halbzeit" (Tor in beiden HZ) + kind-basiert `team_o15` (Team ≥2 Tore) und `ah25_*` (+2.5 Handicap). Alle Pepper-Legs settlebar über bestehende Engine + snapshot_systems.
