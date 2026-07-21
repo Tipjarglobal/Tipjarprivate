@@ -1,6 +1,13 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-21b — Quali-Briefing in Smart Picks (Liga-Kontext, Schüsse, Rotation, Reise)
+### CHANGELOG 2026-07-21c — Wochen-Pfeffer-Kombi (Di→Fr) mit 15 Spielen / 6 Banker
+- Owner-Wunsch: ein großer Kombi-Schein Di→Fr 12:00, 6 beste Banker mit „Pfeffer" (2-Leg-Kombis, KEIN Über 0,5), insgesamt 15 Spiele.
+- Backend `build_systems`: neues System key `pepper` „Wochen-Pfeffer-Kombi (Di→Fr)" ganz oben. Fenster: jetzt−3h → kommender Freitag 12:00. Nur 0:0-sichere Spiele (`over_safe`). 6 Banker als 2-Leg-Kombis (variiert: „Tor in jeder Halbzeit + Über 2.5" / bet365-Stil „Favorit Doppelte Chance + Beide treffen"), 9 Value-Legs → 15 Spiele, Gesamtquote als Produkt.
+- Grader `_grade_goal_leg`: neue text-abrechenbare Märkte „Tor in jeder Halbzeit" (Tor in beiden HZ) + kind-basiert `team_o15` (Team ≥2 Tore) und `ah25_*` (+2.5 Handicap). Alle Pepper-Legs settlebar über bestehende Engine + snapshot_systems.
+- Frontend `Systems.jsx`: Titel/Untertitel-Fallback auf Backend-Werte (kein roher i18n-Key für neue System-Keys).
+- VERIFIZIERT: /systems liefert pepper (15 Spiele, 6 Banker, ~31000x, Di→Do im Fenster), Screenshot zeigt Karte oben mit Banker-Kombis + Datum/Liga. Backend 200 ohne Fehler. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Wunsch: kleine Einführung über die Quali-Spiele der Woche + pro Team: welche Liga-Spiele davor/danach, wie sie im Ligaspiel spielten (Schüsse, Rotation), ob das nächste Ligaspiel wichtig ist / weite Reise.
 - Backend: `GET /api/smart/qualifier-briefing` (8h-gecacht in `briefing_cache`, quota-schonend, max 10 Ties). `_team_league_context` holt letztes Liga-Spiel VOR dem Quali (Ergebnis + Schüsse via /fixtures/statistics) und nächstes Liga-Spiel DANACH (Gegner, Heim/Auswärts, Stadt, Tage Abstand). LLM (Gemini) schreibt daraus ein deutsches Briefing; ehrlich wenn Liga in Sommerpause (keine erfundenen Zahlen). In `smart_loop` (12h) + Startup-Rebuild, Concurrency-Guard `_BRIEFING_BUILDING`.
 - BUGFIX beim Bau: `/fixtures`-Response hat kein `league.type` → alle Spiele wurden als „keine Liga" verworfen. Erkennung jetzt über Liga-NAME (Quali/Cup/Friendly ausgeschlossen). 18 Teams liefern nun echten Liga-Kontext.

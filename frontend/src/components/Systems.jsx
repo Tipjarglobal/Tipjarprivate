@@ -71,6 +71,10 @@ const SystemCard = ({ system }) => {
   const { t } = useI18n();
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
+  const titleKey = `sys.title.${system.key}`;
+  const subKey = `sys.sub.${system.key}`;
+  const title = t(titleKey) === titleKey ? (system.title || system.key) : t(titleKey);
+  const subtitle = t(subKey) === subKey ? (system.subtitle || "") : t(subKey);
   const hasCombo = (system.selections || []).some((s) => s.combo_markets);
   if (!system.selections || (system.selections.length < 2 && !hasCombo)) return null;
   return (
@@ -92,7 +96,7 @@ const SystemCard = ({ system }) => {
                 {t(`sys.risk.${cfg.riskKey}`)}
               </span>
               <h3 className="font-heading font-black text-white text-base sm:text-lg leading-none truncate">
-                {t(`sys.title.${system.key}`)}
+                {title}
               </h3>
             </div>
             <p className="text-xs text-zinc-400 mt-1.5 truncate">{system.week} · {system.count} {t("sys.picks")}</p>
@@ -106,7 +110,7 @@ const SystemCard = ({ system }) => {
         </div>
       </div>
 
-      <p className="text-xs text-zinc-400 mb-3">{t(`sys.sub.${system.key}`)}</p>
+      <p className="text-xs text-zinc-400 mb-3">{subtitle}</p>
 
       <div className="space-y-2 flex-1">
         {system.selections.map((s) => (
