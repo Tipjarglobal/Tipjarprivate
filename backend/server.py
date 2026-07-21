@@ -633,6 +633,28 @@ async def goals_forecast():
     return {"count": len(out), "matches": out[:80], "generated_at": now.isoformat()}
 
 
+@api_router.get("/smart/qualifier-briefing")
+async def qualifier_briefing():
+    """Weekly European-qualifier briefing for the Smart Picks intro. Returns the cached
+    briefing; if it is missing or older than BRIEFING_TTL_H, a rebuild is kicked off in
+    the background (the current cache is returned immediately, no request blocking)."""
+    doc = await db.briefing_cache.find_one({"id": "qualifier"}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    stale = True
+    if doc:
+        try:
+            gen = datetime.fromisoformat(doc.get("generated_at"))
+            stale = (now - gen) > timedelta(hours=BRIEFING_TTL_H)
+        except Exception:
+            stale = True
+    if stale:
+        _BG_TASKS.append(asyncio.create_task(build_qualifier_briefing()))
+    if not doc:
+        return {"count": 0, "matches": [], "narrative": "", "generated_at": "", "building": True}
+    return {**doc, "building": stale}
+
+
+
 
 @api_router.get("/tips/counts")
 async def tips_counts():
@@ -6451,6 +6473,213 @@ async def qualifier_autopost() -> dict:
     return {"posted": posted, "scanned": scanned}
 
 
+# ---------------------------------------------------------------------------
+# QUALIFIER BRIEFING (owner request 2026-07-21): a short intro in Smart Picks about
+# this week's European qualifier ties — for each team, which LEAGUE game they play
+# before/after, how they performed there (shots), schedule congestion / rotation
+# risk, and whether the next league game matters / involves far travel. Quota-capped
+# and 8h-cached so it never hammers API-Football or the LLM key.
+# ---------------------------------------------------------------------------
+BRIEFING_TTL_H = 8
+BRIEFING_MAX_MATCHES = 10
+_BRIEFING_BUILDING = False
+
+
+def _is_domestic_league_fx(fx: dict) -> bool:
+    """True for a normal domestic LEAGUE fixture (not a UEFA/qualifier tie, cup or
+    friendly). NOTE: API-Football's /fixtures response does NOT populate league.type
+    (that only exists on /leagues), so we classify by the league NAME instead."""
+    name = ((fx.get("league") or {}).get("name") or "").lower()
+    if not name:
+        return False
+    if any(k in name for k in QUAL_KEYWORDS):
+        return False
+    if any(k in name for k in ("friendl", "cup", "pokal", "coppa", "copa del",
+                               "trophy", "supercup", "super cup", "super lig cup")):
+        return False
+    return True
+
+
+def _fx_shots_for_team(fid, team_id):
+    """(total shots, shots on goal) for a team in a finished fixture, else (None, None)."""
+    stats = _apifootball("/fixtures/statistics", {"fixture": fid}) or []
+    for block in stats:
+        if (block.get("team") or {}).get("id") == team_id:
+            sh = sog = None
+            for row in block.get("statistics") or []:
+                t = (row.get("type") or "").lower()
+                if t == "total shots":
+                    sh = row.get("value")
+                elif t == "shots on goal":
+                    sog = row.get("value")
+            return sh, sog
+    return None, None
+
+
+async def _team_league_context(team_id: int, team_name: str, qko: datetime) -> dict:
+    """Last domestic-league game BEFORE the qualifier (result + shots) and next
+    domestic-league game AFTER it (opponent, home/away, city, days rest)."""
+    recent = await _apifootball_async("/fixtures", {"team": team_id, "last": 6}) or []
+    upcoming = await _apifootball_async("/fixtures", {"team": team_id, "next": 6}) or []
+
+    def _dt(fx):
+        try:
+            return datetime.fromisoformat(((fx.get("fixture") or {}).get("date") or "").replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    out = {"team": team_name, "last_league": None, "next_league": None}
+
+    # LAST finished domestic-league game before the qualifier
+    prev = [fx for fx in recent if _is_domestic_league_fx(fx)
+            and ((fx.get("fixture") or {}).get("status") or {}).get("short") in FINISHED_STATUSES
+            and (_dt(fx) is not None and _dt(fx) < qko)]
+    prev.sort(key=lambda fx: _dt(fx) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    if prev:
+        fx = prev[0]
+        fid = (fx.get("fixture") or {}).get("id")
+        teams = fx.get("teams") or {}
+        is_home = (teams.get("home") or {}).get("id") == team_id
+        opp = ((teams.get("away") if is_home else teams.get("home")) or {}).get("name") or "?"
+        hg, ag = _reg_goals(fx)
+        gf, ga = (hg, ag) if is_home else (ag, hg)
+        sh, sog = _fx_shots_for_team(fid, team_id)
+        d = _dt(fx)
+        out["last_league"] = {
+            "opponent": opp, "home": is_home, "gf": gf, "ga": ga,
+            "shots": sh, "sot": sog, "league": (fx.get("league") or {}).get("name") or "",
+            "date": d.isoformat() if d else "",
+            "days_before": round((qko - d).total_seconds() / 86400, 1) if d else None,
+        }
+
+    # NEXT domestic-league game after the qualifier
+    nxt = [fx for fx in upcoming if _is_domestic_league_fx(fx)
+           and (_dt(fx) is not None and _dt(fx) > qko)]
+    nxt.sort(key=lambda fx: _dt(fx) or datetime.max.replace(tzinfo=timezone.utc))
+    if nxt:
+        fx = nxt[0]
+        teams = fx.get("teams") or {}
+        is_home = (teams.get("home") or {}).get("id") == team_id
+        opp = ((teams.get("away") if is_home else teams.get("home")) or {}).get("name") or "?"
+        venue = (fx.get("fixture") or {}).get("venue") or {}
+        d = _dt(fx)
+        out["next_league"] = {
+            "opponent": opp, "home": is_home,
+            "city": venue.get("city") or "", "league": (fx.get("league") or {}).get("name") or "",
+            "date": d.isoformat() if d else "",
+            "days_after": round((d - qko).total_seconds() / 86400, 1) if d else None,
+        }
+    return out
+
+
+_BRIEFING_SYSTEM = (
+    "Du bist der Chef-Analyst von TipJar. Schreibe ein kompaktes, spannendes deutsches "
+    "Briefing über die Europapokal-Qualifikationsspiele dieser Woche. Sprich den Leser "
+    "direkt an, sei meinungsstark aber seriös. Struktur: (1) ein kurzer Intro-Absatz (2-3 Sätze) "
+    "über die Quali-Woche allgemein. (2) Pro Spiel 2-4 Sätze: nenne beide Teams, welche "
+    "LIGA-Spiele sie davor/danach haben, wie sie im letzten Ligaspiel gespielt haben (Ergebnis, "
+    "Schüsse = Offensivdruck), ob ein enger Terminplan Rotationsrisiko bedeutet, ob das nächste "
+    "Ligaspiel wichtig ist und ob eine weite/auswärtige Reise ansteht. Wenn Daten fehlen, sag es "
+    "ehrlich statt zu erfinden. KEINE erfundenen Zahlen. Nutze klare Absätze, höchstens dezent Emojis."
+)
+
+
+async def build_qualifier_briefing() -> dict:
+    """Gather this week's qualifier ties + each team's league context and let the LLM
+    write the German briefing. Cached in db.briefing_cache (id='qualifier')."""
+    global _BRIEFING_BUILDING
+    if _BRIEFING_BUILDING:
+        return {"skipped": True}
+    _BRIEFING_BUILDING = True
+    try:
+        return await _build_qualifier_briefing_inner()
+    finally:
+        _BRIEFING_BUILDING = False
+
+
+async def _build_qualifier_briefing_inner() -> dict:
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(2000)
+    ties, seen = [], set()
+    for p in preds:
+        if not _looks_two_legged(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < -3 or h > 24 * 7:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        ties.append((ko, p))
+    ties.sort(key=lambda x: x[0])
+    ties = ties[:BRIEFING_MAX_MATCHES]
+
+    matches = []
+    for ko, p in ties:
+        home, away = p.get("home"), p.get("away")
+        id_h = await resolve_team_id(home)
+        id_a = await resolve_team_id(away)
+        ctx_h = await _team_league_context(id_h, home, ko) if id_h else {"team": home, "last_league": None, "next_league": None}
+        ctx_a = await _team_league_context(id_a, away, ko) if id_a else {"team": away, "last_league": None, "next_league": None}
+        matches.append({
+            "home": home, "away": away, "league": p.get("league") or "Qualifikation",
+            "kickoff": ko.isoformat(), "teams": [ctx_h, ctx_a],
+        })
+
+    # Build a compact structured prompt for the LLM.
+    def _team_line(c):
+        parts = [f"  Team: {c['team']}"]
+        ll = c.get("last_league")
+        if ll:
+            venue = "Heim" if ll["home"] else "Auswärts"
+            shots = f", {ll['shots']} Schüsse ({ll.get('sot') or '?'} aufs Tor)" if ll.get("shots") is not None else ""
+            parts.append(f"    Letztes Ligaspiel ({venue}, vor {ll.get('days_before')} Tagen): "
+                         f"{ll['gf']}:{ll['ga']} gg. {ll['opponent']} [{ll['league']}]{shots}")
+        else:
+            parts.append("    Letztes Ligaspiel: keine Daten (evtl. Liga in Sommerpause)")
+        nl = c.get("next_league")
+        if nl:
+            venue = "zuhause" if nl["home"] else f"auswärts in {nl.get('city') or '?'}"
+            parts.append(f"    Nächstes Ligaspiel (in {nl.get('days_after')} Tagen, {venue}): "
+                         f"gg. {nl['opponent']} [{nl['league']}]")
+        else:
+            parts.append("    Nächstes Ligaspiel: keine Daten")
+        return "\n".join(parts)
+
+    lines = []
+    for m in matches:
+        ko_txt = ""
+        try:
+            ko_txt = datetime.fromisoformat(m["kickoff"]).strftime("%d.%m. %H:%M")
+        except Exception:
+            pass
+        lines.append(f"Quali-Spiel ({ko_txt}): {m['home']} vs {m['away']} [{m['league']}]\n"
+                     + "\n".join(_team_line(c) for c in m["teams"]))
+    data_block = "\n\n".join(lines) if lines else "Diese Woche keine Qualifikationsspiele gefunden."
+
+    narrative = ""
+    if EMERGENT_LLM_KEY and matches:
+        try:
+            chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"brief-{uuid.uuid4()}",
+                           system_message=_BRIEFING_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+            resp = await chat.send_message(UserMessage(
+                text=f"Daten der Qualifikationswoche:\n\n{data_block}\n\nSchreibe das Briefing."))
+            narrative = (resp if isinstance(resp, str) else str(resp)).strip()[:4000]
+        except Exception as e:
+            logger.error(f"briefing LLM failed: {e}")
+
+    doc = {"id": "qualifier", "generated_at": now.isoformat(),
+           "count": len(matches), "matches": matches, "narrative": narrative}
+    await db.briefing_cache.update_one({"id": "qualifier"}, {"$set": doc}, upsert=True)
+    logger.info(f"Qualifier briefing built: {len(matches)} ties")
+    return doc
+
+
+
 async def smart_autopost() -> dict:
     """Generate player-prop 'Smart Bet' tips — ONLY for top leagues where bookmakers
     actually offer player markets (Premier League, La Liga, World Cup, UCL …). Owner:
@@ -6673,6 +6902,7 @@ async def smart_loop():
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
                 logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
+                logger.info(f"HQ loop C (Briefing): {(await build_qualifier_briefing()).get('count')} ties")
         except Exception as e:
             logger.error(f"smart_loop error: {e}")
         await asyncio.sleep(12 * 3600)  # every 12 hours (season stats change slowly)

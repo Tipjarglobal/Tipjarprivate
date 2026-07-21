@@ -1,6 +1,13 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-21 — Abgerechnete Scheine löschen sobald SPIEL >24h vorbei (nicht erst nach Abrechnung)
+### CHANGELOG 2026-07-21b — Quali-Briefing in Smart Picks (Liga-Kontext, Schüsse, Rotation, Reise)
+- Owner-Wunsch: kleine Einführung über die Quali-Spiele der Woche + pro Team: welche Liga-Spiele davor/danach, wie sie im Ligaspiel spielten (Schüsse, Rotation), ob das nächste Ligaspiel wichtig ist / weite Reise.
+- Backend: `GET /api/smart/qualifier-briefing` (8h-gecacht in `briefing_cache`, quota-schonend, max 10 Ties). `_team_league_context` holt letztes Liga-Spiel VOR dem Quali (Ergebnis + Schüsse via /fixtures/statistics) und nächstes Liga-Spiel DANACH (Gegner, Heim/Auswärts, Stadt, Tage Abstand). LLM (Gemini) schreibt daraus ein deutsches Briefing; ehrlich wenn Liga in Sommerpause (keine erfundenen Zahlen). In `smart_loop` (12h) + Startup-Rebuild, Concurrency-Guard `_BRIEFING_BUILDING`.
+- BUGFIX beim Bau: `/fixtures`-Response hat kein `league.type` → alle Spiele wurden als „keine Liga" verworfen. Erkennung jetzt über Liga-NAME (Quali/Cup/Friendly ausgeschlossen). 18 Teams liefern nun echten Liga-Kontext.
+- Frontend: neue `QualifierBriefing.jsx` (aufklappbare Karte oben in Smart Picks, Markdown-Fettschrift, i18n in 8 Sprachen).
+- VERIFIZIERT: Endpoint liefert 10 Ties + Narrative mit echten Daten (Hammarby 4:0/22 Schüsse/Rotationsgefahr/Reise), Screenshot der Smart-Ansicht, Backend 200 ohne Fehler. Greift auf Produktion nach **Deploy**.
+
+
 - Owner: verspätete Abrechnungen ließen Scheine alter Spiele hängen (z.B. Spain–Argentina, Spiel 19.07., erst 20.07. abgerechnet). `purge_settled_tips` löscht jetzt, sobald ENTWEDER die Abrechnung >24h alt ist ODER das Spiel selbst >24h vorbei ist (max. Kickoff über alle Legs via `_parse_kickoff`).
 - VERIFIZIERT: Purge entfernte sofort 11 zusätzliche Scheine (Spiel >24h vorbei), 0 solche übrig; Hall of Fame (win_claims) unberührt. Greift auf Produktion nach **Deploy**.
 

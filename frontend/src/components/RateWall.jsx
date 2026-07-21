@@ -5,6 +5,7 @@ import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clo
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
+import { QualifierBriefing } from "./QualifierBriefing";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
@@ -418,6 +419,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
       {view !== "systems" && view !== "settled" && (
         <>
+      {view === "smart" && <QualifierBriefing t={t} />}
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {view === "members" && <MemberSearch onUserClick={onUserClick} t={t} />}
       {/* filters — hidden entirely in Smart; no "live" toggle anywhere (dedicated Live tab exists) */}
