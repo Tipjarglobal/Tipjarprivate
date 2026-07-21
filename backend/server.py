@@ -608,6 +608,7 @@ async def goals_forecast():
         except Exception:
             conf_val = None
         btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        zz = _zero_zero_assessment(p)
         if total == 0:
             note = "Torlos erwartet — 0:0 möglich, Vorsicht mit Über-Wetten"
         elif ph == 0 or pa == 0:
@@ -623,9 +624,12 @@ async def goals_forecast():
             "league": p.get("league") or "", "kickoff": ko.isoformat() if ko else "",
             "btts": btts, "over25": over25,
             "confidence": max(30, min(97, conf_val)) if conf_val else None,
+            "zero_zero": zz["level"], "zero_zero_label": zz["label"],
+            "over_safe": zz["over_safe"],
             "note": note,
         })
-    out.sort(key=lambda x: (-x["total"], x["kickoff"] or "z"))
+    # 0:0-unwahrscheinliche (Über-sichere) Spiele nach oben, dann Torschnitt
+    out.sort(key=lambda x: (not x["over_safe"], -x["total"], x["kickoff"] or "z"))
     return {"count": len(out), "matches": out[:80], "generated_at": now.isoformat()}
 
 
@@ -4748,6 +4752,10 @@ async def build_systems() -> dict:
     for p in goals_sorted:
         if p["id"] in used_tj:
             continue
+        # Owner-Regel: nur Spiele, bei denen ein 0:0 praktisch ausgeschlossen ist —
+        # keine nordischen/defensiven Über-Fallen (Örgryte–Djurgården 0:0 lässt grüßen).
+        if not _zero_zero_assessment(p)["over_safe"]:
+            continue
         t_goals = p.get("total") or 0
         if t_goals >= 3:
             mk, base, rt = "Über 1.5 Tore", 1.18, 8.5
@@ -5107,6 +5115,47 @@ def _is_scandinavian(*vals) -> bool:
     Owner rule: these leagues are too unpredictable for Double-Chance bankers."""
     s = " ".join(str(v or "").lower() for v in vals)
     return any(k in s for k in _SCAND_KEYS)
+
+
+def _zero_zero_assessment(p: dict) -> dict:
+    """Owner-Philosophie (2026-07-20): manche Spiele enden 0:0 (Örgryte–Djurgården,
+    Hafnarfjörður–Breidablik). Über-Wetten sind NUR sicher, wenn ein 0:0 praktisch
+    ausgeschlossen ist. Diese Heuristik bewertet die 0:0-Wahrscheinlichkeit aus den
+    gespeicherten Prognose-Signalen (KEIN extra API-Quota):
+      • hoher vorhergesagter Torschnitt → 0:0 unwahrscheinlich
+      • beide Teams treffen (btts) / über 2,5 → 0:0 unwahrscheinlich
+      • skandinavische/nordische Ligen → 0:0 realistisch (Owner-Erfahrung)
+    Rückgabe: level = 'unlikely' | 'medium' | 'possible', over_safe (bool), label."""
+    total = p.get("total") or 0
+    ph, pa = p.get("ph") or 0, p.get("pa") or 0
+    btts = bool(p.get("btts"))
+    over25 = bool(p.get("over25"))
+    scand = _is_scandinavian(p.get("league"), p.get("league_code"), p.get("country"))
+    try:
+        conf = int(float(str(p.get("conf"))))
+    except Exception:
+        conf = 0
+    score = 0
+    score += 42 if total >= 4 else 30 if total >= 3 else 14 if total >= 2 else -12
+    if btts:
+        score += 26
+    if over25:
+        score += 14
+    if ph >= 1 and pa >= 1:
+        score += 10
+    if total <= 1:
+        score -= 26
+    if scand:
+        score -= 32          # nordic/defensive: a 0:0 is genuinely on the cards
+    if conf >= 80:
+        score += 6
+    if score >= 52:
+        level, over_safe, label = "unlikely", True, "0:0 praktisch ausgeschlossen"
+    elif score >= 28:
+        level, over_safe, label = "medium", False, "0:0 eher unwahrscheinlich"
+    else:
+        level, over_safe, label = "possible", False, "0:0 möglich — Vorsicht mit Über"
+    return {"level": level, "over_safe": over_safe, "label": label, "score": score}
 
 
 

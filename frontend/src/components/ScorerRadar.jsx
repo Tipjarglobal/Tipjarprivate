@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Target, Flame, RefreshCw, Clock, Table2 } from "lucide-react";
+import { Target, Flame, RefreshCw, Clock, Table2, ShieldCheck } from "lucide-react";
 import api from "../api";
 import { useI18n, toLatin } from "../i18n";
 
@@ -86,6 +86,12 @@ const RadarView = ({ rows, t }) => {
   );
 };
 
+const ZZ = {
+  unlikely: { cls: "bg-[#2ECC57]/15 text-[#2ECC57] border-[#2ECC57]/40" },
+  medium: { cls: "bg-zinc-500/15 text-zinc-300 border-zinc-500/40" },
+  possible: { cls: "bg-amber-400/15 text-amber-300 border-amber-400/40" },
+};
+
 const TableView = ({ matches, t }) => {
   if (matches.length === 0) {
     return <div className="text-center text-zinc-500 py-20" data-testid="goals-table-empty">{t("scorers.empty")}</div>;
@@ -94,6 +100,7 @@ const TableView = ({ matches, t }) => {
     <div className="grid sm:grid-cols-2 gap-3" data-testid="goals-table">
       {matches.map((m, i) => {
         const goalless = m.total === 0;
+        const zz = ZZ[m.zero_zero] || ZZ.medium;
         return (
           <motion.div
             key={`${m.home}-${m.away}-${i}`}
@@ -101,7 +108,7 @@ const TableView = ({ matches, t }) => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(i * 0.025, 0.4) }}
             data-testid="goals-row"
-            className={`rounded-2xl bg-surface border p-4 ${goalless ? "border-zinc-700/60" : m.total >= 4 ? "border-[#2ECC57]/40" : "border-elevated"}`}
+            className={`rounded-2xl bg-surface border p-4 ${m.over_safe ? "border-[#2ECC57]/40" : goalless ? "border-amber-400/40" : "border-elevated"}`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-[11px] text-zinc-500 truncate">{m.league || "—"}</span>
@@ -113,8 +120,16 @@ const TableView = ({ matches, t }) => {
             </div>
             <TeamGoalRow name={m.home} goals={m.home_goals} dim={goalless} />
             <TeamGoalRow name={m.away} goals={m.away_goals} dim={goalless} />
-            <div className={`text-[11px] mt-2 font-medium ${goalless ? "text-amber-300/80" : m.total >= 4 ? "text-[#2ECC57]" : "text-zinc-400"}`}>
-              {m.note}{m.confidence ? ` · ${m.confidence}%` : ""}
+            <div className="flex items-center justify-between gap-2 mt-2.5">
+              <span className="text-[11px] text-zinc-400 font-medium truncate">
+                {m.note}{m.confidence ? ` · ${m.confidence}%` : ""}
+              </span>
+              <span
+                data-testid="goals-zerozero-badge"
+                className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide rounded-full px-2 py-1 border ${zz.cls}`}
+              >
+                {m.over_safe && <ShieldCheck size={10} />}{m.zero_zero_label}
+              </span>
             </div>
           </motion.div>
         );

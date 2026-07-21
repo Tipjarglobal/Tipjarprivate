@@ -1,6 +1,13 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-20b — Verlängerung ausgeschlossen + Tor-Prognose-Tabelle + Systeme-Meta
+### CHANGELOG 2026-07-20c — 0:0-Bewertung: bei welchen Spielen ein 0:0 ausgeschlossen ist
+- **Owner-Philosophie:** Über-Wetten nur sicher, wenn ein 0:0 praktisch ausgeschlossen ist (Örgryte–Djurgården & Hafnarfjörður–Breidablik endeten 0:0, obwohl viele sie als torreich sahen).
+- Neuer Helper `_zero_zero_assessment(p)` (quota-frei, aus Prognose-Signalen: Torschnitt, btts, über 2,5, conf, nordische Liga −32) → level `unlikely` / `medium` / `possible` + `over_safe`.
+- `/api/goals-forecast`: liefert jetzt `zero_zero`, `zero_zero_label`, `over_safe`; 0:0-ausgeschlossene Spiele werden nach oben sortiert. Frontend zeigt farbiges Badge (grün „0:0 praktisch ausgeschlossen" / amber „0:0 möglich").
+- `build_systems` (tjlogic-Kombi): nimmt nur noch Spiele mit `over_safe=True` → keine nordischen/defensiven Über-Fallen mehr in der Sicherheits-Kombi.
+- VERIFIZIERT: goals-forecast liefert Level+Badge (curl), Frontend-Screenshot zeigt grüne Badges, Backend 200. Greift auf Produktion nach **Deploy**.
+
+
 - **Verlängerung zählt NICHT (Owner-Regel):** Alle Tor-/Über-Märkte + Spieler-Props gelten nur für die reguläre 90-Min-Zeit. Neuer Helper `_reg_goals()` liest `score.fulltime` statt `goals` (API-Football zählt bei AET/PEN die Verlängerung mit). Angewandt in `find_finished_fixture`, `_datescan_fixture`, `_align_goals`. Bei Live-Spielen (fulltime=null) Fallback auf aktuellen Stand → keine Regression. Rest-Datenlücke: /fixtures/players trennt ET-Schüsse nicht.
 - **Tor-Prognose-Tabelle (neu):** `GET /api/goals-forecast` liefert pro Spiel die vorhergesagten Tore je Team (aus ph/pa, NICHT aus der Quote). Frontend ScorerRadar hat jetzt 2 Tabs: "Tor-Prognose" (⚽ pro Tor, Owner-Format Ajax⚽⚽⚽) + "Wer trifft?" (bestehender Radar). 0:0-erwartete Spiele werden ehrlich als "kein Tor erwartet" markiert. i18n in 8 Sprachen.
 - **Systeme-Bug:** Datum/Uhrzeit/Liga fehlten in der Anzeige. Frontend Systems.jsx: neue `LegMeta`-Zeile (📅 Datum · 🕐 Uhrzeit · 🏆 Liga) auf JEDEM Leg, robuster Kickoff-Parser (dd/mm/yyyy hh:mm + "21. Jul 2026"). Backend lieferte die Daten bereits.
