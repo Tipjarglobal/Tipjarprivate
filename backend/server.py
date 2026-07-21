@@ -3660,23 +3660,33 @@ PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota gu
 
 
 async def purge_settled_tips() -> int:
-    """Settled slips (won/lost/void) are auto-removed 24h after they were settled — the
-    'Abgerechnet' area (inkl. 'Best Won') only ever shows the last day. Seed showcase
-    tips are kept. The public HALL OF FAME (db.win_claims) is a SEPARATE collection and
-    is never touched here — it stays forever (owner 2026-07-20: 'Best Won weg, Hall of
-    Fame steht'). ALL settled tips >24h are purged, including won System/Community picks."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    """Settled slips (won/lost/void) are auto-removed once EITHER the settlement is >24h
+    old OR the MATCH itself has been over for >24h — so a late/delayed settlement can no
+    longer leave an old game's slip hanging around (owner 2026-07-21). The 'Abgerechnet'
+    area (inkl. 'Best Won') only ever shows the last day. Seed showcase tips are kept.
+    The public HALL OF FAME (db.win_claims) is a SEPARATE collection and is never touched
+    here — it stays forever ('Best Won weg, Hall of Fame steht')."""
+    now = datetime.now(timezone.utc)
+    cutoff_dt = now - timedelta(hours=24)
+    cutoff = cutoff_dt.isoformat()
     docs = await db.tips.find(
         {"status": {"$in": ["won", "lost", "void"]}, "id": {"$not": {"$regex": "^seed-"}}},
-        {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1, "source": 1, "status": 1}).to_list(5000)
+        {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1, "source": 1, "status": 1,
+         "match_time": 1, "legs": 1}).to_list(5000)
+
+    def _match_over_24h(d) -> bool:
+        kos = [k for k in (_parse_kickoff(l.get("kickoff")) for l in (d.get("legs") or [])) if k]
+        ko = max(kos) if kos else _parse_kickoff(d.get("match_time"))
+        return bool(ko and ko < cutoff_dt)
 
     stale = [d["id"] for d in docs
-             if (d.get("settled_at") or d.get("created_at") or "") < cutoff]
+             if (d.get("settled_at") or d.get("created_at") or "") < cutoff
+             or _match_over_24h(d)]
     if not stale:
         return 0
     await db.tips.delete_many({"id": {"$in": stale}})
     await db.tip_ratings.delete_many({"tip_id": {"$in": stale}})
-    logger.info(f"Purged {len(stale)} settled tips older than 24h")
+    logger.info(f"Purged {len(stale)} settled tips (settled >24h or match over >24h)")
     return len(stale)
 
 

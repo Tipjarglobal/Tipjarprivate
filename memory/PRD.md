@@ -1,6 +1,10 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-20d — Alle abgerechneten Scheine >24 Std. löschen (Best Won weg, HoF bleibt)
+### CHANGELOG 2026-07-21 — Abgerechnete Scheine löschen sobald SPIEL >24h vorbei (nicht erst nach Abrechnung)
+- Owner: verspätete Abrechnungen ließen Scheine alter Spiele hängen (z.B. Spain–Argentina, Spiel 19.07., erst 20.07. abgerechnet). `purge_settled_tips` löscht jetzt, sobald ENTWEDER die Abrechnung >24h alt ist ODER das Spiel selbst >24h vorbei ist (max. Kickoff über alle Legs via `_parse_kickoff`).
+- VERIFIZIERT: Purge entfernte sofort 11 zusätzliche Scheine (Spiel >24h vorbei), 0 solche übrig; Hall of Fame (win_claims) unberührt. Greift auf Produktion nach **Deploy**.
+
+
 - Owner: „Best Won weg. Hall of Fame steht." `purge_settled_tips` löscht jetzt ALLE won/lost/void-Scheine >24 Std. — die bisherige „für immer behalten"-Ausnahme (gewonnene System-/Community-Picks im 'Best Won'-Bucket) wurde entfernt.
 - Die öffentliche HALL OF FAME (`db.win_claims`) ist eine SEPARATE Collection und bleibt unberührt (für immer sichtbar). Seed-Showcase-Scheine (`seed-*`) bleiben ebenfalls.
 - VERIFIZIERT: Purge lief (5 alte gelöscht), 0 Scheine >24 Std. übrig, win_claims (2) unangetastet. Greift auf Produktion nach **Deploy**.
