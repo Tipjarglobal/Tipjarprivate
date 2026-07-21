@@ -1,6 +1,11 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-20c — 0:0-Bewertung: bei welchen Spielen ein 0:0 ausgeschlossen ist
+### CHANGELOG 2026-07-20d — Alle abgerechneten Scheine >24 Std. löschen (Best Won weg, HoF bleibt)
+- Owner: „Best Won weg. Hall of Fame steht." `purge_settled_tips` löscht jetzt ALLE won/lost/void-Scheine >24 Std. — die bisherige „für immer behalten"-Ausnahme (gewonnene System-/Community-Picks im 'Best Won'-Bucket) wurde entfernt.
+- Die öffentliche HALL OF FAME (`db.win_claims`) ist eine SEPARATE Collection und bleibt unberührt (für immer sichtbar). Seed-Showcase-Scheine (`seed-*`) bleiben ebenfalls.
+- VERIFIZIERT: Purge lief (5 alte gelöscht), 0 Scheine >24 Std. übrig, win_claims (2) unangetastet. Greift auf Produktion nach **Deploy**.
+
+
 - **Owner-Philosophie:** Über-Wetten nur sicher, wenn ein 0:0 praktisch ausgeschlossen ist (Örgryte–Djurgården & Hafnarfjörður–Breidablik endeten 0:0, obwohl viele sie als torreich sahen).
 - Neuer Helper `_zero_zero_assessment(p)` (quota-frei, aus Prognose-Signalen: Torschnitt, btts, über 2,5, conf, nordische Liga −32) → level `unlikely` / `medium` / `possible` + `over_safe`.
 - `/api/goals-forecast`: liefert jetzt `zero_zero`, `zero_zero_label`, `over_safe`; 0:0-ausgeschlossene Spiele werden nach oben sortiert. Frontend zeigt farbiges Badge (grün „0:0 praktisch ausgeschlossen" / amber „0:0 möglich").

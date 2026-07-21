@@ -3660,27 +3660,18 @@ PARLAY_JUDGE_CAP = 40   # max LLM settlement calls per multi-match run (quota gu
 
 
 async def purge_settled_tips() -> int:
-    """Settled slips (won/lost) are auto-removed 24h after they were settled — the
-    'Abgerechnet' area only ever shows the last day. Seed showcase tips are kept.
-    KEPT FOREVER: (1) WON System picks (source=hq-system) so the owner can see whether a
-    system ever won ('Best Won' history), and (2) WON Community/member picks so tipsters
-    keep their winning track record (owner 2026-07-17 — a member's won slip must never
-    silently vanish after a day). AI auto-wins (hq-auto/smart/hq-live) still purge at 24h."""
+    """Settled slips (won/lost/void) are auto-removed 24h after they were settled — the
+    'Abgerechnet' area (inkl. 'Best Won') only ever shows the last day. Seed showcase
+    tips are kept. The public HALL OF FAME (db.win_claims) is a SEPARATE collection and
+    is never touched here — it stays forever (owner 2026-07-20: 'Best Won weg, Hall of
+    Fame steht'). ALL settled tips >24h are purged, including won System/Community picks."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     docs = await db.tips.find(
         {"status": {"$in": ["won", "lost", "void"]}, "id": {"$not": {"$regex": "^seed-"}}},
         {"_id": 0, "id": 1, "settled_at": 1, "created_at": 1, "source": 1, "status": 1}).to_list(5000)
 
-    def _keep_forever(d) -> bool:
-        if d.get("status") != "won":
-            return False
-        src = d.get("source")
-        # won System picks OR won Community/member picks (anything that isn't an AI feed)
-        return src == "hq-system" or src not in ("hq-auto", "smart", "hq-live")
-
     stale = [d["id"] for d in docs
-             if (d.get("settled_at") or d.get("created_at") or "") < cutoff
-             and not _keep_forever(d)]
+             if (d.get("settled_at") or d.get("created_at") or "") < cutoff]
     if not stale:
         return 0
     await db.tips.delete_many({"id": {"$in": stale}})
