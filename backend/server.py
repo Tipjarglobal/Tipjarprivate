@@ -272,6 +272,13 @@ async def admin_predictz_run(admin: dict = Depends(require_admin)):
     return await predictz_autopost()
 
 
+@api_router.post("/admin/apifootball/predictions/run")
+async def admin_apifootball_predictions_run(admin: dict = Depends(require_admin)):
+    """Manually trigger the API-Football predictions gap-filler (quota-bounded)."""
+    return await apifootball_predictions_autopost()
+
+
+
 @api_router.post("/admin/autotips/reset")
 async def admin_autotips_reset(admin: dict = Depends(require_admin)):
     """Wipe all auto-posted HQ tips and regenerate them with current filters/odds."""
@@ -519,6 +526,8 @@ async def scorers_today():
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find(
         {"status": "pending"}, {"_id": 0}).to_list(1500)
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "apifootball": 3}
+    preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
     out = []
     seen = set()
     for p in preds:
@@ -585,6 +594,8 @@ async def goals_forecast():
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find(
         {"status": "pending"}, {"_id": 0}).to_list(1500)
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "apifootball": 3}
+    preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
     out, seen = [], set()
     for p in preds:
         if not _pred_whitelisted(p):
@@ -6254,6 +6265,146 @@ async def predictz_loop():
 
 
 # ---------------------------------------------------------------------------
+# API-Football /predictions — a THIRD, independent prediction source that widens
+# match coverage beyond the Forebet/Predictz scrapers. Additive & quota-bounded:
+# only upcoming top-league fixtures NOT already predicted by another source are
+# fetched (1 request/fixture), capped per run and 24h-cached. Stored as source
+# "apifootball"; consumers (Scorer-Radar / Tor-Prognose / Systeme) treat it as the
+# lowest-priority gap-filler so the scraper data always wins on shared matches.
+# ---------------------------------------------------------------------------
+APIFOOTBALL_PRED_MAX_PER_RUN = 20   # fixtures fetched per run (quota guard)
+APIFOOTBALL_PRED_CACHE_TTL_H = 24
+
+
+def _goal_est(line) -> int:
+    """Estimate a team's predicted goals from API-Football's goal-line advice string
+    (e.g. '-1.5' → 1, '-2.5' → 2, '+2.5' → 3). Clamped to 0..4."""
+    try:
+        x = float(str(line).replace(" ", ""))
+    except Exception:
+        return 1
+    est = round(abs(x) - 0.5) if x < 0 else round(abs(x) + 0.5)
+    return max(0, min(4, int(est)))
+
+
+def _parse_apifootball_prediction(entry: dict):
+    """Turn one /predictions response element into (ph, pa, fav, fav_prob, btts, over25)
+    or None if it can't be parsed."""
+    pred = (entry or {}).get("predictions") or {}
+    percent = pred.get("percent") or {}
+
+    def _pct(v):
+        try:
+            return int(str(v).replace("%", "").strip())
+        except Exception:
+            return 0
+    ph_p, pd_p, pa_p = _pct(percent.get("home")), _pct(percent.get("draw")), _pct(percent.get("away"))
+    if ph_p == 0 and pd_p == 0 and pa_p == 0:
+        return None
+    if ph_p >= pa_p and ph_p >= pd_p:
+        fav, fav_prob = "home", ph_p
+    elif pa_p >= ph_p and pa_p >= pd_p:
+        fav, fav_prob = "away", pa_p
+    else:
+        fav, fav_prob = "draw", pd_p
+    goals = pred.get("goals") or {}
+    ph = _goal_est(goals.get("home"))
+    pa = _goal_est(goals.get("away"))
+    advice = (pred.get("advice") or "").lower()
+    total = ph + pa
+    btts = ("both teams" in advice) or (ph >= 1 and pa >= 1)
+    over25 = ("over 2.5" in advice) or ("+2.5" in str(pred.get("under_over") or "")) or total >= 3
+    return ph, pa, fav, fav_prob, btts, over25
+
+
+async def apifootball_predictions_autopost() -> dict:
+    """Fetch API-Football's own predictions for upcoming top-league fixtures the
+    scrapers missed, and store them (source=apifootball) so Scorer-Radar / Tor-Prognose
+    gain coverage. Quota-bounded and 24h-cached."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "no API key"}
+    now = datetime.now(timezone.utc)
+    # already-covered matches (any source) — we only FILL GAPS, never duplicate work
+    existing = await db.match_predictions.find(
+        {"status": "pending"}, {"_id": 0, "home": 1, "away": 1}).to_list(3000)
+    covered = {_match_key(x.get("home"), x.get("away")) for x in existing}
+    dates = [(now + timedelta(days=d)).date().isoformat() for d in (0, 1, 2)]
+    posted, scanned, calls = 0, 0, 0
+    for d in dates:
+        if posted >= APIFOOTBALL_PRED_MAX_PER_RUN or _api_quota_exhausted():
+            break
+        fixtures = await _apifootball_async("/fixtures", {"date": d}) or []
+        for fx in fixtures:
+            if posted >= APIFOOTBALL_PRED_MAX_PER_RUN or _api_quota_exhausted():
+                break
+            status = ((fx.get("fixture") or {}).get("status") or {}).get("short")
+            if status != "NS":
+                continue  # only not-started matches
+            lg = ((fx.get("league") or {}).get("name") or "")
+            lgl = lg.lower()
+            if not any(k in lgl for k in SLIP_LEAGUE_KEYWORDS):
+                continue
+            if any(b in f" {lgl} " for b in SLIP_BLOCK_KEYWORDS):
+                continue
+            teams = fx.get("teams") or {}
+            home = (teams.get("home") or {}).get("name") or ""
+            away = (teams.get("away") or {}).get("name") or ""
+            if not home or not away or _is_women_or_youth(home) or _is_women_or_youth(away):
+                continue
+            mkey = _match_key(home, away)
+            if mkey in covered:
+                continue  # a scraper already predicts this match → skip
+            fid = str((fx.get("fixture") or {}).get("id"))
+            if not fid:
+                continue
+            cache = await db.apifootball_pred_cache.find_one({"fixture_id": fid})
+            if cache:
+                try:
+                    if now - datetime.fromisoformat(cache["cached_at"]) < timedelta(hours=APIFOOTBALL_PRED_CACHE_TTL_H):
+                        continue  # fetched recently → don't spend quota again
+                except Exception:
+                    pass
+            scanned += 1
+            resp = await _apifootball_async("/predictions", {"fixture": fid})
+            calls += 1
+            await db.apifootball_pred_cache.update_one(
+                {"fixture_id": fid}, {"$set": {"fixture_id": fid, "cached_at": now.isoformat()}}, upsert=True)
+            if not resp:
+                continue
+            parsed = _parse_apifootball_prediction(resp[0])
+            if not parsed:
+                continue
+            ph, pa, fav, fav_prob, btts, over25 = parsed
+            kickoff = (fx.get("fixture") or {}).get("date") or ""
+            country = ((fx.get("league") or {}).get("country") or "")
+            try:
+                await store_match_prediction(
+                    "apifootball", fid, home, away, kickoff, ph, pa, fav, fav_prob,
+                    btts, over25, fav_prob, league=lg, country=country)
+                covered.add(mkey)
+                posted += 1
+            except Exception as e:
+                logger.warning(f"apifootball prediction store failed: {e}")
+    return {"posted": posted, "scanned": scanned, "api_calls": calls,
+            "quota_exhausted": _api_quota_exhausted()}
+
+
+async def apifootball_predictions_loop():
+    await asyncio.sleep(120)  # let scrapers populate first so we only fill gaps
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await apifootball_predictions_autopost()
+            logger.info(f"HQ loop E (API-Football predictions): {res}")
+        except Exception as e:
+            logger.error(f"HQ loop E error: {e}")
+        await asyncio.sleep(6 * 3600)  # every 6 hours
+
+
+
+# ---------------------------------------------------------------------------
 # Smart Bet: data-driven PLAYER PROPS from API-Football season statistics.
 # API-Football does NOT provide prop predictions/odds, so we compute them from
 # each player's real season stats (shots, shots on target, fouls, cards, saves,
@@ -8272,6 +8423,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
+    _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))

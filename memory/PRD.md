@@ -842,3 +842,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Effekt: Sieg-, Über 3.5- und Unter 1.5-Tipps tragen jetzt echte Buchmacher-Quoten statt Heuristik-Fallback.
 - Getestet mit echtem Spiel (fixture 1490332): Über 3.5 → 2.00, Sieg → win_home 3.65.
 - OFFEN Roadmap: Phase 1 /predictions (Quota-Caching), Phase 4 3. Scraper, Phase 5 mehr Ligen.
+
+## 2026-07-22 — Phase 1: API-Football /predictions als 3. Prognosequelle (DONE + getestet)
+- NEU: apifootball_predictions_autopost() + apifootball_predictions_loop() (alle 6h, leader-gated). Holt /predictions für kommende Top-Liga-Spiele (SLIP_LEAGUE_KEYWORDS, NS-Status) die KEINE andere Quelle hat → store_match_prediction(source="apifootball").
+- Quota-sicher: max 20 Fixtures/Lauf, _api_quota_exhausted-Guard, 24h-Cache (collection apifootball_pred_cache), überspringt bereits abgedeckte Matches (_match_key).
+- _goal_est() schätzt ph/pa aus /predictions goals-lines; fav/fav_prob aus percent; btts/over25 aus advice.
+- Konsumenten-Schutz: scorers_today & goals_forecast sortieren jetzt nach Quellen-Priorität (forebet>predictz>sonst>apifootball) → Scraper-Daten gewinnen bei geteilten Matches, apifootball füllt nur Lücken.
+- Admin-Trigger: POST /api/admin/apifootball/predictions/run.
+- Getestet: 20 Prognosen gespeichert, alle Konsumenten (scorers/goals-forecast/systems) 200, neue Ligen-Abdeckung bestätigt.
+- OFFEN Roadmap: Phase 4 (3. Scraper WinDrawWin/FootyStats), Phase 5 (mehr Ligen).
