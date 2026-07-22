@@ -2294,24 +2294,32 @@ async def track_visit(inp: VisitInput, request: Request):
     Admin visits are flagged (and never counted) — the owner opens the site hourly
     and must not inflate the analytics."""
     vid = (inp.visitor_id or "").strip()[:64]
-    if not vid:
-        return {"ok": True}
     user = None
     try:
         user = await get_current_user(request)
     except Exception:
         user = None
+    uid = str(user.get("id")) if user else ""
     is_admin = bool(user and user.get("role") == "admin")
+    # Identity: logged-in users are deduped per ACCOUNT across every device (so 4
+    # logins from one person = 1 visitor); anonymous visitors are deduped per device.
+    identity = f"u:{uid}" if uid else (f"d:{vid}" if vid else "")
+    if not identity:
+        return {"ok": True}
     now = datetime.now(timezone.utc)
     day = now.strftime("%Y-%m-%d")
     if is_admin:
-        # retroactively flag every past visit from this device so the owner's own
-        # hourly opens drop out of the historical counts too.
-        await db.visits.update_many({"visitor_id": vid}, {"$set": {"is_admin": True}})
+        # retroactively flag every past visit from this account AND this device so the
+        # owner's own opens (logged in or not) drop out of the historical counts too.
+        await db.visits.update_many(
+            {"$or": [{"identity": identity}, {"visitor_id": vid}]} if vid else {"identity": identity},
+            {"$set": {"is_admin": True}},
+        )
     await db.visits.update_one(
-        {"visitor_id": vid, "day": day},
+        {"identity": identity, "day": day},
         {"$inc": {"hits": 1},
-         "$set": {"last_ts": now.isoformat(), "path": (inp.path or "")[:120], "is_admin": is_admin},
+         "$set": {"last_ts": now.isoformat(), "path": (inp.path or "")[:120],
+                  "is_admin": is_admin, "visitor_id": vid, "user_id": uid},
          "$setOnInsert": {"first_ts": now.isoformat()}},
         upsert=True,
     )
@@ -2325,14 +2333,29 @@ async def admin_visits(admin: dict = Depends(require_admin)):
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
+    # A visit's identity = the account (u:<id>) when logged in, else the device
+    # (d:<visitor_id>). Old docs predate the `identity` field, so fall back to the
+    # device id. Admin/owner visits (is_admin) are always excluded.
+    ident_expr = {"$ifNull": ["$identity", {"$concat": ["d:", {"$ifNull": ["$visitor_id", ""]}]}]}
     not_admin = {"is_admin": {"$ne": True}}
-    daily = []
-    for d in days:
-        docs = await db.visits.find({"day": d, **not_admin}, {"_id": 0, "hits": 1}).to_list(100000)
-        daily.append({"day": d, "unique": len(docs), "hits": sum(x.get("hits", 0) for x in docs)})
-    total_unique = len(await db.visits.distinct("visitor_id", not_admin))
-    all_docs = await db.visits.find(not_admin, {"_id": 0, "hits": 1}).to_list(200000)
-    total_hits = sum(x.get("hits", 0) for x in all_docs)
+    daily_map = {}
+    async for row in db.visits.aggregate([
+        {"$match": {"day": {"$in": days}, **not_admin}},
+        {"$group": {"_id": {"day": "$day", "ident": ident_expr}, "hits": {"$sum": "$hits"}}},
+        {"$group": {"_id": "$_id.day", "unique": {"$sum": 1}, "hits": {"$sum": "$hits"}}},
+    ]):
+        daily_map[row["_id"]] = {"unique": row["unique"], "hits": row["hits"]}
+    daily = [{"day": d, "unique": daily_map.get(d, {}).get("unique", 0),
+              "hits": daily_map.get(d, {}).get("hits", 0)} for d in days]
+    total_row = {"total_unique": 0, "total_hits": 0}
+    async for row in db.visits.aggregate([
+        {"$match": not_admin},
+        {"$group": {"_id": ident_expr, "hits": {"$sum": "$hits"}}},
+        {"$group": {"_id": None, "total_unique": {"$sum": 1}, "total_hits": {"$sum": "$hits"}}},
+    ]):
+        total_row = row
+    total_unique = total_row["total_unique"]
+    total_hits = total_row["total_hits"]
     today_row = next((x for x in daily if x["day"] == today), {"unique": 0, "hits": 0})
     week = daily[-7:]
     members = await db.users.count_documents({"role": {"$ne": "admin"}})
