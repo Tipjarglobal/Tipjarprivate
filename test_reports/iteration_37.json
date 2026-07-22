@@ -1,0 +1,41 @@
+{
+  "summary": "End-to-end verification of the 4 new session features (player-prop single settlement, API-Football /predictions gap-filler, Statarea scraper, Community live sub-tab, analytics excluding admin). Backend: 18/18 pytest cases pass — /admin/settle-now correctly settles a real member player-prop tip for a finished match (Toluca 1-2 UNAM Pumas, fixture 1550904) to WON for Jorge Díaz (scored 1 goal → 'Anytime Torschütze' won) and to LOST for Fernando Arce Juárez (0 SOT → 'Über 0.5 Torschüsse aufs Tor' lost). Auth guard verified on all 4 new admin endpoints. Admin visits are correctly excluded from today_unique (before==after after admin ping), anonymous visits bump both today_unique and today_anon by 1. /admin/apifootball/predictions/run returns {posted, scanned, api_calls, quota_exhausted} respecting the 20/run cap; /admin/statarea/run returns {posted, scanned}. Consumers /scorers/today, /goals-forecast, /systems all 200 and forebet(162)+predictz(173) predictions still dominate over apifootball(60)+statarea(54) so source priority holds. Grader unit tests confirm the full-name key disambiguates two 'Castillo' players. Frontend: (a) Live Community sub-tab (data-testid=live-cat-community) renders with count-badge 0, is clickable, and the explainer text switches to the German 'Community — Live-Tipps, die echte Mitglieder gerade posten…' copy — API params correctly change to source=members. (b) /insights admin dashboard: after setting tj_token via /api/auth/login inside the page context and reloading, stat-today-unique(21), stat-today-members(0), stat-today-anon(21), insights-member-split card and insights-chart with all 14 daily bars render as required.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter37_iter38_new_sources.py",
+    "/app/test_reports/pytest/iter37_38.xml",
+    "/app/test_reports/iter37_live_view.png",
+    "/app/test_reports/iter37_live_community.png",
+    "/app/test_reports/iter37_insights.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 8824 lines (up from ~7494). The new statarea/apifootball scraper loops, /predictions parser, and expanded player-prop settlement branch keep piling into the same monolith — splitting sources/scraper_*.py and settlement.py is overdue.",
+    "settle_pending_tips (~L3624) uses `is_player_single = _lk in PLAYER_LEG_KINDS or _pk is not None or ('beide teams' in market and 'karte' in market)`. The `_parse_player_market` fallback for a bare 'Über 3.5 Tore' returns kind=None so it falls through to judge_market — good — but a market string like 'Halbzeit Über 2.5 Tore' would ALSO match nothing and go to judge_market. Watch out for market strings that contain BOTH team goals AND a player name (rare, but the parser scans by keywords in order).",
+    "apifootball_predictions_autopost (~L6329): the covered-set only checks CURRENT pending predictions (`status: pending`). If forebet/predictz have not yet finished their loop when this fires, apifootball would insert a duplicate. The 120s asyncio.sleep at loop start mitigates this, but the /admin/apifootball/predictions/run endpoint has no such guard — an owner clicking it before scrapers finish CAN create a duplicate on a fixture. Consider dedup on `home+away+kickoff_date` regardless of status.",
+    "track_visit sets is_admin on the CURRENT visit and retroactively flags ALL past docs matching identity or visitor_id (L2334). That solves the 'owner opened site anonymously earlier' case, but the retro update runs on EVERY admin ping (dozens per day). Adding a shortcut `if is_admin and already-flagged: skip update_many` would save writes.",
+    "/admin/visits `is_member` uses `$substrCP: ['$_id', 0, 2]` in the OUTER $group but the INNER group's _id is `{'day', 'ident'}` (a document), so `$_id` refers to the OUTER group's _id (which is just the day string like '2026-07-22' — the substring will never be 'u:'). The daily 'members'/'anon' split is computed correctly via the inner `_is_mem` that reads `$_id.ident`, but the OUTER top-level split (today_members/today_anon) is computed by _split() which does its own aggregation — that one is correct. So no user-facing bug but the OUTER `is_member` variable at L2390 is dead code / confusing.",
+    "SecretInsights.jsx line 92: uses `data.daily.map((d) => …)` and reads `d.hits` for the hover tooltip. Backend always returns hits, so ok. But `maxHits` (L35) is computed and never used — dead variable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter37_iter38_new_sources.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18)",
+    "frontend": "100% (Live/Community + /insights both pass all data-testid assertions)"
+  },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! — POST /api/auth/login body field 'username', response field 'token'. Frontend stores in localStorage as 'tj_token'.",
+  "seed_data_creation": "Two TEST_pp_* member tips (scorer + SOT) for Toluca vs UNAM Pumas (fixture 1550904, 2026-07-22 03:05 UTC, final 1-2). Inserted by the temp_player_tips pytest fixture and deleted in teardown — no residue in DB. Verified via direct pymongo query.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For player-prop settlement testing, use the temp_player_tips fixture pattern: pick a finished fixture with known API-Football /fixtures/players data, choose (a) one player with goals>=1 for scorer WON and (b) one player with 0 shots-on-target for a 'Über 0.5 Torschüsse aufs Tor' LOST. The kind field must be one of PLAYER_LEG_KINDS = {sot,shots,fouls_c,fouls_d,scorer,card,saves,player}. Player name must exactly match API-Football naming (including accents) — the full-name key `_norm(name)` is what the grader looks up first. Statarea endpoint returns {posted:0, reason:'chromium unavailable'} in this preview env if chromium is missing — the test handles both shapes (checks for 'reason' key). API-Football quota is bounded per run (20 for predictions).",
+  "rca of the issue": "N/A — every feature works as designed. Player-prop single settlement path (server.py L3688-L3703) correctly (i) detects is_player_single via _parse_player_market OR PLAYER_LEG_KINDS, (ii) fetches per-player stats via _player_stats_for_fixture, (iii) grades with _grade_player_leg, (iv) sets status won/lost with settled_by='auto'. The full-name key (L3165) prevents same-lastname collisions."
+}
