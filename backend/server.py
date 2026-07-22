@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field, EmailStr
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
+from statarea import scrape_statarea
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
@@ -276,6 +277,14 @@ async def admin_predictz_run(admin: dict = Depends(require_admin)):
 async def admin_apifootball_predictions_run(admin: dict = Depends(require_admin)):
     """Manually trigger the API-Football predictions gap-filler (quota-bounded)."""
     return await apifootball_predictions_autopost()
+
+
+@api_router.post("/admin/statarea/run")
+async def admin_statarea_run(admin: dict = Depends(require_admin)):
+    """Manually trigger the Statarea prediction scraper (no API quota)."""
+    if not await ensure_chromium():
+        return {"posted": 0, "reason": "chromium unavailable in this environment"}
+    return await statarea_autopost()
 
 
 
@@ -526,7 +535,7 @@ async def scorers_today():
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find(
         {"status": "pending"}, {"_id": 0}).to_list(1500)
-    _SRC_PRIO = {"forebet": 0, "predictz": 1, "apifootball": 3}
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
     preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
     out = []
     seen = set()
@@ -594,7 +603,7 @@ async def goals_forecast():
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find(
         {"status": "pending"}, {"_id": 0}).to_list(1500)
-    _SRC_PRIO = {"forebet": 0, "predictz": 1, "apifootball": 3}
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
     preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
     out, seen = [], set()
     for p in preds:
@@ -6403,6 +6412,92 @@ async def apifootball_predictions_loop():
         await asyncio.sleep(6 * 3600)  # every 6 hours
 
 
+# ---------------------------------------------------------------------------
+# Statarea scraper — a THIRD prediction source (1X2 + Over/Under probabilities).
+# No API-Football quota cost (pure scrape). Stored as source "statarea"; treated
+# as a gap-filler (priority below Forebet/Predictz) in the consumers.
+# ---------------------------------------------------------------------------
+def _statarea_est_score(p1, px, p2, over25):
+    """Estimate a predicted scoreline from 1X2 + Over 2.5 probabilities so Statarea
+    matches can feed the Scorer-Radar / Tor-Prognose. The favourite always scores
+    at least as many as the underdog."""
+    total = 3 if (over25 or 0) >= 52 else 2
+    if p1 >= px and p1 >= p2:          # home favourite
+        return (2, 1) if total >= 3 else (1, 0)
+    if p2 >= p1 and p2 >= px:          # away favourite
+        return (1, 2) if total >= 3 else (0, 1)
+    return 1, 1                        # draw lean
+
+
+async def statarea_autopost() -> dict:
+    """Scrape Statarea and store today's whitelisted upcoming matches as match
+    predictions (source=statarea). Additive gap-filler; no API quota used."""
+    try:
+        rows = await asyncio.wait_for(scrape_statarea(), timeout=SCRAPE_TIMEOUT)
+    except Exception as e:
+        logger.error(f"Statarea scrape failed: {e}")
+        return {"posted": 0, "reason": "scrape failed"}
+    if not rows:
+        return {"posted": 0, "reason": "scrape empty"}
+    now = datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    posted = 0
+    for r in rows:
+        home, away = r.get("home"), r.get("away")
+        if not home or not away:
+            continue
+        if r.get("score"):
+            continue  # already kicked off / finished → not a pre-match prediction
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        p1, px, p2 = r.get("p1") or 0, r.get("px") or 0, r.get("p2") or 0
+        if (p1 + px + p2) == 0:
+            continue
+        over25 = r.get("over25")
+        sc = r.get("score")
+        ph, pa = (sc[0], sc[1]) if sc else _statarea_est_score(p1, px, p2, over25)
+        if p1 >= px and p1 >= p2:
+            fav, fav_prob = "home", p1
+        elif p2 >= p1 and p2 >= px:
+            fav, fav_prob = "away", p2
+        else:
+            fav, fav_prob = "draw", px
+        btts = ph >= 1 and pa >= 1
+        over25_flag = (over25 or 0) >= 52 or (ph + pa) >= 3
+        time = (r.get("time") or "").strip()
+        kickoff = f"{today}T{time}:00+00:00" if time else f"{today}T18:00:00+00:00"
+        league = (r.get("league") or "").strip()
+        try:
+            await store_match_prediction(
+                "statarea", f"{home}-{away}", home, away, kickoff, ph, pa, fav,
+                fav_prob, btts, over25_flag, fav_prob, league=league,
+                country=r.get("country", ""))
+            posted += 1
+        except Exception as e:
+            logger.warning(f"statarea prediction store failed: {e}")
+    return {"posted": posted, "scanned": len(rows)}
+
+
+async def statarea_loop():
+    await asyncio.sleep(150)  # after forebet/predictz so it only fills gaps
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            if await ensure_chromium():
+                res = await statarea_autopost()
+                logger.info(f"HQ loop F (Statarea): {res}")
+            else:
+                logger.error("HQ loop F skipped: chromium unavailable — retry in 20 min")
+                await asyncio.sleep(20 * 60)
+                continue
+        except Exception as e:
+            logger.error(f"HQ loop F error: {e}")
+        await asyncio.sleep(3 * 3600)  # every 3 hours
+
+
+
 
 # ---------------------------------------------------------------------------
 # Smart Bet: data-driven PLAYER PROPS from API-Football season statistics.
@@ -8424,6 +8519,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
+    _BG_TASKS.append(asyncio.create_task(statarea_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))

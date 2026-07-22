@@ -851,3 +851,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Admin-Trigger: POST /api/admin/apifootball/predictions/run.
 - Getestet: 20 Prognosen gespeichert, alle Konsumenten (scorers/goals-forecast/systems) 200, neue Ligen-Abdeckung bestätigt.
 - OFFEN Roadmap: Phase 4 (3. Scraper WinDrawWin/FootyStats), Phase 5 (mehr Ligen).
+
+## 2026-07-22 — Phase 4: 3. Scraper Statarea (DONE + getestet)
+- NEU statarea.py: scrape_statarea() rendert old.statarea.com/predictions (kein Cloudflare-Block), liefert pro Spiel 1X2-% + Über 1.5/2.5/3.5-% + Liga (Land,Liga) + optional vorhergesagte Score (nur bei bereits angepfiffenen → werden übersprungen).
+- server.py: statarea_autopost() + statarea_loop() (alle 3h, chromium-gated, KEINE API-Quota). Schätzt ph/pa via _statarea_est_score aus 1X2+Über2.5. Speichert source="statarea".
+- Quellen-Priorität erweitert: forebet(0)>predictz(1)>statarea(2)>apifootball(3) in scorers_today & goals_forecast → Scraper-Daten gewinnen, Statarea/apifootball füllen nur Lücken.
+- Admin-Trigger: POST /api/admin/statarea/run.
+- Getestet: 54 Prognosen gespeichert, korrekte Ligen, scorers 94 (Abdeckung gestiegen), systems/scorers 200.
+- OFFEN Roadmap: Phase 5 (mehr Ligen im Whitelist).
