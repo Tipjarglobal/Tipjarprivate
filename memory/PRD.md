@@ -859,3 +859,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Admin-Trigger: POST /api/admin/statarea/run.
 - Getestet: 54 Prognosen gespeichert, korrekte Ligen, scorers 94 (Abdeckung gestiegen), systems/scorers 200.
 - OFFEN Roadmap: Phase 5 (mehr Ligen im Whitelist).
+
+## 2026-07-22 — i18n Fix: Tip-Card Lokalisierung (DONE + getestet)
+- Bug: In nicht-deutscher UI (z.B. Griechisch) blieben Labels & Player-Prop-Markets deutsch.
+- Fix RateWall.jsx: hartkodierte Labels "Parlay·Spiele", "Quote", "Einsatz", "Gewinn" → t("wall.parlay/game/games/odds/stake/payout").
+- Fix i18n.js localizeMarket(): Player-Prop-Regexes ergänzt (Komma-Dezimal 0,5 + echte Phrasen: "Schüsse aufs Tor"→sot, "Torschüsse/Schüsse"→shots, "Fouls begangen"→fouls, "mal gefoult"→fouled, "Paraden"→saves, "Torschütze (Anytime)"→scorer, "sieht eine Karte"→getcard).
+- Neue i18n-Keys in ALLEN 8 Sprachen: wall.parlay/game/games/odds/stake/payout + mkt.sot/shots/scorer/fouls/card/saves/fouled/getcard.
+- Getestet: Screenshot Griechisch — Smart-Picks-Parlay zeigt "ΠΑΡΟΛΙ · 1 ΑΓΩΝΑΣ", "Σουτ στην εστία", "Κερδισμένα φάουλ", "Αποκρούσεις", "Απόδοση/Ποντάρισμα/Κέρδος".
+- BEWUSST NICHT gefixt (User-Entscheidung "Άστα ετσι"): LLM-generierte ai_analysis / Qualifier-Briefing bleiben in Generierungssprache (DE/EN), da einmalig gespeichert.
