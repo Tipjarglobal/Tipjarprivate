@@ -4798,7 +4798,7 @@ async def build_systems() -> dict:
             continue
         # Owner-Regel: nur Spiele, bei denen ein 0:0 praktisch ausgeschlossen ist —
         # keine nordischen/defensiven Über-Fallen (Örgryte–Djurgården 0:0 lässt grüßen).
-        if not _zero_zero_assessment(p)["over_safe"]:
+        if not _zero_zero_assessment(p)["over_safe"] or _bad_for_overs(p):
             continue
         t_goals = p.get("total") or 0
         if t_goals >= 3:
@@ -4828,6 +4828,8 @@ async def build_systems() -> dict:
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko or not (win_start <= ko <= fri_noon):
             continue
+        if _bad_for_overs(p):
+            continue                            # Owner: kein Brasilien & Co. als Pfeffer
         if not _zero_zero_assessment(p)["over_safe"]:
             continue                            # 0:0-sichere Spiele only
         pepper_pool.append(p)
@@ -5245,6 +5247,18 @@ def _is_scandinavian(*vals) -> bool:
     Owner rule: these leagues are too unpredictable for Double-Chance bankers."""
     s = " ".join(str(v or "").lower() for v in vals)
     return any(k in s for k in _SCAND_KEYS)
+
+
+# Leagues the owner REFUSES to use for OVER-goals / Pfeffer picks. Predictions there
+# routinely over-estimate goals (0:0 / 1:0 grind, then a late goal) — Brazil above all
+# ("Ich hasse es, Brasilien als Pfeffer zu benutzen", 2026-07-21). Atletico Mineiro (pred 5, real 1:1)
+# and Gremio Novorizontino (pred 4, real 0:1) proved it. They stay bettable elsewhere, just NOT overs.
+_NO_OVER_LEAGUE_KEYS = ("brazil", "brasil", "brasile", "brazilian")
+
+
+def _bad_for_overs(p: dict) -> bool:
+    s = f"{p.get('league', '')} {p.get('league_code', '')} {p.get('country', '')}".lower()
+    return any(k in s for k in _NO_OVER_LEAGUE_KEYS)
 
 
 def _zero_zero_assessment(p: dict) -> dict:

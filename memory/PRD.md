@@ -1,6 +1,12 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-21d — Pfeffer-Banker als Tor-Range (Über-Linie + Unter-Linie)
+### CHANGELOG 2026-07-21e — Brasilien raus aus Pfeffer/Über-Kombis
+- Owner: „deine Pfeffer spiele waren Müll. Ich hasse es, Brasilien als Pfeffer zu benutzen." Atletico Mineiro (pred 5→1:1) & Gremio (pred 4→0:1) bewiesen: Brasilien-Prognosen überschätzen Tore.
+- Neuer Helper `_bad_for_overs(p)` (Liga enthält brazil/brasil) → schließt Brasilien aus dem Wochen-Pfeffer UND der TipJarLogic-Über-Kombi aus. Betrifft NUR Über-Tipps; Brasilien bleibt sonst bettbar.
+- Lernnotiz zur Exakt-2-Tore-Falle (Asian Über 2.0 = Push, Über 2.25 = halber Verlust) in betting_notes ergänzt → Über 2.5 nur bei echten Torfesten.
+- VERIFIZIERT: /systems pepper enthält 0 Brasilien-Spiele (jetzt K-League/Quali/Norwegen/Usbekistan/MLS), ~5.500x. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Verfeinerung: Banker-Kombis kombinieren jetzt eine Über- mit einer Unter-Linie (Tor-Range), Pivot ~2.5. Torfest→„Über 2.5 + Unter 5.5" (3–5), mittel→„Über 1.5 + Unter 4.5" (2–4), niedrig→„Über 0.5 + Unter 3.5" (1–3). Jeder 3. Banker mit klarem Favoriten: „Favorit Doppelte Chance + Über-Linie".
 - Grader `_grade_goal_leg`: neue text-abrechenbare UNTER-Linie („Unter N.5 Tore" → total ≤ N).
 - VERIFIZIERT: /systems pepper zeigt Range-Banker (Über 2.5 + Unter 5.5 @2,24), Gesamtquote ~6.500x, alle Legs settlebar. Greift auf Produktion nach **Deploy**.

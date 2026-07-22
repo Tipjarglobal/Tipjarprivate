@@ -21,10 +21,15 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
 3. **Keine eigenständige "Über 0,5 Tore"-Wette** (nur als Zweit-Leg im Builder). (2026-07-18)
 4. **Kein Lotto-1X / kein "beide treffen" als Zufalls-Lotto.**
    - Bsp: Spanien–Argentinien → KI gab "beide treffen" (Lotto). Besser wäre: **Unter 2,5 Tore + 1X**.
-5. **Brasilien NICHT löschen!** Brasilianische Top-Ligen (Série A/B) bleiben bettbar. Nur
-   obskure Staatsmeisterschaften (paulista, carioca, …) bleiben geblockt. Bei Live-Overs in
-   Brasilien vorsichtig sein (oft passiert nichts, dann Tor in der Nachspielzeit) — aber NICHT
-   pauschal ausschließen. (Hard-Exclusion 2026-07-20 wieder entfernt.)
+5. **Brasilien NICHT löschen, aber NIE als Pfeffer/Über-Tipp!** Brasilianische Top-Ligen
+   (Série A/B) bleiben bettbar; obskure Staatsmeisterschaften (paulista, carioca, …) geblockt.
+   ABER: Brasilien NIE für Über-Tore/Pfeffer verwenden (Owner 2026-07-21: "Ich hasse es,
+   Brasilien als Pfeffer zu benutzen"). Prognosen dort überschätzen Tore massiv:
+   Atletico Mineiro (pred total 5 → real 1:1), Gremio Novorizontino (pred 4 → real 0:1).
+   → Helper `_bad_for_overs()` schließt Brasilien aus Pfeffer- & TipJarLogic-Über-Kombis aus.
+6. **Exakt-2-Tore-Falle (Asian Handicap):** Bei Über 2.0 mit genau 2 Toren = Push (Einsatz
+   zurück, kein Gewinn). Bei Über 2.25 mit 2 Toren = halber Verlust. → Über 2.5 nur bei
+   echten Torfesten (torreiche Ligen), niemals in torarmen Ligen wo 1:1/2:x typisch ist.
 
 ## Muster-Wissen (für zukünftige Features / KI-Prompts)
 - **0:0 in Skandinavien real (2026-07-20 bestätigt):** Örgryte–Djurgården endete 0:0,
