@@ -3304,10 +3304,18 @@ def _grade_goal_leg(kind, market, team, fx):
         line = int(cm.group(1))
         over = ("über" in m) or (k == "corner_o")
         return ctot >= line + 1 if over else ctot <= line
-    # full-time total goals line, e.g. "Über 2.5 Tore" (not a half-time line)
+    # full-time total goals line, e.g. "Über 2.5 Tore" — but if the market NAMES a team
+    # (e.g. "Crvena Zvezda Über 1.5 Tore"), grade that team's goals instead of the match.
     gm = re.search(r"über\s+(\d+)\.5", m)
-    if gm and not team and "halbzeit" not in m and "hz" not in m:
-        return total >= int(gm.group(1)) + 1
+    if gm and "halbzeit" not in m and "hz" not in m:
+        line = int(gm.group(1))
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            return hg >= line + 1
+        if an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            return ag >= line + 1
+        if not team:
+            return total >= line + 1
     # full-time UNDER line, e.g. "Unter 3.5 Tore" (goals capped)
     um = re.search(r"unter\s+(\d+)\.5", m)
     if um and not team and "halbzeit" not in m and "hz" not in m:
@@ -4843,6 +4851,16 @@ async def build_systems() -> dict:
             return True
         return (p.get("total") or 0) >= 4 and bool(p.get("btts"))
 
+    def _fav_over(p):
+        # "{Favourite} Über 1.5 Tore" — the strong side must score 2+ (winner's pattern:
+        # Sturm/Crvena Zvezda/Lech alle 4 Tore). Nur wenn der Favorit auch 2+ erwartet.
+        team, fg = _fav_team(p), _fav_goals(p)
+        if not team or fg < 2:
+            return None
+        line = "1.5" if fg >= 2 else "0.5"
+        od = 1.55 if fg >= 3 else 1.75
+        return f"{team} Über {line} Tore", od
+
     def _build_pepper_slip(win_start, win_end, key, title, sub):
         pool = []
         for p in goals_sorted:
@@ -4854,15 +4872,18 @@ async def build_systems() -> dict:
             if not _pepper_qualifies(p):
                 continue
             pool.append(p)
+        # dominant favourites first (winner's style), goal-fests only as filler
+        pool.sort(key=lambda p: (
+            not (_fav_team(p) and (p.get("fav_prob") or 0) >= 52 and _fav_goals(p) >= 2),
+            -(_fav_goals(p)), -((p.get("fav_prob") or 0)), -(p.get("total") or 0)))
         sels, used = [], set()
-        # 6 BANKER — favourite-anchored 2-leg combos (Favorit verliert nicht + Über-Linie)
+        # 6 BANKER — favourite-anchored: der starke Favorit verliert nicht UND trifft selbst 2+.
         for p in pool:
             if len(sels) >= 6 or p["id"] in used:
                 continue
-            total, dc, fg = p.get("total") or 0, _pepper_dc(p), _fav_goals(p)
-            if dc and (p.get("fav_prob") or 0) >= 55 and fg >= 2:
-                over = ("Über 2.5 Tore", 1.65) if total >= 4 else ("Über 1.5 Tore", 1.30)
-                legA, legB = dc, over
+            dc, fo, total = _pepper_dc(p), _fav_over(p), p.get("total") or 0
+            if dc and fo:                       # Favorit trägt beide Legs (Gewinner-Muster)
+                legA, legB = dc, (fo[0], fo[1])
             elif total >= 4:
                 legA, legB = ("Über 2.5 Tore", 1.75), ("Unter 5.5 Tore", 1.28)
             else:
@@ -4875,8 +4896,10 @@ async def build_systems() -> dict:
         for p in pool:
             if len(sels) >= 15 or p["id"] in used:
                 continue
-            total, dc = p.get("total") or 0, _pepper_dc(p)
-            if dc and (p.get("fav_prob") or 0) >= 55:
+            fo, dc, total = _fav_over(p), _pepper_dc(p), p.get("total") or 0
+            if fo:
+                mk, od = fo                     # {Favorit} Über 1.5 Tore
+            elif dc and (p.get("fav_prob") or 0) >= 55:
                 mk, od = dc
             elif total >= 4:
                 mk, od = "Über 2.5 Tore", 1.55

@@ -1,6 +1,12 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-22 — Pfeffer: favoriten-verankert + zwei Fenster + Favoriten-Tracker
+### CHANGELOG 2026-07-22b — Pfeffer-Banker = Gewinner-Muster (Favorit verliert nicht + trifft selbst 2+)
+- Owner-Beobachtung: cleverer Tipper spielte dominante Favoriten (Sturm/Crvena Zvezda/Lech, alle 4 Tore) mit „{Team} Sieg/DC + {Team} Über 1.5"; verlor nur wegen Fenerbahce (1:0).
+- Pfeffer-Banker jetzt: „{Favorit} Doppelte Chance {dc} + {Favorit} Über 1.5 Tore" (nur wenn Favorit ≥2 Tore erwartet). Der Favorit trägt beide Legs → keine Abhängigkeit vom schwachen Team. Dominante Favoriten werden zuerst gewählt.
+- Grader: team-spezifische Über/Unter-Linien jetzt TEXT-abrechenbar (Teamname im Markt → dessen Tore), damit „{Team} Über 1.5 Tore" auch im gespeicherten System settlet.
+- VERIFIZIERT: /systems pepper zeigt „Braga DC X2 + Braga Über 1.5" etc., beide Fenster, Screenshot sauber. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Lektion: Radar sagte „Lincoln trifft" → Lincoln traf NICHT (Mjällby 3:0). Regel: nie vom schwachen Team abhängen.
 - Pfeffer neu (`_build_pepper_slip`): `_pepper_qualifies` nimmt nur Spiele mit starkem Favoriten (fav_prob≥52, Favorit erwartet ≥2 Tore) ODER echtem Torfest (total≥4 & btts). Banker favoriten-verankert: „{Favorit} Doppelte Chance + Über-Linie" (der Favorit trägt beide Legs) statt schwache-Team-abhängiger BTTS.
 - Zwei Fenster: `pepper` (Di→Fr 12:00) + `pepperwk` (Fr→Di 12:00), beide oben in System-Picks. Snapshot je Key.

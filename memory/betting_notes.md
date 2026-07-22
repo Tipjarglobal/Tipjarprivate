@@ -32,6 +32,13 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
    echten Torfesten (torreiche Ligen), niemals in torarmen Ligen wo 1:1/2:x typisch ist.
 
 ## Muster-Wissen (für zukünftige Features / KI-Prompts)
+- **GEWINNER-MUSTER (2026-07-22, vom Owner beobachtet):** Ein cleverer Tipper spielte dominante
+  Favoriten, die 4:0 gewinnen: Sturm (1X + Über 0.5), Crvena Zvezda (Sieg + Über 1.5), Lech
+  (Gegner +2.5 + Über 1.5) — alle trafen 4 Tore. Verlor nur wegen Fenerbahce (Über 1.5, aber nur 1:0).
+  → LEHRE: Auf den STARKEN FAVORITEN setzen, der SELBST 2+ trifft: „{Favorit} Doppelte Chance +
+  {Favorit} Über 1.5 Tore". Der Favorit trägt den Schein — nie vom schwachen Team abhängen.
+  → Pfeffer-Banker sind jetzt genau so gebaut. VORSICHT: auch Top-Teams gewinnen mal 1:0
+  (Fenerbahce) → nur Favoriten mit vorhergesagten 2+ Toren nehmen (fav_goals≥2).
 - **Nie von schwachen Teams abhängen (2026-07-21):** Radar sagte „Lincoln trifft" → Mjällby 3:0 Lincoln (Lincoln traf NICHT). Larne 0:4 Crvena zvezda, AGF 1:4 Lech. Lehre: NICHT auf das schwache Team setzen (BTTS/each-half, das das schwache Team braucht). Stattdessen den STARKEN FAVORITEN spielen (Favorit verliert nicht + Über-Linie, die der Favorit selbst liefert).
   → Pfeffer ist jetzt favoriten-verankert (`_pepper_qualifies`: nur Spiele mit starkem Favoriten, der 2+ Tore erwartet, ODER echtem Torfest total≥4 & btts). Banker = „{Favorit} Doppelte Chance + Über-Linie" oder Über/Unter-Range.
 - **Zwei Pfeffer-Fenster (2026-07-21):** Di→Fr 12:00 (`pepper`) und Fr→Di 12:00 (`pepperwk`). Beide oben in den System-Picks.
