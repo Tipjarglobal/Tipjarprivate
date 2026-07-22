@@ -870,7 +870,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         <div className="space-y-2">
           {tip.is_parlay && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
-              Parlay · {tip.legs.length} {tip.legs.length > 1 ? "Spiele" : "Spiel"}
+              {t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
             </span>
           )}
           {tip.legs.map((leg, li) => {
@@ -904,9 +904,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           );})}
           {(tip.odds || tip.stake || tip.potential_return) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-1 px-1">
-              {tip.odds && <span className="text-zinc-500">Quote <span className="font-mono font-bold text-volt">{tip.odds}</span></span>}
-              {tip.stake && <span className="text-zinc-500">Einsatz <span className="text-white font-medium">{tip.stake}</span></span>}
-              {tip.potential_return && <span className="text-zinc-500">Gewinn <span className="text-won font-medium">{tip.potential_return}</span></span>}
+              {tip.odds && <span className="text-zinc-500">{t("wall.odds")} <span className="font-mono font-bold text-volt">{tip.odds}</span></span>}
+              {tip.stake && <span className="text-zinc-500">{t("wall.stake")} <span className="text-white font-medium">{tip.stake}</span></span>}
+              {tip.potential_return && <span className="text-zinc-500">{t("wall.payout")} <span className="text-won font-medium">{tip.potential_return}</span></span>}
             </div>
           )}
         </div>
@@ -937,8 +937,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           </div>
           {(tip.stake || tip.potential_return) && (
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs pt-2 px-1">
-              {tip.stake && <span className="text-zinc-500">Einsatz <span className="text-white font-medium">{tip.stake}</span></span>}
-              {tip.potential_return && <span className="text-zinc-500">Gewinn <span className="text-won font-medium">{tip.potential_return}</span></span>}
+              {tip.stake && <span className="text-zinc-500">{t("wall.stake")} <span className="text-white font-medium">{tip.stake}</span></span>}
+              {tip.potential_return && <span className="text-zinc-500">{t("wall.payout")} <span className="text-won font-medium">{tip.potential_return}</span></span>}
             </div>
           )}
         </>
