@@ -285,7 +285,9 @@ async def admin_autotips_reset(admin: dict = Depends(require_admin)):
 
 @api_router.post("/admin/smart/run")
 async def admin_smart_run(admin: dict = Depends(require_admin)):
-    return await smart_autopost()
+    a = await smart_autopost()
+    b = await favourite_smart_autopost()
+    return {"player_props": a, "favourites": b}
 
 
 @api_router.post("/admin/smart/reset")
@@ -3345,6 +3347,22 @@ def _grade_goal_leg(kind, market, team, fx):
         if k == "ah25_home" or _teams_match(fx.get("home_name", ""), team):
             return (hg - ag) > -3
         return (ag - hg) > -3
+    # text-based handicaps naming a team: "{Team} -1.5 Handicap" / "{Team} +2.5 Handicap"
+    if "halbzeit" not in m and ("handicap" in m or "-1.5" in m or "+2.5" in m):
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        side = None
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            side = "home"
+        elif an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            side = "away"
+        if side:
+            diff = (hg - ag) if side == "home" else (ag - hg)
+            if "-1.5" in m:
+                return diff >= 2          # team wins by 2+
+            if "+2.5" in m:
+                return diff > -3          # team does not lose by 3+
+            if "-2.5" in m:
+                return diff >= 3
     # full-time result / double chance (computed straight from the final score)
     if k == "res_1":
         return hg > ag
@@ -6940,6 +6958,97 @@ async def smart_autopost() -> dict:
     return {"posted": posted, "matches": scanned, "candidates": candidates}
 
 
+async def favourite_smart_autopost() -> dict:
+    """Owner-Wunsch (2026-07-22): Smart Picks sollen dominante FAVORITEN als saubere 2-Leg-
+    Kombis mit Sterne-Rating & Begründung anbieten (wie der Gewinner: Lech +Handicap + Über 1.5).
+    SICHER: '{Favorit} Doppelte Chance + Über 1.5' (ein 1:1 reicht). PFEFFER für sehr dominante:
+    '{Favorit} -1.5 Handicap + Über 1.5' (Favorit gewinnt mit 2+). Kein Brasilien, keine 0:0-Fallen."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    cand, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
+            continue
+        fav = _fav_team(p)
+        fav_prob = p.get("fav_prob") or 0
+        fg = (p.get("ph") or 0) if p.get("fav") == "home" else (p.get("pa") or 0)
+        if not fav or fav_prob < 58 or fg < 2:
+            continue
+        if not _zero_zero_assessment(p)["over_safe"]:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        cand.append((fav_prob, fg, ko, p, fav))
+    cand.sort(key=lambda x: (-x[0], -x[1]))
+    posted = 0
+    for fav_prob, fg, ko, p, fav in cand[:SMART_MAX_MATCHES]:
+        home, away = p.get("home"), p.get("away")
+        dc = "1X" if p.get("fav") == "home" else "X2"
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"smartfav-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        very_dominant = fav_prob >= 66 and fg >= 3
+        if very_dominant:
+            legs_spec = [(f"{fav} -1.5 Handicap", 1.85, ""),
+                         ("Über 1.5 Tore", 1.30, "")]
+            why = (f"{fav} ist klarer Favorit (Sieg-Wahrscheinlichkeit {fav_prob}%) und wird "
+                   f"laut Prognose {fg} Tore schießen — Kombi zielt auf einen Sieg mit 2+ Toren Vorsprung.")
+        else:
+            legs_spec = [(f"{fav} Doppelte Chance {dc}", 1.30, "dc_1x" if dc == "1X" else "dc_x2"),
+                         ("Über 1.5 Tore", 1.30, "")]
+            why = (f"{fav} ist starker Favorit ({fav_prob}%). SICHER gebaut: {fav} verliert nicht "
+                   f"UND es fallen 2+ Tore — schon ein 1:1 reicht für diesen Schein.")
+        combo_legs = [{"home": home, "away": away, "market": mk, "odds": str(od),
+                       "kind": kd, "team": fav if "-1.5" in mk or "Chance" in mk else "",
+                       "status": "open"} for (mk, od, kd) in legs_spec]
+        prod = 1.0
+        for lg in combo_legs:
+            prod *= float(lg["odds"])
+        display_legs = [{
+            "match": f"{home} – {away}", "league": p.get("league") or "TipJarHQ Smart Pick",
+            "kickoff": p.get("kickoff") or "",
+            "selections": [lg["market"] for lg in combo_legs],
+            "sel_odds": [lg["odds"] for lg in combo_legs], "status": "pending",
+        }]
+        rating = 7.0 + (1 if fav_prob >= 62 else 0) + (1 if fav_prob >= 70 else 0) \
+            + (0.5 if p.get("btts") else 0) + (0.5 if fg >= 3 else 0)
+        rating = round(min(10.0, rating), 1)
+        stars = "⭐" * int(round(rating))
+        analysis = (f"{stars} Favoriten-Smart-Pick: {why} Anstoß {p.get('kickoff')}. "
+                    f"Genau das Muster erfolgreicher Tipper — auf den dominanten Favoriten setzen, "
+                    f"der selbst für die Tore sorgt. Quoten sind Schätzungen.")
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Smart Pick",
+            "league_code": p.get("league_code") or "",
+            "market": f"{fav} — Favoriten-Kombi ({legs_spec[0][0].split(fav)[-1].strip()} + Über 1.5)",
+            "odds": f"{round(prod, 2)}", "combo_legs": combo_legs, "is_parlay": True,
+            "ai_rating": rating, "ai_analysis": analysis,
+            "legs": display_legs, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
+    logger.info(f"Favourite Smart run: posted {posted} of {len(cand)} candidates")
+    return {"posted": posted, "candidates": len(cand)}
+
+
 def _parse_smart_json(resp) -> dict | None:
     """Extract the JSON object from an LLM Smart-Bet reply (tolerates markdown/prose)."""
     raw = (resp if isinstance(resp, str) else str(resp)).strip()
@@ -7060,6 +7169,7 @@ async def smart_loop():
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
+                logger.info(f"HQ loop C (FavSmart): {await favourite_smart_autopost()}")
                 logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
                 logger.info(f"HQ loop C (Briefing): {(await build_qualifier_briefing()).get('count')} ties")
         except Exception as e:

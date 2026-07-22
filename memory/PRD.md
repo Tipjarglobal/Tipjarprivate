@@ -1,6 +1,12 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-22c — Pfeffer-Banker auf SICHERE DC + Spiel-Über-1.5 umgestellt
+### CHANGELOG 2026-07-22d — Favoriten-Smart-Picks (DC/Handicap + Über 1.5, mit Rating & Begründung)
+- Owner-Wunsch: Smart Picks sollen dominante Favoriten anbieten (wie Gewinner: Lech +Handicap + Über 1.5) mit Sterne-Rating & Begründung.
+- Neu `favourite_smart_autopost()`: für whitelisted Favoriten (fav_prob≥58, erwartete Favoriten-Tore≥2, 0:0-sicher, kein Brasilien) im 5-Tage-Fenster. SICHER: „{Fav} Doppelte Chance + Über 1.5" (1:1 reicht). PFEFFER (fav_prob≥66 & fg≥3): „{Fav} -1.5 Handicap + Über 1.5". Rating 7–10 ⭐, deutsche Begründung, auto-settlebar (source=smart, is_parlay).
+- Grader: text-basierte Handicaps „{Team} -1.5/+2.5 Handicap" ergänzt. Admin-Trigger `/admin/smart/run` läuft jetzt beide Generatoren; Hook im Smart-Loop.
+- STATUS: Logik verifiziert (Toluca bestand alle Filter, nur Anstoß bereits vorbei). Aktuell 0 Posts, da alle *kommenden* starken Favoriten obskure Ligen sind (korrekt gefiltert) — füllt sich automatisch mit echten Liga-Spielen. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Klarstellung: „{Fav} DC + Über 1.5 (Spiel)" → 1:1 reicht (sicher). Team-spezifisch „{Fav} Über 1.5" würde 2 eigene Tore verlangen (riskant, Fenerbahce-1:0-Falle).
 - Pfeffer-Banker nutzen jetzt „{Favorit} Doppelte Chance {dc} + Über 1.5 Tore" (Spiel-Gesamttore, NICHT teamspezifisch). Settlet als total≥2 + Favorit verliert nicht.
 - VERIFIZIERT: /systems zeigt „Braga DC X2 + Über 1.5 Tore" etc. (12 Spiele, 367x), abrechenbar. Greift auf Produktion nach **Deploy**.
