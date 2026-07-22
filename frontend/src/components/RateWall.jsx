@@ -428,7 +428,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
         {view === "ai" ? (
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
            ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
-           ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"]].map(([v, lbl, on, off]) => (
+           ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
+           ["mental", "🤯 Mental", "bg-fuchsia-600 text-white border-fuchsia-600", "text-fuchsia-400 border-fuchsia-500/40"]].map(([v, lbl, on, off]) => (
             <button key={v} data-testid={`cat-${v}`}
               onClick={() => { markCatSeen(v); setCat((c) => (c === v ? null : v)); }}
               className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${cat === v ? on : `bg-surface ${off} hover:text-white`}`}>

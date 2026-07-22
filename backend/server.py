@@ -287,7 +287,8 @@ async def admin_autotips_reset(admin: dict = Depends(require_admin)):
 async def admin_smart_run(admin: dict = Depends(require_admin)):
     a = await smart_autopost()
     b = await favourite_smart_autopost()
-    return {"player_props": a, "favourites": b}
+    c = await mental_autopost()
+    return {"player_props": a, "favourites": b, "mental": c}
 
 
 @api_router.post("/admin/smart/reset")
@@ -1430,10 +1431,14 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["category"] = "risk"
     elif category == "banger":
         q["category"] = "banger"
+    elif category == "mental":
+        q["category"] = "mental"
     elif category == "value":
-        q["category"] = {"$nin": ["banker", "risk", "banger"]}
+        q["category"] = {"$nin": ["banker", "risk", "banger", "mental"]}
     if source == "ai":
         q["source"] = "hq-auto"
+        if category not in ("mental", "banker", "risk", "banger", "value"):
+            q["category"] = {"$ne": "mental"}   # mental only in its own tab
     elif source == "smart":
         q["source"] = "smart"
     elif source == "members":
@@ -7049,6 +7054,89 @@ async def favourite_smart_autopost() -> dict:
     return {"posted": posted, "candidates": len(cand)}
 
 
+async def mental_autopost() -> dict:
+    """Owner-Wunsch (2026-07-22): 'Mental'-Kategorie im Single-Pick-Bereich — verrückte
+    Long-Shot-Bet-Builder auf EIN Spiel mit riesiger Gesamtquote (Über 4.5 Tore, beide
+    Halbzeiten, Favorit-Handicap usw.). Hoher Nervenkitzel, kleine Trefferchance. Alle Legs
+    text-abrechenbar (settle_hq_combos), category='mental', source='hq-auto'."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    cand, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
+            continue
+        if (p.get("total") or 0) < 4 or not _zero_zero_assessment(p)["over_safe"]:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        cand.append((p.get("total") or 0, ko, p))
+    cand.sort(key=lambda x: -x[0])
+    posted = 0
+    for total, ko, p in cand[:6]:
+        home, away = p.get("home"), p.get("away")
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"mental-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        fav = _fav_team(p)
+        dc_side = p.get("fav")
+        legs = [("Über 4.5 Tore", 6.5, ""),
+                ("Beide Teams treffen", 1.55, "btts"),
+                ("Tor in jeder Halbzeit", 1.80, "")]
+        if fav and dc_side in ("home", "away"):
+            legs.append((f"{fav} -1.5 Handicap", 2.10, ""))
+            legs.append((f"{fav} Über 2.5 Tore", 3.80, ""))
+        else:
+            legs.append(("Über 5.5 Tore", 3.40, ""))
+            legs.append(("Über 3.5 Tore", 1.55, ""))
+        combo_legs = [{"home": home, "away": away, "market": mk, "odds": str(od),
+                       "kind": kd, "team": fav if ("-1.5" in mk or "Über 2.5" in mk and fav and fav in mk) else "",
+                       "status": "open"} for (mk, od, kd) in legs]
+        prod = 1.0
+        for lg in combo_legs:
+            prod *= float(lg["odds"])
+        display_legs = [{
+            "match": f"{home} – {away}", "league": p.get("league") or "TipJarHQ Mental",
+            "kickoff": p.get("kickoff") or "",
+            "selections": [lg["market"] for lg in combo_legs],
+            "sel_odds": [lg["odds"] for lg in combo_legs], "status": "pending",
+        }]
+        analysis = (f"🤯 MENTAL-Pick — Jackpot-Bet-Builder auf EIN Spiel bei ~{round(prod)}/1! "
+                    f"{home} vs {away} ist ein absolutes Torfest-Kandidat (Prognose {p.get('ph')}:{p.get('pa')}). "
+                    f"Kleiner Einsatz, riesiger Traum — genau EIN Leg reicht zum Zittern. Nur mit Spaßgeld spielen! "
+                    f"Quoten sind Schätzungen.")
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Mental",
+            "league_code": p.get("league_code") or "",
+            "market": f"{home} vs {away} — MENTAL Bet-Builder ({len(combo_legs)} Legs)",
+            "odds": f"{round(prod, 2)}", "combo_legs": combo_legs, "is_parlay": True,
+            "ai_rating": 3.5, "ai_analysis": analysis, "category": "mental",
+            "legs": display_legs, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-auto", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
+    logger.info(f"Mental run: posted {posted} of {len(cand)} candidates")
+    return {"posted": posted, "candidates": len(cand)}
+
+
+
 def _parse_smart_json(resp) -> dict | None:
     """Extract the JSON object from an LLM Smart-Bet reply (tolerates markdown/prose)."""
     raw = (resp if isinstance(resp, str) else str(resp)).strip()
@@ -7170,6 +7258,7 @@ async def smart_loop():
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
                 logger.info(f"HQ loop C (FavSmart): {await favourite_smart_autopost()}")
+                logger.info(f"HQ loop C (Mental): {await mental_autopost()}")
                 logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
                 logger.info(f"HQ loop C (Briefing): {(await build_qualifier_briefing()).get('count')} ties")
         except Exception as e:

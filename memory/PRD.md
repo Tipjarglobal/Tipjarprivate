@@ -1,6 +1,13 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-22d — Favoriten-Smart-Picks (DC/Handicap + Über 1.5, mit Rating & Begründung)
+### CHANGELOG 2026-07-22e — "Mental"-Kategorie im Single-Pick-Bereich (verrückte Long-Shot-Builder)
+- Owner-Wunsch: eigene „Mental"-Option mit crazy High-Odds-Bet-Buildern (Über 4.5 Tore + beide HZ + Handicap etc.).
+- Backend `mental_autopost()`: pro Torfest-Spiel EIN 5-Leg-Builder auf ein Spiel, riesige Quote (~95–150/1), category="mental", source="hq-auto", is_parlay → abrechenbar via settle_hq_combos. Alle Legs text-gradeable (Über 4.5/5.5, BTTS, Tor in jeder Halbzeit, {Fav} -1.5 Handicap, {Fav} Über 2.5).
+- /tips: category="mental" Filter ergänzt; Mental aus Default/Value-Ansichten ausgeschlossen (nur im eigenen Tab).
+- Frontend: 4. Kategorie-Tab „🤯 Mental" (fuchsia) im AI-Single-Pick-Wall. Loop-Hook + Admin-Trigger `/admin/smart/run`.
+- VERIFIZIERT: /admin/smart/run postete 6 Mental-Picks; /tips?category=mental liefert 6, 0 Leck in Default-Wall; Frontend kompiliert. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Wunsch: Smart Picks sollen dominante Favoriten anbieten (wie Gewinner: Lech +Handicap + Über 1.5) mit Sterne-Rating & Begründung.
 - Neu `favourite_smart_autopost()`: für whitelisted Favoriten (fav_prob≥58, erwartete Favoriten-Tore≥2, 0:0-sicher, kein Brasilien) im 5-Tage-Fenster. SICHER: „{Fav} Doppelte Chance + Über 1.5" (1:1 reicht). PFEFFER (fav_prob≥66 & fg≥3): „{Fav} -1.5 Handicap + Über 1.5". Rating 7–10 ⭐, deutsche Begründung, auto-settlebar (source=smart, is_parlay).
 - Grader: text-basierte Handicaps „{Team} -1.5/+2.5 Handicap" ergänzt. Admin-Trigger `/admin/smart/run` läuft jetzt beide Generatoren; Hook im Smart-Loop.
