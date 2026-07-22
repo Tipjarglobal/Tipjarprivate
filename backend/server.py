@@ -2339,14 +2339,20 @@ async def admin_visits(admin: dict = Depends(require_admin)):
     ident_expr = {"$ifNull": ["$identity", {"$concat": ["d:", {"$ifNull": ["$visitor_id", ""]}]}]}
     not_admin = {"is_admin": {"$ne": True}}
     daily_map = {}
+    _is_mem = {"$eq": [{"$substrCP": ["$_id.ident", 0, 2]}, "u:"]}
     async for row in db.visits.aggregate([
         {"$match": {"day": {"$in": days}, **not_admin}},
         {"$group": {"_id": {"day": "$day", "ident": ident_expr}, "hits": {"$sum": "$hits"}}},
-        {"$group": {"_id": "$_id.day", "unique": {"$sum": 1}, "hits": {"$sum": "$hits"}}},
+        {"$group": {"_id": "$_id.day", "unique": {"$sum": 1}, "hits": {"$sum": "$hits"},
+                    "members": {"$sum": {"$cond": [_is_mem, 1, 0]}},
+                    "anon": {"$sum": {"$cond": [_is_mem, 0, 1]}}}},
     ]):
-        daily_map[row["_id"]] = {"unique": row["unique"], "hits": row["hits"]}
+        daily_map[row["_id"]] = {"unique": row["unique"], "hits": row["hits"],
+                                 "members": row["members"], "anon": row["anon"]}
     daily = [{"day": d, "unique": daily_map.get(d, {}).get("unique", 0),
-              "hits": daily_map.get(d, {}).get("hits", 0)} for d in days]
+              "hits": daily_map.get(d, {}).get("hits", 0),
+              "members": daily_map.get(d, {}).get("members", 0),
+              "anon": daily_map.get(d, {}).get("anon", 0)} for d in days]
     total_row = {"total_unique": 0, "total_hits": 0}
     async for row in db.visits.aggregate([
         {"$match": not_admin},

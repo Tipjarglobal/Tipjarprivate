@@ -827,3 +827,4 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - `/api/admin/visits`: unique/hits via Aggregation über `identity` (Fallback auf `visitor_id` für Alt-Docs, keine Migration nötig). Neue Felder: today_members/today_anon/total_members/total_anon.
 - SecretInsights.jsx (/insights): neue Card-Zeile „Heute · eingeloggte Mitglieder vs. anonyme Besucher" (testids: stat-today-members, stat-today-anon, insights-member-split).
 - Getestet via curl + DB + Screenshot. Wirkt auf Produktion erst nach Deploy.
+- Follow-up: 14-Tage-Chart im /insights-Board jetzt zweifarbig gestapelt (grün=Mitglieder, grau=anonym). Backend `daily` liefert nun members/anon pro Tag. Höhe basiert auf unique (members+anon), nicht mehr hits.

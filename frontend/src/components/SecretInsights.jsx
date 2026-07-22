@@ -33,6 +33,7 @@ export default function SecretInsights() {
   }
 
   const maxHits = data ? Math.max(1, ...data.daily.map((d) => d.hits)) : 1;
+  const maxUnique = data ? Math.max(1, ...data.daily.map((d) => (d.members || 0) + (d.anon || 0))) : 1;
 
   return (
     <div className="min-h-screen bg-void text-white px-4 py-10" data-testid="insights-page">
@@ -77,22 +78,37 @@ export default function SecretInsights() {
             </div>
 
             <div className="rounded-2xl border border-elevated bg-surface p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="text-volt" size={16} />
-                <p className="text-xs uppercase tracking-widest text-zinc-400">Besucher — letzte 14 Tage</p>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="text-volt" size={16} />
+                  <p className="text-xs uppercase tracking-widest text-zinc-400">Besucher — letzte 14 Tage</p>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-zinc-400">
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-volt inline-block" />Mitglieder</span>
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-500 inline-block" />Anonym</span>
+                </div>
               </div>
               <div className="flex items-end justify-between gap-1 h-40" data-testid="insights-chart">
-                {data.daily.map((d) => (
-                  <div key={d.day} className="flex-1 flex flex-col items-center gap-1 group">
-                    <span className="text-[9px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity">{d.hits}</span>
-                    <div
-                      className="w-full rounded-t bg-volt/80 hover:bg-volt transition-colors"
-                      style={{ height: `${Math.max(4, (d.hits / maxHits) * 130)}px` }}
-                      title={`${d.day}: ${d.unique} Besucher / ${d.hits} Aufrufe`}
-                    />
-                    <span className="text-[8px] text-zinc-600">{d.day.slice(5)}</span>
-                  </div>
-                ))}
+                {data.daily.map((d) => {
+                  const total = (d.members || 0) + (d.anon || 0);
+                  const barH = Math.max(4, (total / maxUnique) * 130);
+                  const memH = total > 0 ? (d.members / total) * barH : 0;
+                  const anonH = total > 0 ? (d.anon / total) * barH : 0;
+                  return (
+                    <div key={d.day} className="flex-1 flex flex-col items-center gap-1 group">
+                      <span className="text-[9px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity">{total}</span>
+                      <div
+                        className="w-full flex flex-col justify-end rounded-t overflow-hidden"
+                        style={{ height: `${barH}px` }}
+                        title={`${d.day}: ${d.members || 0} Mitglieder + ${d.anon || 0} anonym = ${total} Besucher (${d.hits} Aufrufe)`}
+                      >
+                        <div className="w-full bg-zinc-500/70 group-hover:bg-zinc-400 transition-colors" style={{ height: `${anonH}px` }} />
+                        <div className="w-full bg-volt/80 group-hover:bg-volt transition-colors" style={{ height: `${memH}px` }} />
+                      </div>
+                      <span className="text-[8px] text-zinc-600">{d.day.slice(5)}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
