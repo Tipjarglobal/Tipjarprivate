@@ -820,3 +820,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - expire_stale_pending schreibt jetzt einen db.cleanup_log-Eintrag NUR wenn deleted>0 ODER voided>0. Eintrag: at, deleted, voided, grace_hours, leagues (sortiert nach Haeufigkeit), matches[:40].
 - NEU Endpoint GET /api/admin/cleanup-log (admin) -> letzte 100 echte Bereinigungslaeufe, inkl. betroffener Ligen (Basis um Ligen aus Scraper zu nehmen).
 - VERIFIZIERT: leerer Lauf=0 Eintraege; echter Lauf=1 Eintrag mit Ligen ECL/TestLiga; AI geloescht, Member void. Backend 200. BRAUCHT RE-DEPLOY.
+
+---
+## 2026-07-22 — Analytics: echte Besucherzählung
+- `/api/track/visit`: Zählung/Entdopplung jetzt per Identity — eingeloggte User pro **Konto** (`u:<id>`) über alle Geräte, anonyme pro **Gerät** (`d:<vid>`). Admin (role=admin) wird immer & retroaktiv ausgeschlossen (kein Zähl-Lag mehr).
+- `/api/admin/visits`: unique/hits via Aggregation über `identity` (Fallback auf `visitor_id` für Alt-Docs, keine Migration nötig). Neue Felder: today_members/today_anon/total_members/total_anon.
+- SecretInsights.jsx (/insights): neue Card-Zeile „Heute · eingeloggte Mitglieder vs. anonyme Besucher" (testids: stat-today-members, stat-today-anon, insights-member-split).
+- Getestet via curl + DB + Screenshot. Wirkt auf Produktion erst nach Deploy.

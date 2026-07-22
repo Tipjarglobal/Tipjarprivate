@@ -63,6 +63,19 @@ export default function SecretInsights() {
               <Stat testid="stat-members" icon={Users} label="Registriert" value={data.members} sub={`${data.subscribers} mit Push`} />
             </div>
 
+            <div className="grid grid-cols-2 gap-3 mb-8" data-testid="insights-member-split">
+              <div className="rounded-2xl border border-volt/30 bg-volt/5 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-400 mb-1">Heute · eingeloggte Mitglieder</p>
+                <p className="text-3xl font-black text-volt" data-testid="stat-today-members">{data.today_members ?? 0}</p>
+                <p className="text-[11px] text-zinc-500 mt-1">Gesamt: {data.total_members ?? 0} Konten</p>
+              </div>
+              <div className="rounded-2xl border border-elevated bg-surface p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-400 mb-1">Heute · anonyme Besucher</p>
+                <p className="text-3xl font-black text-white" data-testid="stat-today-anon">{data.today_anon ?? 0}</p>
+                <p className="text-[11px] text-zinc-500 mt-1">Gesamt: {data.total_anon ?? 0} Geräte</p>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-elevated bg-surface p-5">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="text-volt" size={16} />

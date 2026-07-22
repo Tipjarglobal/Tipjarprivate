@@ -2360,11 +2360,28 @@ async def admin_visits(admin: dict = Depends(require_admin)):
     week = daily[-7:]
     members = await db.users.count_documents({"role": {"$ne": "admin"}})
     subs = await db.subscribers.count_documents({})
+    # Split unique visitors into logged-in members (identity "u:") vs anonymous ("d:").
+    is_member = {"$eq": [{"$substrCP": ["$_id", 0, 2]}, "u:"]}
+    async def _split(match):
+        res = {"members": 0, "anon": 0}
+        async for row in db.visits.aggregate([
+            {"$match": {**match, **not_admin}},
+            {"$group": {"_id": ident_expr}},
+            {"$group": {"_id": None,
+                        "members": {"$sum": {"$cond": [is_member, 1, 0]}},
+                        "anon": {"$sum": {"$cond": [is_member, 0, 1]}}}},
+        ]):
+            res = {"members": row["members"], "anon": row["anon"]}
+        return res
+    today_split = await _split({"day": today})
+    total_split = await _split({})
     return {
         "total_unique": total_unique, "total_hits": total_hits,
         "today_unique": today_row["unique"], "today_hits": today_row["hits"],
         "week_unique": sum(x["unique"] for x in week), "week_hits": sum(x["hits"] for x in week),
         "daily": daily, "members": members, "subscribers": subs,
+        "today_members": today_split["members"], "today_anon": today_split["anon"],
+        "total_members": total_split["members"], "total_anon": total_split["anon"],
     }
 
 
