@@ -32,6 +32,10 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
    echten Torfesten (torreiche Ligen), niemals in torarmen Ligen wo 1:1/2:x typisch ist.
 
 ## Muster-Wissen (für zukünftige Features / KI-Prompts)
+- **Nie von schwachen Teams abhängen (2026-07-21):** Radar sagte „Lincoln trifft" → Mjällby 3:0 Lincoln (Lincoln traf NICHT). Larne 0:4 Crvena zvezda, AGF 1:4 Lech. Lehre: NICHT auf das schwache Team setzen (BTTS/each-half, das das schwache Team braucht). Stattdessen den STARKEN FAVORITEN spielen (Favorit verliert nicht + Über-Linie, die der Favorit selbst liefert).
+  → Pfeffer ist jetzt favoriten-verankert (`_pepper_qualifies`: nur Spiele mit starkem Favoriten, der 2+ Tore erwartet, ODER echtem Torfest total≥4 & btts). Banker = „{Favorit} Doppelte Chance + Über-Linie" oder Über/Unter-Range.
+- **Zwei Pfeffer-Fenster (2026-07-21):** Di→Fr 12:00 (`pepper`) und Fr→Di 12:00 (`pepperwk`). Beide oben in den System-Picks.
+- **Favoriten-Tracker (`db.favourite_teams`):** sammelt automatisch starke Favoriten (fav_prob≥60) → wächst zur ~50-Team-Liste. TODO: aus Ergebnissen lernen (Trefferquote je Team, chronische Versager wie Lincoln soft-blocken).
 - **0:0 in Skandinavien real (2026-07-20 bestätigt):** Örgryte–Djurgården endete 0:0,
   Hafnarfjörður–Breidablik endete 0:0. Beweis, dass 0:0 dort möglich ist → bei Über-Wetten
   in nordischen Ligen vorsichtig, torlose Spiele ehrlich als solche kennzeichnen.

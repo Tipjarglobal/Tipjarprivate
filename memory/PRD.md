@@ -1,6 +1,13 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-21e — Brasilien raus aus Pfeffer/Über-Kombis
+### CHANGELOG 2026-07-22 — Pfeffer: favoriten-verankert + zwei Fenster + Favoriten-Tracker
+- Owner-Lektion: Radar sagte „Lincoln trifft" → Lincoln traf NICHT (Mjällby 3:0). Regel: nie vom schwachen Team abhängen.
+- Pfeffer neu (`_build_pepper_slip`): `_pepper_qualifies` nimmt nur Spiele mit starkem Favoriten (fav_prob≥52, Favorit erwartet ≥2 Tore) ODER echtem Torfest (total≥4 & btts). Banker favoriten-verankert: „{Favorit} Doppelte Chance + Über-Linie" (der Favorit trägt beide Legs) statt schwache-Team-abhängiger BTTS.
+- Zwei Fenster: `pepper` (Di→Fr 12:00) + `pepperwk` (Fr→Di 12:00), beide oben in System-Picks. Snapshot je Key.
+- Favoriten-Tracker `db.favourite_teams`: sammelt automatisch starke Favoriten (fav_prob≥60), wächst zur ~50-Team-Liste (Grundlage fürs Lernen aus Ergebnissen).
+- VERIFIZIERT: /systems liefert beide Fenster (Di→Fr 10 Spiele/505x, Fr→Di 2 Spiele), 0 Brasilien, Screenshot ok. Greift auf Produktion nach **Deploy**.
+
+
 - Owner: „deine Pfeffer spiele waren Müll. Ich hasse es, Brasilien als Pfeffer zu benutzen." Atletico Mineiro (pred 5→1:1) & Gremio (pred 4→0:1) bewiesen: Brasilien-Prognosen überschätzen Tore.
 - Neuer Helper `_bad_for_overs(p)` (Liga enthält brazil/brasil) → schließt Brasilien aus dem Wochen-Pfeffer UND der TipJarLogic-Über-Kombi aus. Betrifft NUR Über-Tipps; Brasilien bleibt sonst bettbar.
 - Lernnotiz zur Exakt-2-Tore-Falle (Asian Über 2.0 = Push, Über 2.25 = halber Verlust) in betting_notes ergänzt → Über 2.5 nur bei echten Torfesten.

@@ -4812,27 +4812,15 @@ async def build_systems() -> dict:
         if len(tjlogic) >= 3:
             break
 
-    # 7) WOCHEN-PFEFFER-KOMBI (owner 2026-07-21): ein großer Kombi-Schein Di→Fr 12:00 mit
-    #    15 Spielen — die 6 besten als "Banker" mit mehr PFEFFER (2-Leg-Kombis wie
-    #    "Tor in jeder Halbzeit" + Doppelte Chance / Beide treffen), der Rest als Value-Legs.
-    #    Team-agnostische, text-abrechenbare Märkte → settlebar über die bestehende Engine.
+    # 7) WOCHEN-PFEFFER-KOMBI (owner 2026-07-21): zwei große Kombi-Scheine, die den STARKEN
+    #    FAVORITEN folgen — nicht mehr von schwachen Teams abhängen (Lincoln traf gg. Mjällby
+    #    3:0 NICHT → so etwas fliegt raus). Fenster 1: Di→Fr 12:00. Fenster 2: Fr→Di 12:00.
+    #    Jeder Banker ist favoriten-verankert: der Favorit verliert nicht UND liefert die Tore.
     now_pw = datetime.now(timezone.utc)
-    _wd = now_pw.weekday()                     # Mon=0 … Fri=4
-    _days_to_fri = (4 - _wd) % 7
-    fri_noon = (now_pw + timedelta(days=_days_to_fri)).replace(hour=12, minute=0, second=0, microsecond=0)
-    if fri_noon < now_pw:
-        fri_noon += timedelta(days=7)
-    win_start = now_pw - timedelta(hours=3)
-    pepper_pool = []
-    for p in goals_sorted:
-        ko = _parse_kickoff(p.get("kickoff"))
-        if not ko or not (win_start <= ko <= fri_noon):
-            continue
-        if _bad_for_overs(p):
-            continue                            # Owner: kein Brasilien & Co. als Pfeffer
-        if not _zero_zero_assessment(p)["over_safe"]:
-            continue                            # 0:0-sichere Spiele only
-        pepper_pool.append(p)
+    _tue0 = (now_pw - timedelta(days=(now_pw.weekday() - 1) % 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+    fri_noon = _tue0 + timedelta(days=3, hours=12)
+    next_tue_noon = _tue0 + timedelta(days=7, hours=12)
+    win_floor = now_pw - timedelta(hours=3)
 
     def _pepper_dc(p):
         team = _fav_team(p)
@@ -4841,57 +4829,87 @@ async def build_systems() -> dict:
         dc = "1X" if p.get("fav") == "home" else "X2"
         return f"{team} Doppelte Chance {dc}", (1.28 if (p.get("fav_prob") or 0) >= 55 else 1.34)
 
-    pepper_sels, used_pw = [], set()
-    # 6 BANKER = 2-leg pepper combos. Owner-Stil (2026-07-21): eine Über-Linie KOMBINIERT
-    # mit einer Unter-Linie als Tor-Range (Pivot ~2.5), oder Favorit-Doppelte-Chance dazu.
-    _bi = 0
-    for p in pepper_pool:
-        if len(pepper_sels) >= 6 or p["id"] in used_pw:
-            continue
-        total = p.get("total") or 0
-        dc = _pepper_dc(p)
+    def _fav_goals(p):
+        if p.get("fav") == "home":
+            return p.get("ph") or 0
+        if p.get("fav") == "away":
+            return p.get("pa") or 0
+        return 0
+
+    def _pepper_qualifies(p):
+        # Anchored on a strong favourite that is predicted to score enough, OR a true goal-fest.
         fav_prob = p.get("fav_prob") or 0
-        # jeder 3. Banker mit klarem Favoriten: bet365-Stil DC + Über-Linie
-        if dc and fav_prob >= 58 and _bi % 3 == 2:
-            over_mk, over_od = ("Über 1.5 Tore", 1.30) if total >= 3 else ("Über 0.5 Tore", 1.08)
-            legA, legB = dc, (over_mk, over_od)
-        elif total >= 4:
-            legA, legB = ("Über 2.5 Tore", 1.75), ("Unter 5.5 Tore", 1.28)   # 3–5 Tore
-        elif total == 3:
-            legA, legB = ("Über 1.5 Tore", 1.30), ("Unter 4.5 Tore", 1.32)    # 2–4 Tore
-        else:
-            legA, legB = ("Über 0.5 Tore", 1.10), ("Unter 3.5 Tore", 1.30)    # 1–3 Tore
-        _bi += 1
-        used_pw.add(p["id"])
-        sel = _sel(p, f"{legA[0]} + {legB[0]}", round(legA[1] * legB[1], 2), 8.0)
-        sel["combo_markets"] = [legA[0], legB[0]]
-        sel["banker"] = True
-        pepper_sels.append(sel)
-    # up to 9 more VALUE single legs → 15 games total, rotated for variety
-    _vi = 0
-    for p in pepper_pool:
-        if len(pepper_sels) >= 15 or p["id"] in used_pw:
-            continue
-        total = p.get("total") or 0
-        dc = _pepper_dc(p)
-        fav_prob = p.get("fav_prob") or 0
-        if dc and fav_prob >= 58:
-            mk, od = dc
-        elif total >= 4:
-            mk, od = "Über 2.5 Tore", 1.55
-        elif p.get("btts") and _vi % 2 == 0:
-            mk, od = "Beide Teams treffen", 1.75
-        elif total >= 3:
-            mk, od = "Über 1.5 Tore", 1.30
-        elif dc:
-            mk, od = dc
-        else:
-            mk, od = "Über 1.5 Tore", 1.40
-        _vi += 1
-        used_pw.add(p["id"])
-        s = _sel(p, mk, od, 7.5)
-        s["banker"] = False
-        pepper_sels.append(s)
+        if _fav_team(p) and fav_prob >= 52 and _fav_goals(p) >= 2:
+            return True
+        return (p.get("total") or 0) >= 4 and bool(p.get("btts"))
+
+    def _build_pepper_slip(win_start, win_end, key, title, sub):
+        pool = []
+        for p in goals_sorted:
+            ko = _parse_kickoff(p.get("kickoff"))
+            if not ko or not (win_start <= ko <= win_end):
+                continue
+            if _bad_for_overs(p) or not _zero_zero_assessment(p)["over_safe"]:
+                continue
+            if not _pepper_qualifies(p):
+                continue
+            pool.append(p)
+        sels, used = [], set()
+        # 6 BANKER — favourite-anchored 2-leg combos (Favorit verliert nicht + Über-Linie)
+        for p in pool:
+            if len(sels) >= 6 or p["id"] in used:
+                continue
+            total, dc, fg = p.get("total") or 0, _pepper_dc(p), _fav_goals(p)
+            if dc and (p.get("fav_prob") or 0) >= 55 and fg >= 2:
+                over = ("Über 2.5 Tore", 1.65) if total >= 4 else ("Über 1.5 Tore", 1.30)
+                legA, legB = dc, over
+            elif total >= 4:
+                legA, legB = ("Über 2.5 Tore", 1.75), ("Unter 5.5 Tore", 1.28)
+            else:
+                legA, legB = ("Über 1.5 Tore", 1.30), ("Unter 4.5 Tore", 1.32)
+            used.add(p["id"])
+            s = _sel(p, f"{legA[0]} + {legB[0]}", round(legA[1] * legB[1], 2), 8.0)
+            s["combo_markets"], s["banker"] = [legA[0], legB[0]], True
+            sels.append(s)
+        # up to 9 VALUE single legs → 15 games total
+        for p in pool:
+            if len(sels) >= 15 or p["id"] in used:
+                continue
+            total, dc = p.get("total") or 0, _pepper_dc(p)
+            if dc and (p.get("fav_prob") or 0) >= 55:
+                mk, od = dc
+            elif total >= 4:
+                mk, od = "Über 2.5 Tore", 1.55
+            else:
+                mk, od = "Über 1.5 Tore", 1.30
+            used.add(p["id"])
+            s = _sel(p, mk, od, 7.5)
+            s["banker"] = False
+            sels.append(s)
+        if len(sels) < 2:
+            return None
+        n_bank = sum(1 for s in sels if s.get("banker"))
+        return _finalize_system(sels, n_bank, key, title,
+                                f"{len(sels)} Favoriten-Spiele · {n_bank} Banker · {sub}", "risk")
+
+    pepper_mid = _build_pepper_slip(
+        max(win_floor, _tue0), fri_noon, "pepper",
+        "Pfeffer-Kombi (Di→Fr 12:00)", f"läuft bis Fr {fri_noon.strftime('%d.%m. %H:%M')}")
+    pepper_wknd = _build_pepper_slip(
+        max(win_floor, fri_noon), next_tue_noon, "pepperwk",
+        "Pfeffer-Kombi (Fr→Di 12:00)", f"läuft bis Di {next_tue_noon.strftime('%d.%m. %H:%M')}")
+
+    # Favoriten-Tracker: starke Favoriten (fav_prob>=60) sammeln → wächst zur ~50-Team-Liste,
+    # Grundlage fürs Lernen aus Ergebnissen ("Mach dir Notizen aus Ergebnissen").
+    try:
+        for p in preds:
+            if (p.get("fav_prob") or 0) >= 60 and _fav_team(p) and not _bad_for_overs(p):
+                await db.favourite_teams.update_one(
+                    {"name": _fav_team(p)},
+                    {"$inc": {"seen": 1}, "$set": {"last_seen": now_pw.isoformat(),
+                     "league": p.get("league") or ""}}, upsert=True)
+    except Exception as _e:
+        logger.warning(f"favourite_teams track failed: {_e}")
 
     systems = [
         _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
@@ -4913,13 +4931,10 @@ async def build_systems() -> dict:
         systems.insert(0, _finalize_system(
             hour, 0, "hour", "System der Stunde",
             "Το Σύστημα της Ώρας · startet ~1 Std. vor Anpfiff · Gesamtquote 3.6+", "value"))
-    if len(pepper_sels) >= 2:
-        _n_bank = sum(1 for s in pepper_sels if s.get("banker"))
-        _fri = fri_noon.strftime("%a %d.%m. %H:%M")
-        systems.insert(0, _finalize_system(
-            pepper_sels, _n_bank, "pepper", "Wochen-Pfeffer-Kombi (Di→Fr)",
-            f"{len(pepper_sels)} Spiele · {_n_bank} Banker mit Pfeffer (2-Leg-Kombis) · läuft bis {_fri}",
-            "risk"))
+    # both pepper windows; the currently-active window ends up on top
+    for _pw in (pepper_wknd, pepper_mid):
+        if _pw:
+            systems.insert(0, _pw)
 
     # Time bucket per slip so the UI can split System Picks into
     # "Fängt jetzt an" / "Heute" / "Diese Woche". Every slip lands in EXACTLY one.
