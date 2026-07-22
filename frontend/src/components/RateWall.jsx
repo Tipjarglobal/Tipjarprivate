@@ -562,37 +562,6 @@ function SmartLab({ t, user, onCreated }) {
   const [images, setImages] = useState([]);
   const [sending, setSending] = useState(false);
   const fileRef = useRef(null);
-  const [ideas, setIdeas] = useState([]);
-  const [myIdeaRatings, setMyIdeaRatings] = useState({});
-  const loadIdeas = useCallback(async () => {
-    try {
-      const { data } = await api.get("/smart/ideas/recent", { params: { limit: 30 } });
-      setIdeas(data);
-    } catch { /* ignore */ }
-  }, []);
-  const loadMyIdeaRatings = useCallback(async () => {
-    if (!user) { setMyIdeaRatings({}); return; }
-    try {
-      const { data } = await api.get("/smart/ideas/my-ratings");
-      setMyIdeaRatings(data || {});
-    } catch { /* ignore */ }
-  }, [user]);
-  useEffect(() => {
-    loadIdeas();
-    const iv = setInterval(loadIdeas, 20000);
-    return () => clearInterval(iv);
-  }, [loadIdeas]);
-  useEffect(() => { loadMyIdeaRatings(); }, [loadMyIdeaRatings]);
-  const rateIdea = async (ideaId, stars) => {
-    if (!user) { toast.error(t("smart.chat.login")); return; }
-    try {
-      const { data } = await api.post(`/smart/ideas/${ideaId}/rate`, { stars });
-      setMyIdeaRatings((m) => ({ ...m, [ideaId]: stars }));
-      setIdeas((list) => list.map((it) => (it.id === ideaId
-        ? { ...it, avg_rating: data.avg_rating, ratings_count: data.ratings_count } : it)));
-      toast.success(t("wall.thanks"));
-    } catch (e) { toast.error(apiErr(e)); }
-  };
   const addImages = (e) => {
     const picked = Array.from(e.target.files || []);
     setImages((prev) => [...prev, ...picked].slice(0, 3));
@@ -612,7 +581,6 @@ function SmartLab({ t, user, onCreated }) {
       setText(""); setImages([]);
       if (data.created) { toast.success(t("smart.chat.created")); onCreated?.(); }
       else { toast.success(t("smart.chat.stored")); }
-      loadIdeas();
     } catch (e) {
       // Owner: never show a blank/error reply — the KI always gives something. On a hiccup,
       // stay friendly and invite a retry instead of a bare error message.
@@ -694,45 +662,6 @@ function SmartLab({ t, user, onCreated }) {
       </div>
       </div>
 
-      {/* Eingegangene Ideen — was die Community an Smart geschickt hat (kein Tipp nötig) */}
-      <div className="mt-4 rounded-2xl border border-white/10 bg-surface/60 p-4 md:p-5" data-testid="smart-ideas-feed">
-        <div className="flex items-center gap-2 mb-3">
-          <MessageCircle size={16} className="text-volt" />
-          <span className="text-sm font-heading font-black uppercase tracking-wide text-white">Eingegangene Ideen</span>
-          <span className="text-[11px] text-zinc-500 font-mono">({ideas.length})</span>
-        </div>
-        {ideas.length === 0 ? (
-          <p className="text-zinc-500 text-sm py-4 text-center">Noch keine Ideen eingegangen — sei der Erste! 💡</p>
-        ) : (
-          <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {ideas.map((idea, idx) => {
-              const meta = SMART_IDEA_STATUS[idea.status] || SMART_IDEA_STATUS.pending;
-              return (
-                <li key={idea.id || idx} data-testid={`smart-idea-item-${idx}`}
-                  className="flex items-start gap-3 rounded-xl bg-void/60 border border-white/5 px-3 py-2.5">
-                  <div className="w-7 h-7 shrink-0 rounded-full bg-elevated border border-zinc-600 flex items-center justify-center text-[11px] font-bold text-white">
-                    {idea.username?.[0]?.toUpperCase() || "?"}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-zinc-300 truncate">@{toLatin(idea.username) || "anon"}</span>
-                      <span className={`text-[9px] font-black uppercase tracking-widest rounded px-1.5 py-0.5 ${meta.cls}`}>{meta.label}</span>
-                      {idea.images > 0 && <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><ImagePlus size={11} /> {idea.images}</span>}
-                    </div>
-                    {idea.text && <p className="text-sm text-zinc-200 mt-0.5 break-words">{toLatin(idea.text)}</p>}
-                    <div className="flex items-center gap-2 mt-2 flex-wrap" data-testid={`smart-idea-rate-${idx}`}>
-                      <StarRating value={myIdeaRatings[idea.id] || 0} onRate={(s) => rateIdea(idea.id, s)} size={15} readOnly={!user} />
-                      {idea.ratings_count > 0 && (
-                        <span className="text-[11px] text-zinc-400 font-mono">Ø {idea.avg_rating} · {idea.ratings_count}</span>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
     </>
   );
 }

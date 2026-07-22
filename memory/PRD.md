@@ -1,6 +1,11 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-22e — "Mental"-Kategorie im Single-Pick-Bereich (verrückte Long-Shot-Builder)
+### CHANGELOG 2026-07-22f — "Eingegangene Ideen" entfernt + Lincoln/Spanien-Argentinien gelöscht
+- Owner: „Eingegangene Ideen" soll nie wieder erscheinen → Feed-Block + Polling (`/smart/ideas/recent` alle 20s) aus SmartLab entfernt (Frontend RateWall.jsx). Idee-Einreichung im Chat bleibt.
+- Spanien–Argentinien: bereits gelöscht (nicht mehr vorhanden). Lincoln Red Imps: 3 Tipps + 1 Prognose gelöscht → erscheint nicht mehr in Single Picks.
+- VERIFIZIERT: Frontend kompiliert fehlerfrei, DB-Löschung bestätigt. Auf Produktion greift die UI-Änderung nach **Deploy**; alte Lost-Tipps dort purgen automatisch nach Spielende.
+
+
 - Owner-Wunsch: eigene „Mental"-Option mit crazy High-Odds-Bet-Buildern (Über 4.5 Tore + beide HZ + Handicap etc.).
 - Backend `mental_autopost()`: pro Torfest-Spiel EIN 5-Leg-Builder auf ein Spiel, riesige Quote (~95–150/1), category="mental", source="hq-auto", is_parlay → abrechenbar via settle_hq_combos. Alle Legs text-gradeable (Über 4.5/5.5, BTTS, Tor in jeder Halbzeit, {Fav} -1.5 Handicap, {Fav} Über 2.5).
 - /tips: category="mental" Filter ergänzt; Mental aus Default/Value-Ansichten ausgeschlossen (nur im eigenen Tab).
