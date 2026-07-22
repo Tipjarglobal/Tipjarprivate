@@ -829,3 +829,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Getestet via curl + DB + Screenshot. Wirkt auf Produktion erst nach Deploy.
 - Follow-up: 14-Tage-Chart im /insights-Board jetzt zweifarbig gestapelt (grün=Mitglieder, grau=anonym). Backend `daily` liefert nun members/anon pro Tag. Höhe basiert auf unique (members+anon), nicht mehr hits.
 - Live-Bereich: neuer 4. Sub-Tab "Community" (blau, testid live-cat-community). Zeigt Live-Tipps von echten Mitgliedern (source=members & status=live), keine KI. Frontend-only Filter in RateWall.jsx; loadLiveCounts zählt community separat (nicht mehr in value gebucht).
+
+## 2026-07-22 — Phase 2: Spieler-Props automatisch abrechnen (DONE + getestet)
+- settle_pending_tips(): Einzeltipps mit Spieler-Prop-Markt (scorer/sot/shots/fouls/card/saves + "beide teams karte") werden jetzt über _player_stats_for_fixture + _grade_player_leg abgerechnet statt score-only judge_market. Deckt Mitglieder-/Community-Spielertipps ab.
+- Bugfix Namensvetter: _player_stats_for_fixture indiziert Spieler zusätzlich per Vollname ("full:<norm>"), _grade_player_leg matcht Vollname zuerst, Nachname als Fallback. Verhindert, dass ein Torschütze von einem gleichnamigen Nicht-Torschützen überschrieben wird.
+- E2E getestet mit echtem Spiel (Alianza Lima 2:1 Sport Huancayo, fixture 1549411): Castillo Torschütze → won, Duarte Über 0.5 SOT → lost. Korrekt.
+- OFFEN (Roadmap "mehr Datenquellen"): Phase 1 API-Football /predictions (Quota-Caching nötig), Phase 3 echte Buchmacher-Quoten, Phase 4 3. Scraper, Phase 5 mehr Ligen.

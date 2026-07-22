@@ -3138,6 +3138,11 @@ def _player_stats_for_fixture(fixture_id):
             key = _name_key(name)
             if key:
                 pmap[key] = rec
+            full = _norm(name)
+            if full:
+                # full-name key disambiguates players who share a last name
+                # (e.g. two "Castillo") so a scorer isn't overwritten by a namesake.
+                pmap[f"full:{full}"] = rec
         if tname:
             team_cards[_norm(tname)] = tcards
     return pmap, team_cards
@@ -3242,9 +3247,11 @@ def _grade_player_leg(leg, pmap, team_cards, fx):
         player = re.split(r"\d|über|torsch|schüss|schuss|foul|karte|paraden|trifft",
                           market, flags=re.IGNORECASE)[0].strip()
     key = _name_key(player)
-    rec = pmap.get(key)
+    rec = pmap.get(f"full:{_norm(player)}") or pmap.get(key)
     if not rec:
         for k, v in pmap.items():
+            if k.startswith("full:"):
+                continue
             if key and (key in k or k in key):
                 rec = v
                 break
@@ -3648,7 +3655,33 @@ async def settle_pending_tips() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         outcome_market = tip.get("market", "")
-        if _is_corner_market(outcome_market):
+        # Player-prop SINGLE (member or HQ): grade from the finished match's per-player
+        # stats (scorer / shots / shots on target / fouls / cards / saves) instead of the
+        # score-only judge. The grading logic already exists (used for combos) — reuse it
+        # so member-posted player tips auto-settle too.
+        _pk = _parse_player_market(outcome_market)[0]
+        _lk = (tip.get("kind") or tip.get("leg_kind") or "").lower()
+        is_player_single = (
+            _lk in PLAYER_LEG_KINDS or _pk is not None
+            or ("beide teams" in outcome_market.lower() and "karte" in outcome_market.lower())
+        )
+        if is_player_single:
+            pmap, team_cards = _player_stats_for_fixture(fx.get("fixture_id"))
+            if not pmap and not team_cards:
+                if _api_quota_exhausted():
+                    checked -= 1
+                    break
+                await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+                continue
+            leg = {"market": outcome_market, "kind": _lk, "line": tip.get("line"),
+                   "player": tip.get("player") or "", "team": tip.get("team", ""),
+                   "home": tip["home_team"], "away": tip["away_team"]}
+            res = _grade_player_leg(leg, pmap or {}, team_cards or {}, fx)
+            if res is None:
+                await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+                continue
+            new_status = "won" if res else "lost"
+        elif _is_corner_market(outcome_market):
             fx["corners"] = _corner_total_for_fixture(fx.get("fixture_id"))
             res = _grade_goal_leg("corner_o" if "über" in outcome_market.lower() else "corner_u",
                                   outcome_market, "", fx)
