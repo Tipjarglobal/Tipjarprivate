@@ -835,3 +835,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Bugfix Namensvetter: _player_stats_for_fixture indiziert Spieler zusätzlich per Vollname ("full:<norm>"), _grade_player_leg matcht Vollname zuerst, Nachname als Fallback. Verhindert, dass ein Torschütze von einem gleichnamigen Nicht-Torschützen überschrieben wird.
 - E2E getestet mit echtem Spiel (Alianza Lima 2:1 Sport Huancayo, fixture 1549411): Castillo Torschütze → won, Duarte Über 0.5 SOT → lost. Korrekt.
 - OFFEN (Roadmap "mehr Datenquellen"): Phase 1 API-Football /predictions (Quota-Caching nötig), Phase 3 echte Buchmacher-Quoten, Phase 4 3. Scraper, Phase 5 mehr Ligen.
+
+## 2026-07-22 — Phase 3: echte Buchmacher-Quoten erweitert (DONE + getestet)
+- _parse_odds(): zusätzlich over35, under15, win_draw geparst (API-Football /odds).
+- _real_odd_for(): NEU gemappt: Match-Winner "{Team} Sieg" → win_home/win_away (wurde vorher geparst aber nie genutzt!), "Über 3.5 Tore" → over35, "Unter 1.5 Tore" → under15.
+- Effekt: Sieg-, Über 3.5- und Unter 1.5-Tipps tragen jetzt echte Buchmacher-Quoten statt Heuristik-Fallback.
+- Getestet mit echtem Spiel (fixture 1490332): Über 3.5 → 2.00, Sieg → win_home 3.65.
+- OFFEN Roadmap: Phase 1 /predictions (Quota-Caching), Phase 4 3. Scraper, Phase 5 mehr Ligen.

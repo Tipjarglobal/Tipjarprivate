@@ -6329,6 +6329,8 @@ def _parse_odds(resp) -> dict:
                     setd("over05", vals.get("Over 0.5"))
                     setd("over15", vals.get("Over 1.5"))
                     setd("over25", vals.get("Over 2.5"))
+                    setd("over35", vals.get("Over 3.5"))
+                    setd("under15", vals.get("Under 1.5"))
                     setd("under25", vals.get("Under 2.5"))
                     setd("under35", vals.get("Under 3.5"))
                 elif nm in ("Both Teams Score", "Both Teams To Score"):
@@ -6338,6 +6340,7 @@ def _parse_odds(resp) -> dict:
                     setd("dnb_away", vals.get("Away"))
                 elif nm == "Match Winner":
                     setd("win_home", vals.get("Home"))
+                    setd("win_draw", vals.get("Draw"))
                     setd("win_away", vals.get("Away"))
                 elif nm == "Double Chance":
                     setd("dc_1x", vals.get("Home/Draw"))
@@ -6386,12 +6389,16 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
     if not odds:
         return None
     m = (market or "").lower()
+    if "über 3.5 tore" in m:
+        return odds.get("over35")
     if "über 2.5 tore" in m:
         return odds.get("over25")
     if "über 1.5 tore" in m:
         return odds.get("over15")
     if "über 0.5 tore" in m:
         return odds.get("over05")
+    if "unter 1.5 tore" in m:
+        return odds.get("under15")
     if "unter 2.5 tore" in m:
         return odds.get("under25")
     if "unter 3.5 tore" in m:
@@ -6410,6 +6417,12 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
             return odds.get("dnb_home")
         if away and away.lower() in m:
             return odds.get("dnb_away")
+    # Straight match winner ("{Team} Sieg"): use real 1X2 odds by team orientation.
+    if "sieg" in m and "doppelte" not in m and "draw no bet" not in m and "+" not in m:
+        if home and home.lower() in m:
+            return odds.get("win_home")
+        if away and away.lower() in m:
+            return odds.get("win_away")
     return None
 
 
