@@ -1,6 +1,11 @@
 # TipJar — Product Requirements & Progress
 
-### CHANGELOG 2026-07-22b — Pfeffer-Banker = Gewinner-Muster (Favorit verliert nicht + trifft selbst 2+)
+### CHANGELOG 2026-07-22c — Pfeffer-Banker auf SICHERE DC + Spiel-Über-1.5 umgestellt
+- Owner-Klarstellung: „{Fav} DC + Über 1.5 (Spiel)" → 1:1 reicht (sicher). Team-spezifisch „{Fav} Über 1.5" würde 2 eigene Tore verlangen (riskant, Fenerbahce-1:0-Falle).
+- Pfeffer-Banker nutzen jetzt „{Favorit} Doppelte Chance {dc} + Über 1.5 Tore" (Spiel-Gesamttore, NICHT teamspezifisch). Settlet als total≥2 + Favorit verliert nicht.
+- VERIFIZIERT: /systems zeigt „Braga DC X2 + Über 1.5 Tore" etc. (12 Spiele, 367x), abrechenbar. Greift auf Produktion nach **Deploy**.
+
+
 - Owner-Beobachtung: cleverer Tipper spielte dominante Favoriten (Sturm/Crvena Zvezda/Lech, alle 4 Tore) mit „{Team} Sieg/DC + {Team} Über 1.5"; verlor nur wegen Fenerbahce (1:0).
 - Pfeffer-Banker jetzt: „{Favorit} Doppelte Chance {dc} + {Favorit} Über 1.5 Tore" (nur wenn Favorit ≥2 Tore erwartet). Der Favorit trägt beide Legs → keine Abhängigkeit vom schwachen Team. Dominante Favoriten werden zuerst gewählt.
 - Grader: team-spezifische Über/Unter-Linien jetzt TEXT-abrechenbar (Teamname im Markt → dessen Tore), damit „{Team} Über 1.5 Tore" auch im gespeicherten System settlet.

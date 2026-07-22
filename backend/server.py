@@ -4877,13 +4877,15 @@ async def build_systems() -> dict:
             not (_fav_team(p) and (p.get("fav_prob") or 0) >= 52 and _fav_goals(p) >= 2),
             -(_fav_goals(p)), -((p.get("fav_prob") or 0)), -(p.get("total") or 0)))
         sels, used = [], set()
-        # 6 BANKER — favourite-anchored: der starke Favorit verliert nicht UND trifft selbst 2+.
+        # 6 BANKER — SICHERE Kombi (Owner 2026-07-22): "{Favorit} Doppelte Chance + Über 1.5 (Spiel)".
+        # Wichtig: DC + Spiel-Über-1.5 → ein 1:1 REICHT bereits (Favorit verliert nicht + 2 Tore
+        # im Spiel). NICHT teamspezifisch (das würde 2 Tore vom Favoriten verlangen = riskanter).
         for p in pool:
             if len(sels) >= 6 or p["id"] in used:
                 continue
-            dc, fo, total = _pepper_dc(p), _fav_over(p), p.get("total") or 0
-            if dc and fo:                       # Favorit trägt beide Legs (Gewinner-Muster)
-                legA, legB = dc, (fo[0], fo[1])
+            dc, total = _pepper_dc(p), p.get("total") or 0
+            if dc:                              # Favorit verliert nicht + Spiel Über 1.5 (1:1 reicht)
+                legA, legB = dc, ("Über 1.5 Tore", 1.30)
             elif total >= 4:
                 legA, legB = ("Über 2.5 Tore", 1.75), ("Unter 5.5 Tore", 1.28)
             else:
@@ -4896,10 +4898,8 @@ async def build_systems() -> dict:
         for p in pool:
             if len(sels) >= 15 or p["id"] in used:
                 continue
-            fo, dc, total = _fav_over(p), _pepper_dc(p), p.get("total") or 0
-            if fo:
-                mk, od = fo                     # {Favorit} Über 1.5 Tore
-            elif dc and (p.get("fav_prob") or 0) >= 55:
+            dc, total = _pepper_dc(p), p.get("total") or 0
+            if dc and (p.get("fav_prob") or 0) >= 55:
                 mk, od = dc
             elif total >= 4:
                 mk, od = "Über 2.5 Tore", 1.55

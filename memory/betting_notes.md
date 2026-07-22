@@ -32,6 +32,9 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
    echten Torfesten (torreiche Ligen), niemals in torarmen Ligen wo 1:1/2:x typisch ist.
 
 ## Muster-Wissen (für zukünftige Features / KI-Prompts)
+- **Markt-Mechanik DC + Über (Owner 2026-07-22, wichtig!):**
+  - „{Fav} Doppelte Chance + Über 1.5 (SPIEL)" → ein **1:1 reicht** (Favorit verliert nicht + 2 Tore im Spiel). SICHER. ← Pfeffer-Banker nutzen genau das.
+  - „{Fav} Sieg + Über 1.5" oder team-spezifisch „{Fav} Über 1.5" → Favorit braucht **2+ eigene Tore** (1:0-Sieg verliert). RISKANTER (Fenerbahce 1:0 hat so einen Schein gekillt).
 - **GEWINNER-MUSTER (2026-07-22, vom Owner beobachtet):** Ein cleverer Tipper spielte dominante
   Favoriten, die 4:0 gewinnen: Sturm (1X + Über 0.5), Crvena Zvezda (Sieg + Über 1.5), Lech
   (Gegner +2.5 + Über 1.5) — alle trafen 4 Tore. Verlor nur wegen Fenerbahce (Über 1.5, aber nur 1:0).
