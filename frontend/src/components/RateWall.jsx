@@ -23,12 +23,14 @@ const LIVE_CATS = [
   ["banker", "Banker", "bg-cyan-400 text-void border-cyan-400", "text-cyan-300 border-cyan-400/40"],
   ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
   ["banger", "Banger", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
+  ["community", "Community", "bg-blue-500 text-white border-blue-500", "text-blue-300 border-blue-500/40"],
 ];
 const LIVE_CAT_INFO = {
   all: ["Live-Picks", "Alle Live-Tipps der KI in 3 Klassen: Banker (sicher), Value (schönere Quoten ab 1,60) und Banger (die smarten Recovery-/Asian-Wetten). Tippe auf eine Klasse, um zu filtern."],
   banker: ["Banker", "Sichere Live-Wetten mit niedriger Quote – z. B. „Über 0,5 Tore“ oder Doppelte Chance/1X auf einen klaren Favoriten. Hohe Trefferchance, ideal als Basis."],
   value: ["Value", "Schönere Quoten ab 1,60 – etwas mehr Risiko, dafür echter Wert. Oft mit Timing-Hinweis (z. B. „erst nach der 70. Minute spielen“)."],
   banger: ["Banger", "Die smarten Recovery-/Asian-Wetten: 9+ Sterne, Quote ab 1,40. Z. B. „Asian Über 2.0“, wenn ein Favorit zurückliegt und Druck macht – bei genau 2 Toren gibt's den Einsatz zurück."],
+  community: ["Community", "Live-Tipps, die echte Mitglieder gerade posten, während ihr Spiel läuft – keine KI. Direkt aus der Community, in Echtzeit."],
 };
 const SMART_IDEA_STATUS = {
   pending: { label: "in Prüfung", cls: "bg-amber-500/15 text-amber-400" },
@@ -58,7 +60,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [win, setWin] = useState("24");
   const [cat, setCat] = useState(null);
   const [liveCat, setLiveCat] = useState(null);
-  const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0 });
+  const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0, community: 0 });
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -83,7 +85,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
-      else if (view === "live") { if (liveCat) params.category = liveCat; }
+      else if (view === "live") { if (liveCat === "community") { params.source = "members"; } else if (liveCat) params.category = liveCat; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
@@ -170,8 +172,10 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     if (view !== "live") return;
     try {
       const { data } = await api.get("/tips", { params: { status: "live", limit: 200 } });
-      const c = { banker: 0, value: 0, banger: 0 };
+      const HQ = ["hq-auto", "hq-live", "hq-system", "smart"];
+      const c = { banker: 0, value: 0, banger: 0, community: 0 };
       data.forEach((tp) => {
+        if (!HQ.includes(tp.source)) { c.community += 1; return; }
         const b = tp.category === "banker" ? "banker" : tp.category === "banger" ? "banger" : "value";
         c[b] += 1;
       });

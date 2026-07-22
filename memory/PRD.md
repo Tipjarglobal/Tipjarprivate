@@ -828,3 +828,4 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - SecretInsights.jsx (/insights): neue Card-Zeile „Heute · eingeloggte Mitglieder vs. anonyme Besucher" (testids: stat-today-members, stat-today-anon, insights-member-split).
 - Getestet via curl + DB + Screenshot. Wirkt auf Produktion erst nach Deploy.
 - Follow-up: 14-Tage-Chart im /insights-Board jetzt zweifarbig gestapelt (grün=Mitglieder, grau=anonym). Backend `daily` liefert nun members/anon pro Tag. Höhe basiert auf unique (members+anon), nicht mehr hits.
+- Live-Bereich: neuer 4. Sub-Tab "Community" (blau, testid live-cat-community). Zeigt Live-Tipps von echten Mitgliedern (source=members & status=live), keine KI. Frontend-only Filter in RateWall.jsx; loadLiveCounts zählt community separat (nicht mehr in value gebucht).
