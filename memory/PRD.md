@@ -965,3 +965,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Poster wird weiter per needs_clarification nach Teams gefragt; /tips/mine bleibt ungefiltert (er sieht/klärt seinen eigenen). Nach Team-Eintrag wird Tipp öffentlich.
 - Verifiziert: Unit (empty/Unknown/leg-Unknown → hidden; echte Teams → shown) + Live-curl (source=members: teamless raus, ok drin). Backend healthy.
 - Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — Warnhinweis "Teams nicht erkannt" im Einreich-Fenster (DONE)
+- SubmitTipModal: Amber-Warnbanner (AlertTriangle) im Detected-Panel wenn Analyse keine Teams fand (home/away leer UND kein Leg mit echtem Match). Text: "⚠️ Teams nicht erkannt – bitte eintragen, sonst wird dein Tipp nicht veröffentlicht."
+- Neuer i18n-Key submit.teamsMissing in allen 8 Sprachen. data-testid teams-missing-warning.
+- Ergänzt die Server-Regel (team-lose Tipps werden aus öffentlichen Feeds gefiltert) um klare User-Kommunikation.
+- Modal kompiliert/rendert verifiziert. Wirkt auf Produktion erst nach DEPLOY.

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Modal, { Field, inputCls, btnPrimary } from "./Modal";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle } from "lucide-react";
+import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle, AlertTriangle } from "lucide-react";
 import api, { apiErr } from "../api";
 import StarRating from "./StarRating";
 import { useI18n, formatSelection } from "../i18n";
@@ -289,6 +289,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 <Sparkles size={16} className="text-volt" />
                 <span className="text-xs font-bold uppercase tracking-[0.2em] text-volt">{t("submit.detected")}</span>
               </div>
+              {(!((detected.home_team || "").trim()) && !((detected.away_team || "").trim()) && !((detected.legs || []).some((l) => ((l.match || "").trim()) && !/^(unknown|n\/?a|tbd|\?|-)$/i.test((l.match || "").trim())))) && (
+                <div data-testid="teams-missing-warning" className="flex items-start gap-2 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-300">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                  <span>{t("submit.teamsMissing")}</span>
+                </div>
+              )}
               <div className="rounded-xl border border-elevated bg-void p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
