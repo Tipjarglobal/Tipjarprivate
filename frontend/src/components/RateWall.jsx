@@ -9,7 +9,7 @@ import { QualifierBriefing } from "./QualifierBriefing";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
-import { playSlip } from "../playSlip";
+import { PlaySlipOverlay } from "./PlaySlipOverlay";
 import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
@@ -63,6 +63,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [liveCat, setLiveCat] = useState(null);
   const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0, community: 0 });
   const [myRatings, setMyRatings] = useState({});
+  const [playData, setPlayData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [streakBubble, setStreakBubble] = useState(false);
@@ -384,7 +385,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {wonTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
                 : wonTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
                   ))}
             </div>
           )}
@@ -394,7 +395,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {lostTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
                 : lostTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
                   ))}
             </div>
           )}
@@ -412,7 +413,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {(bestwonTips.length + cashedTips.length) === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch nichts hier — sobald ein Smart/Risk/Community/System-Pick gewinnt (oder ein Schein ausgezahlt wird), erscheint er hier.</p>
                 : [...bestwonTips, ...cashedTips].map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
                   ))}
             </div>
           )}
@@ -501,12 +502,13 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {[...tips].sort((a, b) => kickoffTs(a) - kickoffTs(b)).map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
           ))}
         </div>
       )}
         </>
       )}
+      <PlaySlipOverlay data={playData} onClose={() => setPlayData(null)} />
     </section>
   );
 }
@@ -764,7 +766,7 @@ function MemberSearch({ onUserClick, t }) {
   );
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onPlay }) {
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
@@ -972,7 +974,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   odds: tip.odds,
                   kickoff: tip.match_time,
                 }];
-            playSlip(legs, { totalOdds: tip.odds, stake: tip.stake, winnings: tip.potential_return, title: tip.is_parlay ? t("wall.parlay") : "" }, t);
+            onPlay && onPlay({ legs, meta: { totalOdds: tip.odds, stake: tip.stake, winnings: tip.potential_return, title: tip.is_parlay ? t("wall.parlay") : "" } });
           }}
           className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl bg-volt text-void font-bold text-sm py-2.5 hover:brightness-110 active:scale-[0.99] transition-all"
         >

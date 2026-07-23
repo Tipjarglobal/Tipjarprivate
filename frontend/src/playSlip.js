@@ -1,9 +1,7 @@
-// One-tap "play this parlay" helper: copies the whole slip (sorted, clean) to the
-// clipboard and opens the bookmaker so the user just ticks the markets — no more
-// searching game-by-game. NOTE: real bookmakers offer no public bet-placement API,
-// so this is a legal copy+handoff, never an automatic real-money placement.
-import { toast } from "sonner";
-import { formatSelection, formatKickoff } from "./i18n";
+// Bet-slip handoff helpers. Real bookmakers offer no public bet-placement API, so we
+// can't auto-load a parlay onto Wazamba. Instead we show an in-app checklist overlay
+// (see PlaySlipOverlay) and copy a clean, ordered slip to the clipboard.
+import { formatKickoff } from "./i18n";
 
 export const BOOKMAKER = { name: "Wazamba", url: "https://www.wazamba.com" };
 
@@ -26,16 +24,13 @@ export function buildSlipText(legs, meta, t) {
     .filter(Boolean)
     .join("  ·  ");
   return [`🎯 TipJar${title}${odds}`, "", body, foot, "tipjarglobal.com"]
-    .filter((x) => x !== "" || true)
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-export async function playSlip(legs, meta, t) {
-  const text = buildSlipText(legs, meta, t);
-  // Copy FIRST, while the document still has focus (opening the bookmaker steals
-  // focus and would make navigator.clipboard fail with "document not focused").
+// Copy synchronously first (document still focused), then async clipboard as fallback.
+export async function copySlip(text) {
   let copied = false;
   try {
     const ta = document.createElement("textarea");
@@ -53,7 +48,6 @@ export async function playSlip(legs, meta, t) {
   } catch (_) {
     /* ignore */
   }
-  // Modern async clipboard as an enhancement (only if the sync path didn't work).
   if (!copied && navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(text);
@@ -62,13 +56,13 @@ export async function playSlip(legs, meta, t) {
       /* ignore */
     }
   }
-  // Then open the bookmaker in a new tab.
+  return copied;
+}
+
+export function openBookmaker() {
   try {
     window.open(BOOKMAKER.url, "_blank", "noopener,noreferrer");
   } catch (_) {
     /* ignore */
   }
-  if (copied) toast.success(t("play.copied"));
-  else toast.message(t("play.manual"));
 }
-

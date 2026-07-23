@@ -949,3 +949,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Lokalisierung: neue Keys mkt.valuebanker (8 Sprachen) + generischer "Ner-Bet-Builder"→"n× Bet Builder". Markt-Labels lokalisieren sauber (DE/EN geprüft).
 - Verifiziert: Grader-Unit-Tests (0/1/2/unknown), HT-Selection-Pfad, Payout-Simulation (won+void→Quote/Payout korrekt, all-void→void, void+lost→lost), Backend healthy, settle-now ohne Crash.
 - Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — Parlay-Abhak-Overlay (DONE + verifiziert)
+- User: "will kompletten Parlay drauf haben" nach Klick. Auto-Platzieren auf Wazamba UNMÖGLICH (keine API) → stattdessen In-App-Checkliste.
+- Neu: /app/frontend/src/components/PlaySlipOverlay.jsx — Overlay zeigt "Dein Parlay" + Gesamtquote, jedes Leg (Spiel + Markt lokalisiert + Anstoß-Badge + Quote) mit Häkchen, Fortschrittsbalken X/N, "🎉 Alle Spiele drin"-Banner, Footer: "Buchmacher öffnen" (öffnet Wazamba) + Kopier-Button. Beim Öffnen wird Schein automatisch in Zwischenablage kopiert (Toast).
+- playSlip.js refaktoriert: exportiert buildSlipText/copySlip/openBookmaker/BOOKMAKER (playSlip() entfernt).
+- RateWall: playData-State auf Component-Ebene + onPlay-Prop an TipCard (4 Render-Stellen); Overlay im Section-Root. Systems: playData-State in SystemCard + Overlay.
+- Neue i18n-Keys play.overlayTitle/overlayHint/open/allDone/copyBtn in allen 8 Sprachen.
+- Verifiziert Live-Preview: Overlay öffnet, 11 Legs sortiert nach Anstoß, Häkchen + 11/11 + Done-Banner, "Open bookmaker" öffnet wazamba.com, Auto-Copy-Toast. Kompiliert fehlerfrei.
+- Wirkt auf Produktion erst nach DEPLOY.

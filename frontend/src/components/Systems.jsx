@@ -4,7 +4,7 @@ import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, Cal
 import { OddsValue } from "./OddsValue";
 import { useI18n, localizeMarket, formatSelection, toLatin, formatKickoff, kickoffInfo } from "../i18n";
 import api from "../api";
-import { playSlip } from "../playSlip";
+import { PlaySlipOverlay } from "./PlaySlipOverlay";
 
 const LegMeta = ({ matchTime, league }) => {
   const { t } = useI18n();
@@ -49,6 +49,7 @@ const RISK = {
 
 const SystemCard = ({ system }) => {
   const { t } = useI18n();
+  const [playData, setPlayData] = useState(null);
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
   const titleKey = `sys.title.${system.key}`;
@@ -151,12 +152,13 @@ const SystemCard = ({ system }) => {
               odds: s.odds,
               kickoff: s.match_time,
             }));
-          playSlip(legs, { totalOdds: system.total_odds, title }, t);
+          setPlayData({ legs, meta: { totalOdds: system.total_odds, title } });
         }}
         className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-volt text-void font-bold text-sm py-2.5 hover:brightness-110 active:scale-[0.99] transition-all"
       >
         <Ticket size={16} /> {t("play.btn")}
       </button>
+      <PlaySlipOverlay data={playData} onClose={() => setPlayData(null)} />
     </motion.div>
   );
 };
