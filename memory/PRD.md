@@ -879,3 +879,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - NotificationBell.jsx: Self-Heal-useEffect on mount — falls Notification.permission==='granted', re-registriert die Subscription idempotent via enableWebPush (kein Prompt). Behebt "keine Pushes mehr" nach Deploy/DB-Wechsel/Endpoint-Rotation, wo Server-Sub verloren geht aber Browser noch "abonniert" denkt.
 - NEU Backend POST /api/push/test: sendet Test-Push an eigene Subscription (prunt bei 404/410). Frontend: "Test-Benachrichtigung senden"-Button (bell-test-push) im Bell-Panel wenn on. i18n bell.test/test_sent/test_fail in 8 Sprachen.
 - Wirkt auf Produktion erst nach Deploy.
+
+## 2026-07-23 — Push-Prompt Verbesserung (DONE)
+- NotificationPrompt.jsx: "Später"/Schließen setzt jetzt SNOOZE statt permanentem Dismiss — Prompt kommt wieder (Später=2 Tage, X=7 Tage) statt für immer weg. Deutlich bessere Opt-in-Conversion.
+- Neuer Fallback-Trigger: erscheint auch nach ~25s für Besucher, die keinen Tipp öffnen (zusätzlich zum tj-viewed-pick Trigger). Session-Guard (max 1x/Session). Leichte Vibration beim Erscheinen (mobil).
+- Eligibility unverändert: nur wenn Push unterstützt, nicht bereits an, permission != denied. In Test-Browser permission=denied → korrekt kein Prompt.
+- Wirkt auf Produktion erst nach Deploy.

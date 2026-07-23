@@ -6,44 +6,56 @@ import { useI18n } from "../i18n";
 import { enablePushFull, supportsWebPush, isIos, isStandalonePwa } from "../pushClient";
 import { playCoin } from "../coinSound";
 
-const DISMISS_KEY = "tj_push_prompt_dismissed";
+const SNOOZE_KEY = "tj_push_prompt_snooze"; // hide until this timestamp (ms)
+const SNOOZE_LATER = 2 * 24 * 3600 * 1000;  // "later" → nudge again in 2 days
+const SNOOZE_CLOSE = 7 * 24 * 3600 * 1000;  // "X"     → nudge again in 7 days
 
-// Subtle, one-time nudge that slides up after the user has looked at their first
-// picks — designed to lift the (currently low) push opt-in rate. Never shown if
-// push is already on, if the user dismissed it before, or if the device can't do it.
+// Subtle nudge to lift the push opt-in rate. Shows after the user looks at their
+// first pick, or (fallback) after ~25s on the page. "Later"/close only SNOOZE it
+// (it returns later) instead of killing it forever — much better for conversion.
+// Never shown if push is already on, the device can't do it, or permission is denied.
 export default function NotificationPrompt() {
   const { t } = useI18n();
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    let shownThisSession = false;
     const eligible = () =>
       supportsWebPush() &&
       !(isIos() && !isStandalonePwa()) &&
       localStorage.getItem("tj_bell") !== "1" &&
-      localStorage.getItem(DISMISS_KEY) !== "1" &&
-      (!window.Notification || Notification.permission !== "denied");
+      (!window.Notification || Notification.permission !== "denied") &&
+      Date.now() > (Number(localStorage.getItem(SNOOZE_KEY)) || 0);
 
-    let timer = null;
-    const onViewed = () => {
-      if (!eligible()) return;
-      timer = setTimeout(() => { if (eligible()) { setShow(true); playCoin(); } }, 2500);
-      window.removeEventListener("tj-viewed-pick", onViewed);
+    const reveal = () => {
+      if (shownThisSession || !eligible()) return;
+      shownThisSession = true;
+      setShow(true);
+      playCoin();
+      try { navigator.vibrate && navigator.vibrate([30, 40, 30]); } catch { /* ignore */ }
     };
+
+    let t1 = null;
+    const onViewed = () => { t1 = setTimeout(reveal, 2500); window.removeEventListener("tj-viewed-pick", onViewed); };
     window.addEventListener("tj-viewed-pick", onViewed);
+    // Fallback: even visitors who never open a pick get one gentle nudge.
+    const t2 = setTimeout(reveal, 25000);
     const onEnabled = () => setShow(false);
     window.addEventListener("tj-push-enabled", onEnabled);
     return () => {
       window.removeEventListener("tj-viewed-pick", onViewed);
       window.removeEventListener("tj-push-enabled", onEnabled);
-      if (timer) clearTimeout(timer);
+      if (t1) clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, []);
 
-  const dismiss = () => {
-    localStorage.setItem(DISMISS_KEY, "1");
+  const snooze = (ms) => {
+    localStorage.setItem(SNOOZE_KEY, String(Date.now() + ms));
     setShow(false);
   };
+  const dismiss = () => snooze(SNOOZE_CLOSE);
 
   const enable = async () => {
     setBusy(true);
@@ -51,16 +63,16 @@ export default function NotificationPrompt() {
       const res = await enablePushFull();
       if (res.ok) {
         toast.success(t("push.prompt.done"));
-        localStorage.setItem(DISMISS_KEY, "1");
+        localStorage.setItem("tj_bell", "1");
         setShow(false);
       } else if (res.reason === "denied") {
         toast.error(t("bell.denied"));
-        dismiss();
+        snooze(SNOOZE_CLOSE);
       } else {
-        dismiss();
+        snooze(SNOOZE_LATER);
       }
     } catch {
-      dismiss();
+      snooze(SNOOZE_LATER);
     } finally {
       setBusy(false);
     }
