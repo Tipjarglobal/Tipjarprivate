@@ -39,6 +39,65 @@ export const LANGUAGES = [
 
 export const RTL_LANGS = ["ar"];
 
+// ── Kickoff date/time parsing + prominent formatting (shared by RateWall / Systems) ──
+const _KO_MONTHS = { jan: 0, feb: 1, "mär": 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
+
+// Parse any stored kickoff string → { ts (ms, for sorting), y, mo, da, time }.
+// Handles ISO (2026-07-23T17:00:00+00:00), dd/mm/yyyy HH:MM, "23. Jul 2026", bare HH:MM.
+export function kickoffInfo(mt) {
+  const empty = { ts: null, y: null, mo: null, da: null, time: "" };
+  if (!mt) return empty;
+  const s = String(mt).trim();
+  if (!s || /multibet/i.test(s)) return empty;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (m) {
+    const [, y, mo, da, hh, mm] = m;
+    return { ts: Date.UTC(+y, +mo - 1, +da, +hh, +mm), y: +y, mo: +mo, da: +da, time: `${hh}:${mm}` };
+  }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const time = m[4] ? `${m[4].padStart(2, "0")}:${m[5]}` : "";
+    return { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0), y: +m[3], mo: +m[2], da: +m[1], time };
+  }
+  m = s.match(/^(\d{1,2})\.\s*([A-Za-zäöü]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const mo = _KO_MONTHS[m[2].toLowerCase().slice(0, 3)];
+    const time = m[4] ? `${m[4].padStart(2, "0")}:${m[5]}` : "";
+    if (mo != null) return { ts: Date.UTC(+m[3], mo, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0), y: +m[3], mo: mo + 1, da: +m[1], time };
+  }
+  m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return { ts: null, y: null, mo: null, da: null, time: `${m[1].padStart(2, "0")}:${m[2]}` };
+  return empty;
+}
+
+// A clear, human label: "Heute 17:00" / "Morgen 15:00" / "24.07. 15:00".
+export function formatKickoff(mt, t) {
+  const info = kickoffInfo(mt);
+  if (!info.y && !info.time) return "";
+  const tr = typeof t === "function" ? t : (k) => (k === "date.today" ? "Heute" : "Morgen");
+  let dayLabel = "";
+  if (info.y) {
+    const now = new Date();
+    const td = { y: now.getFullYear(), mo: now.getMonth() + 1, da: now.getDate() };
+    const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+    const td2 = { y: tmr.getFullYear(), mo: tmr.getMonth() + 1, da: tmr.getDate() };
+    if (info.y === td.y && info.mo === td.mo && info.da === td.da) dayLabel = tr("date.today");
+    else if (info.y === td2.y && info.mo === td2.mo && info.da === td2.da) dayLabel = tr("date.tomorrow");
+    else dayLabel = `${String(info.da).padStart(2, "0")}.${String(info.mo).padStart(2, "0")}.`;
+  }
+  return [dayLabel, info.time].filter(Boolean).join(" ");
+}
+
+// Earliest kickoff (ms) across a tip's match_time + legs — for ascending sort.
+// Tips without a resolvable kickoff sort last.
+export function kickoffTs(tip) {
+  const cand = [];
+  const add = (v) => { const i = kickoffInfo(v); if (i.ts != null) cand.push(i.ts); };
+  add(tip && tip.match_time);
+  (tip && tip.legs ? tip.legs : []).forEach((l) => add(l && l.kickoff));
+  return cand.length ? Math.min(...cand) : Infinity;
+}
+
 // Localize the German bet-market strings produced by the backend (systems + tips).
 // Keeps dynamic parts (team names, scores). Order matters: combos before singles.
 export function localizeMarket(market, t) {
@@ -557,6 +616,8 @@ const T = {
     "mkt.cs": "Correct Score",
     "mkt.draw": "Draw (X)",
     "mkt.dc12": "Double Chance 12",
+    "date.today": "Today",
+    "date.tomorrow": "Tomorrow",
     "mkt.ht1": "1st Half",
     "mkt.ht2": "2nd Half",
     "mkt.eachhalf": "in each half",
@@ -884,6 +945,8 @@ const T = {
     "mkt.cs": "Resultado exacto",
     "mkt.draw": "Empate (X)",
     "mkt.dc12": "Doble oportunidad 12",
+    "date.today": "Hoy",
+    "date.tomorrow": "Mañana",
     "mkt.ht1": "1ª Parte",
     "mkt.ht2": "2ª Parte",
     "mkt.eachhalf": "en cada tiempo",
@@ -1292,6 +1355,8 @@ const T = {
     "mkt.cs": "Genaues Ergebnis",
     "mkt.draw": "Unentschieden (X)",
     "mkt.dc12": "Doppelte Chance 12",
+    "date.today": "Heute",
+    "date.tomorrow": "Morgen",
     "mkt.ht1": "1. Halbzeit",
     "mkt.ht2": "2. Halbzeit",
     "mkt.eachhalf": "in jeder Halbzeit",
@@ -1617,6 +1682,8 @@ const T = {
     "mkt.cs": "Ακριβές σκορ",
     "mkt.draw": "Ισοπαλία (X)",
     "mkt.dc12": "Διπλή ευκαιρία 12",
+    "date.today": "Σήμερα",
+    "date.tomorrow": "Αύριο",
     "mkt.ht1": "1ο Ημίχρονο",
     "mkt.ht2": "2ο Ημίχρονο",
     "mkt.eachhalf": "σε κάθε ημίχρονο",
@@ -1934,6 +2001,8 @@ const T = {
     "mkt.cs": "Score exact",
     "mkt.draw": "Match nul (X)",
     "mkt.dc12": "Double chance 12",
+    "date.today": "Aujourd'hui",
+    "date.tomorrow": "Demain",
     "mkt.ht1": "1re mi-temps",
     "mkt.ht2": "2e mi-temps",
     "mkt.eachhalf": "dans chaque mi-temps",
@@ -2251,6 +2320,8 @@ const T = {
     "mkt.cs": "Risultato esatto",
     "mkt.draw": "Pareggio (X)",
     "mkt.dc12": "Doppia chance 12",
+    "date.today": "Oggi",
+    "date.tomorrow": "Domani",
     "mkt.ht1": "1° Tempo",
     "mkt.ht2": "2° Tempo",
     "mkt.eachhalf": "in ogni tempo",
@@ -2567,6 +2638,8 @@ const T = {
     "mkt.cs": "النتيجة الصحيحة",
     "mkt.draw": "تعادل (X)",
     "mkt.dc12": "فرصة مزدوجة 12",
+    "date.today": "اليوم",
+    "date.tomorrow": "غداً",
     "mkt.ht1": "الشوط الأول",
     "mkt.ht2": "الشوط الثاني",
     "mkt.eachhalf": "في كل شوط",
@@ -2883,6 +2956,8 @@ const T = {
     "mkt.cs": "Kesin skor",
     "mkt.draw": "Beraberlik (X)",
     "mkt.dc12": "Çifte şans 12",
+    "date.today": "Bugün",
+    "date.tomorrow": "Yarın",
     "mkt.ht1": "İlk Yarı",
     "mkt.ht2": "İkinci Yarı",
     "mkt.eachhalf": "her yarıda",

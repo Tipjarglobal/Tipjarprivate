@@ -2,43 +2,22 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange, Clock, Trophy } from "lucide-react";
 import { OddsValue } from "./OddsValue";
-import { useI18n, localizeMarket, formatSelection, toLatin } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin, formatKickoff, kickoffInfo } from "../i18n";
 import api from "../api";
 
-const MONTHS_DE = { jan: 0, feb: 1, "mär": 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
-
-const parseKickoff = (mt) => {
-  if (!mt) return { date: "", time: "" };
-  const s = String(mt).trim();
-  if (/multibet/i.test(s)) return { date: "", time: "" };
-  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (m) {
-    const date = `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}.${m[3]}`;
-    const time = m[4] ? `${m[4].padStart(2, "0")}:${m[5]}` : "";
-    return { date, time };
-  }
-  m = s.match(/^(\d{1,2})\.\s*([A-Za-zäöü]+)\s+(\d{4})/);
-  if (m) {
-    const mo = MONTHS_DE[m[2].toLowerCase().slice(0, 3)];
-    const date = mo != null ? `${m[1].padStart(2, "0")}.${String(mo + 1).padStart(2, "0")}.${m[3]}` : s;
-    return { date, time: "" };
-  }
-  return { date: s, time: "" };
-};
-
 const LegMeta = ({ matchTime, league }) => {
-  const { date, time } = parseKickoff(matchTime);
-  if (!date && !time && !league) return null;
+  const { t } = useI18n();
+  const ko = formatKickoff(matchTime, t);
+  if (!ko && !league) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-[10px] text-zinc-500 font-medium">
-      {date && (
-        <span className="inline-flex items-center gap-1"><CalendarDays size={11} className="text-zinc-500" />{date}</span>
-      )}
-      {time && (
-        <span className="inline-flex items-center gap-1"><Clock size={11} className="text-zinc-500" />{time}</span>
+    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+      {ko && (
+        <span className="inline-flex items-center gap-1 rounded-md bg-volt/10 border border-volt/30 px-2 py-0.5 text-[11px] font-bold text-volt">
+          <Clock size={11} />{ko}
+        </span>
       )}
       {league && (
-        <span className="inline-flex items-center gap-1 min-w-0"><Trophy size={11} className="text-volt/70 shrink-0" /><span className="truncate">{league}</span></span>
+        <span className="inline-flex items-center gap-1 min-w-0 text-[10px] text-zinc-500 font-medium"><Trophy size={11} className="text-volt/70 shrink-0" /><span className="truncate">{league}</span></span>
       )}
     </div>
   );
@@ -113,7 +92,7 @@ const SystemCard = ({ system }) => {
       <p className="text-xs text-zinc-400 mb-3">{subtitle}</p>
 
       <div className="space-y-2 flex-1">
-        {system.selections.map((s) => (
+        {[...system.selections].sort((a, b) => (kickoffInfo(a.match_time).ts ?? Infinity) - (kickoffInfo(b.match_time).ts ?? Infinity)).map((s) => (
           <div
             key={s.id}
             data-testid={`system-${system.key}-leg`}

@@ -9,7 +9,7 @@ import { QualifierBriefing } from "./QualifierBriefing";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
-import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -499,7 +499,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {tips.map((tip, i) => (
+          {[...tips].sort((a, b) => kickoffTs(a) - kickoffTs(b)).map((tip, i) => (
             <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
           ))}
         </div>
@@ -860,11 +860,22 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         );
       })()}
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mb-2">
-        {tip.league && <span>{toLatin(tip.league)}</span>}
-        {tip.country && <span>· {toLatin(tip.country)}</span>}
-        {tip.match_time && !(tip.legs && tip.legs.length) && <span>· {tip.match_time}</span>}
-      </div>
+      {(() => {
+        const ko = formatKickoff(tip.match_time, t)
+          || (tip.legs || []).map((l) => formatKickoff(l.kickoff, t)).find(Boolean) || "";
+        if (!ko) return null;
+        return (
+          <div data-testid={`tip-kickoff-${tip.id}`} className="inline-flex items-center gap-1.5 mb-2 rounded-lg bg-volt/10 border border-volt/30 px-2.5 py-1 text-sm font-bold text-volt">
+            <Clock size={14} /> {ko}
+          </div>
+        );
+      })()}
+      {(tip.league || tip.country) && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mb-2">
+          {tip.league && <span>{toLatin(tip.league)}</span>}
+          {tip.country && <span>· {toLatin(tip.country)}</span>}
+        </div>
+      )}
 
       {tip.legs && tip.legs.length ? (
         <div className="space-y-2">
@@ -873,7 +884,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               {t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
             </span>
           )}
-          {tip.legs.map((leg, li) => {
+          {[...tip.legs].sort((a, b) => (kickoffInfo(a.kickoff).ts ?? Infinity) - (kickoffInfo(b.kickoff).ts ?? Infinity)).map((leg, li) => {
             const ls = STATUS_META[leg.status];
             const settled = ls && leg.status !== "pending";
             return (
@@ -886,7 +897,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                       <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
-                  {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
+                  {leg.kickoff && formatKickoff(leg.kickoff, t) && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>}
                 </div>
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}

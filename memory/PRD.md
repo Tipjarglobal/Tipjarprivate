@@ -923,3 +923,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - "Unknown"-Teams-Fix: LLM gab "Unknown" wenn Teams auf Live-Screenshot nicht lesbar. Jetzt: (a) Prompt zwingt "" statt Platzhalter, (b) _clean_placeholder() normalisiert Unknown/N/A/TBD/Team A/? → "" (in analyze_tip + _sanitize_legs), (c) leere Teams → Clarify-Flow fragt nach. Preview-DB hatte 0 Unknown (das Beispiel war PRODUKTION).
 - "Settle everything" via /api/admin/settle-now ausgeführt: nichts Fälliges offen (39 live in progress).
 - Alles wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — Anstoßzeit deutlich + Sortierung überall (DONE + Screenshot-verifiziert)
+- User: Datum/Uhrzeit soll deutlich aussehen + früheste Spiele oben ("überall").
+- Neuer geteilter Helper in i18n.js: kickoffInfo() (parst ISO 2026-..T.., dd/mm/yyyy, "23. Jul 2026", HH:MM), formatKickoff(mt,t) → deutliches Label "Heute 17:00 / Morgen 15:00 / 24.07. 15:00", kickoffTs(tip) für Sortierung (Min über match_time + legs, ohne KO → ans Ende).
+- Neue Keys date.today / date.tomorrow in allen 8 Sprachen.
+- RateWall (Tipp-Wand + KI Single-Game + Community + Live): prominentes Volt-Badge (Clock, text-sm bold) oben pro Karte; Karten nach kickoffTs aufsteigend sortiert; Legs pro Karte nach Anstoß sortiert; Leg-Kickoff jetzt als Volt-Badge statt roher String.
+- Systems.jsx: parseKickoff/MONTHS_DE entfernt → nutzt formatKickoff; LegMeta jetzt deutliches Volt-Badge; system.selections nach Anstoß aufsteigend sortiert.
+- Verifiziert (Live-Preview, EN): Systems "Today 17:00…19:00…22:30" korrekt sortiert, 0 rohe ISO-Strings; Single-Game-Wand 12 Kickoff-Badges. Auf DE zeigt es "Heute/Morgen".
+- Wirkt auf Produktion erst nach DEPLOY.
