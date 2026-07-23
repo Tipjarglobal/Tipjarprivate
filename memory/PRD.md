@@ -979,3 +979,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - key="bomben", steht ganz oben in System-Picks; snapshot_systems persistiert als hqsys-bomben-{day} → tägliche Auto-Abrechnung. i18n sys.title.bomben in allen 8 Sprachen. Subtitle dynamisch (Anzahl X/Siege).
 - Verifiziert: GET /api/systems → bomben mit 15 Legs, Gesamtquote ~3.98 Mio, bucket "now", 9× Value-X + 6× Über 3.5, keine "Unknown"-Teams. Syntax OK, Backend healthy.
 - Frontend rendert generisch (Systems.jsx) — Preview zeigte nur Emergent-Idle-Gate, kein App-Fehler. Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-24 — Bomben-Kombi Fix: abgelaufene Spiele + falsche Picks (DONE + API-verifiziert)
+- Owner-Beschwerde (Screenshot): Schein enthielt bereits gespielte Spiele; Coritiba–Palmeiras als "Unentschieden" trotz starkem Palmeiras-Auswärtssieg; Zeleznicar–Braga als "Über 3.5" obwohl 0:1.
+- Fix 1 (abgelaufene Spiele): Fenster von now-15min → now+10min → now+48h. NUR noch nicht angepfiffene Spiele im Schein.
+- Fix 2 (Favorit statt X/Über3.5): _bomben_pick priorisiert jetzt KLARE FAVORITEN zuerst (Handicap -1.5/-2.5, Über 1.5 Team, Doppelte Chance). Value-X (fav==draw ODER ph==pa) kommt ERST danach → ein klarer Favorit wird nie mehr als Remis gespielt. Über 3.5 nur wenn BEIDE Teams treffen (btts + ph>=1 + pa>=1) → kein einseitiger Favoritensieg mehr.
+- Fix 3 (Mischung): Obergrenzen goals<=6, draw<=6 → kein 14×-Über-3.5-Klumpen mehr; Filler bevorzugt Favoriten-DC.
+- Verifiziert Live-API: 15 Legs, 0 abgelaufen, Mix 6× Value-X + 6× Über 3.5 + 3× Favorit, Quote ~327k. Stale Snapshot gelöscht → baut neu.
+- VERDACHT für die produktions-seitig gezeigten alten Spiele: PWA/HTTP-Cache oder älterer Build vor Deploy. Live-Preview-Build ist sauber. Wirkt auf tipjarglobal.com erst nach DEPLOY.

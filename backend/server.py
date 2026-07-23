@@ -5353,13 +5353,13 @@ async def build_systems() -> dict:
 
     # 8) BOMBEN-KOMBI (owner 2026: großer täglicher 15er-Mega-Schein). 15 Legs aus den
     #    nächsten 48h, gemischt aus HOCHWERT-Mustern, die sich ALLE deterministisch aus dem
-    #    ENDSTAND abrechnen lassen (kein LLM-Rätsel, keine Halbzeit-Lücke):
-    #      • "riecht nach X"  → Unentschieden (X)
-    #      • klarer Favoritensieg → {Favorit} -1.5/-2.5 Handicap
-    #      • Torfestival → Über 3.5 Tore (nur 0:0-sichere Spiele)
-    #    Fällt auf sichere Legs (Über 1.5 / Doppelte Chance) zurück, sodass IMMER 15
-    #    zusammenkommen. Wird täglich neu gebaut (snapshot per Tag eingefroren).
-    bomben_lo, bomben_hi = now_dt - timedelta(minutes=15), now_dt + timedelta(hours=48)
+    #    ENDSTAND abrechnen lassen (kein LLM-Rätsel, keine Halbzeit-Lücke).
+    #    WICHTIG (owner 2026-07-24): NUR NOCH NICHT ANGEPFIFFENE Spiele (ko > jetzt+10min) —
+    #    keine abgelaufenen/laufenden Spiele im Schein. Und: KLARER FAVORIT wird IMMER auf
+    #    den Favoriten gespielt (Palmeiras=Auswärtssieg, Braga gewinnt+trifft), NIE als Remis
+    #    oder Über 3.5 in einem einseitigen Spiel. "Riecht nach X" nur bei echten engen
+    #    Remis-Spielen OHNE klaren Favoriten. Über 3.5 NUR wenn BEIDE Teams treffen.
+    bomben_lo, bomben_hi = now_dt + timedelta(minutes=10), now_dt + timedelta(hours=48)
     bomben_pool = sorted(
         [(ko, p) for p in preds
          if (ko := _parse_kickoff(p.get("kickoff"))) and bomben_lo <= ko <= bomben_hi],
@@ -5369,17 +5369,29 @@ async def build_systems() -> dict:
         fav, team = p.get("fav"), _fav_team(p)
         ph, pa = p.get("ph"), p.get("pa")
         total, fav_prob = p.get("total") or 0, p.get("fav_prob") or 0
+        btts = bool(p.get("btts"))
         over_safe = _zero_zero_assessment(p)["over_safe"] and not _bad_for_overs(p)
         fg = _fav_goals(p)
-        og = (pa if fav == "home" else ph) or 0
+        og = (pa if fav == "home" else ph if fav == "away" else 0) or 0
         margin = fg - og
-        if fav == "draw" or (ph is not None and pa is not None and ph == pa):
-            return ("Unentschieden (X)", 3.30, 6.0, "draw")
-        if team and fav_prob >= 60 and margin >= 3:
+        # 1) KLARER FAVORIT → immer den Favoriten spielen (nie X / nie Über 3.5 einseitig).
+        #    Deckt Palmeiras (starker Auswärtssieger) & Braga (gewinnt + trifft) ab.
+        if team and fav_prob >= 58 and margin >= 3:
             return (f"{team} -2.5 Handicap", 2.60, 7.0, "heavy")
         if team and fav_prob >= 55 and margin >= 2:
             return (f"{team} -1.5 Handicap", 1.90, 7.5, "heavy")
-        if over_safe and total >= 4:
+        if team and fav_prob >= 55 and fg >= 2:
+            return (f"{team} Über 1.5 Tore", 1.75, 7.5, "favgoals")
+        if team and fav_prob >= 60:
+            dc = "1X" if fav == "home" else "X2"
+            return (f"{team} Doppelte Chance {dc}", round(_dc_odds(fav_prob), 2), 8.0, "favdc")
+        # 2) ECHTE Value-X ("riecht nach Remis") — Prognose = Remis ODER exakt gleiches
+        #    Ergebnis (1:1). Kommt ERST nach den Favoriten-Zweigen: ein klarer Favorit
+        #    (Palmeiras/Braga) ist oben schon abgefangen und wird NIE als X gespielt.
+        if fav == "draw" or (ph is not None and pa is not None and ph == pa):
+            return ("Unentschieden (X)", 3.30, 6.0, "draw")
+        # 3) TORFESTIVAL Über 3.5 — NUR wenn BEIDE Teams treffen (kein 0:x-Favoritensieg).
+        if over_safe and total >= 4 and btts and (ph or 0) >= 1 and (pa or 0) >= 1:
             return ("Über 3.5 Tore", 2.10, 7.0, "goals")
         return None
 
@@ -5387,39 +5399,58 @@ async def build_systems() -> dict:
         team, fav_prob = _fav_team(p), p.get("fav_prob") or 0
         total = p.get("total") or 0
         over_safe = _zero_zero_assessment(p)["over_safe"] and not _bad_for_overs(p)
-        if over_safe and total >= 3:
-            return ("Über 1.5 Tore", 1.30, 8.0, "fill")
-        if team and fav_prob >= 50:
+        # prefer backing a favourite (owner style) before a blind goals leg
+        if team and fav_prob >= 52:
             dc = "1X" if p.get("fav") == "home" else "X2"
             return (f"{team} Doppelte Chance {dc}", round(_dc_odds(fav_prob), 2), 8.0, "fill")
+        if over_safe and total >= 3:
+            return ("Über 1.5 Tore", 1.30, 8.0, "fill")
         if over_safe and total >= 2:
             return ("Über 0.5 Tore", 1.08, 8.5, "fill")
         return None
 
-    bomben_sels, used_bomb = [], set()
-    for _picker in (_bomben_pick, _bomben_filler):
-        for _ko, p in bomben_pool:
-            if len(bomben_sels) >= 15 or p["id"] in used_bomb:
-                continue
-            pick = _picker(p)
-            if not pick:
-                continue
-            mk, od, rt, tag = pick
-            used_bomb.add(p["id"])
-            s = _apply_real(_sel(p, mk, od, rt))
-            s["bomben_tag"] = tag
-            bomben_sels.append(s)
-        if len(bomben_sels) >= 15:
-            break
+    bomben_sels, used_bomb, tag_count = [], set(), {}
+    # per-Muster-Obergrenzen halten den Schein GEMISCHT (kein 14×-Über-3.5-Klumpen)
+    _TAG_CAP = {"goals": 6, "draw": 6}
+    # pass 1 — HOCHWERT-Picks mit Obergrenzen für eine ausgewogene Mischung
+    for _ko, p in bomben_pool:
+        if len(bomben_sels) >= 15 or p["id"] in used_bomb:
+            continue
+        pick = _bomben_pick(p)
+        if not pick:
+            continue
+        mk, od, rt, tag = pick
+        cap = _TAG_CAP.get(tag)
+        if cap is not None and tag_count.get(tag, 0) >= cap:
+            continue
+        used_bomb.add(p["id"])
+        tag_count[tag] = tag_count.get(tag, 0) + 1
+        s = _apply_real(_sel(p, mk, od, rt))
+        s["bomben_tag"] = tag
+        bomben_sels.append(s)
+    # pass 2 — sichere Filler-Legs, falls noch keine 15 zusammen sind
+    for _ko, p in bomben_pool:
+        if len(bomben_sels) >= 15 or p["id"] in used_bomb:
+            continue
+        fill = _bomben_filler(p)
+        if not fill:
+            continue
+        mk, od, rt, tag = fill
+        used_bomb.add(p["id"])
+        s = _apply_real(_sel(p, mk, od, rt))
+        s["bomben_tag"] = tag
+        bomben_sels.append(s)
 
     bomben = None
     if len(bomben_sels) >= 8:
         n_draw = sum(1 for s in bomben_sels if s.get("bomben_tag") == "draw")
-        n_heavy = sum(1 for s in bomben_sels if s.get("bomben_tag") == "heavy")
+        n_fav = sum(1 for s in bomben_sels
+                    if s.get("bomben_tag") in ("heavy", "favgoals", "favdc", "fill"))
+        n_goals = sum(1 for s in bomben_sels if s.get("bomben_tag") == "goals")
         bomben = _finalize_system(
             bomben_sels, 0, "bomben", "Bomben-Kombi des Tages",
-            f"{len(bomben_sels)} Legs aus 48h · {n_draw}× Value-X · {n_heavy}× klarer Sieg · "
-            f"Über 3.5 · der große Zocker-Wumms", "gamble")
+            f"{len(bomben_sels)} Legs · nächste 48h (nur kommende Spiele) · {n_fav}× Favorit · "
+            f"{n_draw}× Value-X · {n_goals}× Über 3.5 · der große Zocker-Wumms", "gamble")
 
     # Favoriten-Tracker: starke Favoriten (fav_prob>=60) sammeln → wächst zur ~50-Team-Liste,
     # Grundlage fürs Lernen aus Ergebnissen ("Mach dir Notizen aus Ergebnissen").
