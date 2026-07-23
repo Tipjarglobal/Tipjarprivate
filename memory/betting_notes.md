@@ -69,3 +69,14 @@ bevor Tippgenerierungslogik geändert wird. Owner-Sprache: DEUTSCH.
 - **"Wer trifft heute?"-Radar:** Über viele Spiele hinweg einfach sagen, WELCHE Teams heute treffen
   werden (Bsp genannt: **Malmö, Breidablik, Göteborg**). Fokus auf verlässliche Torteams +
   "hungrige" Teams (siehe Muster oben). → eigenes Feature, noch zu bauen.
+
+## Referenz-Quoten (User-Vorgabe 2026-07-23, Wettz-Screenshots)
+Für Ligen OHNE echte Buchmacher-Quoten (Armenien, Baltikum, Kirgistan, Kosovo, MLS Next Pro II etc.) muss die Fallback-Heuristik (base_odd) ungefähr so aussehen:
+- Team "Über 0.5 Tore" (Team trifft): ~1.10 (sehr niedrig, war 1.22)
+- Match "Über 1.5 Tore": ~1.35-1.44 → base_odd 1.38 (war 1.28/1.30)
+- Match "Über 2.5 Tore": ~1.65-1.70 → base_odd 1.70 (war 1.85)
+- "Beide Teams treffen (Ja)": ~1.60-1.65 → base_odd 1.65 (war 1.80)
+- "Über 8.5 Ecken": ~1.55 (ok)
+- HT "Über 1.5 Tore": ~2.4-2.6 (ok)
+- Match "Unter 3.5": ~1.40 | "Unter 3": ~1.36
+Beispiel-Referenz-Combos: CFR Cluj Team Ü0.5 + Ü1.5 = 1.58 | Herediano Ü0.5+Ü1.5 = 1.37 | NE Rev II Ü2.5+BTTS = 1.81 | Liepaja Ü2.5+HT Ü1.5+BTTS = 3.80.

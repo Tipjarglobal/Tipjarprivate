@@ -5581,9 +5581,9 @@ def _forebet_candidates(r: dict) -> list[dict]:
             # leg settles deterministically via _grade_goal_leg.
             fav_team = home if pred == "1" else away
             clegs = [
-                {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.22,
+                {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
                  "kind": "team_o05", "team": fav_team},
-                {"market": "Über 1.5 Tore", "base_odd": 1.30, "kind": "o15"},
+                {"market": "Über 1.5 Tore", "base_odd": 1.38, "kind": "o15"},
             ]
             if total >= 4:
                 clegs.append({"market": "Über 0.5 Tore 2. Halbzeit",
@@ -5608,7 +5608,7 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "sfx": "-favdc", "combo": True, "rating": 7.5, "winprob": 0.70,
                 "market": f"{fav_team} Über 0.5 Tore + Doppelte Chance {dc_lbl} (Bet-Builder)",
                 "legs": [
-                    {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.22,
+                    {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
                      "kind": "team_o05", "team": fav_team},
                     {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.28, "kind": dc_kind},
                 ],
@@ -5627,8 +5627,8 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "market": "Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore (3er-Bet-Builder)",
                 "legs": [
                     {"market": "Über 1.5 Tore 1. Halbzeit", "base_odd": 2.60, "kind": "ht_o15"},
-                    {"market": "Beide Teams treffen", "base_odd": 1.80, "kind": "btts"},
-                    {"market": "Über 2.5 Tore", "base_odd": 1.85, "kind": "o25"},
+                    {"market": "Beide Teams treffen", "base_odd": 1.65, "kind": "btts"},
+                    {"market": "Über 2.5 Tore", "base_odd": 1.70, "kind": "o25"},
                 ],
             })
         # (a3) RISK: "Beide Teams treffen in JEDER Halbzeit" (both sides score in BOTH halves).
@@ -5651,7 +5651,7 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "sfx": "-o25dc", "combo": True, "rating": 7.5, "winprob": 0.48,
                 "market": "Über 2.5 Tore + Doppelte Chance 12 (Bet-Builder)",
                 "legs": [
-                    {"market": "Über 2.5 Tore", "base_odd": 1.85, "kind": "o25"},
+                    {"market": "Über 2.5 Tore", "base_odd": 1.70, "kind": "o25"},
                     {"market": "Doppelte Chance 12", "base_odd": 1.35, "kind": "dc_12"},
                 ],
             })
@@ -5702,7 +5702,7 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "sfx": "-cornerbb", "combo": True, "rating": 7.5, "winprob": 0.55,
                 "market": "Über 1.5 Tore + Über 8.5 Ecken (Bet-Builder)",
                 "legs": [
-                    {"market": "Über 1.5 Tore", "base_odd": 1.28, "kind": "o15"},
+                    {"market": "Über 1.5 Tore", "base_odd": 1.38, "kind": "o15"},
                     {"market": "Über 8.5 Ecken", "base_odd": 1.55, "kind": "corner_o"},
                 ],
             })
