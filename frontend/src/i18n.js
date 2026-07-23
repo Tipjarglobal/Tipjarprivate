@@ -78,6 +78,34 @@ export function localizeMarket(market, t) {
   m = m.replace(/Anytime\s+Torschütze/gi, t("mkt.scorer"));
   m = m.replace(/\bTorschütze\b/gi, t("mkt.scorer"));
   m = m.replace(/sieht eine Karte/gi, t("mkt.getcard"));
+  // ── extended German market wording (halves, asian lines, builders, DC/handicap,
+  //    generic over/under goals) so NOTHING stays German after a language switch ──
+  m = m.replace(/3er-?Bet-?Builder/gi, t("mkt.bb3"));
+  m = m.replace(/Risk-?Bet-?Builder/gi, t("mkt.bbrisk"));
+  m = m.replace(/Mega-?Bet-?Builder/gi, t("mkt.bbmega"));
+  m = m.replace(/Bet-?Builder/gi, t("mkt.bb"));
+  m = m.replace(/Tor\s+in\s+jeder\s+Halbzeit/gi, t("mkt.goaleachhalf"));
+  m = m.replace(/in\s+jeder\s+Halbzeit/gi, t("mkt.eachhalf"));
+  m = m.replace(/beide\s+Halbzeiten/gi, t("mkt.eachhalf"));
+  m = m.replace(/1\.\s*Halbzeit/gi, t("mkt.ht1"));
+  m = m.replace(/erste\s+Halbzeit/gi, t("mkt.ht1"));
+  m = m.replace(/2\.\s*Halbzeit/gi, t("mkt.ht2"));
+  m = m.replace(/zweite\s+Halbzeit/gi, t("mkt.ht2"));
+  m = m.replace(/\bHalbzeit\b/gi, t("mkt.half"));
+  m = m.replace(/Beide\s+Teams\s+treffen/gi, t("mkt.btts"));
+  m = m.replace(/Beide\s+treffen/gi, t("mkt.btts"));
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Doppelte\s+Chance\s+12/gi, t("mkt.dc12"));
+  m = m.replace(/Doppelte\s+Chance\s+1X/gi, t("mkt.dc1x"));
+  m = m.replace(/Doppelte\s+Chance\s+X2/gi, t("mkt.dcx2"));
+  m = m.replace(/Draw\s+No\s+Bet/gi, t("mkt.dnb"));
+  m = m.replace(/Genaues\s+Ergebnis/gi, t("mkt.cs"));
+  m = m.replace(/Unentschieden(?:\s*\(X\))?/gi, t("mkt.draw"));
+  m = m.replace(/\(?\s*Asiatisch\s*\)?/gi, ` ${t("mkt.asian")}`);
+  m = m.replace(/\bHandicap\b/gi, t("mkt.handicap"));
+  m = m.replace(/\btrifft\b/gi, t("mkt.scores"));
+  m = m.replace(/\s{2,}/g, " ").trim();
   return m;
 }
 
@@ -528,6 +556,18 @@ const T = {
     "mkt.dcx2": "Double Chance X2",
     "mkt.cs": "Correct Score",
     "mkt.draw": "Draw (X)",
+    "mkt.dc12": "Double Chance 12",
+    "mkt.ht1": "1st Half",
+    "mkt.ht2": "2nd Half",
+    "mkt.eachhalf": "in each half",
+    "mkt.goaleachhalf": "Goal in each half",
+    "mkt.asian": "(Asian)",
+    "mkt.handicap": "Handicap",
+    "mkt.scores": "to score",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "3-Leg Bet Builder",
+    "mkt.bbrisk": "Risk Bet Builder",
+    "mkt.bbmega": "Mega Bet Builder",
     "win.mine": "Your recent wins",
     "win.mine.empty": "No wins claimed yet.",
     "win.mine.credits": "credits earned",
@@ -585,6 +625,7 @@ const T = {
     "bell.tooltip": "Recibe un aviso en cuanto llegue un nuevo pronóstico — sin registro.",
     "bell.watching": "observando el tarro",
     "bell.on": "¡Estás dentro! Te avisaremos con cada nuevo pronóstico.",
+    "bell.view_pick": "Ver pick",
     "bell.subscribers": "personas con alertas activas",
     "bell.test": "Enviar notificación de prueba",
     "bell.test_sent": "¡Notificación de prueba enviada!",
@@ -842,6 +883,18 @@ const T = {
     "mkt.dcx2": "Doble oportunidad X2",
     "mkt.cs": "Resultado exacto",
     "mkt.draw": "Empate (X)",
+    "mkt.dc12": "Doble oportunidad 12",
+    "mkt.ht1": "1ª Parte",
+    "mkt.ht2": "2ª Parte",
+    "mkt.eachhalf": "en cada tiempo",
+    "mkt.goaleachhalf": "Gol en cada tiempo",
+    "mkt.asian": "(Asiático)",
+    "mkt.handicap": "Hándicap",
+    "mkt.scores": "marca",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "Bet Builder de 3",
+    "mkt.bbrisk": "Bet Builder de riesgo",
+    "mkt.bbmega": "Mega Bet Builder",
     "win.mine": "Tus últimas ganancias",
     "win.mine.empty": "Aún no has reclamado ganancias.",
     "win.mine.credits": "créditos ganados",
@@ -1238,6 +1291,18 @@ const T = {
     "mkt.dcx2": "Doppelte Chance X2",
     "mkt.cs": "Genaues Ergebnis",
     "mkt.draw": "Unentschieden (X)",
+    "mkt.dc12": "Doppelte Chance 12",
+    "mkt.ht1": "1. Halbzeit",
+    "mkt.ht2": "2. Halbzeit",
+    "mkt.eachhalf": "in jeder Halbzeit",
+    "mkt.goaleachhalf": "Tor in jeder Halbzeit",
+    "mkt.asian": "(Asiatisch)",
+    "mkt.handicap": "Handicap",
+    "mkt.scores": "trifft",
+    "mkt.bb": "Bet-Builder",
+    "mkt.bb3": "3er-Bet-Builder",
+    "mkt.bbrisk": "Risk-Bet-Builder",
+    "mkt.bbmega": "Mega-Bet-Builder",
     "win.mine": "Deine letzten Gewinne",
     "win.mine.empty": "Noch keine Gewinne eingereicht.",
     "win.mine.credits": "Credits verdient",
@@ -1295,6 +1360,7 @@ const T = {
     "bell.tooltip": "Σε ειδοποιούμε αμέσως μόλις μπει νέα πρόγνωση — χωρίς εγγραφή.",
     "bell.watching": "παρακολουθούν το βάζο",
     "bell.on": "Μπήκες! Θα σε ειδοποιούμε σε κάθε νέα πρόγνωση.",
+    "bell.view_pick": "Δες το pick",
     "bell.subscribers": "άτομα έχουν ενεργές ειδοποιήσεις",
     "bell.push_title": "🔥 Πρόγνωση με υψηλή βαθμολογία!",
     "bell.settings": "Ρυθμίσεις ειδοποιήσεων",
@@ -1550,6 +1616,18 @@ const T = {
     "mkt.dcx2": "Διπλή ευκαιρία X2",
     "mkt.cs": "Ακριβές σκορ",
     "mkt.draw": "Ισοπαλία (X)",
+    "mkt.dc12": "Διπλή ευκαιρία 12",
+    "mkt.ht1": "1ο Ημίχρονο",
+    "mkt.ht2": "2ο Ημίχρονο",
+    "mkt.eachhalf": "σε κάθε ημίχρονο",
+    "mkt.goaleachhalf": "Γκολ σε κάθε ημίχρονο",
+    "mkt.asian": "(Ασιατικό)",
+    "mkt.handicap": "Χάντικαπ",
+    "mkt.scores": "να σκοράρει",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "Bet Builder 3 επιλογών",
+    "mkt.bbrisk": "Bet Builder ρίσκου",
+    "mkt.bbmega": "Mega Bet Builder",
     "win.mine": "Τα πρόσφατα κέρδη σου",
     "win.mine.empty": "Δεν έχεις καταχωρίσει κέρδη ακόμη.",
     "win.mine.credits": "credits κερδισμένα",
@@ -1605,6 +1683,7 @@ const T = {
     "bell.tooltip": "Sois notifié dès qu'un nouveau pronostic tombe — sans inscription.",
     "bell.watching": "surveillent le bocal",
     "bell.on": "C'est bon ! On te prévient à chaque nouveau pronostic.",
+    "bell.view_pick": "Voir le pronostic",
     "bell.subscribers": "personnes ont activé les alertes",
     "bell.test": "Envoyer une notification test",
     "bell.test_sent": "Notification test envoyée !",
@@ -1854,6 +1933,18 @@ const T = {
     "mkt.dcx2": "Double chance X2",
     "mkt.cs": "Score exact",
     "mkt.draw": "Match nul (X)",
+    "mkt.dc12": "Double chance 12",
+    "mkt.ht1": "1re mi-temps",
+    "mkt.ht2": "2e mi-temps",
+    "mkt.eachhalf": "dans chaque mi-temps",
+    "mkt.goaleachhalf": "But dans chaque mi-temps",
+    "mkt.asian": "(Asiatique)",
+    "mkt.handicap": "Handicap",
+    "mkt.scores": "marque",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "Bet Builder 3 sélections",
+    "mkt.bbrisk": "Bet Builder risqué",
+    "mkt.bbmega": "Méga Bet Builder",
     "win.mine": "Tes derniers gains",
     "win.mine.empty": "Aucun gain réclamé pour l'instant.",
     "win.mine.credits": "crédits gagnés",
@@ -1909,6 +2000,7 @@ const T = {
     "bell.tooltip": "Ricevi una notifica appena arriva un nuovo pronostico — senza registrarti.",
     "bell.watching": "osservano il barattolo",
     "bell.on": "Ci sei! Ti avvisiamo a ogni nuovo pronostico.",
+    "bell.view_pick": "Vedi pick",
     "bell.subscribers": "persone hanno gli avvisi attivi",
     "bell.test": "Invia notifica di prova",
     "bell.test_sent": "Notifica di prova inviata!",
@@ -2158,6 +2250,18 @@ const T = {
     "mkt.dcx2": "Doppia chance X2",
     "mkt.cs": "Risultato esatto",
     "mkt.draw": "Pareggio (X)",
+    "mkt.dc12": "Doppia chance 12",
+    "mkt.ht1": "1° Tempo",
+    "mkt.ht2": "2° Tempo",
+    "mkt.eachhalf": "in ogni tempo",
+    "mkt.goaleachhalf": "Gol in ogni tempo",
+    "mkt.asian": "(Asiatico)",
+    "mkt.handicap": "Handicap",
+    "mkt.scores": "segna",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "Bet Builder da 3",
+    "mkt.bbrisk": "Bet Builder rischioso",
+    "mkt.bbmega": "Mega Bet Builder",
     "win.mine": "Le tue ultime vincite",
     "win.mine.empty": "Nessuna vincita richiesta ancora.",
     "win.mine.credits": "crediti guadagnati",
@@ -2212,6 +2316,7 @@ const T = {
     "bell.tooltip": "احصل على إشعار فور نزول توقع جديد — دون تسجيل.",
     "bell.watching": "يراقبون الجرة",
     "bell.on": "تم! سننبهك مع كل توقع جديد.",
+    "bell.view_pick": "عرض التوقع",
     "bell.subscribers": "شخصاً فعّلوا التنبيهات",
     "bell.test": "إرسال إشعار تجريبي",
     "bell.test_sent": "تم إرسال الإشعار التجريبي!",
@@ -2461,6 +2566,18 @@ const T = {
     "mkt.dcx2": "فرصة مزدوجة X2",
     "mkt.cs": "النتيجة الصحيحة",
     "mkt.draw": "تعادل (X)",
+    "mkt.dc12": "فرصة مزدوجة 12",
+    "mkt.ht1": "الشوط الأول",
+    "mkt.ht2": "الشوط الثاني",
+    "mkt.eachhalf": "في كل شوط",
+    "mkt.goaleachhalf": "هدف في كل شوط",
+    "mkt.asian": "(آسيوي)",
+    "mkt.handicap": "هانديكاب",
+    "mkt.scores": "يسجل",
+    "mkt.bb": "بيت بيلدر",
+    "mkt.bb3": "بيت بيلدر 3",
+    "mkt.bbrisk": "بيت بيلدر مخاطرة",
+    "mkt.bbmega": "ميجا بيت بيلدر",
     "win.mine": "أحدث أرباحك",
     "win.mine.empty": "لم تطالب بأي أرباح بعد.",
     "win.mine.credits": "رصيد مكتسب",
@@ -2515,6 +2632,7 @@ const T = {
     "bell.tooltip": "Yeni bir tahmin düşer düşmez bildirim al — kayıt gerekmez.",
     "bell.watching": "kavanozu izliyor",
     "bell.on": "Katıldın! Her yeni tahmini sana bildireceğiz.",
+    "bell.view_pick": "Tahmini gör",
     "bell.subscribers": "kişi uyarıları açtı",
     "bell.test": "Test bildirimi gönder",
     "bell.test_sent": "Test bildirimi gönderildi!",
@@ -2764,6 +2882,18 @@ const T = {
     "mkt.dcx2": "Çifte şans X2",
     "mkt.cs": "Kesin skor",
     "mkt.draw": "Beraberlik (X)",
+    "mkt.dc12": "Çifte şans 12",
+    "mkt.ht1": "İlk Yarı",
+    "mkt.ht2": "İkinci Yarı",
+    "mkt.eachhalf": "her yarıda",
+    "mkt.goaleachhalf": "Her yarıda gol",
+    "mkt.asian": "(Asya)",
+    "mkt.handicap": "Handikap",
+    "mkt.scores": "gol atar",
+    "mkt.bb": "Bet Builder",
+    "mkt.bb3": "3'lü Bet Builder",
+    "mkt.bbrisk": "Riskli Bet Builder",
+    "mkt.bbmega": "Mega Bet Builder",
     "win.mine": "Son kazançların",
     "win.mine.empty": "Henüz kazanç talep edilmedi.",
     "win.mine.credits": "kredi kazanıldı",

@@ -905,3 +905,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Getestet: lokal (pending/won-Varianten) + live gegen /api/tips/{id}/share-image mit echtem HQ-System-Tip. Bilder sauber, keine Overlaps, QR scannbar.
 - Wirkt auf Produktion erst nach Deploy.
 - OFFEN (vom User verschoben): "Asiatisch Über 1.0 HZ" Grading (0=verloren, 1=Push/void, 2+=gewonnen) + Value-Banker-Generator (Tor in jeder HZ + Favorit trifft). Noch NICHT umgesetzt.
+
+## 2026-07-23 — Markt-Lokalisierung Lücken geschlossen (DONE + live getestet)
+- Beschwerde: Markt-Labels wie "Über 0.5 Tore 1. Halbzeit", "Asiatisch", "Über 3.5 Tore", "Bet-Builder" blieben beim Sprachwechsel DEUTSCH.
+- i18n.js localizeMarket() erweitert: generisches Über/Unter N Tore, 1./2./jeder Halbzeit, "Tor in jeder Halbzeit", (Asiatisch), Doppelte Chance 12, Handicap, "trifft", Bet-Builder/3er/Risk/Mega, Beide (Teams) treffen. Team-Namen/Zahlen bleiben erhalten.
+- 12 neue mkt.* Keys in ALLEN 8 Sprachen (ht1/ht2/eachhalf/goaleachhalf/asian/dc12/handicap/scores/bb/bb3/bbrisk/bbmega).
+- bell.view_pick fehlte in 6 Sprachen (nur en/de) → in allen 8 ergänzt (Toast-Navigationsknopf-Label).
+- Live getestet (EN, View AI System): "Over 1.5 Goals 1st Half / BTTS / Over 2.5 Goals" — 0 deutsche Reste.
+- Wirkt auf Produktion erst nach Deploy.
+- HINWEIS Notification-"Zum-Pick"-Knopf: Code intakt in allen 3 Pfaden (Service-Worker push actions "Zum Pick →" + notificationclick-Navigation; foreground pushNotify actions; In-App-Sonner-Toast action mit bell.view_pick). Wurde kürzlich HINZUGEFÜGT (commit 3bc1bc7), nicht entfernt. Vermutlich Produktion veraltet → Deploy nötig. Beim User rückbestätigen (Preview vs. Prod).
