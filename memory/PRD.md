@@ -885,3 +885,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Neuer Fallback-Trigger: erscheint auch nach ~25s für Besucher, die keinen Tipp öffnen (zusätzlich zum tj-viewed-pick Trigger). Session-Guard (max 1x/Session). Leichte Vibration beim Erscheinen (mobil).
 - Eligibility unverändert: nur wenn Push unterstützt, nicht bereits an, permission != denied. In Test-Browser permission=denied → korrekt kein Prompt.
 - Wirkt auf Produktion erst nach Deploy.
+
+## 2026-07-23 — Blacklist erweitert (DONE + getestet)
+- TEAM_LEAGUE_BLACKLIST += agama, hardrock, ekibastuz, ontustik, "astana ii", "triangle united". Präzise: "astana ii" blockt NUR Reserve, nicht FC Astana.
+- _team_or_league_blocked() jetzt AUCH in apifootball_predictions_autopost (lg) und statarea_autopost (league) verdrahtet — vorher nur forebet/predictz/settle/andere Generatoren.
+- Preview-DB bereinigt: 4 tips + 3 predictions gelöscht. Getestet: alle 4 Fixtures blocked=True, FC Astana/Real Madrid=False.
+- Wirkt auf Produktion nach Deploy (verhindert neue; bestehende laufen aus/werden bei Regeneration ersetzt).

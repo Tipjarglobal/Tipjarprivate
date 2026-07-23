@@ -4310,7 +4310,9 @@ def _league_blocked_predictz(league: str) -> bool:
 TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "forge", "saint-laurent", "saint laurent",
                          "delaware", "eagle fc", "gumi", "sportstoto",
-                         "prievidza", "inter bratislava")
+                         "prievidza", "inter bratislava",
+                         "agama", "hardrock", "ekibastuz", "ontustik",
+                         "astana ii", "triangle united")
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
@@ -6394,6 +6396,8 @@ async def apifootball_predictions_autopost() -> dict:
             away = (teams.get("away") or {}).get("name") or ""
             if not home or not away or _is_women_or_youth(home) or _is_women_or_youth(away):
                 continue
+            if _team_or_league_blocked(home, away, lg):
+                continue
             mkey = _match_key(home, away)
             if mkey in covered:
                 continue  # a scraper already predicts this match → skip
@@ -6483,6 +6487,8 @@ async def statarea_autopost() -> dict:
         if r.get("score"):
             continue  # already kicked off / finished → not a pre-match prediction
         if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, r.get("league") or ""):
             continue
         p1, px, p2 = r.get("p1") or 0, r.get("px") or 0, r.get("p2") or 0
         if (p1 + px + p2) == 0:
