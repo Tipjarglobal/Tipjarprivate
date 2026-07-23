@@ -1930,75 +1930,105 @@ def _tip_to_render_legs(tip: dict) -> list:
     return rlegs
 
 
-def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None) -> bytes:
-    """Compact, mobile-first DARK TipJar bet slip (v5). Tight two-line rows so even a
-    7-leg slip stays short and legible; volt accents, green/red status, per-game score
-    chip and a faint centred crest watermark. Same signature as before."""
-    from PIL import Image, ImageDraw, ImageFont
-    import io
-    FB = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-    FR = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
-    CREST = "/app/frontend/public/tipjar-crest.png"
+FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+CREST_PATH = "/app/frontend/public/tipjar-crest.png"
 
-    def font(path, sz):
+
+def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None) -> bytes:
+    """Premium TipJar bet-ticket (v6) — a dark, glossy portrait 'ticket' with a gradient
+    stage, volt accents, glassy leg panels, a status glow, a tear-off perforation and a
+    scannable QR that links back to tipjarglobal.com. Same signature as before."""
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    import io
+
+    def font(name, sz):
         try:
-            return ImageFont.truetype(path, sz)
+            return ImageFont.truetype(os.path.join(FONT_DIR, name + ".ttf"), sz)
         except Exception:
-            return ImageFont.load_default()
+            try:
+                return ImageFont.truetype(
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", sz)
+            except Exception:
+                return ImageFont.load_default()
+
+    # display / body font families (bundled OFL fonts)
+    DISPLAY = "Anton-Regular"          # big odds & wordmark
+    HEAD = "BarlowCondensed-Bold"      # match titles, status
+    HEADS = "BarlowCondensed-SemiBold"
+    BODY_B = "Barlow-Bold"
+    BODY_S = "Barlow-SemiBold"
+    BODY_M = "Barlow-Medium"
+    BODY = "Barlow-Regular"
 
     _scratch = ImageDraw.Draw(Image.new("RGB", (4, 4)))
 
-    # ---- dark palette -----------------------------------------------------
-    BG, ROW = (14, 15, 19), (22, 24, 30)
-    INK, MUTE, FAINT = (242, 243, 246), (150, 154, 165), (108, 112, 122)
-    VOLT = (225, 255, 0)
-    GREEN, RED, AMBER = (46, 204, 113), (240, 74, 66), (240, 190, 40)
-    LINE = (40, 42, 50)
-    won = ctype not in ("pending", "live_pending")
-    STATUS = GREEN if won else (AMBER if ctype in ("pending", "live_pending") else RED)
-    status_txt = {"pending": "OFFEN", "live_pending": "LIVE"}.get(ctype, "GEWONNEN")
-
-    W = 1000
-    pad = 40
-    inner_w = W - 2 * pad
-    f_logo = font(FB, 74)
-    f_tag = font(FR, 26)
-    f_status = font(FB, 40)
-    f_match = font(FB, 46)
-    f_odds = font(FB, 50)
-    f_market = font(FR, 40)
-    f_meta = font(FR, 30)
-    f_score = font(FB, 34)
-    f_flabel = font(FR, 30)
-    f_fval = font(FB, 54)
-    f_total = font(FB, 92)
-    f_user = font(FB, 48)
-    f_live = font(FB, 34)
-
     def tw(txt, fnt):
-        return _scratch.textlength(txt, font=fnt)
+        return _scratch.textlength(txt or "", font=fnt)
 
-    def fit(txt, hi, lo, maxw):
-        for sz in range(hi, lo - 1, -2):
-            f = font(FB, sz)
+    def trunc(txt, fnt, maxw):
+        txt = txt or ""
+        if tw(txt, fnt) <= maxw:
+            return txt
+        while txt and tw(txt + "…", fnt) > maxw:
+            txt = txt[:-1]
+        return (txt + "…") if txt else ""
+
+    def fit(txt, family, hi, lo, maxw):
+        for sz in range(hi, lo - 1, -1):
+            f = font(family, sz)
             if tw(txt, f) <= maxw:
                 return f
-        return font(FB, lo)
+        return font(family, lo)
 
     def _clean(p):
         m = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})", p or "")
         if m:
-            return f"{m.group(3)}.{m.group(2)}.{m.group(1)} {m.group(4)}:{m.group(5)}"
+            return f"{m.group(3)}.{m.group(2)} · {m.group(4)}:{m.group(5)}"
         return p or ""
 
+    # ---- palette ----------------------------------------------------------
+    BG_TOP, BG_BOT = (16, 18, 25), (7, 8, 12)
+    PANEL = (23, 26, 34)
+    PANEL_EDGE = (48, 53, 66)
+    INK, SOFT, MUTE, FAINT = (244, 246, 250), (196, 201, 212), (150, 156, 170), (108, 114, 128)
+    VOLT = (202, 240, 0)
+    GREEN, RED, AMBER, LIVE = (52, 211, 130), (244, 82, 74), (245, 190, 46), (255, 92, 92)
+    won = ctype not in ("pending", "live_pending")
+    is_live = ctype == "live_pending"
+    STATUS = LIVE if is_live else (AMBER if ctype == "pending" else GREEN)
+    status_txt = {"pending": "OFFEN", "live_pending": "LIVE"}.get(ctype, "GEWONNEN")
+
+    W = 1080
+    M = 34                 # outer margin (gradient stage → ticket)
+    P = 42                 # ticket inner padding
+    cx0 = M + P
+    cx1 = W - M - P
+    cw = cx1 - cx0         # content width
+
+    # ---- fonts ------------------------------------------------------------
+    f_logo = font(DISPLAY, 62)
+    f_tag = font(HEADS, 24)
+    f_status = font(HEAD, 34)
+    f_chip = font(BODY_B, 26)
+    f_market = font(BODY_M, 36)
+    f_legodds = font(DISPLAY, 40)
+    f_meta = font(BODY_M, 26)
+    f_score = font(HEAD, 36)
+    f_user = font(HEAD, 46)
+    f_label = font(BODY_S, 26)
+    f_small = font(BODY_M, 24)
+    f_total = font(DISPLAY, 118)
+    f_fval = font(HEAD, 46)
+    f_url = font(BODY_B, 26)
+
     # ---- group legs by match ---------------------------------------------
-    legs = legs[:12]
+    legs = (legs or [])[:12]
     groups, gidx = [], {}
     for l in legs:
         k = _match_key(l.get("home", ""), l.get("away", ""))
         if k not in gidx:
             gidx[k] = len(groups)
-            groups.append({"home": l.get("home", "?"), "away": l.get("away", "?"),
+            groups.append({"home": l.get("home", "?") or "?", "away": l.get("away", "?") or "",
                            "league": l.get("league", ""), "date": l.get("date", ""),
                            "time": l.get("time", ""), "result": "", "mkts": []})
         if not groups[gidx[k]]["result"]:
@@ -2008,127 +2038,246 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
                 groups[gidx[k]]["result"] = r
         groups[gidx[k]]["mkts"].append(l)
 
-    ROW_A, ROW_M, ROW_META, ROW_PAD = 58, 50, 38, 20
-
+    # per-group geometry ----------------------------------------------------
+    G_PAD = 24          # inner pad of a leg panel
+    TITLE_H = 52
+    MKT_H = 54
+    META_H = 34
+    G_GAP = 16
     for g in groups:
-        n_mkt = len(g["mkts"])
-        meta = " · ".join(x for x in (g.get("league", ""), _clean(g.get("date", "")), g.get("time", "")) if x)
+        meta = " · ".join(x for x in (g.get("league", ""), _clean(g.get("date", "")),
+                                      _clean(g.get("time", "")) if not g.get("date") else "") if x)
         g["meta"] = meta
-        h = ROW_PAD + ROW_A + n_mkt * ROW_M
+        h = G_PAD + TITLE_H + len(g["mkts"]) * MKT_H
         if meta:
-            h += ROW_META
-        h += ROW_PAD
+            h += META_H
+        h += G_PAD
         g["h"] = h
 
-    head_h = 128
-    gap = 12
-    content_h = sum(g["h"] + gap for g in groups)
-    foot_h = 208
-    H = head_h + content_h + foot_h + pad
+    head_h = 150
+    meta_bar_h = 58
+    content_h = sum(g["h"] + G_GAP for g in groups)
+    foot_h = 344
+    perf_h = 44
+    H = M + head_h + meta_bar_h + content_h + perf_h + foot_h + M
 
-    base = Image.new("RGB", (W, H), BG)
+    # ---- background stage (vertical gradient + volt corner glow) ----------
+    grad = Image.new("RGB", (1, H))
+    for yy in range(H):
+        t = yy / max(1, H - 1)
+        grad.putpixel((0, yy), tuple(int(BG_TOP[i] + (BG_BOT[i] - BG_TOP[i]) * t) for i in range(3)))
+    base = grad.resize((W, H)).convert("RGBA")
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([W - 520, -320, W + 260, 320], fill=VOLT + (34,))
+    gd.ellipse([-300, H - 380, 360, H + 260], fill=STATUS + (26,))
+    base.alpha_composite(glow.filter(ImageFilter.GaussianBlur(150)))
+
+    def _bg_at(yy):
+        t = min(1.0, max(0.0, yy / max(1, H - 1)))
+        return tuple(int(BG_TOP[i] + (BG_BOT[i] - BG_TOP[i]) * t) for i in range(3))
+
+    # ---- ticket shadow + body ---------------------------------------------
+    tx0, ty0, tx1, ty1 = M, M, W - M, H - M
+    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle([tx0 + 6, ty0 + 16, tx1 + 6, ty1 + 16], 44, fill=(0, 0, 0, 150))
+    base.alpha_composite(sh.filter(ImageFilter.GaussianBlur(34)))
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle([tx0, ty0, tx1, ty1], 44, fill=(17, 19, 26, 252), outline=(60, 66, 80), width=2)
+    d.rounded_rectangle([tx0 + 2, ty0 + 2, tx1 - 2, ty0 + 8], 6, fill=VOLT + (255,))  # volt top edge
+
+    # faint crest watermark, centred in the legs area
     try:
-        crest = Image.open(CREST).convert("RGBA")
-        cw = 540
-        crest = crest.resize((cw, int(cw * crest.height / crest.width)))
-        a = crest.split()[3].point(lambda v: int(v * 0.06))
+        crest = Image.open(CREST_PATH).convert("RGBA")
+        cwm = 620
+        crest = crest.resize((cwm, int(cwm * crest.height / crest.width)))
+        a = crest.split()[3].point(lambda v: int(v * 0.05))
         crest.putalpha(a)
-        wy = head_h + max(0, (content_h - crest.height) // 2)
-        base.paste(crest, ((W - crest.width) // 2, wy), crest)
+        wy = M + head_h + meta_bar_h + max(0, (content_h - crest.height) // 2)
+        base.alpha_composite(crest, ((W - crest.width) // 2, max(M + head_h, wy)))
     except Exception:
         pass
-    d = ImageDraw.Draw(base)
 
-    def check(cx, cy, sz, col, wd=6):
-        d.line([(cx, cy), (cx + sz * 0.34, cy + sz * 0.44)], fill=col, width=wd)
-        d.line([(cx + sz * 0.34, cy + sz * 0.44), (cx + sz, cy - sz * 0.5)], fill=col, width=wd)
+    def check_badge(cxp, cyp, r, col):
+        d.ellipse([cxp - r, cyp - r, cxp + r, cyp + r], fill=col)
+        d.line([(cxp - r * 0.42, cyp), (cxp - r * 0.08, cyp + r * 0.4)], fill=(10, 12, 16), width=5)
+        d.line([(cxp - r * 0.08, cyp + r * 0.4), (cxp + r * 0.5, cyp - r * 0.42)], fill=(10, 12, 16), width=5)
 
-    def trunc(txt, fnt, maxw):
-        txt = txt or ""
-        if tw(txt, fnt) <= maxw:
-            return txt
-        while txt and tw(txt + "…", fnt) > maxw:
-            txt = txt[:-1]
-        return txt + "…"
+    def pill(x0p, y0p, x1p, y1p, col, alpha=255, glow_blur=0):
+        if glow_blur:
+            gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            ImageDraw.Draw(gl).rounded_rectangle([x0p, y0p, x1p, y1p], (y1p - y0p) // 2,
+                                                 fill=col + (150,))
+            base.alpha_composite(gl.filter(ImageFilter.GaussianBlur(glow_blur)))
+        d.rounded_rectangle([x0p, y0p, x1p, y1p], (y1p - y0p) // 2, fill=col + (alpha,))
 
     # ---- header -----------------------------------------------------------
-    d.text((pad, 26), "Tip", font=f_logo, fill=INK)
-    lw = tw("Tip", f_logo)
-    d.text((pad + lw, 26), "Jar", font=f_logo, fill=VOLT)
-    d.text((pad + 2, 100), "Post it. Rate it. Cash it.", font=f_tag, fill=FAINT)
-    # status pill (right)
-    st_w = tw(status_txt, f_status)
-    pill_w = st_w + (86 if won else 56)
-    px1 = W - pad
-    d.rounded_rectangle([px1 - pill_w, 34, px1, 34 + 60], 30, fill=STATUS)
-    tx = px1 - pill_w + 26
-    if won:
-        check(tx, 34 + 30 - 4, 24, BG, 7)
-        tx += 44
-    d.text((tx, 34 + 8), status_txt, font=f_status, fill=BG)
-    if total_odds:
-        ot = f"{float(total_odds):.2f}"
-        d.text((px1 - tw(f"Quote {ot}", f_tag), 104), f"Quote {ot}", font=f_tag, fill=FAINT)
+    hy = M + 30
+    try:
+        cr = Image.open(CREST_PATH).convert("RGBA")
+        cs = 96
+        cr = cr.resize((cs, int(cs * cr.height / cr.width)))
+        base.alpha_composite(cr, (cx0, hy - 6))
+        logo_x = cx0 + cs + 22
+    except Exception:
+        logo_x = cx0
+    d.text((logo_x, hy - 8), "TIP", font=f_logo, fill=INK)
+    lw = tw("TIP", f_logo)
+    d.text((logo_x + lw + 4, hy - 8), "JAR", font=f_logo, fill=VOLT)
+    d.text((logo_x + 3, hy + 60), "POST IT · RATE IT · CASH IT", font=f_tag, fill=FAINT)
 
-    # ---- leg rows ---------------------------------------------------------
-    y = head_h
+    # status pill (top-right, with soft glow)
+    st_w = tw(status_txt, f_status)
+    pw = int(st_w + (108 if is_live else 96))
+    py0, py1 = hy - 4, hy + 52
+    px1 = cx1
+    pill(px1 - pw, py0, px1, py1, STATUS, glow_blur=26)
+    inx = px1 - pw + 30
+    if is_live:
+        d.ellipse([inx, (py0 + py1) // 2 - 9, inx + 18, (py0 + py1) // 2 + 9], fill=(12, 12, 14))
+        inx += 34
+    else:
+        check_badge(inx + 12, (py0 + py1) // 2, 15, (12, 14, 18))
+        inx += 40
+    d.text((inx, py0 + 8), status_txt, font=f_status, fill=(12, 14, 18))
+
+    # ---- meta bar: PARLAY · N GAMES + optional live score -----------------
+    my = M + head_h - 6
+    ng = len(groups)
+    chip = f"PARLAY · {ng} {'SPIEL' if ng == 1 else 'SPIELE'}"
+    d.rounded_rectangle([cx0, my, cx0 + tw(chip, f_chip) + 40, my + 44], 22,
+                        outline=VOLT, width=2)
+    d.text((cx0 + 20, my + 9), chip, font=f_chip, fill=VOLT)
+    if live_info and (live_info.get("minute") is not None or live_info.get("score")):
+        li = "LIVE"
+        if live_info.get("score"):
+            li = f"{live_info['score']}"
+        if live_info.get("minute") is not None:
+            li += f"  {live_info['minute']}'"
+        lw2 = tw(li, f_chip)
+        d.rounded_rectangle([cx1 - lw2 - 40, my, cx1, my + 44], 22, fill=LIVE + (255,))
+        d.text((cx1 - lw2 - 20, my + 9), li, font=f_chip, fill=(12, 12, 14))
+
+    # ---- leg panels -------------------------------------------------------
+    y = M + head_h + meta_bar_h
     for g in groups:
-        d.rounded_rectangle([pad, y, W - pad, y + g["h"]], 18, fill=ROW)
-        d.rounded_rectangle([pad, y, pad + 7, y + g["h"]], 18, fill=STATUS)
-        ix = pad + 30
-        ty = y + ROW_PAD
-        # match title + score chip on the right
-        title = f"{g['home']}  vs  {g['away']}"
-        chip_x1 = W - pad - 26
+        p0, p1 = cx0, y
+        d.rounded_rectangle([p0, p1, cx1, p1 + g["h"]], 22, fill=PANEL + (255,),
+                            outline=PANEL_EDGE, width=1)
+        d.rounded_rectangle([p0, p1 + 10, p0 + 8, p1 + g["h"] - 10], 4, fill=STATUS + (255,))
+        ix = p0 + G_PAD + 16
+        ty = p1 + G_PAD
+        # title + optional score chip
+        away = g["away"]
+        title = f"{g['home']}  –  {away}" if away else g["home"]
+        chip_x1 = cx1 - G_PAD
         if g["result"]:
             sc = g["result"]
             scw = tw(sc, f_score)
-            d.rounded_rectangle([chip_x1 - scw - 28, ty - 2, chip_x1, ty + 46], 12, fill=(34, 37, 45))
-            d.text((chip_x1 - scw - 14, ty + 3), sc, font=f_score, fill=INK)
-            title_max = chip_x1 - scw - 28 - ix - 16
+            d.rounded_rectangle([chip_x1 - scw - 30, ty - 2, chip_x1, ty + 44], 12,
+                                fill=(38, 42, 52))
+            d.text((chip_x1 - scw - 15, ty + 1), sc, font=f_score, fill=INK)
+            title_max = chip_x1 - scw - 30 - ix - 18
         else:
-            title_max = inner_w - 90
-        mf = fit(title, 46, 32, title_max)
+            title_max = chip_x1 - ix
+        mf = fit(title, HEAD, 44, 30, title_max)
         d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
-        ty += ROW_A
-        # each market: ✓ + text (left), odds (volt, right)
+        ty += TITLE_H
+        # markets — if the whole group carries ONE combined odd (typical for HQ system
+        # tips), show it once, vertically centred as a group badge instead of on row 1.
+        odds_vals = [l.get("odds") or 0 for l in g["mkts"]]
+        group_odd = odds_vals[0] if (len(g["mkts"]) > 1 and sum(1 for o in odds_vals if o) == 1) else None
+        mkt_top = ty
         for l in g["mkts"]:
             od = l.get("odds") or 0
             odt = f"{float(od):.2f}" if od else ""
-            ow = tw(odt, f_odds)
-            check(ix, ty + 26, 22, GREEN if won else FAINT, 6)
-            mtxt = trunc(l.get("market", "") or "", f_market, inner_w - 120 - ow)
-            d.text((ix + 42, ty + 4), mtxt, font=f_market, fill=(206, 210, 218))
-            if odt:
-                d.text((W - pad - 26 - ow, ty), odt, font=f_odds, fill=VOLT)
-            ty += ROW_M
+            ow = tw(odt, f_legodds)
+            check_badge(ix + 12, ty + 25, 14, STATUS)
+            mtxt = trunc(l.get("market", "") or "", f_market, cw - 130 - (0 if group_odd else ow))
+            d.text((ix + 40, ty + 6), mtxt, font=f_market, fill=SOFT)
+            if odt and group_odd is None:
+                d.text((chip_x1 - ow, ty + 3), odt, font=f_legodds, fill=VOLT)
+            ty += MKT_H
+        if group_odd:
+            got = f"{float(group_odd):.2f}"
+            gow = tw(got, f_legodds)
+            cym = (mkt_top + ty) // 2
+            d.text((chip_x1 - gow, cym - 30), got, font=f_legodds, fill=VOLT)
         if g["meta"]:
-            d.text((ix + 42, ty - 4), trunc(g["meta"], f_meta, inner_w - 100), font=f_meta, fill=FAINT)
-        y += g["h"] + gap
+            d.text((ix + 40, ty), trunc(g["meta"], f_meta, cw - 140), font=f_meta, fill=FAINT)
+        y += g["h"] + G_GAP
+
+    # ---- perforation (tear-off) ------------------------------------------
+    perf_y = y + perf_h // 2 - 4
+    dot = 12
+    xdot = tx0 + 40
+    while xdot < tx1 - 40:
+        d.ellipse([xdot, perf_y - 3, xdot + dot, perf_y + 3], fill=(52, 57, 70))
+        xdot += 30
+    for cxn in (tx0, tx1):
+        r = 22
+        d.ellipse([cxn - r, perf_y - r, cxn + r, perf_y + r], fill=_bg_at(perf_y))
 
     # ---- footer -----------------------------------------------------------
-    fy = y + 2
-    d.rounded_rectangle([pad, fy, W - pad, fy + foot_h - 16], 20, fill=(20, 21, 27), outline=LINE, width=2)
-    label = {"played": "Mitgespielt", "posted": "Reingepostet", "live": "Live-Serie",
-             "cashed": "Ausgezahlt", "live_pending": "Live-Pick",
-             "pending": "Community-Tipp"}.get(ctype, "Gewonnen")
-    d.text((pad + 28, fy + 22), label, font=f_tag, fill=VOLT)
-    d.text((pad + 28, fy + 58), f"@{username}", font=f_user, fill=INK)
+    fy = y + perf_h
+    label = {"played": "MITGESPIELT", "posted": "REINGEPOSTET", "live": "LIVE-SERIE",
+             "cashed": "AUSGEZAHLT", "live_pending": "LIVE-PICK",
+             "pending": "COMMUNITY-TIPP"}.get(ctype, "GEWONNEN")
+    # avatar bubble + username
+    av_r = 34
+    av_cx, av_cy = cx0 + av_r, fy + 30 + av_r
+    d.ellipse([av_cx - av_r, av_cy - av_r, av_cx + av_r, av_cy + av_r], fill=(30, 34, 44),
+              outline=VOLT, width=3)
+    initial = (username or "T").strip().lstrip("@")[:1].upper() or "T"
+    fi = font(HEAD, 40)
+    d.text((av_cx - tw(initial, fi) / 2, av_cy - 26), initial, font=fi, fill=VOLT)
+    d.text((av_cx + av_r + 20, fy + 22), label, font=f_label, fill=VOLT)
+    uname = "@" + (username or "TipJar").lstrip("@")
+    d.text((av_cx + av_r + 18, fy + 52), trunc(uname, f_user, cw - 380), font=f_user, fill=INK)
+
+    # hero total odds (right, sits directly above the QR)
     ot = f"{float(total_odds):.2f}" if total_odds else "—"
-    d.text((W - pad - 28 - tw(ot, f_total), fy + 16), ot, font=f_total, fill=VOLT)
-    d.text((W - pad - 28 - tw("Gesamtquote", f_tag), fy + 118), "Gesamtquote", font=f_tag, fill=FAINT)
-    row_y = fy + 130
+    otw = tw(ot, f_total)
+    d.text((cx1 - tw("GESAMTQUOTE", f_label), fy + 20), "GESAMTQUOTE", font=f_label, fill=MUTE)
+    gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(gl).text((cx1 - otw, fy + 40), ot, font=f_total, fill=VOLT + (170,))
+    base.alpha_composite(gl.filter(ImageFilter.GaussianBlur(18)))
+    d.text((cx1 - otw, fy + 40), ot, font=f_total, fill=VOLT)
+
+    # stake / winnings row (left)
+    row_y = fy + 196
+    d.line([(cx0, row_y - 16), (cx1, row_y - 16)], fill=(40, 45, 56), width=2)
+    col2 = cx0 + 260
     if stake:
-        d.text((pad + 28, row_y), "Einsatz", font=f_tag, fill=FAINT)
-        d.text((pad + 28, row_y + 30), str(stake), font=f_fval, fill=INK)
+        d.text((cx0, row_y), "EINSATZ", font=f_small, fill=FAINT)
+        d.text((cx0, row_y + 28), str(stake), font=f_fval, fill=INK)
     if winnings:
-        wlabel = "Ausgezahlt" if ctype == "cashed" else ("Gewinn" if won else "Möglicher Gewinn")
-        wt = str(winnings)
-        d.text((pad + 300, row_y), wlabel, font=f_tag, fill=FAINT)
-        d.text((pad + 300, row_y + 30), wt, font=f_fval, fill=VOLT)
+        wlabel = "AUSGEZAHLT" if ctype == "cashed" else ("GEWINN" if won else "MÖGL. GEWINN")
+        d.text((col2, row_y), wlabel, font=f_small, fill=FAINT)
+        d.text((col2, row_y + 28), str(winnings), font=f_fval, fill=VOLT)
+
+    # QR → tipjarglobal.com (bottom-right corner), on a light tile for scannability
+    qs = 116
+    qx, qy = cx1 - qs, fy + 188
+    try:
+        import qrcode
+        qr = qrcode.QRCode(border=1, box_size=10,
+                           error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data("https://tipjarglobal.com")
+        qr.make(fit=True)
+        qimg = qr.make_image(fill_color=(12, 14, 18), back_color=(233, 255, 210)).convert("RGB")
+        qimg = qimg.resize((qs, qs), Image.NEAREST)
+        d.rounded_rectangle([qx - 9, qy - 9, qx + qs + 9, qy + qs + 9], 14, fill=(233, 255, 210))
+        base.paste(qimg, (qx, qy))
+    except Exception:
+        pass
+    d.text((qx - 20 - tw("SCAN &", f_url), qy + 30), "SCAN &", font=f_url, fill=SOFT)
+    d.text((qx - 20 - tw("MITSPIELEN", f_url), qy + 62), "MITSPIELEN", font=f_url, fill=VOLT)
+    d.text((qx - 20 - tw("tipjarglobal.com", f_small), qy + qs - 8),
+           "tipjarglobal.com", font=f_small, fill=FAINT)
 
     out = io.BytesIO()
-    base.save(out, format="WEBP", quality=92)
+    base.convert("RGB").save(out, format="WEBP", quality=94, method=6)
     return out.getvalue()
 
 

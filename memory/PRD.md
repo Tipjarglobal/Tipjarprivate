@@ -891,3 +891,17 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - _team_or_league_blocked() jetzt AUCH in apifootball_predictions_autopost (lg) und statarea_autopost (league) verdrahtet — vorher nur forebet/predictz/settle/andere Generatoren.
 - Preview-DB bereinigt: 4 tips + 3 predictions gelöscht. Getestet: alle 4 Fixtures blocked=True, FC Astana/Real Madrid=False.
 - Wirkt auf Produktion nach Deploy (verhindert neue; bestehende laufen aus/werden bei Regeneration ersetzt).
+
+## 2026-07-23 — Share-Schein Bild KOMPLETT neu (DONE + getestet)
+- User-Beschwerde (mehrfach): geteilte Scheine sahen "scheiße" aus → er machte lieber manuelle Screenshots.
+- `_render_slip_image` in server.py komplett neu geschrieben (v6): premium dunkles "Ticket"-Design.
+  - Gradient-Bühne + Volt/Status-Glow, gerundetes Ticket mit Schatten, Volt-Oberkante, faintes Crest-Wasserzeichen.
+  - Gebündelte OFL-Fonts unter /app/backend/assets/fonts/ (Anton = Display/Quoten, BarlowCondensed = Titel/Status, Barlow = Body). Font-Fallback auf Liberation.
+  - Header: Crest + TIPJAR-Wortmarke + Tagline + Status-Pill (OFFEN/LIVE/GEWONNEN) mit Glow. Meta-Bar "PARLAY · N SPIELE" + optional Live-Score.
+  - Glassy Leg-Panels mit Status-Akzentleiste, Check-Badges, Volt-Quoten. Gruppen-Quote vertikal zentriert wenn 1 Quote für mehrere Märkte (HQ-System-Tips). ISO-Datum wird sauber formatiert (_clean auch auf time).
+  - Perforation/Tear-off zwischen Body und Footer. Footer: Avatar + @user + Label | GESAMTQUOTE (großes Volt) | Einsatz/Gewinn | QR-Code → tipjarglobal.com ("SCAN & MITSPIELEN") für Conversion.
+- Gilt für ALLE Slip-Verbraucher: /tips/{id}/share-image (RateWall Teilen), /wins/claim (Hall of Fame), Hintergrund-Tasks.
+- Neue Deps: qrcode==8.2 (in requirements.txt). Fonts im Repo → deployen automatisch.
+- Getestet: lokal (pending/won-Varianten) + live gegen /api/tips/{id}/share-image mit echtem HQ-System-Tip. Bilder sauber, keine Overlaps, QR scannbar.
+- Wirkt auf Produktion erst nach Deploy.
+- OFFEN (vom User verschoben): "Asiatisch Über 1.0 HZ" Grading (0=verloren, 1=Push/void, 2+=gewonnen) + Value-Banker-Generator (Tor in jeder HZ + Favorit trifft). Noch NICHT umgesetzt.
