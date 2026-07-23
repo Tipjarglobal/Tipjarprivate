@@ -932,3 +932,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Systems.jsx: parseKickoff/MONTHS_DE entfernt → nutzt formatKickoff; LegMeta jetzt deutliches Volt-Badge; system.selections nach Anstoß aufsteigend sortiert.
 - Verifiziert (Live-Preview, EN): Systems "Today 17:00…19:00…22:30" korrekt sortiert, 0 rohe ISO-Strings; Single-Game-Wand 12 Kickoff-Badges. Auf DE zeigt es "Heute/Morgen".
 - Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — "Auf Buchmacher spielen" 1-Klick-Schein (DONE + verifiziert)
+- User will nicht Spiel-für-Spiel suchen; wünscht Button der ganzen Parlay beim Buchmacher erzeugt. RECHERCHIERT: echtes Auto-Platzieren auf Wazamba unmöglich (keine öffentliche API; Lizenz/AGB). Deep-Link-Prefill nur für große Books (bet365/Betway/Stake/Unibet…), NICHT Wazamba.
+- Umgesetzt Variante a) (funktioniert mit JEDEM Buchmacher): neuer /app/frontend/src/playSlip.js → buildSlipText() (Kopf + nummerierte Legs "Spiel / Markt @Quote · Anstoß" + Einsatz/Gewinn + tipjarglobal.com) und playSlip() = SYNC copy (textarea+execCommand, VOR window.open wegen Fokus) → dann Wazamba (BOOKMAKER.url=https://www.wazamba.com) öffnen → Toast.
+- Button in RateWall TipCard (nur status pending/live) und Systems SystemCard; Volt-Button, Ticket-Icon, data-testid play-slip-{id} / play-system-{key}.
+- Neue i18n Keys play.btn/play.copied/play.manual/play.totalOdds/play.stake/play.win in allen 8 Sprachen.
+- Verifiziert Live-Preview: 9 System- + 31 Single-Buttons; Klick öffnet wazamba.com + Zwischenablage enthält vollständigen sortierten Schein; Success-Toast.
+- Backlog: echte Deeplink-Prefill via The Odds API/SharpAPI (kostenpflichtig) NUR wenn User zu unterstütztem Buchmacher wechselt.
+- Wirkt auf Produktion erst nach DEPLOY.

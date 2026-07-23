@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -9,6 +9,7 @@ import { QualifierBriefing } from "./QualifierBriefing";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
+import { playSlip } from "../playSlip";
 import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
@@ -953,6 +954,30 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             </div>
           )}
         </>
+      )}
+
+      {["pending", "live"].includes(tip.status) && (
+        <button
+          data-testid={`play-slip-${tip.id}`}
+          onClick={() => {
+            const legs = (tip.legs && tip.legs.length)
+              ? tip.legs.map((l) => ({
+                  match: toLatin(l.match) || `${displayTeam(tip.home_team, tip.home_team_latin)} vs ${displayTeam(tip.away_team, tip.away_team_latin)}`,
+                  market: (l.selections || []).map((s, si) => `${formatSelection(s, t)}${(l.sel_odds || [])[si] ? ` @${(l.sel_odds)[si]}` : ""}`).join(" + "),
+                  kickoff: l.kickoff,
+                }))
+              : [{
+                  match: `${displayTeam(tip.home_team, tip.home_team_latin) || ""} vs ${displayTeam(tip.away_team, tip.away_team_latin) || ""}`.trim(),
+                  market: formatSelection(tip.market, t),
+                  odds: tip.odds,
+                  kickoff: tip.match_time,
+                }];
+            playSlip(legs, { totalOdds: tip.odds, stake: tip.stake, winnings: tip.potential_return, title: tip.is_parlay ? t("wall.parlay") : "" }, t);
+          }}
+          className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl bg-volt text-void font-bold text-sm py-2.5 hover:brightness-110 active:scale-[0.99] transition-all"
+        >
+          <Ticket size={16} /> {t("play.btn")}
+        </button>
       )}
 
       {tip.ai_analysis && (
