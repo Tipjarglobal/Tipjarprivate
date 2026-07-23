@@ -873,3 +873,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - /admin/visits "members" nutzt jetzt REAL_MEMBER_QUERY (beide Vorkommen). Nicht-destruktiv — Bots bleiben in DB, zählen nur nicht in Insights.
 - Getestet Preview: members 78 → 18. Wirkt auf Produktion nach Deploy.
 - User-Entscheidung: NUR ausblenden, KEIN Löschen.
+
+## 2026-07-23 — Sprach-Erkennung + Push-Fixes (DONE + getestet)
+- i18n.js: detectInitialLang() erkennt navigator.language/languages beim ersten Besuch (kein tj_lang) und mappt auf 8 Sprachen (en/es/de/el/fr/it/ar/tr), sonst EN. Vorher: immer EN. Getestet: de-DE Browser → App startet deutsch.
+- NotificationBell.jsx: Self-Heal-useEffect on mount — falls Notification.permission==='granted', re-registriert die Subscription idempotent via enableWebPush (kein Prompt). Behebt "keine Pushes mehr" nach Deploy/DB-Wechsel/Endpoint-Rotation, wo Server-Sub verloren geht aber Browser noch "abonniert" denkt.
+- NEU Backend POST /api/push/test: sendet Test-Push an eigene Subscription (prunt bei 404/410). Frontend: "Test-Benachrichtigung senden"-Button (bell-test-push) im Bell-Panel wenn on. i18n bell.test/test_sent/test_fail in 8 Sprachen.
+- Wirkt auf Produktion erst nach Deploy.

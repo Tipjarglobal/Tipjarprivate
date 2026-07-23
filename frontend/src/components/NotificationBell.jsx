@@ -163,6 +163,24 @@ export default function NotificationBell() {
   }, [areas]);
 
   useEffect(() => {
+    // Self-heal: if the browser already has push permission, make sure the SERVER
+    // still holds our current subscription. It can silently vanish after a redeploy /
+    // DB change or when the browser rotates the endpoint — leaving the user with no
+    // pushes while the browser still thinks it's subscribed. Re-register idempotently
+    // on every load (no prompt, since permission is already granted).
+    (async () => {
+      try {
+        if (!supportsWebPush()) return;
+        if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+        const res = await enableWebPush(areasRef.current);
+        if (res && res.ok) setOn(true);
+      } catch { /* ignore */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  useEffect(() => {
     const openHandler = () => { setOpen(true); setUnseen(0); };
     window.addEventListener("tj-open-alerts", openHandler);
     const enabledHandler = () => setOn(true);  // synced when the prompt enables push
@@ -457,6 +475,27 @@ export default function NotificationBell() {
                 </label>
               )}
             </div>
+
+            {on && supportsWebPush() && (
+              <button
+                data-testid="bell-test-push"
+                onClick={async () => {
+                  try {
+                    const reg = await navigator.serviceWorker.ready;
+                    const sub = await reg.pushManager.getSubscription();
+                    if (!sub) { toast.error(t("bell.test_fail")); return; }
+                    const json = sub.toJSON();
+                    await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys, areas: areasRef.current });
+                    const { data } = await api.post("/push/test", { endpoint: json.endpoint, keys: json.keys });
+                    toast[data.ok ? "success" : "error"](data.ok ? t("bell.test_sent") : t("bell.test_fail"));
+                  } catch { toast.error(t("bell.test_fail")); }
+                }}
+                className="mt-3 w-full text-sm py-2 rounded-lg border border-bell/40 text-bell hover:bg-bell/10 transition-colors flex items-center justify-center gap-2"
+              >
+                <BellRing size={14} /> {t("bell.test")}
+              </button>
+            )}
+
 
             {on && <p className="text-[11px] text-bell mt-2">{t("bell.on")}</p>}
             {count > 0 && (

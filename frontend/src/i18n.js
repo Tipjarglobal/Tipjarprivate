@@ -224,6 +224,9 @@ const T = {
     "bell.watching": "watching the jar",
     "bell.on": "You're in! We'll ping you on every fresh tip.",
     "bell.subscribers": "people have alerts on",
+    "bell.test": "Send test notification",
+    "bell.test_sent": "Test notification sent!",
+    "bell.test_fail": "Couldn't send — enable notifications first",
     "bell.push_title": "🔥 High-rated tip dropped!",
     "bell.settings": "Alert settings",
     "bell.threshold": "Alert me from",
@@ -583,6 +586,9 @@ const T = {
     "bell.watching": "observando el tarro",
     "bell.on": "¡Estás dentro! Te avisaremos con cada nuevo pronóstico.",
     "bell.subscribers": "personas con alertas activas",
+    "bell.test": "Enviar notificación de prueba",
+    "bell.test_sent": "¡Notificación de prueba enviada!",
+    "bell.test_fail": "No se pudo enviar — activa las notificaciones primero",
     "bell.push_title": "🔥 ¡Nuevo pronóstico bien valorado!",
     "bell.settings": "Ajustes de alertas",
     "bell.threshold": "Avísame desde",
@@ -1600,6 +1606,9 @@ const T = {
     "bell.watching": "surveillent le bocal",
     "bell.on": "C'est bon ! On te prévient à chaque nouveau pronostic.",
     "bell.subscribers": "personnes ont activé les alertes",
+    "bell.test": "Envoyer une notification test",
+    "bell.test_sent": "Notification test envoyée !",
+    "bell.test_fail": "Échec de l'envoi — active d'abord les notifications",
     "bell.push_title": "🔥 Un pronostic bien noté vient de tomber !",
     "bell.settings": "Réglages des alertes",
     "bell.threshold": "M'alerter à partir de",
@@ -1901,6 +1910,9 @@ const T = {
     "bell.watching": "osservano il barattolo",
     "bell.on": "Ci sei! Ti avvisiamo a ogni nuovo pronostico.",
     "bell.subscribers": "persone hanno gli avvisi attivi",
+    "bell.test": "Invia notifica di prova",
+    "bell.test_sent": "Notifica di prova inviata!",
+    "bell.test_fail": "Invio non riuscito — attiva prima le notifiche",
     "bell.push_title": "🔥 È arrivato un pronostico molto votato!",
     "bell.settings": "Impostazioni avvisi",
     "bell.threshold": "Avvisami da",
@@ -2201,6 +2213,9 @@ const T = {
     "bell.watching": "يراقبون الجرة",
     "bell.on": "تم! سننبهك مع كل توقع جديد.",
     "bell.subscribers": "شخصاً فعّلوا التنبيهات",
+    "bell.test": "إرسال إشعار تجريبي",
+    "bell.test_sent": "تم إرسال الإشعار التجريبي!",
+    "bell.test_fail": "تعذّر الإرسال — فعّل الإشعارات أولاً",
     "bell.push_title": "🔥 نزل توقع بتقييم عالٍ!",
     "bell.settings": "إعدادات التنبيه",
     "bell.threshold": "نبّهني ابتداءً من",
@@ -2501,6 +2516,9 @@ const T = {
     "bell.watching": "kavanozu izliyor",
     "bell.on": "Katıldın! Her yeni tahmini sana bildireceğiz.",
     "bell.subscribers": "kişi uyarıları açtı",
+    "bell.test": "Test bildirimi gönder",
+    "bell.test_sent": "Test bildirimi gönderildi!",
+    "bell.test_fail": "Gönderilemedi — önce bildirimleri etkinleştir",
     "bell.push_title": "🔥 Yüksek puanlı bir tahmin düştü!",
     "bell.settings": "Uyarı ayarları",
     "bell.threshold": "Şuradan itibaren uyar",
@@ -2754,8 +2772,24 @@ const T = {
 
 const I18nContext = createContext(null);
 
+// Auto-detect the reader's language from the browser on first visit (no saved
+// choice yet). Maps navigator languages to our 8 supported codes; falls back to EN.
+const SUPPORTED_LANGS = ["en", "es", "de", "el", "fr", "it", "ar", "tr"];
+function detectInitialLang() {
+  try {
+    const saved = localStorage.getItem("tj_lang");
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    const cands = [navigator.language, ...(navigator.languages || [])].filter(Boolean);
+    for (const c of cands) {
+      const code = c.slice(0, 2).toLowerCase();
+      if (SUPPORTED_LANGS.includes(code)) return code;
+    }
+  } catch { /* ignore */ }
+  return "en";
+}
+
 export function I18nProvider({ children }) {
-  const [lang, setLangState] = useState(() => localStorage.getItem("tj_lang") || "en");
+  const [lang, setLangState] = useState(detectInitialLang);
   const applyDir = useCallback((l) => {
     const rtl = RTL_LANGS.includes(l);
     document.documentElement.dir = rtl ? "rtl" : "ltr";

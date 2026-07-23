@@ -2528,6 +2528,31 @@ async def push_unsubscribe(sub: PushSubIn):
     return {"ok": True}
 
 
+@api_router.post("/push/test")
+async def push_test(sub: PushSubIn):
+    """Send a single test Web Push to the caller's own subscription so a user can
+    verify that notifications actually arrive on their device."""
+    if not VAPID_PRIVATE_KEY:
+        return {"ok": False, "reason": "push not configured"}
+    s = await db.push_subscriptions.find_one({"endpoint": sub.endpoint}, {"_id": 0})
+    if not s:
+        return {"ok": False, "reason": "not-subscribed"}
+    payload = {"title": "TipJar 🔔", "body": "Test-Benachrichtigung — Push funktioniert!",
+               "url": "/", "area": "test"}
+    try:
+        await asyncio.to_thread(_send_web_push, s, payload)
+        return {"ok": True}
+    except WebPushException as exc:
+        code = getattr(getattr(exc, "response", None), "status_code", None)
+        if code in (404, 410):
+            await db.push_subscriptions.delete_one({"endpoint": sub.endpoint})
+            return {"ok": False, "reason": "expired"}
+        return {"ok": False, "reason": f"push-error-{code}"}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)[:100]}
+
+
+
 def _send_web_push(subscription: dict, payload: dict):
     webpush(
         subscription_info={"endpoint": subscription["endpoint"], "keys": subscription["keys"]},
