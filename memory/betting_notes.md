@@ -80,3 +80,17 @@ Für Ligen OHNE echte Buchmacher-Quoten (Armenien, Baltikum, Kirgistan, Kosovo, 
 - HT "Über 1.5 Tore": ~2.4-2.6 (ok)
 - Match "Unter 3.5": ~1.40 | "Unter 3": ~1.36
 Beispiel-Referenz-Combos: CFR Cluj Team Ü0.5 + Ü1.5 = 1.58 | Herediano Ü0.5+Ü1.5 = 1.37 | NE Rev II Ü2.5+BTTS = 1.81 | Liepaja Ü2.5+HT Ü1.5+BTTS = 3.80.
+
+## Neue Muster vom Owner (2026-07-23) — "lern von mir, sei offener, mehr Ideen"
+Der Owner will MEHR Vielfalt, nicht immer dieselben 3 Bausteine. Zwei konkrete neue Muster:
+
+1) SAFE-FAVOURITE "Braga"-Dreiereck (10★, sehr sicher): ein starker Favorit, der knapp & tor-arm gewinnt.
+   - Doppelte Chance 1X/X2  +  {Fav} Über 0,5 Tore  +  {Fav} Unter 3,5 Tore
+   - Logik: Favorit verliert nicht UND trifft 1–3 Tore. Ein 1:0/2:1 reicht; ein Kantersieg schadet nicht (unter 3,5 pro Team).
+   - Umgesetzt als opt "-favsafe" (rating 8.5). Neuer Grader-Kind team_u35 (team-spezifisches Unter).
+
+2) VALUE-BANKER "Austria-Wien": frühes Tor in offenen Spielen.
+   - Über 0,5 Tore 1. Halbzeit (asiatisches HT-Tor)  +  {Fav} Über 0,5 Tore
+   - Als "Value-Banker" gedacht (hohe Trefferquote, faire Quote). Umgesetzt als opt "-htvalue" (rating 8.0).
+
+GENERELLE ANWEISUNG: Bei der Tipp-Generierung offener/kreativer sein — verschiedene Markt-Kombis je nach Spielcharakter (tor-arm vs. offen), nicht stur dieselben Templates. Favoriten-Tipps immer absichern (DC statt reiner Sieg), Kantersieg-Risiko mit "Unter X,5 (Team)" abfedern.

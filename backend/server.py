@@ -3430,10 +3430,23 @@ def _grade_goal_leg(kind, market, team, fx):
             return ag >= line + 1
         if not team:
             return total >= line + 1
-    # full-time UNDER line, e.g. "Unter 3.5 Tore" (goals capped)
+    # full-time UNDER line, e.g. "Unter 3.5 Tore". If the market NAMES a team
+    # (e.g. "Braga Unter 3.5 Tore" → that team scores at most 3), grade that team.
     um = re.search(r"unter\s+(\d+)\.5", m)
-    if um and not team and "halbzeit" not in m and "hz" not in m:
-        return total <= int(um.group(1))
+    if um and "halbzeit" not in m and "hz" not in m:
+        line = int(um.group(1))
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            return hg <= line
+        if an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            return ag <= line
+        if k == "team_u35" and team:
+            if _teams_match(hn, team):
+                return hg <= line
+            if _teams_match(an, team):
+                return ag <= line
+        if not team:
+            return total <= line
     if k == "team_o05" or ("über 0.5" in m and team):
         if _teams_match(fx.get("home_name", ""), team):
             return hg >= 1
@@ -5613,6 +5626,26 @@ def _forebet_candidates(r: dict) -> list[dict]:
                     {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.28, "kind": dc_kind},
                 ],
             })
+        # (a1) SAFE-FAVOURITE "Braga" builder (owner 2026-07-23): a strong favourite that
+        # wins narrowly & low-scoring — doesn't lose AND scores 1–3 goals. Very safe → 10★.
+        #   Doppelte Chance 1X/X2  +  {Fav} Über 0.5 Tore  +  {Fav} Unter 3.5 Tore
+        if sc and fav_side:
+            _fg = ph if fav_side == "1" else pa
+            if 1 <= _fg <= 3:
+                fav_team = home if fav_side == "1" else away
+                dc_kind, dc_lbl = ("dc_1x", "1X") if fav_side == "1" else ("dc_x2", "X2")
+                opts.append({
+                    "sfx": "-favsafe", "combo": True, "rating": 8.5, "winprob": 0.66,
+                    "market": (f"Doppelte Chance {dc_lbl} + {fav_team} Über 0.5 Tore "
+                               f"+ {fav_team} Unter 3.5 Tore (3er-Bet-Builder)"),
+                    "legs": [
+                        {"market": f"Doppelte Chance {dc_lbl}", "base_odd": 1.30, "kind": dc_kind},
+                        {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
+                         "kind": "team_o05", "team": fav_team},
+                        {"market": f"{fav_team} Unter 3.5 Tore", "base_odd": 1.15,
+                         "kind": "team_u35", "team": fav_team},
+                    ],
+                })
         # (a2) HOT high-scoring "Anderlecht-style" builder (owner 2026-07-11): for open,
         # goal-heavy games → Über 1.5 Tore 1. Halbzeit + Beide Teams treffen + Über 2.5 Tore.
         # Higher odds/risk; every leg settles deterministically (ht_o15 / btts / o25).
@@ -5663,6 +5696,21 @@ def _forebet_candidates(r: dict) -> list[dict]:
                 "legs": [
                     {"market": "Über 0.5 Tore 1. Halbzeit", "base_odd": 1.55, "kind": "ht_o05"},
                     {"market": "Über 0.5 Tore 2. Halbzeit", "base_odd": 1.40, "kind": "sh_o05"},
+                ],
+            })
+        # (c2) VALUE-BANKER "Austria-Wien" builder (owner 2026-07-23): an early goal is very
+        # likely in open games → "Über 0.5 Tore 1. Halbzeit" (asian HT goal) anchored by the
+        # favourite also scoring. Both legs settle deterministically (ht_o05 / team_o05).
+        if sc and fav_side and (xg >= 2.6 or total >= 3):
+            fav_team = home if fav_side == "1" else away
+            opts.append({
+                "sfx": "-htvalue", "combo": True, "rating": 8.0, "winprob": 0.62,
+                "market": (f"Über 0.5 Tore 1. Halbzeit + {fav_team} Über 0.5 Tore "
+                           f"(Value-Bet-Builder)"),
+                "legs": [
+                    {"market": "Über 0.5 Tore 1. Halbzeit", "base_odd": 1.55, "kind": "ht_o05"},
+                    {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
+                     "kind": "team_o05", "team": fav_team},
                 ],
             })
         # ── Goal-line markets with REALISTIC, match-specific odds (owner fed real
