@@ -10,7 +10,7 @@ import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
-import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -864,8 +864,18 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       })()}
 
       {(() => {
+        const hasLiveState = tip.live_state || tip.live_minute != null || tip.live_score;
+        const mt = tip.match_time || (tip.legs || []).map((l) => l.kickoff).find(Boolean) || "";
         const ko = formatKickoff(tip.match_time, t)
           || (tip.legs || []).map((l) => formatKickoff(l.kickoff, t)).find(Boolean) || "";
+        const live = !hasLiveState && isKickoffLive(mt);
+        if (live) {
+          return (
+            <div data-testid={`tip-live-${tip.id}`} className="inline-flex items-center gap-1.5 mb-2 rounded-lg bg-[#F0443C]/15 border border-[#F0443C]/40 px-2.5 py-1 text-sm font-bold text-[#F0443C]">
+              <span className="w-2 h-2 rounded-full bg-[#F0443C] animate-pulse" /> {t("kickoff.live")}
+            </div>
+          );
+        }
         if (!ko) return null;
         return (
           <div data-testid={`tip-kickoff-${tip.id}`} className="inline-flex items-center gap-1.5 mb-2 rounded-lg bg-volt/10 border border-volt/30 px-2.5 py-1 text-sm font-bold text-volt">
@@ -900,7 +910,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                       <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
-                  {leg.kickoff && formatKickoff(leg.kickoff, t) && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>}
+                  {leg.kickoff && leg.status !== "live" && (isKickoffLive(leg.kickoff)
+                    ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F0443C] bg-[#F0443C]/10 border border-[#F0443C]/30 rounded px-1.5 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-[#F0443C] animate-pulse" />{t("kickoff.live")}</span>
+                    : formatKickoff(leg.kickoff, t) && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>)}
                 </div>
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}

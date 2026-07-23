@@ -2,17 +2,22 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange, Clock, Trophy, Ticket } from "lucide-react";
 import { OddsValue } from "./OddsValue";
-import { useI18n, localizeMarket, formatSelection, toLatin, formatKickoff, kickoffInfo } from "../i18n";
+import { useI18n, localizeMarket, formatSelection, toLatin, formatKickoff, kickoffInfo, isKickoffLive } from "../i18n";
 import api from "../api";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
 
 const LegMeta = ({ matchTime, league }) => {
   const { t } = useI18n();
   const ko = formatKickoff(matchTime, t);
-  if (!ko && !league) return null;
+  const live = isKickoffLive(matchTime);
+  if (!ko && !league && !live) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 mt-1.5">
-      {ko && (
+      {live ? (
+        <span className="inline-flex items-center gap-1 rounded-md bg-[#F0443C]/15 border border-[#F0443C]/40 px-2 py-0.5 text-[11px] font-bold text-[#F0443C]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F0443C] animate-pulse" />{t("kickoff.live")}
+        </span>
+      ) : ko && (
         <span className="inline-flex items-center gap-1 rounded-md bg-volt/10 border border-volt/30 px-2 py-0.5 text-[11px] font-bold text-volt">
           <Clock size={11} />{ko}
         </span>

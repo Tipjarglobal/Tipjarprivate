@@ -88,6 +88,16 @@ export function formatKickoff(mt, t) {
   return [dayLabel, info.time].filter(Boolean).join(" ");
 }
 
+// True while a match is (likely) IN PLAY: it kicked off 0..3h ago. Used to show a
+// "Läuft/Live" badge so a just-started game doesn't just vanish from the feed but is
+// clearly marked as live before it moves to "Abgerechnet" (owner 2026-07-24).
+export function isKickoffLive(mt) {
+  const info = kickoffInfo(mt);
+  if (info.ts == null) return false;
+  const elapsedH = (Date.now() - info.ts) / 3600000;
+  return elapsedH >= 0 && elapsedH <= 3;
+}
+
 // Earliest kickoff (ms) across a tip's match_time + legs — for ascending sort.
 // Tips without a resolvable kickoff sort last.
 export function kickoffTs(tip) {
@@ -620,6 +630,7 @@ const T = {
     "mkt.draw": "Draw (X)",
     "mkt.dc12": "Double Chance 12",
     "date.today": "Today",
+    "kickoff.live": "Live now",
     "play.btn": "Play on bookmaker",
     "play.overlayTitle": "Your parlay",
     "play.overlayHint": "Enter each game on the bookmaker and tick it off here — nothing gets missed.",
@@ -963,6 +974,7 @@ const T = {
     "mkt.draw": "Empate (X)",
     "mkt.dc12": "Doble oportunidad 12",
     "date.today": "Hoy",
+    "kickoff.live": "En vivo",
     "play.btn": "Jugar en la casa",
     "play.overlayTitle": "Tu combinada",
     "play.overlayHint": "Ingresa cada partido en la casa y márcalo aquí — no se te escapa ninguno.",
@@ -1387,6 +1399,7 @@ const T = {
     "mkt.draw": "Unentschieden (X)",
     "mkt.dc12": "Doppelte Chance 12",
     "date.today": "Heute",
+    "kickoff.live": "Läuft",
     "play.btn": "Auf Buchmacher spielen",
     "play.overlayTitle": "Dein Parlay",
     "play.overlayHint": "Tippe jedes Spiel beim Buchmacher ein und hak es hier ab — nichts wird vergessen.",
@@ -1728,6 +1741,7 @@ const T = {
     "mkt.draw": "Ισοπαλία (X)",
     "mkt.dc12": "Διπλή ευκαιρία 12",
     "date.today": "Σήμερα",
+    "kickoff.live": "Ζωντανά",
     "play.btn": "Παίξε στον πράκτορα",
     "play.overlayTitle": "Το παρολί σου",
     "play.overlayHint": "Πέρασε κάθε παιχνίδι στον πράκτορα και τσέκαρέ το εδώ — δεν ξεχνιέται κανένα.",
@@ -2061,6 +2075,7 @@ const T = {
     "mkt.draw": "Match nul (X)",
     "mkt.dc12": "Double chance 12",
     "date.today": "Aujourd'hui",
+    "kickoff.live": "En direct",
     "play.btn": "Jouer chez le bookmaker",
     "play.overlayTitle": "Ton combiné",
     "play.overlayHint": "Saisis chaque match chez le bookmaker et coche-le ici — rien n'est oublié.",
@@ -2394,6 +2409,7 @@ const T = {
     "mkt.draw": "Pareggio (X)",
     "mkt.dc12": "Doppia chance 12",
     "date.today": "Oggi",
+    "kickoff.live": "In corso",
     "play.btn": "Gioca sul bookmaker",
     "play.overlayTitle": "La tua multipla",
     "play.overlayHint": "Inserisci ogni partita sul bookmaker e spuntala qui — non ne salti nessuna.",
@@ -2726,6 +2742,7 @@ const T = {
     "mkt.draw": "تعادل (X)",
     "mkt.dc12": "فرصة مزدوجة 12",
     "date.today": "اليوم",
+    "kickoff.live": "مباشر",
     "play.btn": "العب لدى الوكيل",
     "play.overlayTitle": "المجمعة الخاصة بك",
     "play.overlayHint": "أدخل كل مباراة لدى الوكيل وضع علامة هنا — لن تفوتك أي مباراة.",
@@ -3058,6 +3075,7 @@ const T = {
     "mkt.draw": "Beraberlik (X)",
     "mkt.dc12": "Çifte şans 12",
     "date.today": "Bugün",
+    "kickoff.live": "Canlı",
     "play.btn": "Bahis sitesinde oyna",
     "play.overlayTitle": "Kuponun",
     "play.overlayHint": "Her maçı bahis sitesine gir ve burada işaretle — hiçbiri atlanmaz.",

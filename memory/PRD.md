@@ -996,3 +996,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Sofort-Reinigung: 29 beendete/zeitlose pending KI-Picks gelöscht (pending 55→21). AI-Feed window=24 zeigt jetzt nur noch 24.07.
 - Fix 3 (Briefing): _BRIEFING_SYSTEM neu → KEIN Intro/Floskeln, GENAU 1 Zeile pro Spiel mit dem EINEN wichtigsten Wett-Winkel, Spiele ohne Daten KOMPLETT weglassen, max 8 Zeilen, Cap 900 Zeichen. Verifiziert: 2 knackige Zeilen (nur echte Reise-Fakten), Rest weggelassen.
 - Wirkt auf tipjarglobal.com erst nach DEPLOY (+ App einmal neu laden wg. PWA-Cache).
+
+## 2026-07-24 — "Läuft/Live now"-Badge für angepfiffene Spiele (DONE + Screenshot-verifiziert)
+- Owner: angepfiffene Spiele sollen nicht einfach verschwinden, sondern kurz als "läuft gerade" markiert werden, bevor sie nach Abgerechnet wandern.
+- Helper isKickoffLive(mt) in i18n.js: true wenn Anpfiff 0–3h her (deckt sich mit Backend-Feldfilter hours>=-3, danach ausgeblendet).
+- Neuer i18n-Key kickoff.live in allen 8 Sprachen (DE "Läuft", EN "Live now", ...).
+- RateWall.jsx: Haupt-Kickoff-Badge zeigt rotes pulsierendes "Live now" statt gelber Zeit, wenn live & kein Backend-live_state (keine Doppelung). Leg-Badges ebenso (außer leg.status==='live'). Systems.jsx LegMeta analog.
+- Verifiziert per Screenshot (Test-Pick Anpfiff -1h): rotes "Live now" auf laufendem Spiel, gelbe Zeit auf zukünftigen. Test-Pick danach gelöscht. Frontend kompiliert sauber.
+- Wirkt auf tipjarglobal.com erst nach DEPLOY.
