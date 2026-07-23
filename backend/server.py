@@ -5351,6 +5351,76 @@ async def build_systems() -> dict:
         max(win_floor, fri_noon), next_tue_noon, "pepperwk",
         "Pfeffer-Kombi (Fr→Di 12:00)", f"läuft bis Di {next_tue_noon.strftime('%d.%m. %H:%M')}")
 
+    # 8) BOMBEN-KOMBI (owner 2026: großer täglicher 15er-Mega-Schein). 15 Legs aus den
+    #    nächsten 48h, gemischt aus HOCHWERT-Mustern, die sich ALLE deterministisch aus dem
+    #    ENDSTAND abrechnen lassen (kein LLM-Rätsel, keine Halbzeit-Lücke):
+    #      • "riecht nach X"  → Unentschieden (X)
+    #      • klarer Favoritensieg → {Favorit} -1.5/-2.5 Handicap
+    #      • Torfestival → Über 3.5 Tore (nur 0:0-sichere Spiele)
+    #    Fällt auf sichere Legs (Über 1.5 / Doppelte Chance) zurück, sodass IMMER 15
+    #    zusammenkommen. Wird täglich neu gebaut (snapshot per Tag eingefroren).
+    bomben_lo, bomben_hi = now_dt - timedelta(minutes=15), now_dt + timedelta(hours=48)
+    bomben_pool = sorted(
+        [(ko, p) for p in preds
+         if (ko := _parse_kickoff(p.get("kickoff"))) and bomben_lo <= ko <= bomben_hi],
+        key=lambda x: x[0])
+
+    def _bomben_pick(p):
+        fav, team = p.get("fav"), _fav_team(p)
+        ph, pa = p.get("ph"), p.get("pa")
+        total, fav_prob = p.get("total") or 0, p.get("fav_prob") or 0
+        over_safe = _zero_zero_assessment(p)["over_safe"] and not _bad_for_overs(p)
+        fg = _fav_goals(p)
+        og = (pa if fav == "home" else ph) or 0
+        margin = fg - og
+        if fav == "draw" or (ph is not None and pa is not None and ph == pa):
+            return ("Unentschieden (X)", 3.30, 6.0, "draw")
+        if team and fav_prob >= 60 and margin >= 3:
+            return (f"{team} -2.5 Handicap", 2.60, 7.0, "heavy")
+        if team and fav_prob >= 55 and margin >= 2:
+            return (f"{team} -1.5 Handicap", 1.90, 7.5, "heavy")
+        if over_safe and total >= 4:
+            return ("Über 3.5 Tore", 2.10, 7.0, "goals")
+        return None
+
+    def _bomben_filler(p):
+        team, fav_prob = _fav_team(p), p.get("fav_prob") or 0
+        total = p.get("total") or 0
+        over_safe = _zero_zero_assessment(p)["over_safe"] and not _bad_for_overs(p)
+        if over_safe and total >= 3:
+            return ("Über 1.5 Tore", 1.30, 8.0, "fill")
+        if team and fav_prob >= 50:
+            dc = "1X" if p.get("fav") == "home" else "X2"
+            return (f"{team} Doppelte Chance {dc}", round(_dc_odds(fav_prob), 2), 8.0, "fill")
+        if over_safe and total >= 2:
+            return ("Über 0.5 Tore", 1.08, 8.5, "fill")
+        return None
+
+    bomben_sels, used_bomb = [], set()
+    for _picker in (_bomben_pick, _bomben_filler):
+        for _ko, p in bomben_pool:
+            if len(bomben_sels) >= 15 or p["id"] in used_bomb:
+                continue
+            pick = _picker(p)
+            if not pick:
+                continue
+            mk, od, rt, tag = pick
+            used_bomb.add(p["id"])
+            s = _apply_real(_sel(p, mk, od, rt))
+            s["bomben_tag"] = tag
+            bomben_sels.append(s)
+        if len(bomben_sels) >= 15:
+            break
+
+    bomben = None
+    if len(bomben_sels) >= 8:
+        n_draw = sum(1 for s in bomben_sels if s.get("bomben_tag") == "draw")
+        n_heavy = sum(1 for s in bomben_sels if s.get("bomben_tag") == "heavy")
+        bomben = _finalize_system(
+            bomben_sels, 0, "bomben", "Bomben-Kombi des Tages",
+            f"{len(bomben_sels)} Legs aus 48h · {n_draw}× Value-X · {n_heavy}× klarer Sieg · "
+            f"Über 3.5 · der große Zocker-Wumms", "gamble")
+
     # Favoriten-Tracker: starke Favoriten (fav_prob>=60) sammeln → wächst zur ~50-Team-Liste,
     # Grundlage fürs Lernen aus Ergebnissen ("Mach dir Notizen aus Ergebnissen").
     try:
@@ -5387,6 +5457,9 @@ async def build_systems() -> dict:
     for _pw in (pepper_wknd, pepper_mid):
         if _pw:
             systems.insert(0, _pw)
+    # the daily 15-leg Bomben-Kombi sits at the very top (biggest ticket of the day)
+    if bomben:
+        systems.insert(0, bomben)
 
     # Time bucket per slip so the UI can split System Picks into
     # "Fängt jetzt an" / "Heute" / "Diese Woche". Every slip lands in EXACTLY one.

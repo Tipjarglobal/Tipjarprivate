@@ -971,3 +971,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Neuer i18n-Key submit.teamsMissing in allen 8 Sprachen. data-testid teams-missing-warning.
 - Ergänzt die Server-Regel (team-lose Tipps werden aus öffentlichen Feeds gefiltert) um klare User-Kommunikation.
 - Modal kompiliert/rendert verifiziert. Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — Bomben-Kombi (täglicher 15-Leg Mega-Parlay) (DONE + API-verifiziert)
+- Owner-Wunsch: EIN großer täglicher 15er-Schein aus Spielen der nächsten 48h, gemischt aus Value-Draws ("riecht nach X"), klaren Favoritensiegen und Über 3.5 Toren.
+- Implementiert in build_systems() (server.py ~5352): _bomben_pick (Value-X @3.30 / Favorit -1.5/-2.5 Handicap / Über 3.5) + _bomben_filler (Über 1.5 / Doppelte Chance / Über 0.5) → füllt IMMER bis 15 (min. 8 sonst weggelassen). Fenster jetzt→+48h, sortiert nach Anstoß.
+- WICHTIG: nur ENDSTAND-sicher gradebare Märkte gewählt (judge_market kennt nur Endstand, keine HZ-Daten) → HT-X/FT-1 & "beide HZ gewinnen" bewusst weggelassen, um Fehl-Abrechnung zu vermeiden. Alle Legs settlen zuverlässig via settle_multimatch_parlays.
+- key="bomben", steht ganz oben in System-Picks; snapshot_systems persistiert als hqsys-bomben-{day} → tägliche Auto-Abrechnung. i18n sys.title.bomben in allen 8 Sprachen. Subtitle dynamisch (Anzahl X/Siege).
+- Verifiziert: GET /api/systems → bomben mit 15 Legs, Gesamtquote ~3.98 Mio, bucket "now", 9× Value-X + 6× Über 3.5, keine "Unknown"-Teams. Syntax OK, Backend healthy.
+- Frontend rendert generisch (Systems.jsx) — Preview zeigte nur Emergent-Idle-Gate, kein App-Fehler. Wirkt auf Produktion erst nach DEPLOY.
