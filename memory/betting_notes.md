@@ -94,3 +94,13 @@ Der Owner will MEHR Vielfalt, nicht immer dieselben 3 Bausteine. Zwei konkrete n
    - Als "Value-Banker" gedacht (hohe Trefferquote, faire Quote). Umgesetzt als opt "-htvalue" (rating 8.0).
 
 GENERELLE ANWEISUNG: Bei der Tipp-Generierung offener/kreativer sein — verschiedene Markt-Kombis je nach Spielcharakter (tor-arm vs. offen), nicht stur dieselben Templates. Favoriten-Tipps immer absichern (DC statt reiner Sieg), Kantersieg-Risiko mit "Unter X,5 (Team)" abfedern.
+
+## Asiatisch Über 1.0 HZ (Asian Over 1.0 First Half) — Grading-Regel (2026-07-23)
+- 0 Tore in HZ1 → VERLOREN
+- genau 1 Tor in HZ1 → PUSH/VOID (Einsatz zurück) — GRADE_VOID Sentinel in _grade_goal_leg (kind: ht_asian_o1)
+- 2+ Tore in HZ1 → GEWONNEN
+- Im Parlay: void-Leg zählt als Quote 1.0 (Rest zählt normal); wenn ALLE Legs void → ganzer Schein void. Payout wird neu berechnet (Gesamtquote / Produkt der void-Quoten).
+
+## Value-Banker (Owner-Wunsch) — Generator (2026-07-23)
+- Muster: "Tor in jeder Halbzeit + {Favorit} Über 0.5 Tore (Value-Banker)" → kinds goal_each_half + team_o05. Nur offene torreiche Spiele (total>=3, xg>=2.8, Favorit trifft). Rating 8.0.
+- Asian-Variante: "{Favorit} Über 0.5 Tore + Über 1.0 Tore 1. Halbzeit (Asiatisch)" → team_o05 + ht_asian_o1 (HZ-Leg ist versichert: 1 Tor = Push statt Verlust). total>=3, xg>=3.0. Rating 7.5.

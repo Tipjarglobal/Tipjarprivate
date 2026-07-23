@@ -3579,10 +3579,14 @@ def _matches_between(team_id: int, after_dt, before_dt):
     return len(out), "; ".join(out)
 
 
+GRADE_VOID = "void"   # sentinel: leg is a PUSH (stake refunded) — never True/False/None
+
+
 def _grade_goal_leg(kind, market, team, fx):
     """Deterministically grade a single-match goal / half-time / corner leg from a
-    finished fixture. Returns True (won), False (lost) or None (kind can't be graded
-    → the caller must NOT settle, so a leg we don't understand never fakes a result)."""
+    finished fixture. Returns True (won), False (lost), GRADE_VOID (push/refund) or
+    None (kind can't be graded → the caller must NOT settle, so a leg we don't
+    understand never fakes a result)."""
     hg = fx.get("home_goals") or 0
     ag = fx.get("away_goals") or 0
     hth, hta = fx.get("ht_home"), fx.get("ht_away")
@@ -3593,6 +3597,20 @@ def _grade_goal_leg(kind, market, team, fx):
     sh_total = total - ht_total          # second-half goals
     m = (market or "").lower()
     k = (kind or "").lower()
+    # ── Asian "Über 1.0 Tore 1. Halbzeit" (Asiatisch): exactly 1 HT goal REFUNDS the
+    #    stake (push/void), 2+ wins, 0 loses. Owner rule 2026-07-23. ──
+    _asian_ht1 = k == "ht_asian_o1" or (
+        "1.0" in m
+        and ("halbzeit" in m or " hz" in m or "hälfte" in m or "first half" in m or "1st half" in m)
+        and ("asiat" in m or "asian" in m or "über 1.0" in m or "over 1.0" in m))
+    if _asian_ht1:
+        if not ht_known:
+            return None
+        if ht_total >= 2:
+            return True
+        if ht_total == 1:
+            return GRADE_VOID
+        return False
     # Corner (Ecken) Over/Under — settled from fixture statistics (fx['corners']).
     if k in ("corner_o", "corner_u") or "ecken" in m:
         ctot = fx.get("corners")
@@ -4029,6 +4047,7 @@ async def settle_hq_combos() -> dict:
                 await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
                 continue
         all_won, any_lost, ungradeable = True, False, False
+        void_count, void_factor = 0, 1.0
         for lg in combo_legs:
             lg.setdefault("home", home)
             lg.setdefault("away", away)
@@ -4038,6 +4057,16 @@ async def settle_hq_combos() -> dict:
             if res is None:
                 ungradeable = True   # e.g. missing half-time data for an obscure league
                 all_won = False
+                continue
+            if res == GRADE_VOID:
+                # PUSH: this leg's stake is refunded → its odds count as 1.0 and it can
+                # neither win nor lose the slip (owner: Asian Über 1.0 HZ, exactly 1 goal).
+                void_count += 1
+                try:
+                    void_factor *= float(lg.get("odds") or 1) or 1.0
+                except Exception:
+                    pass
+                lg["status"] = "void"
                 continue
             if not res:
                 any_lost = True
@@ -4050,13 +4079,32 @@ async def settle_hq_combos() -> dict:
         elif ungradeable:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
+        elif void_count and void_count == len(combo_legs):
+            new_status = "void"          # every leg pushed → whole slip refunded
         else:
             new_status = "won"
-        await db.tips.update_one({"id": tip["id"]}, {"$set": {
+        upd = {
             "status": new_status,
             "final_home": hg, "final_away": ag,
             "settled_by": "auto", "settled_at": datetime.now(timezone.utc).isoformat(),
-        }})
+        }
+        # If some (not all) legs pushed on a WON slip, divide the voided odds out of the
+        # total so the payout reflects the refunded legs (their odds become 1.0).
+        if new_status == "won" and void_count and void_factor > 1.0:
+            try:
+                eff = round(float(tip.get("odds") or 0) / void_factor, 2)
+                if eff >= 1.0:
+                    upd["odds"] = f"{eff:.2f}"
+                    upd["combo_legs"] = combo_legs
+                    try:
+                        st = float(re.sub(r"[^0-9.]", "", str(tip.get("stake") or "").replace(",", ".")) or 0)
+                    except Exception:
+                        st = 0
+                    if st:
+                        upd["potential_return"] = f"{round(st * eff, 2):.2f} €"
+            except Exception:
+                pass
+        await db.tips.update_one({"id": tip["id"]}, {"$set": upd})
         settled += 1
         await _record_league_hit(tip.get("league_code"))
     return {"ok": True, "settled": settled, "quota_exhausted": _api_quota_exhausted()}
@@ -4098,7 +4146,8 @@ async def purge_settled_tips() -> int:
 
 def _grade_ht_selection(selection, ht_h, ht_a):
     """Grade a FIRST-HALF goals market from the half-time score.
-    Returns 'won' / 'lost' / 'open' (HT market but no HT data yet) / None (not a HT market)."""
+    Returns 'won' / 'lost' / 'void' (Asian Über 1.0 HZ push) / 'open' (HT market but no
+    HT data yet) / None (not a HT market)."""
     s = (selection or "").lower()
     is_ht = any(k in s for k in (
         "1. halbzeit", "erste halbzeit", "1.halbzeit", "1. hz", "erste hz",
@@ -4108,6 +4157,13 @@ def _grade_ht_selection(selection, ht_h, ht_a):
     if ht_h is None or ht_a is None:
         return "open"
     total = (ht_h or 0) + (ht_a or 0)
+    # Asian "Über 1.0" first half: exactly 1 HT goal = push/refund, 2+ = won, 0 = lost.
+    if ("1.0" in s) and ("asiat" in s or "asian" in s or "über 1.0" in s or "over 1.0" in s):
+        if total >= 2:
+            return "won"
+        if total == 1:
+            return "void"
+        return "lost"
     m = re.search(r"(\d)[.,]5", s)
     line = (int(m.group(1)) + 0.5) if m else 0.5
     if "unter" in s or "under" in s:
@@ -5864,6 +5920,43 @@ def _forebet_candidates(r: dict) -> list[dict]:
                     {"market": "Beide Teams treffen 2. Halbzeit", "base_odd": 2.50, "kind": "btts_sh"},
                 ],
             })
+        # (a4) VALUE-BANKER (owner 2026-07-23): "Tor in jeder Halbzeit + {Favourite} trifft".
+        # The smart safe combo for open, goal-carrying games — needs a goal in BOTH halves
+        # plus the favourite to score at least once. Both legs settle deterministically
+        # (goal_each_half + team_o05). Lives as a high-rated value pick.
+        if sc and fav_side and total >= 3 and xg >= 2.8:
+            fav_team = home if fav_side == "1" else away
+            _fg = ph if fav_side == "1" else pa
+            if _fg >= 1:
+                opts.append({
+                    "sfx": "-valuebanker", "combo": True, "rating": 8.0, "winprob": 0.58,
+                    "market": (f"Tor in jeder Halbzeit + {fav_team} Über 0.5 Tore "
+                               f"(Value-Banker)"),
+                    "legs": [
+                        {"market": "Tor in jeder Halbzeit", "base_odd": 1.55, "kind": "goal_each_half"},
+                        {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
+                         "kind": "team_o05", "team": fav_team},
+                    ],
+                })
+        # (a5) ASIAN VALUE-BANKER (owner 2026-07-23): "{Favourite} trifft + Über 1.0 Tore
+        # 1. Halbzeit (Asiatisch)". The Asian HT leg is INSURED — exactly 1 first-half goal
+        # refunds that leg (push) instead of losing, so a cagey first half doesn't kill the
+        # slip. Only for open games with a decent first-half goal expectation.
+        if sc and fav_side and total >= 3 and xg >= 3.0:
+            fav_team = home if fav_side == "1" else away
+            _fg = ph if fav_side == "1" else pa
+            if _fg >= 1:
+                opts.append({
+                    "sfx": "-asianbanker", "combo": True, "rating": 7.5, "winprob": 0.50,
+                    "market": (f"{fav_team} Über 0.5 Tore + Über 1.0 Tore 1. Halbzeit "
+                               f"(Asiatisch) (Value-Banker)"),
+                    "legs": [
+                        {"market": f"{fav_team} Über 0.5 Tore", "base_odd": 1.10,
+                         "kind": "team_o05", "team": fav_team},
+                        {"market": "Über 1.0 Tore 1. Halbzeit (Asiatisch)", "base_odd": 1.70,
+                         "kind": "ht_asian_o1"},
+                    ],
+                })
         # (b) Über 2.5 Tore + Doppelte Chance 12 (high-scoring game, draw unlikely)
         if sc and total >= 4 and len(probs) >= 3 and (probs[0] + probs[2]) >= 60:
             opts.append({

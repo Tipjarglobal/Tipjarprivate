@@ -140,6 +140,8 @@ export function localizeMarket(market, t) {
   // ── extended German market wording (halves, asian lines, builders, DC/handicap,
   //    generic over/under goals) so NOTHING stays German after a language switch ──
   m = m.replace(/3er-?Bet-?Builder/gi, t("mkt.bb3"));
+  m = m.replace(/(\d+)er-?Bet-?Builder/gi, (_, n) => `${n}× ${t("mkt.bb")}`);
+  m = m.replace(/Value-?Banker/gi, t("mkt.valuebanker"));
   m = m.replace(/Risk-?Bet-?Builder/gi, t("mkt.bbrisk"));
   m = m.replace(/Mega-?Bet-?Builder/gi, t("mkt.bbmega"));
   m = m.replace(/Bet-?Builder/gi, t("mkt.bb"));
@@ -618,6 +620,7 @@ const T = {
     "mkt.dc12": "Double Chance 12",
     "date.today": "Today",
     "play.btn": "Play on bookmaker",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "Slip copied! Bookmaker opened — just tick the markets.",
     "play.manual": "Couldn't copy automatically — copy the slip manually.",
     "play.totalOdds": "Total odds",
@@ -953,6 +956,7 @@ const T = {
     "mkt.dc12": "Doble oportunidad 12",
     "date.today": "Hoy",
     "play.btn": "Jugar en la casa",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "¡Boleto copiado! Casa abierta — solo marca los mercados.",
     "play.manual": "No se pudo copiar — copia el boleto manualmente.",
     "play.totalOdds": "Cuota total",
@@ -1369,6 +1373,7 @@ const T = {
     "mkt.dc12": "Doppelte Chance 12",
     "date.today": "Heute",
     "play.btn": "Auf Buchmacher spielen",
+    "mkt.valuebanker": "Value-Banker",
     "play.copied": "Wettschein kopiert! Buchmacher geöffnet — nur noch Märkte antippen.",
     "play.manual": "Konnte nicht automatisch kopieren — bitte Schein manuell kopieren.",
     "play.totalOdds": "Gesamtquote",
@@ -1702,6 +1707,7 @@ const T = {
     "mkt.dc12": "Διπλή ευκαιρία 12",
     "date.today": "Σήμερα",
     "play.btn": "Παίξε στον πράκτορα",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "Το δελτίο αντιγράφηκε! Άνοιξε ο πράκτορας — απλώς επίλεξε τα σημεία.",
     "play.manual": "Αδυναμία αντιγραφής — αντίγραψε το δελτίο χειροκίνητα.",
     "play.totalOdds": "Συνολική απόδοση",
@@ -2027,6 +2033,7 @@ const T = {
     "mkt.dc12": "Double chance 12",
     "date.today": "Aujourd'hui",
     "play.btn": "Jouer chez le bookmaker",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "Coupon copié ! Bookmaker ouvert — coche juste les marchés.",
     "play.manual": "Copie impossible — copie le coupon manuellement.",
     "play.totalOdds": "Cote totale",
@@ -2352,6 +2359,7 @@ const T = {
     "mkt.dc12": "Doppia chance 12",
     "date.today": "Oggi",
     "play.btn": "Gioca sul bookmaker",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "Schedina copiata! Bookmaker aperto — seleziona i mercati.",
     "play.manual": "Copia non riuscita — copia la schedina manualmente.",
     "play.totalOdds": "Quota totale",
@@ -2676,6 +2684,7 @@ const T = {
     "mkt.dc12": "فرصة مزدوجة 12",
     "date.today": "اليوم",
     "play.btn": "العب لدى الوكيل",
+    "mkt.valuebanker": "فاليو بانكر",
     "play.copied": "تم نسخ القسيمة! فُتح الموقع — فقط حدد الأسواق.",
     "play.manual": "تعذّر النسخ — انسخ القسيمة يدويًا.",
     "play.totalOdds": "إجمالي الأودز",
@@ -3000,6 +3009,7 @@ const T = {
     "mkt.dc12": "Çifte şans 12",
     "date.today": "Bugün",
     "play.btn": "Bahis sitesinde oyna",
+    "mkt.valuebanker": "Value Banker",
     "play.copied": "Kupon kopyalandı! Bahis sitesi açıldı — sadece seçimleri işaretle.",
     "play.manual": "Otomatik kopyalanamadı — kuponu elle kopyala.",
     "play.totalOdds": "Toplam oran",

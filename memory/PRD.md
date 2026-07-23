@@ -941,3 +941,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Verifiziert Live-Preview: 9 System- + 31 Single-Buttons; Klick öffnet wazamba.com + Zwischenablage enthält vollständigen sortierten Schein; Success-Toast.
 - Backlog: echte Deeplink-Prefill via The Odds API/SharpAPI (kostenpflichtig) NUR wenn User zu unterstütztem Buchmacher wechselt.
 - Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — Asian Über 1.0 HZ Grading + Value-Banker Generator (DONE + getestet)
+- GRADE_VOID Sentinel: _grade_goal_leg gibt bei "Asiatisch Über 1.0 HZ" (kind ht_asian_o1 / Text-Erkennung) zurück: 0 HZ-Tore=False, 1=GRADE_VOID(Push), 2+=True, unbekannt=None. Auch _grade_ht_selection (Community/Parlay-Pfad) gibt "void".
+- settle_hq_combos: void-Legs werden herausgerechnet (Quote→1.0, void_factor), all-void→status "void", sonst "won" mit neu berechneter Quote + potential_return. void+lost bleibt lost.
+- Generator (Forebet-basiert): (a4) "Tor in jeder Halbzeit + {Fav} Über 0.5 Tore (Value-Banker)" [goal_each_half+team_o05, total>=3,xg>=2.8, Fav trifft, 8.0★]; (a5) Asian "{Fav} Über 0.5 + Über 1.0 HZ (Asiatisch) (Value-Banker)" [team_o05+ht_asian_o1, xg>=3.0, 7.5★].
+- Lokalisierung: neue Keys mkt.valuebanker (8 Sprachen) + generischer "Ner-Bet-Builder"→"n× Bet Builder". Markt-Labels lokalisieren sauber (DE/EN geprüft).
+- Verifiziert: Grader-Unit-Tests (0/1/2/unknown), HT-Selection-Pfad, Payout-Simulation (won+void→Quote/Payout korrekt, all-void→void, void+lost→lost), Backend healthy, settle-now ohne Crash.
+- Wirkt auf Produktion erst nach DEPLOY.
