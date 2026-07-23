@@ -812,6 +812,19 @@ def _clean_placeholder(s) -> str:
     return "" if v.lower() in _PLACEHOLDER_TEAMS else v
 
 
+def _tip_has_known_teams(tip: dict) -> bool:
+    """True if we know the actual teams (tip-level or in any leg). A member slip whose
+    teams the AI couldn't read ('Unknown') must NEVER go public (owner 2026-07-23)."""
+    if _clean_placeholder(tip.get("home_team")) or _clean_placeholder(tip.get("away_team")):
+        return True
+    for lg in (tip.get("legs") or []):
+        m = str(lg.get("match", "") or "")
+        parts = re.split(r"\s(?:vs\.?|[–—-])\s", m, maxsplit=1)
+        if any(_clean_placeholder(p) for p in parts):
+            return True
+    return False
+
+
 def _sanitize_legs(legs) -> list:
     out = []
     if isinstance(legs, list):
@@ -1522,6 +1535,9 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     if source == "ai" and sort not in ("top", "hype"):
         far = datetime.max.replace(tzinfo=timezone.utc)
         tips.sort(key=lambda t: _kickoff_dt(t.get("match_time")) or far)
+    # Never surface a team-less ('Unknown') slip publicly — the poster is asked to fill
+    # the teams first; until then it stays out of every feed (owner rule 2026-07-23).
+    tips = [t for t in tips if _tip_has_known_teams(t)]
     return await _tag_expert(tips[:limit])
 
 

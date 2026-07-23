@@ -958,3 +958,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Neue i18n-Keys play.overlayTitle/overlayHint/open/allDone/copyBtn in allen 8 Sprachen.
 - Verifiziert Live-Preview: Overlay öffnet, 11 Legs sortiert nach Anstoß, Häkchen + 11/11 + Done-Banner, "Open bookmaker" öffnet wazamba.com, Auto-Copy-Toast. Kompiliert fehlerfrei.
 - Wirkt auf Produktion erst nach DEPLOY.
+
+## 2026-07-23 — "Kein Unknown posten" Regel (DONE + verifiziert)
+- Problem: Mitglied "Swag Winners" postete Tipp mit Team "Unknown" (Live-Screenshot ohne lesbare Teams) → öffentlich sichtbar.
+- Fix: neuer Helper _tip_has_known_teams(tip) (prüft home/away + legs.match gegen _clean_placeholder). list_tips (GET /tips) filtert team-lose Tipps aus ALLEN öffentlichen Feeds raus → deckt Altbestand + neue ab.
+- Poster wird weiter per needs_clarification nach Teams gefragt; /tips/mine bleibt ungefiltert (er sieht/klärt seinen eigenen). Nach Team-Eintrag wird Tipp öffentlich.
+- Verifiziert: Unit (empty/Unknown/leg-Unknown → hidden; echte Teams → shown) + Live-curl (source=members: teamless raus, ok drin). Backend healthy.
+- Wirkt auf Produktion erst nach DEPLOY.
