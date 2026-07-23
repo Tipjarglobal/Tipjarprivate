@@ -76,9 +76,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     const chosen = incoming.slice(0, room);
     if (!chosen.length) { toast.error("Maximal 4 Bilder."); return; }
     const optimized = await Promise.all(chosen.map((f) => compressImage(f)));
-    setFiles((f) => [...f, ...optimized].slice(0, 4));
+    const merged = [...files, ...optimized].slice(0, 4);
+    setFiles(merged);
     setPreviews((p) => [...p, ...optimized.map((f) => URL.createObjectURL(f))].slice(0, 4));
     setDetected(null);
+    // Pre-upload + analyse IMMEDIATELY in the background so publishing is instant.
+    scan(merged, text);
   };
   const removeAt = (i) => {
     setFiles((f) => f.filter((_, x) => x !== i));
@@ -86,18 +89,22 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     setDetected(null);
   };
 
-  const scan = async () => {
-    if (!user) { requireLogin(); return; }
-    if (!files.length && !text.trim()) { toast.error("Add a screenshot or write your tip."); return; }
+  const scan = async (fileList, textVal) => {
+    const fs = fileList || files;
+    const tx = textVal !== undefined ? textVal : text;
+    if (!user) { requireLogin(); return null; }
+    if (!fs.length && !tx.trim()) { toast.error("Add a screenshot or write your tip."); return null; }
     setScanning(true);
     try {
       const fd = new FormData();
-      files.forEach((f) => fd.append("files", f));
-      fd.append("text", text);
+      fs.forEach((f) => fd.append("files", f));
+      fd.append("text", tx);
       const { data } = await api.post("/tips/analyze", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setDetected(data);
+      return data;
     } catch (err) {
       toast.error(apiErr(err));
+      return null;
     } finally {
       setScanning(false);
     }
@@ -106,18 +113,24 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   const publish = async () => {
     if (!user) { requireLogin(); return; }
     if (!selfStars) { toast.error(t("submit.needStars")); return; }
+    if (scanning) { toast.message(t("submit.analyzing")); return; }
     setPublishing(true);
     try {
+      let d = detected;
+      if (!d) {
+        d = await scan();
+        if (!d) { setPublishing(false); return; }
+      }
       const { data } = await api.post("/tips", {
         raw_text: text,
-        image_path: detected.image_path,
-        image_paths: detected.image_paths,
-        home_team: detected.home_team, away_team: detected.away_team,
-        match_time: detected.match_time, country: detected.country,
-        league: detected.league, market: detected.market, odds: detected.odds,
-        ai_rating: detected.rating, ai_analysis: detected.analysis,
-        legs: detected.legs, is_parlay: detected.is_parlay,
-        stake: detected.stake, potential_return: detected.potential_return,
+        image_path: d.image_path,
+        image_paths: d.image_paths,
+        home_team: d.home_team, away_team: d.away_team,
+        match_time: d.match_time, country: d.country,
+        league: d.league, market: d.market, odds: d.odds,
+        ai_rating: d.rating, ai_analysis: d.analysis,
+        legs: d.legs, is_parlay: d.is_parlay,
+        stake: d.stake, potential_return: d.potential_return,
         self_rating: selfStars,
         timing,
       });
@@ -214,9 +227,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
           </div>
         </div>
       ) : (
-        <div>
-          {!detected && (
-            <>
+        <div className="space-y-4">
               <div
                 data-testid="upload-dropzone"
                 onClick={() => inputRef.current?.click()}
@@ -266,11 +277,11 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 <textarea data-testid="tip-text" className={inputCls + " resize-none h-20"} placeholder={t("submit.textPh")} value={text} onChange={(e) => setText(e.target.value)} />
               </Field>
 
-              <button data-testid="scan-button" onClick={scan} disabled={scanning} className={btnPrimary + " flex items-center justify-center gap-2"}>
-                <Sparkles size={18} /> {scanning ? t("submit.analyzing") : t("submit.analyze")}
-              </button>
-            </>
-          )}
+              {scanning && !detected && (
+                <div data-testid="analyzing-inline" className="flex items-center justify-center gap-2 rounded-xl border border-volt/30 bg-volt/5 py-3 text-sm font-semibold text-volt">
+                  <Sparkles size={16} className="animate-pulse" /> {t("submit.analyzing")}
+                </div>
+              )}
 
           {detected && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} data-testid="detected-panel">
@@ -323,15 +334,17 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                   <div className="rounded-lg bg-surface px-3 py-2 text-sm text-zinc-300 border-l-2 border-volt">{detected.analysis}</div>
                 )}
               </div>
+            </motion.div>
+          )}
 
-              <div className="mt-4 rounded-xl border border-volt/30 bg-volt/5 p-4" data-testid="self-rating-block">
+          <div className="rounded-xl border border-volt/30 bg-volt/5 p-4" data-testid="self-rating-block">
                 <p className="text-sm font-bold text-white">{t("submit.rateTitle")}</p>
                 <p className="text-xs text-zinc-400 mb-3">{t("submit.rateHint")}</p>
                 <StarRating value={selfStars} onRate={setSelfStars} size={26} />
                 {!selfStars && <p className="text-[11px] text-lost mt-2" data-testid="stars-required">{t("submit.needStars")}</p>}
               </div>
 
-              <div className="mt-4" data-testid="timing-block">
+              <div data-testid="timing-block">
                 <p className="text-sm font-bold text-white mb-2">{t("submit.timing")}</p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -353,16 +366,16 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-4">
-                <button data-testid="rescan-button" onClick={() => setDetected(null)} className="flex items-center justify-center gap-1.5 rounded-lg border border-elevated px-4 py-3 text-sm font-semibold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
-                  <RefreshCw size={15} />
-                </button>
-                <button data-testid="publish-button" onClick={publish} disabled={publishing || !selfStars} className={btnPrimary + (!selfStars ? " opacity-50 cursor-not-allowed" : "")}>
-                  {publishing ? t("common.loading") : t("submit.publish")}
+              <div className="flex gap-3">
+                {detected && (
+                  <button data-testid="rescan-button" onClick={() => setDetected(null)} className="flex items-center justify-center gap-1.5 rounded-lg border border-elevated px-4 py-3 text-sm font-semibold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
+                    <RefreshCw size={15} />
+                  </button>
+                )}
+                <button data-testid="publish-button" onClick={publish} disabled={publishing || scanning || !selfStars} className={btnPrimary + ((!selfStars || scanning) ? " opacity-50 cursor-not-allowed" : "")}>
+                  {publishing ? t("common.loading") : (scanning ? t("submit.analyzing") : t("submit.publish"))}
                 </button>
               </div>
-            </motion.div>
-          )}
         </div>
       )}
       </>

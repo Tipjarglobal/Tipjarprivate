@@ -797,6 +797,21 @@ AI_SYSTEM = (
 )
 
 
+_PLACEHOLDER_TEAMS = {
+    "", "unknown", "unknown team", "unknown teams", "unbekannt", "n/a", "na", "n.a.",
+    "tbd", "tba", "?", "-", "—", "–", "none", "null", "keine angabe", "not visible",
+    "nicht sichtbar", "team a", "team b", "home", "away", "heim", "auswärts",
+}
+
+
+def _clean_placeholder(s) -> str:
+    """Turn AI placeholder values ('Unknown', 'N/A', 'TBD', 'Team A' …) into '' so a
+    slip whose teams weren't readable never shows 'Unknown' — it triggers the (minimal)
+    clarify flow instead so the poster fills the real teams in."""
+    v = str(s or "").strip()
+    return "" if v.lower() in _PLACEHOLDER_TEAMS else v
+
+
 def _sanitize_legs(legs) -> list:
     out = []
     if isinstance(legs, list):
@@ -804,8 +819,13 @@ def _sanitize_legs(legs) -> list:
             if isinstance(lg, dict):
                 sels = lg.get("selections") or []
                 sodds = lg.get("sel_odds") or []
+                match = str(lg.get("match", "") or "")
+                # strip a match that's just a placeholder ("Unknown", "Team A vs Team B" …)
+                parts = re.split(r"\s(?:vs\.?|[–—-])\s", match, maxsplit=1)
+                if parts and all(not _clean_placeholder(p) for p in parts):
+                    match = ""
                 out.append({
-                    "match": str(lg.get("match", "") or ""),
+                    "match": match,
                     "league": str(lg.get("league", "") or ""),
                     "kickoff": str(lg.get("kickoff", "") or ""),
                     "selections": [str(s) for s in sels if s][:10],
@@ -835,6 +855,8 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
             f"User's written tip: {text or '(none)'}\n\n"
             "Analyse the attached bet slip screenshot (if any) together with the written tip. "
             "Extract the teams, kickoff, country, league, market and odds, then rate the bet 1-10. "
+            "IMPORTANT: for ANY field you cannot clearly read, return an EMPTY string \"\" — "
+            "NEVER write 'Unknown', 'N/A', 'TBD', 'Team A', '?' or any placeholder. "
             "Respond with strict JSON only."
         )
         kwargs = {"text": prompt}
@@ -855,8 +877,8 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         rating = float(data.get("rating", 5) or 5)
         rating = max(1.0, min(10.0, rating))
         return {
-            "home_team": str(data.get("home_team", "") or ""),
-            "away_team": str(data.get("away_team", "") or ""),
+            "home_team": _clean_placeholder(data.get("home_team")),
+            "away_team": _clean_placeholder(data.get("away_team")),
             "match_time": str(data.get("match_time", "") or ""),
             "country": str(data.get("country", "") or ""),
             "league": str(data.get("league", "") or ""),
@@ -1214,34 +1236,24 @@ def _looks_live_now(match_time: str, legs, now) -> bool:
 
 
 async def _slip_needs_clarification(tip: dict) -> list:
-    """Which fields the AI couldn't confidently resolve (teams / league / datetime).
-    Used to ask the member a friendly follow-up instead of rejecting the slip."""
+    """Which fields the member MUST fill in — kept deliberately minimal (owner 2026-07-23:
+    'don't show the team-names window unless totally necessary'). We ONLY ask when the AI
+    couldn't even read the team names off the slip. If both team names are present we accept
+    the slip silently and let the background enrichment/settlement resolve league/kickoff
+    (robust datescan fallbacks already handle minor leagues that API-Football can't verify)."""
     need = []
     home, away = _tip_match_teams(tip)
-    teams_ok = False
-    if home and away and API_FOOTBALL_KEY:
-        try:
-            tid = await resolve_team_id(home)
-            if tid:
-                meta = await asyncio.to_thread(find_upcoming_fixture, tid, away)
-                if not meta:
-                    live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
-                    meta = _find_live_fixture(live, home, away)
-                teams_ok = bool(meta)
-        except Exception:
-            teams_ok = False
-    elif home and away and not API_FOOTBALL_KEY:
-        teams_ok = True  # can't verify without a key → don't nag
-    if not (home and away) or not teams_ok:
+    if not (home and away):
         need.append("teams")
-    league = (tip.get("league") or "").strip()
-    leg_leagues = any((l.get("league") or "").strip() for l in (tip.get("legs") or []))
-    if not league and not leg_leagues:
-        need.append("league")
-    mt = (tip.get("match_time") or "").strip()
-    leg_ko = any((l.get("kickoff") or "").strip() for l in (tip.get("legs") or []))
-    if (not mt or mt == "Multibet") and not leg_ko:
-        need.append("datetime")
+        # Only for a truly unreadable slip do we also ask for league/kickoff context.
+        league = (tip.get("league") or "").strip()
+        leg_leagues = any((l.get("league") or "").strip() for l in (tip.get("legs") or []))
+        if not league and not leg_leagues:
+            need.append("league")
+        mt = (tip.get("match_time") or "").strip()
+        leg_ko = any((l.get("kickoff") or "").strip() for l in (tip.get("legs") or []))
+        if (not mt or mt == "Multibet") and not leg_ko:
+            need.append("datetime")
     return need
 
 
@@ -2753,30 +2765,52 @@ def _tip_push_area(tip: dict) -> str:
     return "ai" if src == "hq-auto" else ("smart" if src == "smart" else "members")
 
 
+def _push_stars(tip: dict) -> int:
+    """Best star rating for a push (1-10): AI win-prob for KI picks, else the highest
+    of the AI/self/crowd ratings for member picks. 0 = unknown (hide)."""
+    cand = []
+    try:
+        wp = tip.get("win_prob")
+        if wp:
+            cand.append(float(wp) * 10)
+    except Exception:
+        pass
+    for k in ("ai_rating", "self_rating", "avg_rating"):
+        try:
+            v = tip.get(k)
+            if v:
+                cand.append(float(v))
+        except Exception:
+            pass
+    s = max(cand) if cand else 0
+    return max(1, min(10, round(s))) if s else 0
+
+
 def _push_payload_for_tip(tip: dict) -> dict:
     """Build a game/market-detailed push. Live picks get the blue LIVE styling.
     High-impact picks get a punchier title + a richer sound the foreground app
-    plays: 10★ → coin+explosion ('explosion'), 9★ → coin+fire ('fire')."""
+    plays: 10★ → coin+explosion ('explosion'), 9★ → coin+fire ('fire').
+    Member picks carry the poster's @username + their star rating on the pop."""
     home, away = tip.get("home_team") or "", tip.get("away_team") or ""
     match = f"{home} vs {away}" if away else (home or "TipJar")
     market = tip.get("market") or ""
     odds = tip.get("odds")
     detail = f"{match} — {market}" + (f" @ {odds}" if odds else "")
-    # Stars mirror the frontend rule: round(win_prob*10), capped 1-10.
-    try:
-        stars = max(1, min(10, round(float(tip.get("win_prob") or 0) * 10)))
-    except Exception:
-        stars = 0
+    stars = _push_stars(tip)
     sound = "explosion" if stars >= 10 else ("fire" if stars == 9 else "coin")
     is_live = tip.get("status") == "live" or tip.get("source") == "hq-live"
     pid = tip.get("id")
     src = tip.get("source")
     area = _tip_push_area(tip)
+    uname = (tip.get("username") or "").strip()
+    community = src not in ("hq-auto", "hq-live", "hq-system", "smart")
+    star_txt = f"⭐ {stars}/10 · " if stars else ""
     if is_live:
         # Owner (2026-07-10): live in-play bets are never "impossible to lose" — cap at
         # 7★ and never fire the 9/10★ explosion sound. Each live class gets its OWN look
         # so Banker / Value / Banger alerts are instantly distinguishable.
         stars = min(stars, 7)
+        star_txt = f"⭐ {stars}/10 · " if stars else ""
         cat = (tip.get("category") or "").lower()
         if cat == "banger":
             l_title, l_icon, l_sound = "🔥 BANGER LIVE", "/push-live.png", "fire"
@@ -2790,10 +2824,12 @@ def _push_payload_for_tip(tip: dict) -> dict:
         else:
             l_title, l_icon, l_sound = "🔴 LIVE-Pick", "/push-live.png", "coin"
             l_vibrate = [80, 40, 80, 40, 120]
-        return {"title": l_title, "body": detail, "url": f"/?pick={pid}&area=live",
+        if community and uname:
+            l_title = f"{l_title} · @{uname}"
+        return {"title": l_title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area=live",
                 "kind": "live", "sound": l_sound, "pick_id": pid, "area": area,
                 "vibrate": l_vibrate,
-                "actions": [{"action": "open", "title": "Zum Pick →"}],
+                "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
     if src == "hq-auto":
@@ -2806,16 +2842,17 @@ def _push_payload_for_tip(tip: dict) -> dict:
             title = f"⚽ Neuer {label}"
     elif src == "smart":
         title = "🧠 Neuer Smart-Pick"
+    elif community and uname:
+        title = f"👥 @{uname}"
     else:
         title = "👥 Neuer Community-Tipp"
     # Fixed tag so a burst of queued pushes COLLAPSES into one visible notification
     # (newest wins) instead of stacking → no endless-swipe. Community picks use their OWN
     # tag so a member post never overwrites/merges with a KI pick (owner: distinct alert).
-    community = src not in ("hq-auto", "smart", "hq-system")
     tag = "tipjar-community" if community else "tipjar-pick"
-    return {"title": title, "body": detail, "url": f"/?pick={pid}&area={area}", "kind": "tip",
+    return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}", "kind": "tip",
             "sound": sound, "pick_id": pid, "area": area,
-            "actions": [{"action": "open", "title": "Zum Pick →"}],
+            "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
             "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": tag}
 
 

@@ -914,3 +914,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Live getestet (EN, View AI System): "Over 1.5 Goals 1st Half / BTTS / Over 2.5 Goals" — 0 deutsche Reste.
 - Wirkt auf Produktion erst nach Deploy.
 - HINWEIS Notification-"Zum-Pick"-Knopf: Code intakt in allen 3 Pfaden (Service-Worker push actions "Zum Pick →" + notificationclick-Navigation; foreground pushNotify actions; In-App-Sonner-Toast action mit bell.view_pick). Wurde kürzlich HINZUGEFÜGT (commit 3bc1bc7), nicht entfernt. Vermutlich Produktion veraltet → Deploy nötig. Beim User rückbestätigen (Preview vs. Prod).
+
+## 2026-07-23 — Push-Pop + Einreich-Flow + "Unknown"-Teams (DONE + getestet)
+- Push-Nachricht (_push_payload_for_tip): jetzt mit (1) @Username des Posters (Community-Picks: Titel "👥 @Maxi" / Live "🔴 LIVE-Pick · @SwagWagner"), (2) Sterne-Rating im Body ("⭐ 7/10 · …"), (3) Navigations-Button "Zum Pick ansehen →" + Klick öffnet /?pick={id} (Service-Worker + notificationclick). Neuer Helper _push_stars() (win_prob für KI, sonst max ai/self/avg-Rating). Unit-getestet.
+- SubmitTipModal komplett auf EIN Frame reduziert (kein zweites Fenster mehr): Dropzone + Text + Sterne + Timing (Live/Heute/Später) + Publish alle sofort sichtbar. Screenshot-verifiziert.
+- Auto-Upload: pick() triggert scan() SOFORT beim Bild-Auswählen (Vor-Upload+Analyse im Hintergrund) → Publish ist instant. publish() nutzt lokales `d` und scannt notfalls selbst.
+- Team-Namen-Fenster (_slip_needs_clarification) minimiert: erscheint NUR wenn Teams wirklich fehlen (API-Football-Vorabprüfung entfernt, die bei Minor-Ligen fälschlich nervte). Curl-verifiziert: Teams da → keine Nachfrage; Teams leer → ['teams','league'].
+- "Unknown"-Teams-Fix: LLM gab "Unknown" wenn Teams auf Live-Screenshot nicht lesbar. Jetzt: (a) Prompt zwingt "" statt Platzhalter, (b) _clean_placeholder() normalisiert Unknown/N/A/TBD/Team A/? → "" (in analyze_tip + _sanitize_legs), (c) leere Teams → Clarify-Flow fragt nach. Preview-DB hatte 0 Unknown (das Beispiel war PRODUKTION).
+- "Settle everything" via /api/admin/settle-now ausgeführt: nichts Fälliges offen (39 live in progress).
+- Alles wirkt auf Produktion erst nach DEPLOY.
