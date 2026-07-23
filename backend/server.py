@@ -1420,6 +1420,15 @@ async def _bump_rating_streak(user: dict, now: datetime) -> int:
     return streak
 
 
+# Real (human) members only: excludes admin, automated test/bot accounts (@t.com
+# emails, created by tests/E2E) and the internal HQ posting account. Used for the
+# "registered members" analytics so the count reflects actual people, not seeds/bots.
+REAL_MEMBER_QUERY = {
+    "role": {"$ne": "admin"},
+    "$nor": [{"email": {"$regex": r"@t\.com$"}}, {"email": "hq@tipjar.com"}],
+}
+
+
 async def purge_demo_tips() -> int:
     """Delete tips (and their ratings) submitted by test-bot accounts (emails on the @t.com domain)."""
     testers = await db.users.find({"email": {"$regex": r"@t\.com$"}}, {"id": 1, "_id": 0}).to_list(1000)
@@ -2294,7 +2303,7 @@ async def unsubscribe(inp: SubscribeInput):
 
 @api_router.get("/stats")
 async def community_stats():
-    members = await db.users.count_documents({"role": {"$ne": "admin"}})
+    members = await db.users.count_documents(REAL_MEMBER_QUERY)
     subs = await db.subscribers.count_documents({})
     tips = await db.tips.count_documents({})
     return {"members": members + _member_boost(), "goal": 1000, "subscribers": subs + _sub_boost(), "total_tips": tips}
@@ -2384,7 +2393,7 @@ async def admin_visits(admin: dict = Depends(require_admin)):
     total_hits = total_row["total_hits"]
     today_row = next((x for x in daily if x["day"] == today), {"unique": 0, "hits": 0})
     week = daily[-7:]
-    members = await db.users.count_documents({"role": {"$ne": "admin"}})
+    members = await db.users.count_documents(REAL_MEMBER_QUERY)
     subs = await db.subscribers.count_documents({})
     # Split unique visitors into logged-in members (identity "u:") vs anonymous ("d:").
     is_member = {"$eq": [{"$substrCP": ["$_id", 0, 2]}, "u:"]}
