@@ -867,3 +867,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Neue i18n-Keys in ALLEN 8 Sprachen: wall.parlay/game/games/odds/stake/payout + mkt.sot/shots/scorer/fouls/card/saves/fouled/getcard.
 - Getestet: Screenshot Griechisch — Smart-Picks-Parlay zeigt "ΠΑΡΟΛΙ · 1 ΑΓΩΝΑΣ", "Σουτ στην εστία", "Κερδισμένα φάουλ", "Αποκρούσεις", "Απόδοση/Ποντάρισμα/Κέρδος".
 - BEWUSST NICHT gefixt (User-Entscheidung "Άστα ετσι"): LLM-generierte ai_analysis / Qualifier-Briefing bleiben in Generierungssprache (DE/EN), da einmalig gespeichert.
+
+## 2026-07-23 — Insights: Bot-/Testkonten ausblenden (DONE + getestet)
+- REAL_MEMBER_QUERY (server.py ~L1423): schließt admin, @t.com Testkonten und hq@tipjar.com aus.
+- /admin/visits "members" nutzt jetzt REAL_MEMBER_QUERY (beide Vorkommen). Nicht-destruktiv — Bots bleiben in DB, zählen nur nicht in Insights.
+- Getestet Preview: members 78 → 18. Wirkt auf Produktion nach Deploy.
+- User-Entscheidung: NUR ausblenden, KEIN Löschen.
