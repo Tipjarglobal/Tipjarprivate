@@ -987,3 +987,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Fix 3 (Mischung): Obergrenzen goals<=6, draw<=6 → kein 14×-Über-3.5-Klumpen mehr; Filler bevorzugt Favoriten-DC.
 - Verifiziert Live-API: 15 Legs, 0 abgelaufen, Mix 6× Value-X + 6× Über 3.5 + 3× Favorit, Quote ~327k. Stale Snapshot gelöscht → baut neu.
 - VERDACHT für die produktions-seitig gezeigten alten Spiele: PWA/HTTP-Cache oder älterer Build vor Deploy. Live-Preview-Build ist sauber. Wirkt auf tipjarglobal.com erst nach DEPLOY.
+
+## 2026-07-24 — Reinigung alter Picks (auto) + Smart Briefing kürzen (DONE + verifiziert)
+- Owner: "Lösche alle Picks vom 23; die Reinigung sollte automatisch laufen" + "Smart Briefing labert, sag nur Sinnvolles kurz & knackig oder lass es weg".
+- ROOT CAUSE (23.-Spiele sichtbar): _in_kickoff_window filterte nur hours<24 → schloss VERGANGENE Spiele (negative Stunden) mit ein. Zusätzlich 25 KI-Picks OHNE match_time, die nie abliefen. Grace=30h ist bewusst >24h (API-Quota-Ausfall).
+- Fix 1 (Display): _in_kickoff_window blendet Picks aus, deren Anpfiff >3h her ist (hours<-3 → False). Beendete/laufende Spiele verschwinden sofort aus KI-/Upcoming-Feeds.
+- Fix 2 (Auto-Cleanup): expire_stale_pending löscht jetzt auch ZEITLOSE KI-Picks (kein Anpfiff) nach created_at-Grace → läuft automatisch im settlement_loop, keine Dauerleichen mehr.
+- Sofort-Reinigung: 29 beendete/zeitlose pending KI-Picks gelöscht (pending 55→21). AI-Feed window=24 zeigt jetzt nur noch 24.07.
+- Fix 3 (Briefing): _BRIEFING_SYSTEM neu → KEIN Intro/Floskeln, GENAU 1 Zeile pro Spiel mit dem EINEN wichtigsten Wett-Winkel, Spiele ohne Daten KOMPLETT weglassen, max 8 Zeilen, Cap 900 Zeichen. Verifiziert: 2 knackige Zeilen (nur echte Reise-Fakten), Rest weggelassen.
+- Wirkt auf tipjarglobal.com erst nach DEPLOY (+ App einmal neu laden wg. PWA-Cache).

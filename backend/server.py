@@ -1546,6 +1546,11 @@ def _in_kickoff_window(match_time: str, window: str, now) -> bool:
     if not ko:
         return True  # no parseable time → always show, never hide a tip
     hours = (ko - now).total_seconds() / 3600
+    # Owner rule 2026-07-24: NEVER show a pick whose match already kicked off >3h ago
+    # (it's finished / in-play, not a placeable "upcoming" pick) — this is what caused
+    # yesterday's played games to keep showing in the KI feed.
+    if hours < -3:
+        return False
     if window == "24":
         return hours < 24
     if window == "48":
@@ -4405,7 +4410,7 @@ async def expire_stale_pending() -> dict:
     cutoff = now - timedelta(hours=EXPIRE_GRACE_HOURS)
     docs = await db.tips.find(
         {"status": {"$in": ["pending", "live"]}},
-        {"_id": 0, "id": 1, "source": 1, "match_time": 1, "legs": 1,
+        {"_id": 0, "id": 1, "source": 1, "match_time": 1, "legs": 1, "created_at": 1,
          "home_team": 1, "away_team": 1, "league": 1, "league_code": 1}).to_list(5000)
     ai_ids, member_ids, affected = [], [], []
     league_hits = {}
@@ -4414,7 +4419,22 @@ async def expire_stale_pending() -> dict:
         legs = d.get("legs") or []
         kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
         latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
-        if not latest or latest >= cutoff:
+        is_ai = d.get("source") in ai_src
+        if latest is None:
+            # Undateable pick (no kickoff on the tip or its legs). AI picks must NEVER
+            # linger forever (owner 2026-07-24: 25 timeless KI picks stuck 'pending') →
+            # expire them by CREATION age. Member picks are left alone (they may be live).
+            if not is_ai:
+                continue
+            try:
+                created = datetime.fromisoformat((d.get("created_at") or "").replace("Z", "+00:00"))
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+            except Exception:
+                created = None
+            if not created or created >= cutoff:
+                continue
+        elif latest >= cutoff:
             continue
         (ai_ids if d.get("source") in ai_src else member_ids).append(d["id"])
         match = f"{d.get('home_team', '?')} – {d.get('away_team', '?')}"
@@ -7580,14 +7600,14 @@ async def _team_league_context(team_id: int, team_name: str, qko: datetime) -> d
 
 
 _BRIEFING_SYSTEM = (
-    "Du bist der Chef-Analyst von TipJar. Schreibe ein kompaktes, spannendes deutsches "
-    "Briefing über die Europapokal-Qualifikationsspiele dieser Woche. Sprich den Leser "
-    "direkt an, sei meinungsstark aber seriös. Struktur: (1) ein kurzer Intro-Absatz (2-3 Sätze) "
-    "über die Quali-Woche allgemein. (2) Pro Spiel 2-4 Sätze: nenne beide Teams, welche "
-    "LIGA-Spiele sie davor/danach haben, wie sie im letzten Ligaspiel gespielt haben (Ergebnis, "
-    "Schüsse = Offensivdruck), ob ein enger Terminplan Rotationsrisiko bedeutet, ob das nächste "
-    "Ligaspiel wichtig ist und ob eine weite/auswärtige Reise ansteht. Wenn Daten fehlen, sag es "
-    "ehrlich statt zu erfinden. KEINE erfundenen Zahlen. Nutze klare Absätze, höchstens dezent Emojis."
+    "Du bist der Chef-Analyst von TipJar. Schreibe ein ULTRA-KURZES deutsches Briefing zu den "
+    "Europapokal-Quali-Spielen dieser Woche. REGELN: KEIN Intro, KEINE Floskeln, KEIN Gelaber. "
+    "NUR konkrete, wett-relevante Fakten. Pro Spiel GENAU EINE Zeile im Format: "
+    "'⚽ Heim – Auswärts: <der eine wichtigste Fakt/Tipp-Winkel>.' Der Winkel muss ETWAS aussagen — "
+    "z.B. Rotationsrisiko wegen engem Ligaspiel in X Tagen, starke/schwache Form aus dem letzten "
+    "Ligaspiel (Ergebnis nennen), oder weite Auswärtsreise. Wenn zu einem Spiel KEINE verwertbaren "
+    "Daten da sind, LASS DIE ZEILE KOMPLETT WEG (lieber weniger Zeilen als leeres Gelaber). "
+    "KEINE erfundenen Zahlen. Maximal 8 Zeilen insgesamt. Keine Überschriften, keine Zusammenfassung."
 )
 
 
@@ -7675,7 +7695,7 @@ async def _build_qualifier_briefing_inner() -> dict:
                            system_message=_BRIEFING_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_MODEL)
             resp = await chat.send_message(UserMessage(
                 text=f"Daten der Qualifikationswoche:\n\n{data_block}\n\nSchreibe das Briefing."))
-            narrative = (resp if isinstance(resp, str) else str(resp)).strip()[:4000]
+            narrative = (resp if isinstance(resp, str) else str(resp)).strip()[:900]
         except Exception as e:
             logger.error(f"briefing LLM failed: {e}")
 
