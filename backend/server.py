@@ -593,6 +593,114 @@ async def scorers_today():
     return {"count": len(out), "scorers": out[:60], "generated_at": now.isoformat()}
 
 
+async def _team_last_scored(team_name, allow_api=True):
+    """Goals the team scored in its most recent FINISHED match. Cached 12h by team NAME so we
+    never touch the API (resolve_team_id/fixtures) unless allowed AND the cache is stale.
+    Returns (scored:int|None, api_used:bool, api_ok:bool)."""
+    if not team_name:
+        return None, False, True
+    now = datetime.now(timezone.utc)
+    doc = await db.team_form_cache.find_one({"team": team_name}, {"_id": 0})
+    if doc:
+        try:
+            fresh = (now - datetime.fromisoformat(doc["checked_at"])).total_seconds() < 12 * 3600
+        except Exception:
+            fresh = False
+        if fresh:
+            return doc.get("scored_last"), False, True
+    if not allow_api:
+        return (doc.get("scored_last") if doc else None), False, True
+    tid = await resolve_team_id(team_name)
+    if not tid:
+        return (doc.get("scored_last") if doc else None), True, True
+    fx = await _apifootball_async("/fixtures", {"team": tid, "last": 3}) or []
+    if not fx:
+        return (doc.get("scored_last") if doc else None), True, False
+    scored = None
+    for m in fx:
+        st = ((m.get("fixture") or {}).get("status") or {}).get("short")
+        if st not in ("FT", "AET", "PEN"):
+            continue
+        teams, goals = m.get("teams") or {}, m.get("goals") or {}
+        if (teams.get("home") or {}).get("id") == tid:
+            scored = goals.get("home")
+        elif (teams.get("away") or {}).get("id") == tid:
+            scored = goals.get("away")
+        if scored is not None:
+            break
+    if scored is not None:
+        await db.team_form_cache.update_one(
+            {"team": team_name},
+            {"$set": {"team_id": tid, "team": team_name, "scored_last": int(scored),
+                      "checked_at": now.isoformat()}}, upsert=True)
+    return scored, True, True
+
+
+@api_router.get("/goal-thirst")
+async def goal_thirst():
+    """"Dursty for goals" — teams that did NOT score in their last match (90' scoreless) and
+    play again within 7 days. Owner idea: a side like Pogon can't stay scoreless for 180' — so
+    we back it to score in the next game. Drought = last finished match with 0 goals (API-Football,
+    cached 12h). Opponent 'victim' quality comes from the stored predictions (quota-free)."""
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({"status": "pending"}, {"_id": 0}).to_list(2000)
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
+    preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
+    cands, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if ko is None or not (now - timedelta(hours=2) <= ko <= now + timedelta(days=7)):
+            continue
+        home, away = p.get("home"), p.get("away")
+        ph, pa = p.get("ph"), p.get("pa")
+        if not home or not away or ph is None or pa is None:
+            continue
+        league = p.get("league") or ""
+        btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        try:
+            conf_val = int(float(str(p.get("conf"))))
+        except Exception:
+            conf_val = None
+        for team, pg, opp, opp_conc in ((home, ph, away, pa), (away, pa, home, ph)):
+            if team in seen:
+                continue
+            if not (pg >= 1 or btts):
+                continue  # only teams our model expects to score → credible "will score"
+            seen.add(team)
+            c = 84 if pg >= 2 else (76 if pg >= 1 else 58)
+            if btts:
+                c += 6
+            if over25:
+                c += 3
+            if conf_val:
+                c = int(0.6 * c + 0.4 * min(conf_val, 95))
+            c = max(40, min(96, c))
+            cands.append({"team": team, "opponent": opp, "kickoff": ko.isoformat(),
+                          "league": league, "predicted": f"{ph}-{pa}",
+                          "opp_concede": opp_conc, "btts": btts, "over25": over25,
+                          "confidence": c})
+    cands.sort(key=lambda x: (x["kickoff"] or "z", -x["confidence"]))
+    cands = cands[:200]
+    out, budget, allow_api = [], 12, True
+    for cand in cands:
+        if len(out) >= 40:
+            break
+        scored, used, ok = await _team_last_scored(cand["team"], allow_api and budget > 0)
+        if used:
+            budget -= 1
+        if not ok:
+            allow_api = False
+        if scored is None or scored != 0:
+            continue  # unknown or scored last match → no 90' drought
+        opp_lvl = "high" if cand["opp_concede"] >= 2 else ("mid" if cand["opp_concede"] >= 1 else "low")
+        out.append({**cand, "last_scored": scored, "opp_level": opp_lvl})
+    out.sort(key=lambda x: (-x["confidence"], x["kickoff"] or "z"))
+    return {"count": len(out), "teams": out[:40], "generated_at": now.isoformat()}
+
+
+
 @api_router.get("/goals-forecast")
 async def goals_forecast():
     """Tor-Prognose-Tabelle — zeigt pro Spiel, wie viele Tore JEDES Team laut

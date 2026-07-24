@@ -13,7 +13,7 @@ import Header from "./components/Header";
 import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
-import ScorerRadar from "./components/ScorerRadar";
+import StatisticsView from "./components/StatisticsView";
 import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
@@ -391,7 +391,7 @@ function Home() {
           </div>
           <DisclaimerBar />
           {tipsView === "scorers" ? (
-            <ScorerRadar />
+            <StatisticsView />
           ) : (
             <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onUserClick={openProfile} />
           )}
