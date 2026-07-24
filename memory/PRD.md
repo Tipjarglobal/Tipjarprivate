@@ -1147,3 +1147,10 @@ Behaviour-preserving extraction to reduce server.py bloat. server.py: 9320 → 7
 - **Verified**: admin run returned {"posted":13,"scanned":13}; 13 docs present in match_predictions (source=footballpred) with correct fav/over25/btts. Backend starts clean, pyflakes 0 undefined.
 - **NOT added (with reasons)**: `scores24.live` → behind Cloudflare active bot-challenge; headless Playwright gets the challenge page (0 matches) → not reliably scrapable from our infra; listing data also low-signal (only % or moneyline, no score/over/btts). `sportsmole.co.uk` → listing has only fixtures + kickoff + competition, NO predicted score/probabilities (predictions live inside each article) → no betting signal for our schema.
 - Backlog: if scores24 is truly wanted, needs a Cloudflare-bypassing scraping proxy (paid) or per-match detail crawling.
+
+---
+## 2026-07-24 (cont.) — background_tasks.py extraction (optional cleanup)
+- Added `background_tasks.py` (342 L): self-contained Web-Push engine (_send_web_push, notify_all_push, _tip_push_area, _push_stars, _push_payload_for_tip, _digest_payload_for_tips, push_watch_loop) + thin orchestrator loops (system_reset_loop, _refresh_leadership, _leadership_loop, smart_loop, live_loop, member_live_loop).
+- KEPT in server.py (referenced by endpoints/other modules): the engines the loops drive — smart_autopost, live_autopost, snapshot_systems, _berlin_now, _system_cycle_day, _is_leader — imported into background_tasks via the same circular pattern. server.py imports loop entrypoints (+_send_web_push for /push/test) near bottom.
+- **Verified**: backend starts clean with all loops created at startup; pyflakes 0 undefined; endpoints OK — push/vapid-public-key 200, notifications/stats 200, admin/live-run works, admin/settle-now systems_snapshot=9.
+- **server.py now 7021 lines (from 9320 at session start, ~25% smaller).** Modules: core.py(142), scrapers_autopost.py(~1200), settlement.py(994), background_tasks.py(342).
