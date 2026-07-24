@@ -4628,6 +4628,23 @@ def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
     return False
 
 
+# Owner-flagged football nations whose leagues are obscure / uncoverable — block ALL their
+# competitions at once (2026-07-24: Kyrgyzstan & Uzbekistan, after the owner flagged Bars,
+# OshMU, Aldier, Olimpik-Mobiuz, Qiziriq, BuxTu, Pakhator …). This blocks the whole LEAGUE,
+# not just the team names. Matched on the readable country OR the 2-letter Forebet code
+# prefix (e.g. 'kg1', 'uz1'). Legit top flights (e.g. Russia PL) are NOT listed here.
+COUNTRY_BLACKLIST = ("kyrgyzstan", "uzbekistan")
+COUNTRY_CODE_BLACKLIST = ("kg", "uz")
+
+
+def _country_blocked(country: str = "", code: str = "") -> bool:
+    c = (country or "").strip().lower()
+    if c and any(b in c for b in COUNTRY_BLACKLIST):
+        return True
+    cc = (code or "").strip().lower()
+    return len(cc) >= 2 and cc[:2] in COUNTRY_CODE_BLACKLIST
+
+
 # ---------------------------------------------------------------------------
 # System-Schein whitelist: the weekly system bet must ONLY bundle matches that
 # mainstream bookmakers actually offer. We use a strict WHITELIST (not blacklist).
@@ -4971,6 +4988,8 @@ def _pred_whitelisted(p: dict) -> bool:
         return False
     if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league")):
         return False
+    if _country_blocked(p.get("country"), p.get("league_code")):
+        return False
     league = (p.get("league") or "").lower()
     if any(b in f" {league} " for b in SLIP_BLOCK_KEYWORDS):
         return False
@@ -4983,6 +5002,8 @@ async def store_match_prediction(source, matchid, home, away, kickoff, ph, pa, f
                                  fav_prob, btts, over25, conf, league="",
                                  league_code="", country=""):
     if not home or not away:
+        return
+    if _country_blocked(country, league_code) or _team_or_league_blocked(home, away, league):
         return
     total = (ph + pa) if (ph is not None and pa is not None) else None
     pid = f"mp-{source[0]}-{matchid}"

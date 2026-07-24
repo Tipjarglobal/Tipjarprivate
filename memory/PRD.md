@@ -1031,3 +1031,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Goulburn Valley Suns–Springvale, Ozgon–Ilbirs, Deportivo Maldonado–Juventud geflaggt.
 - Keywords ergänzt: goulburn, springvale, ozgon, ilbirs, maldonado (Juventud weggelassen — zu allgemein; maldonado deckt das Spiel ab).
 - 4 Prognosen bereinigt. Verifiziert: /api/systems clean. Wirkt produktiv nach Deploy.
+
+## 2026-07-24 — Blacklist auf LIGA-Ebene (Länder-Block) statt nur Namen
+- Owner-Klarstellung: nicht nur Teamnamen, sondern deren LIGEN sperren.
+- Daten-Analyse: geflaggte Teams stammen aus Kirgistan Premier League (Bars, OshMU, Aldier, Neftchi, Asiagoal, Ozgon, Ilbirs) & Usbekistan Pro League A/Super League/Superliga (BuxTu, Pakhator, Olimpik-Mobiuz, Qiziriq). Rutschten durch, weil Whitelist breite Keywords hat ("premier league"/"super league"/"pro league").
+- NEU: COUNTRY_BLACKLIST=(kyrgyzstan,uzbekistan) + COUNTRY_CODE_BLACKLIST=(kg,uz), Helper _country_blocked(country,code). Eingehängt in store_match_prediction (blockt Ingestion) + _pred_whitelisted (Systems/Prognose-Anzeige). Blockt ganze Ligen dieser Länder.
+- CSKA Moskau vs Baltika = Russland Premier League (legitime Topliga) → NICHT komplett gesperrt, nur das eine Spiel via MATCH_BLACKLIST. Racing–Reyadi Abaseya (Ägypten, nicht in aktuellen Daten) via Team-Keyword abgedeckt.
+- 19 KG/UZ-Prognosen bereinigt. Verifiziert: /api/systems clean, 0 KG/UZ preds. Wirkt produktiv nach Deploy (Read-Filter sofort + Ingestion-Block).
