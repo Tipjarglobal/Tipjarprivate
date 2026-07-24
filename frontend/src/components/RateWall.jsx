@@ -10,7 +10,7 @@ import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
-import { useI18n, localizeMarket, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -26,12 +26,12 @@ const LIVE_CATS = [
   ["banger", "Banger", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
   ["community", "Community", "bg-blue-500 text-white border-blue-500", "text-blue-300 border-blue-500/40"],
 ];
-const LIVE_CAT_INFO = {
-  all: ["Live-Picks", "Alle Live-Tipps der KI in 3 Klassen: Banker (sicher), Value (schönere Quoten ab 1,60) und Banger (die smarten Recovery-/Asian-Wetten). Tippe auf eine Klasse, um zu filtern."],
-  banker: ["Banker", "Sichere Live-Wetten mit niedriger Quote – z. B. „Über 0,5 Tore“ oder Doppelte Chance/1X auf einen klaren Favoriten. Hohe Trefferchance, ideal als Basis."],
-  value: ["Value", "Schönere Quoten ab 1,60 – etwas mehr Risiko, dafür echter Wert. Oft mit Timing-Hinweis (z. B. „erst nach der 70. Minute spielen“)."],
-  banger: ["Banger", "Die smarten Recovery-/Asian-Wetten: 9+ Sterne, Quote ab 1,40. Z. B. „Asian Über 2.0“, wenn ein Favorit zurückliegt und Druck macht – bei genau 2 Toren gibt's den Einsatz zurück."],
-  community: ["Community", "Live-Tipps, die echte Mitglieder gerade posten, während ihr Spiel läuft – keine KI. Direkt aus der Community, in Echtzeit."],
+const LIVE_CAT_KEYS = {
+  all: ["livecat.all.t", "livecat.all.d"],
+  banker: ["livecat.banker.t", "livecat.banker.d"],
+  value: ["livecat.value.t", "livecat.value.d"],
+  banger: ["livecat.banger.t", "livecat.banger.d"],
+  community: ["livecat.community.t", "livecat.community.d"],
 };
 const SMART_IDEA_STATUS = {
   pending: { label: "in Prüfung", cls: "bg-amber-500/15 text-amber-400" },
@@ -505,8 +505,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view === "live" && (
         <div data-testid="live-cat-explain" className="mb-6 rounded-xl border border-live/25 bg-live/5 px-4 py-3">
           <p className="text-sm text-zinc-300 leading-snug">
-            <span className="font-heading font-black text-live">{LIVE_CAT_INFO[liveCat || "all"][0]}</span>
-            {" — "}{LIVE_CAT_INFO[liveCat || "all"][1]}
+            <span className="font-heading font-black text-live">{t(LIVE_CAT_KEYS[liveCat || "all"][0])}</span>
+            {" — "}{t(LIVE_CAT_KEYS[liveCat || "all"][1])}
           </p>
         </div>
       )}
@@ -799,6 +799,7 @@ function MemberSearch({ onUserClick, t }) {
 }
 
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onPlay }) {
+  const { lang } = useI18n();
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
@@ -908,6 +909,12 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             ? { minute: tip.live_minute, score: tip.live_score }
             : null);
         if (!liveState) return null;
+        // Guard a STUCK live badge: if kickoff was clearly long ago (>2.5h) the match is over,
+        // so never show LIVE even if the backend live loop froze (e.g. API-quota outage that
+        // stopped updates mid-match) — owner 2026-07-26: "Vasteras kollierte auf live".
+        const mtLive = tip.match_time || (tip.legs || []).map((l) => l.kickoff).find(Boolean) || "";
+        const koTs = kickoffInfo(mtLive).ts;
+        if (koTs != null && Date.now() - koTs > 2.5 * 3600 * 1000) return null;
         return (
           <div data-testid={`live-state-${tip.id}`} className="inline-flex items-center gap-2 bg-[#F0443C] text-white font-bold text-xs rounded-lg px-3 py-1.5 mb-2">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
@@ -1062,7 +1069,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
 
       {tip.ai_analysis && (
         <p className="text-xs text-zinc-400 mt-2 border-l-2 border-volt pl-2 leading-snug">
-          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {toLatin(tip.ai_analysis)}
+          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {localizeProse(toLatin(tip.ai_analysis), t, lang)}
         </p>
       )}
 

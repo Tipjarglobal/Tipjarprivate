@@ -8490,16 +8490,33 @@ async def live_annotate_sync() -> dict:
     tips = await db.tips.find(
         {"status": {"$in": ["pending", "live"]},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1,
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
          "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
     # single-game member parlays too (home_team empty, teams live inside the one leg)
     parlays = await db.tips.find(
         {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
          "$or": [{"home_team": {"$in": ["", None]}}, {"away_team": {"$in": ["", None]}}]},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1,
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
          "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
     annotated = cleared = to_live = 0
+    now_utc = datetime.now(timezone.utc)
     for t in tips + parlays:
+        # STUCK-LIVE guard (quota-independent): if kickoff was clearly long ago (>2.5h) the
+        # match is over — force-clear any frozen live_state and hand it back to settlement so
+        # it can't hang on LIVE forever if the live feed froze mid-match (owner 2026-07-26).
+        _ko = t.get("match_time") or next((l.get("kickoff") for l in (t.get("legs") or [])
+                                           if l.get("kickoff")), "")
+        _kd = _kickoff_dt(_ko) if _ko else None
+        if _kd and (now_utc - _kd).total_seconds() > 2.5 * 3600:
+            upd = {}
+            if t.get("live_state"):
+                upd["$unset"] = {"live_state": ""}
+            if t.get("status") == "live":
+                upd.setdefault("$set", {})["status"] = "pending"
+            if upd:
+                await db.tips.update_one({"id": t["id"]}, upd)
+                cleared += 1
+            continue
         home, away = _tip_match_teams(t)
         fx = _find_live_fixture(live, home, away) if (home and away) else None
         # Multi-game parlay (no single home/away): live if ANY leg is currently in-play.

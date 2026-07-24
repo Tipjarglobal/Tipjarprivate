@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange, Clock, Trophy, Ticket } from "lucide-react";
 import { OddsValue } from "./OddsValue";
-import { useI18n, localizeMarket, formatSelection, toLatin, formatKickoff, kickoffInfo, isKickoffLive } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, formatKickoff, kickoffInfo, isKickoffLive } from "../i18n";
 import api from "../api";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
 
@@ -53,14 +53,14 @@ const RISK = {
 };
 
 const SystemCard = ({ system }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [playData, setPlayData] = useState(null);
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
   const titleKey = `sys.title.${system.key}`;
   const subKey = `sys.sub.${system.key}`;
   const title = t(titleKey) === titleKey ? (system.title || system.key) : t(titleKey);
-  const subtitle = t(subKey) === subKey ? (system.subtitle || "") : t(subKey);
+  const subtitle = localizeProse(t(subKey) === subKey ? (system.subtitle || "") : t(subKey), t, lang);
   const hasCombo = (system.selections || []).some((s) => s.combo_markets);
   if (!system.selections || (system.selections.length < 2 && !hasCombo)) return null;
   return (

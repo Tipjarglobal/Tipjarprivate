@@ -1114,3 +1114,17 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Verifiziert: node-Test + Greek-Screenshot (Systems). DE unverändert (toLatin no-op für Latein).
 - OFFEN/Hinweis: System-Untertitel ("15 Legs · nächste 48h ...", "6 Banker · läuft bis ...") sind backend-generiertes Deutsch, noch nicht lokalisiert (separater, größerer i18n-Task). es/fr/it/ar/tr fehlen weiterhin mkt.goals/ovr/und (Pre-existing, EN-Fallback).
 - Wirkt produktiv erst NACH Deploy.
+
+## 2026-07-26 (Teil 4) — Stuck-LIVE Fix + volle Prosa-Lokalisierung (DONE, verifiziert)
+- STUCK-LIVE BUG (z.B. Västerås "LIVE 30' 1:0" obwohl 2:0 FT): Live-Feed fror mid-match ein (API-Quota) → live_state nie geräumt.
+  - FRONTEND (RateWall live-state badge): zeigt LIVE NIE, wenn kickoff > 2.5h her (sofort, feed-unabhängig).
+  - BACKEND (live_annotate_sync): quota-unabhängiger Stale-Clear am Loop-Anfang → kickoff > 2.5h alt ⇒ live_state entfernen + status live→pending (zurück an Settlement). Verifiziert: cleared=1, status→pending trotz erschöpfter Quota.
+- VOLLE PROSA-LOKALISIERUNG (i18n.js localizeProse): übersetzt backend-generierte deutsche Prosa client-seitig in die Leser-Sprache (DE unverändert; andere → EL/EN, Rest EN-Fallback). Angewandt auf:
+  - ai_analysis ("KI sagt: BANGER ...") — RateWall TipCard.
+  - System-Subtitles ("15 Legs · nächste 48h · 6× Über 3.5 ...") — Systems.jsx.
+  - Phrasen-Map (prose.*) + generische DE-Marktbegriffe (Über/Unter X (Tore), Doppelte Chance, Schüsse aufs Tor, Ecken). WICHTIG: kein \b vor "Über" (nicht-ASCII bricht \b).
+- LIVE_CAT_INFO (hardcoded DE Kategorie-Beschreibungen) → i18n-Keys livecat.* (en/el/de).
+- Market-Fix (Teil 3) ergänzt: englische Rohformen (GG/NG, Double chance, Over/Under X Goals) + toLatin-Reihenfolge; el mkt.goals/ovr/und/corners/half ergänzt.
+- Verifiziert: node-Tests + Greek-Screenshots (Systems-Subtitle, Live-Kategorie-Text, Märkte alle griechisch).
+- OFFEN (klein): nav "Settled"-Label + Wochentags-Kürzel (Di/Fr) noch DE; seltene ai_analysis-Varianten evtl. teils DE; es/fr/it/ar/tr Prosa fällt auf EN zurück.
+- Wirkt produktiv erst NACH Deploy.

@@ -196,8 +196,49 @@ export function localizeMarket(market, t) {
   return m;
 }
 
-
-// Normalize a single bet-slip "selection" string (bookmaker raw text or German
+// Localize backend-generated German PROSE (AI commentary `ai_analysis` + system subtitles).
+// These are free-text German strings shared across all users, so translate them client-side
+// into the reader's language. German readers keep the original; unknown phrases stay as-is.
+// (owner 2026-07-26: "μετέφρασε τα ολα" — translate everything.)
+export function localizeProse(text, t, lang) {
+  if (!text || typeof text !== "string") return text;
+  if (lang === "de") return text;
+  let m = text;
+  const P = [
+    [/liegt zurück und drückt auf den Ausgleich/gi, "prose.trailingpush"],
+    [/Beide drücken bei 0:0/gi, "prose.bothpush"],
+    [/bei GENAU 2 Toren gibt'?s den Einsatz zurück/gi, "prose.exact2refund"],
+    [/\(Asian-Absicherung\)/gi, "prose.asianhedge"],
+    [/am besten sofort spielen, solange die Quote hoch ist/gi, "prose.playnow"],
+    [/\bTiming:/gi, "prose.timing"],
+    [/\bDruck:/gi, "prose.pressure"],
+    [/\bLive zu\b/gi, "prose.liveat"],
+    [/\bStand\b/gi, "prose.score"],
+    [/der große Zocker-Wumms/gi, "prose.gamblebang"],
+    [/nur kommende Spiele/gi, "prose.upcomingonly"],
+    [/nächste 48h/gi, "prose.next48"],
+    [/\bläuft bis\b/gi, "prose.runsuntil"],
+    [/Favoriten-Spiele/gi, "prose.favgames"],
+    [/×\s*Favorit/gi, "prose.xfav"],
+    [/×\s*Value-?X/gi, "prose.xvaluex"],
+    [/\bLegs\b/gi, "prose.legs"],
+    [/Schüsse aufs Tor/gi, "mkt.sot"],
+    [/\bEcken\b/gi, "mkt.corners"],
+    [/\bAsian\b/gi, "mkt.asian"],
+  ];
+  for (const [re, key] of P) {
+    const val = t(key);
+    m = m.replace(re, () => (/^×/.test(re.source) ? `× ${val}` : val));
+  }
+  // generic German market terms embedded in the prose
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore?/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore?/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")}`);
+  m = m.replace(/Doppelte\s+Chance/gi, t("mkt.doublechance"));
+  m = m.replace(/\s{2,}/g, " ").trim();
+  return m;
+}
 // market) into a clean, correctly-worded label. Handles legacy posted slips too.
 //  - "Total OVER 1.5" / "Total Over 1,5"  -> "Über 1.5 Tore"
 //  - "Total UNDER 3.5"                    -> "Unter 3.5 Tore"
@@ -653,6 +694,33 @@ const T = {
     "mkt.ggng_no": "Not Both Teams to Score",
     "mkt.doublechance": "Double Chance",
     "mkt.or": "or",
+    "prose.trailingpush": "is trailing and pushing for the equaliser",
+    "prose.bothpush": "Both pushing at 0:0",
+    "prose.exact2refund": "at EXACTLY 2 goals you get your stake back",
+    "prose.asianhedge": "(Asian hedge)",
+    "prose.playnow": "best to play right away while the odds are high",
+    "prose.timing": "Timing:",
+    "prose.pressure": "Pressure:",
+    "prose.liveat": "Live at",
+    "prose.score": "Score",
+    "prose.gamblebang": "the big gamble bang",
+    "prose.upcomingonly": "upcoming games only",
+    "prose.next48": "next 48h",
+    "prose.runsuntil": "runs until",
+    "prose.favgames": "favourite games",
+    "prose.xfav": "Favourite",
+    "prose.xvaluex": "Value-X",
+    "prose.legs": "Legs",
+    "livecat.all.t": "Live Picks",
+    "livecat.all.d": "All the AI's live tips in 3 classes: Banker (safe), Value (nicer odds from 1.60) and Banger (the smart recovery/Asian bets). Tap a class to filter.",
+    "livecat.banker.t": "Banker",
+    "livecat.banker.d": "Safe live bets at low odds – e.g. \"Over 0.5 goals\" or Double Chance/1X on a clear favourite. High hit rate, ideal as a base.",
+    "livecat.value.t": "Value",
+    "livecat.value.d": "Nicer odds from 1.60 – a bit more risk but real value. Often with a timing hint (e.g. \"play only after the 70th minute\").",
+    "livecat.banger.t": "Banger",
+    "livecat.banger.d": "The smart recovery/Asian bets: 9+ stars, odds from 1.40. E.g. \"Asian Over 2.0\" when a favourite is trailing and pushing – at exactly 2 goals you get your stake back.",
+    "livecat.community.t": "Community",
+    "livecat.community.d": "Live tips real members are posting right now while their match is live – no AI. Straight from the community, in real time.",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Double Chance 1X",
     "mkt.dcx2": "Double Chance X2",
@@ -1441,6 +1509,16 @@ const T = {
     "mkt.ggng_no": "Nicht beide treffen",
     "mkt.doublechance": "Doppelte Chance",
     "mkt.or": "oder",
+    "livecat.all.t": "Live-Picks",
+    "livecat.all.d": "Alle Live-Tipps der KI in 3 Klassen: Banker (sicher), Value (schönere Quoten ab 1,60) und Banger (die smarten Recovery-/Asian-Wetten). Tippe auf eine Klasse, um zu filtern.",
+    "livecat.banker.t": "Banker",
+    "livecat.banker.d": "Sichere Live-Wetten mit niedriger Quote – z. B. „Über 0,5 Tore“ oder Doppelte Chance/1X auf einen klaren Favoriten. Hohe Trefferchance, ideal als Basis.",
+    "livecat.value.t": "Value",
+    "livecat.value.d": "Schönere Quoten ab 1,60 – etwas mehr Risiko, dafür echter Wert. Oft mit Timing-Hinweis (z. B. „erst nach der 70. Minute spielen“).",
+    "livecat.banger.t": "Banger",
+    "livecat.banger.d": "Die smarten Recovery-/Asian-Wetten: 9+ Sterne, Quote ab 1,40. Z. B. „Asian Über 2.0“, wenn ein Favorit zurückliegt und Druck macht – bei genau 2 Toren gibt's den Einsatz zurück.",
+    "livecat.community.t": "Community",
+    "livecat.community.d": "Live-Tipps, die echte Mitglieder gerade posten, während ihr Spiel läuft – keine KI. Direkt aus der Community, in Echtzeit.",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Doppelte Chance 1X",
     "mkt.dcx2": "Doppelte Chance X2",
@@ -1796,6 +1874,33 @@ const T = {
     "mkt.ggng_no": "Νο Γκολ",
     "mkt.doublechance": "Διπλή ευκαιρία",
     "mkt.or": "ή",
+    "prose.trailingpush": "χάνει και πιέζει για την ισοφάριση",
+    "prose.bothpush": "Και οι δύο πιέζουν στο 0:0",
+    "prose.exact2refund": "με ΑΚΡΙΒΩΣ 2 γκολ παίρνεις πίσω το ποντάρισμα",
+    "prose.asianhedge": "(ασιατική κάλυψη)",
+    "prose.playnow": "καλύτερα να παίξεις αμέσως όσο η απόδοση είναι ψηλή",
+    "prose.timing": "Χρονισμός:",
+    "prose.pressure": "Πίεση:",
+    "prose.liveat": "Live στο",
+    "prose.score": "Σκορ",
+    "prose.gamblebang": "το μεγάλο ρίσκο-μπαμ",
+    "prose.upcomingonly": "μόνο επόμενα ματς",
+    "prose.next48": "επόμενες 48ώρες",
+    "prose.runsuntil": "ισχύει έως",
+    "prose.favgames": "ματς φαβορί",
+    "prose.xfav": "Φαβορί",
+    "prose.xvaluex": "Value-X",
+    "prose.legs": "σκέλη",
+    "livecat.all.t": "Live Picks",
+    "livecat.all.d": "Όλα τα live tips του AI σε 3 κλάσεις: Banker (ασφαλή), Value (καλύτερες αποδόσεις από 1,60) και Banger (τα έξυπνα recovery/ασιατικά στοιχήματα). Πάτα μια κλάση για φιλτράρισμα.",
+    "livecat.banker.t": "Banker",
+    "livecat.banker.d": "Ασφαλή live στοιχήματα με χαμηλή απόδοση – π.χ. «Over 0.5 γκολ» ή Διπλή ευκαιρία/1X σε ξεκάθαρο φαβορί. Υψηλή πιθανότητα επιτυχίας, ιδανικά ως βάση.",
+    "livecat.value.t": "Value",
+    "livecat.value.d": "Καλύτερες αποδόσεις από 1,60 – λίγο περισσότερο ρίσκο αλλά πραγματική αξία. Συχνά με υπόδειξη χρονισμού (π.χ. «παίξε μόνο μετά το 70ό λεπτό»).",
+    "livecat.banger.t": "Banger",
+    "livecat.banger.d": "Τα έξυπνα recovery/ασιατικά στοιχήματα: 9+ αστέρια, απόδοση από 1,40. Π.χ. «Asian Over 2.0» όταν ένα φαβορί χάνει και πιέζει – με ακριβώς 2 γκολ παίρνεις πίσω το ποντάρισμα.",
+    "livecat.community.t": "Community",
+    "livecat.community.d": "Live tips που ποστάρουν πραγματικά μέλη τώρα ενώ παίζεται το ματς τους – όχι AI. Απευθείας από την κοινότητα, σε πραγματικό χρόνο.",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Διπλή ευκαιρία 1X",
     "mkt.dcx2": "Διπλή ευκαιρία X2",
