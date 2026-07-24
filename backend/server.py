@@ -5177,15 +5177,34 @@ async def build_systems() -> dict:
         if len(vals) >= 4:
             break
 
-    # 4) RISK-KOMBI — double-chance + BTTS bet-builders, higher total odds
+    # 4) RISK-KOMBI — Doppelte Chance + VARIIERENDER Tor-Leg. Owner 2026-07-24: NICHT stur
+    #    "beide treffen" anhängen — ein klarer Favorit kann zu Null gewinnen (0:2-Überraschung)
+    #    und der BTTS-Leg platzt. "Beide treffen" NUR wenn beide Seiten realistisch treffen
+    #    (kein einseitiger Favorit, schwächeres Team trifft laut Prognose auch). Sonst Über
+    #    1.5/2.5 Tore (ein 2:0 gewinnt die trotzdem). Märkte rotieren → kein monotoner Schein.
     risks = []
+    _risk_rot = 0
     for p in fav_sorted:
         team = _fav_team(p)
-        if not team or not p.get("btts"):
+        if not team:
             continue
+        fp = p.get("fav_prob") or 0
+        ph, pa = p.get("ph") or 0, p.get("pa") or 0
+        total = p.get("total") or (ph + pa)
         dc = "1X" if p["fav"] == "home" else "X2"
-        od = round(_dc_odds(p.get("fav_prob")) * 1.70, 2)
-        risks.append(_sel(p, f"{team} Doppelte Chance {dc} + Beide treffen", od, 6.5))
+        underdog_goals = pa if p["fav"] == "home" else ph
+        # favourite may keep a clean sheet (0:2 surprise) → BTTS is a trap for weaker sides
+        lopsided = fp >= 58 or underdog_goals == 0
+        both_score = bool(p.get("btts")) and ph >= 1 and pa >= 1 and not lopsided
+        if both_score and _risk_rot % 2 == 0:
+            leg2, mult = "Beide treffen", 1.70
+        elif total >= 4 and (p.get("over25") or both_score):
+            leg2, mult = "Über 2.5 Tore", 1.55
+        else:
+            leg2, mult = "Über 1.5 Tore", 1.30
+        _risk_rot += 1
+        od = round(_dc_odds(fp) * mult, 2)
+        risks.append(_sel(p, f"{team} Doppelte Chance {dc} + {leg2}", od, 6.5))
         if len(risks) >= 5:
             break
 
@@ -5580,6 +5599,23 @@ async def build_systems() -> dict:
     }
 
 
+def _berlin_now() -> datetime:
+    """Current time in Europe/Berlin (DST-aware)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Berlin"))
+    except Exception:
+        return datetime.now(timezone.utc) + timedelta(hours=2)  # summer fallback
+
+
+def _system_cycle_day() -> str:
+    """The daily system-picks cycle resets at 14:00 Europe/Berlin. A cycle is dated by the
+    calendar day it STARTED (before 14:00 → still yesterday's cycle)."""
+    b = _berlin_now()
+    ref = b - timedelta(hours=14)  # shift so the 14:00 boundary becomes midnight
+    return ref.strftime("%Y-%m-%d")
+
+
 async def snapshot_systems() -> int:
     """Persist today's system slips as tips (source=hq-system, is_parlay) so they get
     auto-settled leg-by-leg and any WINNING system surfaces in 'Best Won'. This is the
@@ -5592,7 +5628,7 @@ async def snapshot_systems() -> int:
     except Exception as e:
         logger.warning(f"snapshot_systems build failed: {e}")
         return 0
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = _system_cycle_day()
     now = datetime.now(timezone.utc).isoformat()
     saved = 0
     for s in data.get("systems", []):
@@ -5635,6 +5671,33 @@ async def snapshot_systems() -> int:
         }, upsert=True)
         saved += 1
     return saved
+
+
+async def system_reset_loop():
+    """Owner 2026-07-24: HARD daily reset of the system picks at 14:00 Europe/Berlin —
+    wipe the still-pending frozen system slips and rebuild a fresh set for the new cycle.
+    Only the elected leader runs it (no double-purge across prod replicas)."""
+    await asyncio.sleep(30)
+    while True:
+        try:
+            if _is_leader():
+                b = _berlin_now()
+                cycle = _system_cycle_day()
+                state = await db.system_reset_state.find_one({"id": "sysreset"})
+                if b.hour >= 14 and (state or {}).get("cycle") != cycle:
+                    res = await db.tips.delete_many({"source": "hq-system", "status": "pending"})
+                    await snapshot_systems()
+                    await db.system_reset_state.update_one(
+                        {"id": "sysreset"},
+                        {"$set": {"id": "sysreset", "cycle": cycle,
+                                  "reset_at": datetime.now(timezone.utc).isoformat(),
+                                  "purged": res.deleted_count}}, upsert=True)
+                    logger.info(f"Daily 14:00 Berlin system reset (cycle {cycle}, "
+                                f"purged {res.deleted_count} pending system slips, rebuilt fresh)")
+        except Exception as e:
+            logger.error(f"system_reset_loop: {e}")
+        await asyncio.sleep(300)
+
 
 
 # team-name -> "DD/MM/YYYY HH:MM" kickoff index, filled by forebet, used by predictz
@@ -9076,6 +9139,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     _BG_TASKS.append(asyncio.create_task(_regenerate_win_slips_once()))
     _BG_TASKS.append(asyncio.create_task(_seed_showcase_wins()))
+    _BG_TASKS.append(asyncio.create_task(system_reset_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

@@ -1046,3 +1046,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Team-Keywords (buxtu, pakhator, olimpik-mobiuz, mobiuz, qiziriq) bleiben zusätzlich als Sicherheitsnetz. "pakhator" (Reserve) kollidiert NICHT mit "pakhtakor" (Erstteam, gut).
 - Logik-Test bestätigt: UZ Super League=drin, UZ Pro League A=raus, Qiziriq=raus, Kirgistan=raus, Belgien Jupiler Pro League=drin (nicht betroffen).
 - Gute UZ-Oberliga-Spiele werden vom Scraper neu geholt (Import-Sperre entfernt). Wirkt produktiv nach Deploy.
+
+## 2026-07-24 — Risk-Kombi entmonotonisiert + tägliches 14-Uhr-Berlin-System-Reset
+- Owner: Risk-Schein baute stur "Doppelte Chance + Beide treffen" → riskant bei schwächeren Teams (0:2-Favoritensieg zu Null platzt BTTS). Weniger monoton gewünscht.
+- FIX Risk-Kombi (build_systems ~5180): 2. Leg variiert. "Beide treffen" NUR wenn beide Seiten realistisch treffen (btts UND ph>=1 UND pa>=1 UND kein einseitiger Favorit: fav_prob<58 und underdog_goals>0). Sonst "Über 1.5 Tore" (2:0 gewinnt) bzw. "Über 2.5" bei torreichen Spielen. Rotation (_risk_rot) gegen Monotonie. Verifiziert: UTA Arad–Otelul jetzt "X2 + Über 1.5" statt "+ Beide treffen"; BTTS nur bei ausgeglichenen Spielen.
+- FEATURE tägliches Reset 14:00 Europe/Berlin: _berlin_now() (zoneinfo, DST-aware), _system_cycle_day() (Grenze rollt 14:00). snapshot_systems nutzt jetzt cycle-day statt UTC-Tag. Neuer system_reset_loop() (nur Leader, check alle 5 Min): ab 14:00 Berlin einmal pro Cycle → löscht pending hq-system Tips + snapshot_systems() neu. State in db.system_reset_state.
+- Getestet: cycle rollt exakt 13:59→14:01. Backend fehlerfrei. Wirkt produktiv nach Deploy.
