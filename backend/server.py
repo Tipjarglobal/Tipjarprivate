@@ -4629,12 +4629,11 @@ def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
 
 
 # Owner-flagged football nations whose leagues are obscure / uncoverable — block ALL their
-# competitions at once (2026-07-24: Kyrgyzstan & Uzbekistan, after the owner flagged Bars,
-# OshMU, Aldier, Olimpik-Mobiuz, Qiziriq, BuxTu, Pakhator …). This blocks the whole LEAGUE,
-# not just the team names. Matched on the readable country OR the 2-letter Forebet code
-# prefix (e.g. 'kg1', 'uz1'). Legit top flights (e.g. Russia PL) are NOT listed here.
-COUNTRY_BLACKLIST = ("kyrgyzstan", "uzbekistan")
-COUNTRY_CODE_BLACKLIST = ("kg", "uz")
+# competitions at once. Kyrgyzstan stays fully blocked. Uzbekistan is NOT here anymore:
+# the owner confirmed the top flight (Uzbekistan Super League) is bettable & scores goals —
+# only the 2nd tier ("Pro League A") + the specific flagged clubs stay blocked (below).
+COUNTRY_BLACKLIST = ("kyrgyzstan",)
+COUNTRY_CODE_BLACKLIST = ("kg",)
 
 
 def _country_blocked(country: str = "", code: str = "") -> bool:
@@ -4739,6 +4738,9 @@ SLIP_LEAGUE_KEYWORDS = (
 SLIP_BLOCK_KEYWORDS = (
     "league two", "women", "reserve", "futsal", "friendly", " ii", " u19",
     " u21", " u17", " u20", " u23",
+    # Uzbekistan 2nd tier (owner: keep the Super League, drop the Pro League A where the
+    # flagged BuxTu / Pakhtakor II / Olimpik-Mobiuz / Qiziriq play).
+    "pro league a",
     # Brazil — exclude ALL obscure divisions & state championships (owner: only the
     # national Série A / Série B / Brasileirão are bettable). ~20 regional leagues out.
     "serie c", "série c", "serie d", "série d", "serie a1", "série a1",

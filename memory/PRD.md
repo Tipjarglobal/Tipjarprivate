@@ -1038,3 +1038,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - NEU: COUNTRY_BLACKLIST=(kyrgyzstan,uzbekistan) + COUNTRY_CODE_BLACKLIST=(kg,uz), Helper _country_blocked(country,code). Eingehängt in store_match_prediction (blockt Ingestion) + _pred_whitelisted (Systems/Prognose-Anzeige). Blockt ganze Ligen dieser Länder.
 - CSKA Moskau vs Baltika = Russland Premier League (legitime Topliga) → NICHT komplett gesperrt, nur das eine Spiel via MATCH_BLACKLIST. Racing–Reyadi Abaseya (Ägypten, nicht in aktuellen Daten) via Team-Keyword abgedeckt.
 - 19 KG/UZ-Prognosen bereinigt. Verifiziert: /api/systems clean, 0 KG/UZ preds. Wirkt produktiv nach Deploy (Read-Filter sofort + Ingestion-Block).
+
+## 2026-07-24 — Uzbekistan verfeinert: Oberliga drin, nur 2. Liga raus
+- Owner: konnte gute UZ-Spiele bespielen (mit Toren) → gute UZ-Liga drinlassen.
+- COUNTRY_BLACKLIST auf ("kyrgyzstan",) reduziert, COUNTRY_CODE_BLACKLIST auf ("kg",) — Usbekistan NICHT mehr komplett gesperrt.
+- Stattdessen "pro league a" in SLIP_BLOCK_KEYWORDS → blockt nur die usbekische 2. Liga (Pro League A), wo BuxTu/Pakhtakor II/Olimpik-Mobiuz/Qiziriq spielen. Uzbekistan Super League (Oberhaus) bleibt bespielbar.
+- Team-Keywords (buxtu, pakhator, olimpik-mobiuz, mobiuz, qiziriq) bleiben zusätzlich als Sicherheitsnetz. "pakhator" (Reserve) kollidiert NICHT mit "pakhtakor" (Erstteam, gut).
+- Logik-Test bestätigt: UZ Super League=drin, UZ Pro League A=raus, Qiziriq=raus, Kirgistan=raus, Belgien Jupiler Pro League=drin (nicht betroffen).
+- Gute UZ-Oberliga-Spiele werden vom Scraper neu geholt (Import-Sperre entfernt). Wirkt produktiv nach Deploy.
