@@ -487,8 +487,12 @@ export default function NotificationBell() {
                     const json = sub.toJSON();
                     await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys, areas: areasRef.current });
                     const { data } = await api.post("/push/test", { endpoint: json.endpoint, keys: json.keys });
-                    toast[data.ok ? "success" : "error"](data.ok ? t("bell.test_sent") : t("bell.test_fail"));
-                  } catch { toast.error(t("bell.test_fail")); }
+                    if (data.ok) {
+                      toast.success(t("bell.test_sent"), { description: t("bell.test_hint"), duration: 9000 });
+                    } else {
+                      toast.error(`${t("bell.test_fail")}${data.reason ? ` — ${data.reason}` : ""}`, { duration: 12000 });
+                    }
+                  } catch (e) { toast.error(`${t("bell.test_fail")}${e && e.message ? ` — ${e.message}` : ""}`); }
                 }}
                 className="mt-3 w-full text-sm py-2 rounded-lg border border-bell/40 text-bell hover:bg-bell/10 transition-colors flex items-center justify-center gap-2"
               >

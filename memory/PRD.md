@@ -1004,3 +1004,11 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - RateWall.jsx: Haupt-Kickoff-Badge zeigt rotes pulsierendes "Live now" statt gelber Zeit, wenn live & kein Backend-live_state (keine Doppelung). Leg-Badges ebenso (außer leg.status==='live'). Systems.jsx LegMeta analog.
 - Verifiziert per Screenshot (Test-Pick Anpfiff -1h): rotes "Live now" auf laufendem Spiel, gelbe Zeit auf zukünftigen. Test-Pick danach gelöscht. Frontend kompiliert sauber.
 - Wirkt auf tipjarglobal.com erst nach DEPLOY.
+
+## 2026-07-24 — Push bei geschlossener App: Diagnose + Fixes (Code korrekt, Delivery-abhängig)
+- Owner (Android, PWA installiert, Berechtigung erlaubt, testet auf Produktion): Benachrichtigungen kommen NUR bei offener App, nicht wenn zu.
+- ANALYSE: Zwei getrennte Systeme. (1) In-App-Polling (NotificationBell poll alle 15s → reg.showNotification im Vordergrund) = nur bei offener App. (2) Echter Web-Push (push_watch_loop → notify_all_push → SW push-Handler) = funktioniert auch geschlossen. Code beider Pfade ist KORREKT; VAPID gesetzt; Subscription-Self-Heal beim Laden vorhanden; SW registriert /service-worker.js; Test-Endpoint /push/test existiert.
+- Kann Produktions-Delivery nicht reproduzieren (Preview-DB 0 Subscriptions, Produktions-DB separat/unzugänglich).
+- FIXES: (a) DE+EL fehlten bell.test/bell.test_sent/bell.test_fail komplett → Test-Button zeigte rohe Keys; ergänzt. (b) neuer Key bell.test_hint (alle 8 Sprachen). (c) Test-Button zeigt jetzt den KONKRETEN Fehlergrund vom Backend (push-error-Code/expired) statt generisch → Diagnose auf Produktion möglich.
+- WAHRSCHEINLICHSTE PRODUKTIONS-URSACHE: Samsung/Android aggressive Akku-Optimierung ("Schlafende Apps") killt Hintergrund-Push. Nutzer-Fix: Chrome/PWA auf "Nicht eingeschränkt" + aus "Schlafende Apps" entfernen + System-Benachrichtigungen an.
+- NÄCHSTER SCHRITT (User): nach Deploy Test-Button tippen, Handy sperren, Ergebnis/Fehlertext melden.
