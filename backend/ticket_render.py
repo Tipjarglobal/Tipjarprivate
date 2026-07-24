@@ -159,7 +159,9 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     f_url = font(BODY_B, 26)
 
     # ---- group legs by match ---------------------------------------------
-    legs = (legs or [])[:12]
+    # Cap by SELECTIONS generously (a game can carry several bet-builder markets), so a
+    # 6-game slip with ~5 markets each isn't cut down to 3 games (owner 2026-07-26).
+    legs = (legs or [])[:90]
     groups, gidx = [], {}
     for l in legs:
         k = _match_key(l.get("home", ""), l.get("away", ""))
@@ -335,24 +337,22 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         mf = fit(title, HEAD, 44, 30, title_max)
         d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
         ty += TITLE_H
-        # markets — if the whole group carries ONE combined odd (typical for HQ system
-        # tips), show it once, vertically centred as a group badge instead of on row 1.
-        odds_vals = [l.get("odds") or 0 for l in g["mkts"]]
-        group_odd = odds_vals[0] if (len(g["mkts"]) > 1 and sum(1 for o in odds_vals if o) == 1) else None
+        # ONE combined quote per GAME, shown right-aligned & vertically centred — a
+        # bet-builder game's legs multiply into a single game odd (owner 2026-07-26:
+        # "jedes [Spiel] braucht seine quote rechts"). Per-market odds are folded into it.
+        nz = [float(o) for o in (l.get("odds") or 0 for l in g["mkts"]) if o]
+        game_odd = 1.0
+        for o in nz:
+            game_odd *= o
+        got = f"{game_odd:.2f}" if nz else ""
+        gow = tw(got, f_legodds) if got else 0
         mkt_top = ty
         for l in g["mkts"]:
-            od = l.get("odds") or 0
-            odt = f"{float(od):.2f}" if od else ""
-            ow = tw(odt, f_legodds)
             check_badge(ix + 12, ty + 25, 14, STATUS)
-            mtxt = trunc(l.get("market", "") or "", f_market, cw - 130 - (0 if group_odd else ow))
+            mtxt = trunc(l.get("market", "") or "", f_market, cw - 130 - gow)
             d.text((ix + 40, ty + 6), mtxt, font=f_market, fill=SOFT)
-            if odt and group_odd is None:
-                d.text((chip_x1 - ow, ty + 3), odt, font=f_legodds, fill=VOLT)
             ty += MKT_H
-        if group_odd:
-            got = f"{float(group_odd):.2f}"
-            gow = tw(got, f_legodds)
+        if got:
             cym = (mkt_top + ty) // 2
             d.text((chip_x1 - gow, cym - 30), got, font=f_legodds, fill=VOLT)
         meta_x = ix + 40

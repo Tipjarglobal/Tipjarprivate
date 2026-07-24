@@ -2689,6 +2689,10 @@ async def inbox_expert_decline(user: dict = Depends(get_current_user)):
 
 
 
+# Bump this whenever _render_slip_image output changes, so cached share images regenerate.
+SHARE_RENDER_VER = 3
+
+
 @api_router.post("/tips/{tip_id}/share-image")
 async def tip_share_image(tip_id: str):
     """Generate a TipJar-branded shareable slip image for a member pick, tagged with
@@ -2702,7 +2706,9 @@ async def tip_share_image(tip_id: str):
     # Serve the cached image if we already built it — frozen system slips and posted member
     # picks are immutable, so re-rendering (up to ~20s for a 15-leg slip) is pure waste and
     # was the reason large slips "wouldn't share" (the tap's user-activation expired).
-    if tip.get("status") != "live" and tip.get("share_image_path"):
+    # BUT bump SHARE_RENDER_VER whenever the renderer changes so old cached images regenerate.
+    if (tip.get("status") != "live" and tip.get("share_image_path")
+            and tip.get("share_image_ver") == SHARE_RENDER_VER):
         existing = await db.files.find_one(
             {"storage_path": tip["share_image_path"], "is_deleted": False}, {"_id": 1})
         if existing:
@@ -2733,7 +2739,7 @@ async def tip_share_image(tip_id: str):
             "owner": tip.get("user_id"), "is_deleted": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        await db.tips.update_one({"id": tip_id}, {"$set": {"share_image_path": path}})
+        await db.tips.update_one({"id": tip_id}, {"$set": {"share_image_path": path, "share_image_ver": SHARE_RENDER_VER}})
     except Exception as ex:
         logger.error(f"share image upload failed: {ex}")
         raise HTTPException(status_code=500, detail="Image generation failed")

@@ -1089,3 +1089,9 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - MODULARISIERUNG: PIL-Ticket-Renderer aus server.py in NEUES Modul ticket_render.py extrahiert (_fmt_selection,_to_float,_split_match,_tip_to_render_legs,_render_slip_image,FONT_DIR,CREST_PATH; ~410 Zeilen). server.py importiert diese zurück. _render_slip_image nutzt lazy 'from server import _match_key' (kein Zirkelimport). Share-Image e2e verifiziert. server.py jetzt ~9180 Zeilen (weiter modularisierbar: snapshots.py, live_annotate.py).
 - EXPLIZIT NICHT umgesetzt (Userwunsch): Telegram, Stripe/Payments, Trefferquote.
 - Wirkt produktiv erst NACH Deploy.
+
+## 2026-07-26 — Share-Bild Fix: alle Spiele + Quote pro Spiel (DONE, verifiziert per Render + Endpoint)
+- BUG: Kombi mit 6 Spielen zeigte nur 3 — die Kappung [:12] zählte EINZEL-Auswahlen statt Spiele (6 Spiele × ~5 Märkte = 30 Auswahlen → nach 12 abgeschnitten). Fix in ticket_render.py: Kappung auf [:90] Auswahlen erhöht → alle Spiele erscheinen (Höhe wächst mit).
+- BUG: Keine Quote pro Spiel. Fix: pro GAME wird jetzt EINE kombinierte Quote (Produkt der Leg-Quoten des Spiels) rechts, vertikal zentriert angezeigt (Bet-Builder-Stil). Per-Markt-Quoten entfallen zugunsten der klaren Spiel-Gesamtquote. Verifiziert mit 6-Spiele-Slip: 5.85/6.10/3.40/2.90/2.10/1.60.
+- CACHE-BUSTING: SHARE_RENDER_VER=3 in server.py. tip_share_image nutzt Cache nur bei passender Version → nach Deploy regenerieren alle alten (eingefrorenen System-)Share-Bilder einmalig mit dem neuen Renderer.
+- Wirkt produktiv erst NACH erneutem Deploy.
