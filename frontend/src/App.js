@@ -25,6 +25,7 @@ import HallOfFame from "./components/HallOfFame";
 import WinClaimModal from "./components/WinClaimModal";
 import SplashScreen from "./components/SplashScreen";
 import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
+import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
@@ -52,6 +53,7 @@ function Home() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [winOpen, setWinOpen] = useState(false);
+  const [legal, setLegal] = useState({ open: false, tab: "impressum" });
   const [tipsOpen, setTipsOpen] = useState(false);
   const [tipsView, setTipsView] = useState("ai");
   const [giftTarget, setGiftTarget] = useState("");
@@ -328,6 +330,13 @@ function Home() {
           <span className="font-heading font-black text-[0.6rem] uppercase tracking-[0.25em] text-orange-500 -mt-0.5">global</span>
         </div>
         <p className="text-xs text-zinc-600 mt-2 mb-6">Post it. Rate it. Cash it.</p>
+        <div className="flex items-center justify-center gap-4 mb-6 text-xs" data-testid="footer-legal-links">
+          <button onClick={() => setLegal({ open: true, tab: "impressum" })} data-testid="footer-impressum" className="text-zinc-400 hover:text-volt transition-colors">Impressum</button>
+          <span className="text-zinc-700">·</span>
+          <button onClick={() => setLegal({ open: true, tab: "datenschutz" })} data-testid="footer-datenschutz" className="text-zinc-400 hover:text-volt transition-colors">Datenschutz</button>
+          <span className="text-zinc-700">·</span>
+          <button onClick={() => setLegal({ open: true, tab: "agb" })} data-testid="footer-agb" className="text-zinc-400 hover:text-volt transition-colors">AGB</button>
+        </div>
         <Disclaimer />
       </footer>
 
@@ -403,6 +412,7 @@ function Home() {
       <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
         requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished}
         onViewBestWins={() => document.getElementById("best-wins")?.scrollIntoView({ behavior: "smooth" })} />
+      <LegalModal open={legal.open} initialTab={legal.tab} onClose={() => setLegal({ open: false, tab: legal.tab })} />
     </div>
   );
 }

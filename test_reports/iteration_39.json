@@ -1,0 +1,33 @@
+{
+  "summary": "Iter39 verified: (A) Notification Board (bell) — Panel opens with default Board tab (empty state renders), Settings tab shows threshold slider + area toggles, switching back to Board keeps empty state. With localStorage 'tj_alert_history' seeded (3 sample alerts) via addInitScript, Board renders exactly 3 [data-testid=bell-board-item] entries — each with colored area dot (bg-volt/bg-[#2ECC57]/bg-live per area), title, body, and relative time (e.g. '1m'). Board tab shows count badge '3'. 'Clear all' button empties the list, returns to empty state, and removes the localStorage key. (B) Legal modal — footer-impressum opens modal on Impressum tab; legal-tab-datenschutz and legal-tab-agb switch content correctly; legal-close dismisses; footer-datenschutz and footer-agb open the modal directly on the correct tab (verified by both content presence and active-tab bg-volt class). (C) Backend regression after ticket_render.py extraction — GET /api/systems returns systems with per-leg banker(bool)+league(str); POST /api/tips/{parlay_id}/share-image returns {path}; the file at /api/files/{path} is a valid WebP (RIFF/WEBP magic bytes, >500 bytes); no 500s on /api/systems, /api/tips, /api/fixtures. (D) No console errors on the landing page across all bell + legal interactions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter39_refactor.py",
+    "/app/test_reports/pytest/iter39_refactor.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ticket_render.py extraction: _render_slip_image still does 'from server import _match_key' lazily inside the function — this is fine to avoid a circular import at module load, but consider passing _match_key as an argument or moving _match_key into a shared util module to fully decouple the two modules. Currently ticket_render.py cannot be unit-tested in isolation (importing _render_slip_image triggers server import chain when called).",
+    "NotificationBell.jsx: history state initialized via useState(loadHistory) — good; however pushHistory() does not deduplicate on `key`, so the same alert can be appended multiple times if the underlying detector fires twice in the 60-item window. Consider: `next = [entry, ...h.filter(x=>x.key!==entry.key)].slice(0, HISTORY_CAP)`.",
+    "LegalModal.jsx: onClick={onClose} on the outer backdrop uses stopPropagation on inner motion.div (correct), but the ESC key does not close the modal — add a useEffect keydown listener for accessibility.",
+    "server.py still ~9500 lines even after ticket_render.py extraction (~450 lines removed). Continue modularization: snapshots.py, live_annotate.py."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter39_refactor.py"
+  ],
+  "success_rate": {
+    "backend": "100% (3/3 pytest passed — systems banker/league, share-image WebP magic bytes, no 500s on core endpoints)",
+    "frontend": "100% (Notification Board empty→populated→clear flow, Settings tab, all 3 Legal tabs via tab clicks + direct footer entry points, 0 console errors)"
+  },
+  "test_credentials": "Not required — all tested flows are public.",
+  "seed_data_creation": "Frontend test used page.add_init_script to inject 3 sample entries into localStorage 'tj_alert_history' pre-hydration. No residue (cleared by test's own 'Clear all' click). No backend seed data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "IMPORTANT for future bell tests: to reliably seed 'tj_alert_history', use page.add_init_script BEFORE page.goto — seeding via page.evaluate + page.reload() sometimes produces 0 board items due to a hydration race where the state initializer runs before the reload writes reach the fresh page's localStorage. addInitScript guarantees the value is present before any React code runs. The share-image endpoint returns {path} where path is a relative /api/files/... URL; fetch it directly against BASE and check bytes[:4]==b'RIFF' and bytes[8:12]==b'WEBP'.",
+  "rca of the issue": "N/A — no bugs found. All iter39 changes (Notification Board, Legal modal, ticket_render.py refactor) are working end-to-end."
+}

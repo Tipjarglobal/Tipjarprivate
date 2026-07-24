@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Star, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
@@ -117,6 +117,29 @@ function loadAreas() {
   return DEFAULT_AREAS;
 }
 
+const HISTORY_KEY = "tj_alert_history";
+const HISTORY_CAP = 60;
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+function timeAgo(ts, nowLabel) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 45) return nowLabel;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+const AREA_DOT = {
+  ai: "bg-[#2ECC57]", smart: "bg-sky-400", members: "bg-volt", systems: "bg-purple-400",
+  live: "bg-live", live_banker: "bg-cyan-400", live_value: "bg-[#E1FF00]", live_banger: "bg-orange-500",
+};
+
 export default function NotificationBell() {
   const { t } = useI18n();
   const [on, setOn] = useState(localStorage.getItem("tj_bell") === "1");
@@ -125,6 +148,20 @@ export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("board");
+  const [history, setHistory] = useState(loadHistory);
+
+  const pushHistory = (entry) => {
+    setHistory((h) => {
+      const next = [entry, ...h].slice(0, HISTORY_CAP);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const clearHistory = () => {
+    setHistory([]);
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
+  };
   const [soundOn, setSoundOn] = useState(() => {
     try { return localStorage.getItem("tj_sound") !== "off"; } catch { return true; }
   });
@@ -205,6 +242,10 @@ export default function NotificationBell() {
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
     const vibrate = area === "live_banger" ? [200, 80, 200, 80, 300] : undefined;
     pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate);
+    pushHistory({
+      key: `${tp.id || area}-${Date.now()}`, title, body, area, navArea,
+      pickId: tp.id || null, ts: Date.now(),
+    });
     toast[isLive ? "message" : "success"](title, {
       description: body,
       duration: isLive ? 15000 : 10000,
@@ -366,12 +407,28 @@ export default function NotificationBell() {
             className="fixed left-4 right-4 top-20 w-auto max-w-xs mx-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-72 sm:max-w-none sm:mx-0 z-50 rounded-2xl bg-surface border border-bell/40 p-4 text-white shadow-2xl"
             data-testid="bell-settings-panel"
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-heading font-black text-sm uppercase tracking-wide">{t("bell.settings")}</span>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-1 bg-void/50 rounded-full p-0.5" data-testid="bell-tabs">
+                <button
+                  onClick={() => setTab("board")}
+                  data-testid="bell-tab-board"
+                  className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors ${tab === "board" ? "bg-bell text-white" : "text-zinc-400 hover:text-white"}`}
+                >
+                  <Inbox size={12} /> {t("bell.board")}
+                  {history.length > 0 && <span className="text-[9px] font-mono bg-void/40 px-1 rounded-full">{history.length > 99 ? "99+" : history.length}</span>}
+                </button>
+                <button
+                  onClick={() => setTab("settings")}
+                  data-testid="bell-tab-settings"
+                  className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors ${tab === "settings" ? "bg-bell text-white" : "text-zinc-400 hover:text-white"}`}
+                >
+                  <Settings size={12} /> {t("bell.board_settings")}
+                </button>
+              </div>
               <button
                 onClick={toggle}
                 data-testid="bell-toggle-btn"
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors ${
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors shrink-0 ${
                   on ? "bg-bell text-white" : "bg-bell/15 text-bell hover:bg-bell/25"
                 }`}
               >
@@ -379,6 +436,56 @@ export default function NotificationBell() {
               </button>
             </div>
 
+            {tab === "board" && (
+              <div data-testid="bell-board">
+                {history.length > 0 && (
+                  <div className="flex items-center justify-end mb-2">
+                    <button
+                      onClick={clearHistory}
+                      data-testid="bell-board-clear"
+                      className="flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-bell transition-colors"
+                    >
+                      <Trash2 size={12} /> {t("bell.board_clear")}
+                    </button>
+                  </div>
+                )}
+                <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto -mx-1 px-1 space-y-1.5">
+                  {history.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-10 text-center" data-testid="bell-board-empty">
+                      <Inbox size={28} className="text-zinc-600" />
+                      <p className="text-[13px] text-zinc-500 leading-snug px-4">{t("bell.board_empty")}</p>
+                    </div>
+                  ) : history.map((h) => (
+                    <button
+                      key={h.key}
+                      data-testid="bell-board-item"
+                      onClick={() => {
+                        setOpen(false);
+                        window.dispatchEvent(
+                          h.pickId
+                            ? new CustomEvent("tj-open-pick", { detail: { area: h.navArea, id: h.pickId } })
+                            : new CustomEvent("tj-open-view", { detail: h.navArea })
+                        );
+                      }}
+                      className="w-full text-left rounded-xl bg-void/60 border border-white/5 hover:border-bell/40 p-2.5 transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${AREA_DOT[h.area] || "bg-zinc-500"}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[13px] font-bold text-white truncate">{h.title}</p>
+                            <span className="text-[10px] font-mono text-zinc-500 shrink-0">{timeAgo(h.ts, t("bell.board_now"))}</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug line-clamp-2">{h.body}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tab === "settings" && (<>
             <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
               <span>{t("bell.threshold")}</span>
               <span className="flex items-center gap-1 font-mono font-bold text-volt" data-testid="bell-threshold-value">
@@ -507,6 +614,7 @@ export default function NotificationBell() {
                 <BellRing size={12} className="text-bell" /> {count} {t("bell.subscribers")}
               </p>
             )}
+            </>)}
           </motion.div>
         )}
       </AnimatePresence>
