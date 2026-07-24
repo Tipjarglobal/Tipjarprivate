@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
+from footballpredictions import scrape_footballpredictions
 
 from server import (
     APIFOOTBALL_PRED_CACHE_TTL_H,
@@ -1139,4 +1140,62 @@ async def statarea_loop():
                 continue
         except Exception as e:
             logger.error(f"HQ loop F error: {e}")
+        await asyncio.sleep(3 * 3600)  # every 3 hours
+
+
+async def footballpredictions_autopost() -> dict:
+    """Scrape FootballPredictions.com (static HTML, no API quota / no Chromium) and
+    store today's + upcoming predicted scorelines as match predictions
+    (source=footballpred). Additive gap-filler that widens pre-match coverage."""
+    try:
+        rows = await scrape_footballpredictions()
+    except Exception as e:
+        logger.error(f"FootballPredictions scrape failed: {e}")
+        return {"posted": 0, "reason": "scrape failed"}
+    if not rows:
+        return {"posted": 0, "reason": "scrape empty"}
+    posted = 0
+    for r in rows:
+        home, away = r.get("home"), r.get("away")
+        if not home or not away:
+            continue
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        league = (r.get("league") or "").strip()
+        if _team_or_league_blocked(home, away, league):
+            continue
+        ph, pa = r.get("ph"), r.get("pa")
+        if ph is None or pa is None:
+            continue
+        if ph > pa:
+            fav, margin = "home", ph - pa
+        elif pa > ph:
+            fav, margin = "away", pa - ph
+        else:
+            fav, margin = "draw", 0
+        fav_prob = {1: 55, 2: 63}.get(margin, 70) if fav != "draw" else 40
+        btts = ph >= 1 and pa >= 1
+        over25 = (ph + pa) >= 3
+        try:
+            await store_match_prediction(
+                "footballpred", f"fp-{home}-{away}", home, away, r.get("kickoff") or "",
+                ph, pa, fav, fav_prob, btts, over25, fav_prob,
+                league=league, country=r.get("country", ""))
+            posted += 1
+        except Exception as e:
+            logger.warning(f"footballpred store failed: {e}")
+    return {"posted": posted, "scanned": len(rows)}
+
+
+async def footballpredictions_loop():
+    await asyncio.sleep(180)  # after the Chromium scrapers; static source needs no browser
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await footballpredictions_autopost()
+            logger.info(f"HQ loop G (FootballPredictions): {res}")
+        except Exception as e:
+            logger.error(f"HQ loop G error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours

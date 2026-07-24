@@ -225,6 +225,12 @@ async def admin_statarea_run(admin: dict = Depends(require_admin)):
     return await statarea_autopost()
 
 
+@api_router.post("/admin/footballpredictions/run")
+async def admin_footballpredictions_run(admin: dict = Depends(require_admin)):
+    """Manually trigger the FootballPredictions.com scraper (static, no API/Chromium)."""
+    return await footballpredictions_autopost()
+
+
 
 @api_router.post("/admin/autotips/reset")
 async def admin_autotips_reset(admin: dict = Depends(require_admin)):
@@ -6872,6 +6878,7 @@ from scrapers_autopost import (
     predictz_autopost, predictz_loop,
     apifootball_predictions_autopost, apifootball_predictions_loop,
     statarea_autopost, statarea_loop,
+    footballpredictions_autopost, footballpredictions_loop,
 )
 
 
@@ -6926,6 +6933,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
     _BG_TASKS.append(asyncio.create_task(statarea_loop()))
+    _BG_TASKS.append(asyncio.create_task(footballpredictions_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
