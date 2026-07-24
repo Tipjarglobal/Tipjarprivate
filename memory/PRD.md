@@ -1138,3 +1138,12 @@ Behaviour-preserving extraction to reduce server.py bloat. server.py: 9320 → 7
 - **Verification**: pyflakes = 0 undefined names in all files; backend starts clean + all background loops run; admin scraper runs exercised full path (statarea posted 52); /admin/settle-now runs engine end-to-end; 8 broad endpoints (tips/systems/leaderboard/hall-of-fame/scorers/goals-forecast/stats/experts) all HTTP 200.
 - Pattern for future: keep the circular `from server import (...)` at module top; server's `from <module> import (entrypoints)` MUST stay near the bottom (after all shared helpers defined) or import-time NameErrors occur.
 - Also this session: "Statistics" (scorers) nav button recolored to soft pink (#F9A8D4) in Header.jsx + App.js tab-bar.
+
+---
+## 2026-07-24 (cont.) — New scraper: FootballPredictions.com
+- Added `footballpredictions.py` (static requests, no Chromium/API quota): parses JSON-LD SportsEvent (clean team names + league) joined with each visible card's predicted score + `data-datetime`. Returns rows {home, away, league, kickoff, ph, pa}.
+- Wired into `scrapers_autopost.py`: `footballpredictions_autopost()` (derives fav/fav_prob from scoreline margin, btts, over25 → `store_match_prediction` source="footballpred") + `footballpredictions_loop()` (every 3h, no chromium gate). Friendlies relabeled "Club Friendly".
+- server.py: admin endpoint `POST /api/admin/footballpredictions/run`, startup task added, entrypoints imported at bottom.
+- **Verified**: admin run returned {"posted":13,"scanned":13}; 13 docs present in match_predictions (source=footballpred) with correct fav/over25/btts. Backend starts clean, pyflakes 0 undefined.
+- **NOT added (with reasons)**: `scores24.live` → behind Cloudflare active bot-challenge; headless Playwright gets the challenge page (0 matches) → not reliably scrapable from our infra; listing data also low-signal (only % or moneyline, no score/over/btts). `sportsmole.co.uk` → listing has only fixtures + kickoff + competition, NO predicted score/probabilities (predictions live inside each article) → no betting signal for our schema.
+- Backlog: if scores24 is truly wanted, needs a Cloudflare-bypassing scraping proxy (paid) or per-match detail crawling.
