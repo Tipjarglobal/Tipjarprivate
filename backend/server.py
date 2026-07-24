@@ -4603,12 +4603,28 @@ TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "delaware", "eagle fc", "gumi", "sportstoto",
                          "prievidza", "inter bratislava",
                          "agama", "hardrock", "ekibastuz", "ontustik",
-                         "astana ii", "triangle united")
+                         "astana ii", "triangle united",
+                         # owner-flagged 2026-07-24 (obscure/untrustworthy fixtures)
+                         "abaseya", "reyadi", "asiagoal", "buxtu", "pakhator",
+                         "oshmu", "aldier", "qiziriq", "olimpik-mobiuz", "mobiuz")
+
+# Owner MATCH blacklist: block ONE specific fixture only (BOTH team keywords must match).
+# Used when the teams themselves are legit clubs we must NOT ban globally (e.g. CSKA Moscow,
+# Baltika are Russian top-flight sides — only this particular game is excluded).
+MATCH_BLACKLIST = (
+    ("cska moscow", "baltika"),
+)
 
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
-    hay = f" {(home or '').lower()} {(away or '').lower()} {(league or '').lower()} "
-    return any(kw in hay for kw in TEAM_LEAGUE_BLACKLIST)
+    h, a = (home or "").lower(), (away or "").lower()
+    hay = f" {h} {a} {(league or '').lower()} "
+    if any(kw in hay for kw in TEAM_LEAGUE_BLACKLIST):
+        return True
+    for x, y in MATCH_BLACKLIST:
+        if (x in h and y in a) or (x in a and y in h):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -4951,6 +4967,8 @@ async def _dedupe_hq_tips() -> int:
 # ---------------------------------------------------------------------------
 def _pred_whitelisted(p: dict) -> bool:
     if _is_women_or_youth(p.get("home")) or _is_women_or_youth(p.get("away")):
+        return False
+    if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league")):
         return False
     league = (p.get("league") or "").lower()
     if any(b in f" {league} " for b in SLIP_BLOCK_KEYWORDS):

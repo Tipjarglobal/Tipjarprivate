@@ -1019,3 +1019,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Eintrag in Preview-DB eingefügt (win_claims, type=played → MITGESPIELT-Footer, GEWONNEN-Badge grün). Erscheint als #1 (höchste Quote). Bild via /api/files abrufbar & korrekt gerendert.
 - WICHTIG: Hall of Fame = DB-Daten, kein Code → Deploy allein trägt es NICHT auf Produktion. Deshalb neuer idempotenter Startup-Seed _seed_showcase_wins() (registriert in @app.on_event startup), dedupe per leg-signature. Läuft gegen die jeweilige DB → legt den Showcase-Eintrag auf tipjarglobal.com beim nächsten Deploy automatisch an, ohne Dupes.
 - Verifiziert: Neustart lief Seed, keine Duplikate (HOF=3), Eintrag sichtbar.
+
+## 2026-07-24 — Owner-Blacklist erweitert (6 Einträge) (DONE + verifiziert)
+- Owner flaggte: Racing–Reyadi Abaseya, bars–asiagoal, BuxTu–Pakhator II, OshMU Aldier–Neftchi, Olimpik-Mobiuz–Qiziriq, CSKA Moscow–Baltika.
+- TEAM_LEAGUE_BLACKLIST um Keywords ergänzt: abaseya, reyadi, asiagoal, buxtu, pakhator, oshmu, aldier, qiziriq, olimpik-mobiuz, mobiuz (obskure Teams global gesperrt).
+- WICHTIG: CSKA Moskau & Baltika sind echte RPL-Klubs → NICHT global gesperrt. Neue MATCH_BLACKLIST (Team-Paar) sperrt nur genau dieses eine Spiel. _team_or_league_blocked prüft jetzt Keywords UND Paare.
+- Blacklist neu in _pred_whitelisted eingehängt → wirkt jetzt auch in Systems/Bomben-Kombi & Prognose-Anzeige (vorher nur Feed/Ingestion). Greift zusätzlich an allen Scraper-Ingestion-Punkten (werden gar nicht mehr gespeichert).
+- 9 bestehende match_predictions bereinigt. Verifiziert: /api/systems → keine geblacklisteten Teams mehr. Auf Produktion wirkt der Read-Filter (_pred_whitelisted) sofort nach Deploy, auch ohne DB-Purge.
