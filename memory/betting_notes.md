@@ -104,3 +104,32 @@ GENERELLE ANWEISUNG: Bei der Tipp-Generierung offener/kreativer sein — verschi
 ## Value-Banker (Owner-Wunsch) — Generator (2026-07-23)
 - Muster: "Tor in jeder Halbzeit + {Favorit} Über 0.5 Tore (Value-Banker)" → kinds goal_each_half + team_o05. Nur offene torreiche Spiele (total>=3, xg>=2.8, Favorit trifft). Rating 8.0.
 - Asian-Variante: "{Favorit} Über 0.5 Tore + Über 1.0 Tore 1. Halbzeit (Asiatisch)" → team_o05 + ht_asian_o1 (HZ-Leg ist versichert: 1 Tor = Push statt Verlust). total>=3, xg>=3.0. Rating 7.5.
+
+## 2026-07-24 — Owner rules: combo redundancy, handicaps, no correct-score
+CRITICAL logic the AI + combo/system builder MUST follow:
+
+1. NO REDUNDANT LEGS in a slip. Never include a selection that is logically ENTAILED
+   by the combination of the other legs (adds no odds/value). Compute the minimal
+   implied scoreline/total from the existing legs and drop any leg whose condition is
+   already guaranteed.
+   - Worked example (Red Star vs Vojvodina): legs {Home -1.5, BTTS}.
+     * Home -1.5 => home wins by >=2 goals.
+     * BTTS => away >=1, home >=1.
+     * Minimal satisfying scoreline = 3-1 => total >=4.
+     * => Over 3.5 (>=4) is REDUNDANT. Home team Over 2.5 (>=3) is REDUNDANT.
+     * Goal-in-each-half is NOT implied (timing) => genuine added value, keep.
+     * Only Over 4.5 (>=5) meaningfully raises risk/odds above the implied floor.
+
+2. LEARN HANDICAPS properly:
+   - Team -1.5 => that team must win by >=2 (2-0, 3-1, 3-0, ...).
+   - Team -2.5 => win by >=3. Team +1.5 => lose by <=1 or better (i.e. not lose by 2+).
+   - Draw No Bet => favourite win OR stake back on draw.
+   - When combining a handicap with BTTS/over lines, derive the implied minimum
+     total/scoreline and use it to detect redundancy (rule 1).
+
+3. NEVER give an exact/correct score as a pick. Express the intended scoreline via a
+   COMBINATION of markets (handicap + BTTS + over/under + halves) that together imply
+   the desired scenario, choosing only legs that each add real value/odds.
+
+Apply in: build_systems / combo candidate generation / _finalize_system, and in the
+match-analysis prose (explain WHY, EMP-Tips style, with implied-goal reasoning).
