@@ -1128,3 +1128,13 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Verifiziert: node-Tests + Greek-Screenshots (Systems-Subtitle, Live-Kategorie-Text, Märkte alle griechisch).
 - OFFEN (klein): nav "Settled"-Label + Wochentags-Kürzel (Di/Fr) noch DE; seltene ai_analysis-Varianten evtl. teils DE; es/fr/it/ar/tr Prosa fällt auf EN zurück.
 - Wirkt produktiv erst NACH Deploy.
+
+---
+## 2026-07-24 — server.py Modularization (P1 refactor)
+Behaviour-preserving extraction to reduce server.py bloat. server.py: 9320 → 7280 lines (~22% smaller).
+- **core.py (142 L)**: runtime config/constants, MongoDB connection (db/client), logger, low-level API-Football client (_apifootball, _apifootball_async, quota flags). Imported by server.py + extracted modules (single shared db handle + quota flag).
+- **scrapers_autopost.py (1142 L)**: 4 site scrapers + private helpers + loops — forebet/predictz/apifootball_predictions/statarea (autopost + *_loop + _forebet_candidates, _predictz_candidates, _goal_est, _parse_apifootball_prediction, _statarea_est_score, etc.). Shared betting helpers/block-lists/odds stay in server.py, imported via intentional circular import (server imports entrypoints near bottom after all helpers defined).
+- **settlement.py (994 L)**: full settlement/grading engine — _grade_goal_leg, _grade_player_leg, find_finished_fixture, _datescan_fixture, judge_market, settle_pending_tips, settle_hq_combos, settle_multimatch_parlays, expire_stale_pending, purge_settled_tips, settlement_loop. Same circular-import pattern.
+- **Verification**: pyflakes = 0 undefined names in all files; backend starts clean + all background loops run; admin scraper runs exercised full path (statarea posted 52); /admin/settle-now runs engine end-to-end; 8 broad endpoints (tips/systems/leaderboard/hall-of-fame/scorers/goals-forecast/stats/experts) all HTTP 200.
+- Pattern for future: keep the circular `from server import (...)` at module top; server's `from <module> import (entrypoints)` MUST stay near the bottom (after all shared helpers defined) or import-time NameErrors occur.
+- Also this session: "Statistics" (scorers) nav button recolored to soft pink (#F9A8D4) in Header.jsx + App.js tab-bar.
