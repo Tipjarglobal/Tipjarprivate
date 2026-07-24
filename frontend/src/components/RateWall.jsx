@@ -940,9 +940,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                     <span data-testid={`leg-live-score-${li}`} className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#F0443C] rounded px-1.5 py-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />{leg.live_score}{leg.live_minute != null ? ` ${leg.live_minute}'` : ""}
                     </span>
-                  ) : leg.kickoff && leg.status !== "live" && (isKickoffLive(leg.kickoff)
-                    ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F0443C] bg-[#F0443C]/10 border border-[#F0443C]/30 rounded px-1.5 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-[#F0443C] animate-pulse" />{t("kickoff.live")}</span>
-                    : formatKickoff(leg.kickoff, t) && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>)}
+                  ) : (leg.status === "live" || leg.live || isKickoffLive(leg.kickoff)) ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F0443C] bg-[#F0443C]/10 border border-[#F0443C]/30 rounded px-1.5 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-[#F0443C] animate-pulse" />{t("kickoff.live")}</span>
+                  ) : leg.kickoff && formatKickoff(leg.kickoff, t) ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>
+                  ) : null}
                 </div>
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}

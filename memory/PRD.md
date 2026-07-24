@@ -1073,3 +1073,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIX Backend (tip_share_image): (1) Cache — wenn share_image_path existiert + File da, sofort zurückgeben (frozen system + immutable member picks). (2) _render_slip_image & put_object via asyncio.to_thread → Event-Loop nicht mehr blockiert. Verifiziert: paralleler /api/systems-Ping in 0.12s während 12s-Render; Folge-Aufrufe instant.
 - FIX Frontend (RateWall TipCard): Share-Bild wird per onViewportEnter VORGEWÄRMT (warmShare → warmedPath ref). doShare nutzt warmedPath → Tap→Teilen sofort, user-activation bleibt erhalten → auch 15-Leg-Slips teilbar. shareSlip.js gibt jetzt Boolean zurück, robuster Telegram-Fallback.
 - Wirkt produktiv nach Deploy.
+
+## 2026-07-24 — Diskretes Share-Bild + Liga/Banker/Live-Score pro Spiel (DONE, getestet iter38)
+- BRANDING (server.py _render_slip_image): QR-Code entfernt (bereits vorher), lauter Slogan "POST IT · RATE IT · CASH IT" → dezenter Schriftzug "tipjarglobal.com" oben links; Footer-Wordmark unten rechts entfernt. Kein Spam-Look mehr in Fremd-Gruppen.
+- SHARE-TEXT (shareSlip.js): dezent "Kombi-Schein · Gesamtquote {odds} · @{username}" (kein CTA/Link-Slogan).
+- LIGA pro Spiel: _render_slip_image zeigt Liga in Meta-Zeile jeder Gruppe; snapshot_systems legs tragen league; enrich_member_picks füllt jetzt AUCH bei Mehrspiel-Parlays die Liga pro Leg (vorher nur Einzelspiel). Frontend RateWall zeigt leg.league.
+- BANKER sichtbar: snapshot_systems legs tragen banker; _tip_to_render_legs reicht banker weiter; Bild zeigt cyan "BANKER"-Chip; RateWall zeigt cyan Banker-Badge pro Leg; play-slip reicht banker+league weiter.
+- LIVE-SCORE pro Spiel: live_annotate_sync annotiert JEDES Parlay-Leg mit live_score/live_minute (nicht nur eins); Bild zeigt roten Live-Score-Chip pro Gruppe; RateWall zeigt roten Live-Score pro Leg (data-testid=leg-live-score-{i}). Hinweis: Per-Leg-Live-Match hängt an Team-Namens-Matching (funktioniert für System-/kanonische Namen; stark transliterierte Member-Legs matchen ggf. nicht → Fallback "Live now"-Pille).
+- Share-Cache (share_image_path) wird bei Liga-/Live-Änderung der Legs invalidiert, damit Produktions-Scheine neu rendern.
+- Wirkt produktiv erst NACH Deploy.
