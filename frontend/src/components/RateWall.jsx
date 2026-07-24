@@ -770,11 +770,31 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
-  const doShare = async () => {
-    setSharing(true);
+  const warmedPath = useRef(null);
+  const warming = useRef(false);
+  // Pre-generate the share image as soon as the slip is on screen, so the tap→share is
+  // instant (cached). Big 15-leg slips take up to ~20s to render+upload — without this the
+  // tap's user-activation expires and navigator.share() is blocked ("wird nicht geteilt").
+  const warmShare = useCallback(async () => {
+    if (!isShareable || warmedPath.current || warming.current) return;
+    warming.current = true;
     try {
       const { data } = await api.post(`/tips/${tip.id}/share-image`);
-      await shareSlip({ imageUrl: fileUrl(data.path), username: tip.username, odds: tip.odds });
+      warmedPath.current = data.path;
+    } catch { /* keep sharing possible via the slow path on tap */ }
+    finally { warming.current = false; }
+  }, [isShareable, tip.id]);
+  const doShare = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      let path = warmedPath.current;
+      if (!path) {
+        const { data } = await api.post(`/tips/${tip.id}/share-image`);
+        path = data.path;
+        warmedPath.current = path;
+      }
+      await shareSlip({ imageUrl: fileUrl(path), username: tip.username, odds: tip.odds });
     } catch (e) {
       toast.error(t("wall.shareErr"));
     } finally {
@@ -786,6 +806,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+      onViewportEnter={warmShare}
       transition={{ delay: (i % 6) * 0.05 }}
       id={`pick-${tip.id}`}
       data-testid={`tip-card-${tip.id}`}

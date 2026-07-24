@@ -13,18 +13,19 @@ export async function shareSlip({ imageUrl, username, odds }) {
       const file = new File([blob], "tipjar-slip.webp", { type: blob.type || "image/webp" });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], text, title: "TipJar" });
-        return;
+        return true;
       }
     }
     if (typeof navigator !== "undefined" && navigator.share) {
       await navigator.share({ text, url: TIPJAR_URL });
-      return;
+      return true;
     }
   } catch (e) {
-    if (e && e.name === "AbortError") return;
+    if (e && e.name === "AbortError") return true;
   }
   // fallback: Telegram share (link to the image + text with the site URL)
   const tgUrl = encodeURIComponent(imageUrl || TIPJAR_URL);
   const tgText = encodeURIComponent(text);
   window.open(`https://t.me/share/url?url=${tgUrl}&text=${tgText}`, "_blank");
+  return true;
 }

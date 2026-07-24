@@ -1066,3 +1066,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIX: _real_odd_for erkennt jetzt " + "-Kombis → splittet, holt echte Einzel-Quoten, gibt PRODUKT zurück (= Buchmacher-Bet-Builder-Pricing). Getestet: "Singapore X2 + Beide treffen" = 1.35×1.57 = 2.12 (exakt Wazamba). BTTS-Match erweitert ("beide"+"treffen" ODER "btts") für Kombi-Variante "Beide treffen".
 - Risk-Kombis jetzt in _apply_real gewickelt → nutzen echte Produkt-Quote wenn Cache vorhanden, sonst kalibrierte Schätzung. Verifiziert live: Saprissa (API-Football-Abdeckung) = echte 1.18; Cambodia/Otelul/Pogon = Schätzung 2.43/1.82/2.03.
 - Wirkt produktiv nach Deploy. Gilt automatisch für alle Systeme + apply_real_odds (Auto-Tips).
+
+## 2026-07-24 — FIX: Große Scheine "werden nicht geteilt"
+- Owner: 7-Spiele-System-Schein ließ sich nicht teilen ("ist er zu groß?").
+- ROOT CAUSE: share-image-Endpoint renderte JEDES Mal neu (kein Cache) → bis zu 21s für 15-Leg-Slip. navigator.share() verliert nach so langem await die user-activation → Teilen blockiert. Kleine/gecachte Scheine gingen, große nicht. Zusätzlich lief PIL-Render + put_object SYNCHRON im Event-Loop → blockierte alle Requests.
+- FIX Backend (tip_share_image): (1) Cache — wenn share_image_path existiert + File da, sofort zurückgeben (frozen system + immutable member picks). (2) _render_slip_image & put_object via asyncio.to_thread → Event-Loop nicht mehr blockiert. Verifiziert: paralleler /api/systems-Ping in 0.12s während 12s-Render; Folge-Aufrufe instant.
+- FIX Frontend (RateWall TipCard): Share-Bild wird per onViewportEnter VORGEWÄRMT (warmShare → warmedPath ref). doShare nutzt warmedPath → Tap→Teilen sofort, user-activation bleibt erhalten → auch 15-Leg-Slips teilbar. shareSlip.js gibt jetzt Boolean zurück, robuster Telegram-Fallback.
+- Wirkt produktiv nach Deploy.

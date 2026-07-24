@@ -3100,6 +3100,14 @@ async def tip_share_image(tip_id: str):
     if tip.get("source") in ("hq-auto", "smart"):
         raise HTTPException(status_code=400, detail="Only member tips can be shared")
     ctype = "live_pending" if tip.get("status") == "live" else "pending"
+    # Serve the cached image if we already built it — frozen system slips and posted member
+    # picks are immutable, so re-rendering (up to ~20s for a 15-leg slip) is pure waste and
+    # was the reason large slips "wouldn't share" (the tap's user-activation expired).
+    if tip.get("status") != "live" and tip.get("share_image_path"):
+        existing = await db.files.find_one(
+            {"storage_path": tip["share_image_path"], "is_deleted": False}, {"_id": 1})
+        if existing:
+            return {"path": tip["share_image_path"]}
     live_info = None
     if tip.get("status") == "live" and API_FOOTBALL_KEY and tip.get("home_team") and tip.get("away_team"):
         try:
@@ -3112,10 +3120,13 @@ async def tip_share_image(tip_id: str):
         except Exception:
             pass
     rlegs = _tip_to_render_legs(tip)
-    img = _render_slip_image(rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
-                             tip.get("potential_return", ""), tip.get("username", "TipJar"), ctype, live_info)
+    # offload the CPU-heavy PIL render + the storage upload so we never block the event loop
+    img = await asyncio.to_thread(
+        _render_slip_image, rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
+        tip.get("potential_return", ""), tip.get("username", "TipJar"), ctype, live_info)
     try:
-        result = put_object(f"{APP_NAME}/shares/{tip_id}.webp", img, "image/webp")
+        result = await asyncio.to_thread(
+            put_object, f"{APP_NAME}/shares/{tip_id}.webp", img, "image/webp")
         path = result["path"]
         await db.files.insert_one({
             "id": str(uuid.uuid4()), "storage_path": path,
