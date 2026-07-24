@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -926,12 +926,21 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               <div className="flex items-center justify-between gap-2">
                 <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{toLatin(leg.match) || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
+                  {leg.banker && (
+                    <span data-testid={`leg-banker-${li}`} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300">
+                      <ShieldCheck size={9} /> Banker
+                    </span>
+                  )}
                   {ls && (
                     <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
                       <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
-                  {leg.kickoff && leg.status !== "live" && (isKickoffLive(leg.kickoff)
+                  {leg.live && leg.live_score ? (
+                    <span data-testid={`leg-live-score-${li}`} className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#F0443C] rounded px-1.5 py-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />{leg.live_score}{leg.live_minute != null ? ` ${leg.live_minute}'` : ""}
+                    </span>
+                  ) : leg.kickoff && leg.status !== "live" && (isKickoffLive(leg.kickoff)
                     ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F0443C] bg-[#F0443C]/10 border border-[#F0443C]/30 rounded px-1.5 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-[#F0443C] animate-pulse" />{t("kickoff.live")}</span>
                     : formatKickoff(leg.kickoff, t) && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-volt bg-volt/10 border border-volt/25 rounded px-1.5 py-0.5"><Clock size={10} />{formatKickoff(leg.kickoff, t)}</span>)}
                 </div>
@@ -1000,6 +1009,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   match: toLatin(l.match) || `${displayTeam(tip.home_team, tip.home_team_latin)} vs ${displayTeam(tip.away_team, tip.away_team_latin)}`,
                   market: (l.selections || []).map((s, si) => `${formatSelection(s, t)}${(l.sel_odds || [])[si] ? ` @${(l.sel_odds)[si]}` : ""}`).join(" + "),
                   kickoff: l.kickoff,
+                  league: l.league || "",
+                  banker: !!l.banker,
                 }))
               : [{
                   match: `${displayTeam(tip.home_team, tip.home_team_latin) || ""} vs ${displayTeam(tip.away_team, tip.away_team_latin) || ""}`.trim(),

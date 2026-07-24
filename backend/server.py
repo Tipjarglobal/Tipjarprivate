@@ -1954,7 +1954,10 @@ def _tip_to_render_legs(tip: dict) -> list:
             od = _to_float(sodds[i]) if i < len(sodds) else 0.0
             rlegs.append({"home": home, "away": away, "market": _fmt_selection(sel),
                           "odds": od, "result": "open",
-                          "league": lg.get("league", ""), "date": "", "time": lg.get("kickoff", "")})
+                          "league": lg.get("league", ""), "date": "", "time": lg.get("kickoff", ""),
+                          "banker": bool(lg.get("banker")),
+                          "live": bool(lg.get("live")), "live_score": lg.get("live_score") or "",
+                          "live_min": lg.get("live_minute")})
     if not rlegs:
         rlegs.append({"home": tip.get("home_team", ""), "away": tip.get("away_team", ""),
                       "market": _fmt_selection(tip.get("market", "")), "odds": _to_float(tip.get("odds")),
@@ -2025,6 +2028,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     PANEL_EDGE = (48, 53, 66)
     INK, SOFT, MUTE, FAINT = (244, 246, 250), (196, 201, 212), (150, 156, 170), (108, 114, 128)
     VOLT = (202, 240, 0)
+    CYAN = (56, 209, 236)
     GREEN, RED, AMBER, LIVE = (52, 211, 130), (244, 82, 74), (245, 190, 46), (255, 92, 92)
     won = ctype not in ("pending", "live_pending")
     is_live = ctype == "live_pending"
@@ -2063,12 +2067,20 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             gidx[k] = len(groups)
             groups.append({"home": l.get("home", "?") or "?", "away": l.get("away", "?") or "",
                            "league": l.get("league", ""), "date": l.get("date", ""),
-                           "time": l.get("time", ""), "result": "", "mkts": []})
+                           "time": l.get("time", ""), "result": "", "mkts": [],
+                           "banker": False, "live": False, "live_score": "", "live_min": None})
         if not groups[gidx[k]]["result"]:
             r = str(l.get("result") or "").strip()
             if r and r.lower() not in ("open", "offen", "won", "lost", "gewonnen",
                                        "verloren", "pending", "void", "-"):
                 groups[gidx[k]]["result"] = r
+        if l.get("banker"):
+            groups[gidx[k]]["banker"] = True
+        if l.get("live") and l.get("live_score"):
+            groups[gidx[k]]["live"] = True
+            groups[gidx[k]]["live_score"] = str(l.get("live_score") or "")
+            if l.get("live_min") is not None:
+                groups[gidx[k]]["live_min"] = l.get("live_min")
         groups[gidx[k]]["mkts"].append(l)
 
     # per-group geometry ----------------------------------------------------
@@ -2082,7 +2094,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
                                       _clean(g.get("time", "")) if not g.get("date") else "") if x)
         g["meta"] = meta
         h = G_PAD + TITLE_H + len(g["mkts"]) * MKT_H
-        if meta:
+        if meta or g.get("banker"):
             h += META_H
         h += G_PAD
         g["h"] = h
@@ -2157,7 +2169,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     d.text((logo_x, hy - 8), "TIP", font=f_logo, fill=INK)
     lw = tw("TIP", f_logo)
     d.text((logo_x + lw + 4, hy - 8), "JAR", font=f_logo, fill=VOLT)
-    d.text((logo_x + 3, hy + 60), "POST IT · RATE IT · CASH IT", font=f_tag, fill=FAINT)
+    # discreet top-left wordmark only — value-provider vibe, no loud slogan (owner 2026-07-24)
+    d.text((logo_x + 3, hy + 60), "tipjarglobal.com", font=f_tag, fill=FAINT)
 
     # status pill (top-right, with soft glow)
     st_w = tw(status_txt, f_status)
@@ -2204,7 +2217,13 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         away = g["away"]
         title = f"{g['home']}  –  {away}" if away else g["home"]
         chip_x1 = cx1 - G_PAD
-        if g["result"]:
+        if g.get("live") and g.get("live_score"):
+            sc = g["live_score"] + (f"  {g['live_min']}'" if g.get("live_min") is not None else "")
+            scw = tw(sc, f_score)
+            d.rounded_rectangle([chip_x1 - scw - 30, ty - 2, chip_x1, ty + 44], 12, fill=LIVE)
+            d.text((chip_x1 - scw - 15, ty + 1), sc, font=f_score, fill=(12, 12, 14))
+            title_max = chip_x1 - scw - 30 - ix - 18
+        elif g["result"]:
             sc = g["result"]
             scw = tw(sc, f_score)
             d.rounded_rectangle([chip_x1 - scw - 30, ty - 2, chip_x1, ty + 44], 12,
@@ -2236,8 +2255,15 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             gow = tw(got, f_legodds)
             cym = (mkt_top + ty) // 2
             d.text((chip_x1 - gow, cym - 30), got, font=f_legodds, fill=VOLT)
+        meta_x = ix + 40
+        if g.get("banker"):
+            bt = "BANKER"
+            bw = tw(bt, f_meta)
+            d.rounded_rectangle([ix + 40, ty - 2, ix + 40 + bw + 28, ty + 34], 16, fill=CYAN)
+            d.text((ix + 40 + 14, ty + 2), bt, font=f_meta, fill=(10, 14, 18))
+            meta_x = ix + 40 + bw + 28 + 16
         if g["meta"]:
-            d.text((ix + 40, ty), trunc(g["meta"], f_meta, cw - 140), font=f_meta, fill=FAINT)
+            d.text((meta_x, ty), trunc(g["meta"], f_meta, cx1 - G_PAD - meta_x), font=f_meta, fill=FAINT)
         y += g["h"] + G_GAP
 
     # ---- perforation (tear-off) ------------------------------------------
@@ -2288,12 +2314,6 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         wlabel = "AUSGEZAHLT" if ctype == "cashed" else ("GEWINN" if won else "MÖGL. GEWINN")
         d.text((col2, row_y), wlabel, font=f_small, fill=FAINT)
         d.text((col2, row_y + 28), str(winnings), font=f_fval, fill=VOLT)
-
-    # discreet footer wordmark (right) — value-provider vibe. NO QR code and no "join now"
-    # call-to-action, so the slip can be dropped into third-party groups without looking like
-    # spam/poaching (owner 2026-07-24: "sei diskret, eher Wertanbieter als krasse Werbung").
-    d.text((cx1 - tw("tipjarglobal.com", f_fval), row_y + 28),
-           "tipjarglobal.com", font=f_fval, fill=SOFT)
 
     out = io.BytesIO()
     base.convert("RGB").save(out, format="WEBP", quality=94, method=6)
@@ -5645,6 +5665,7 @@ async def snapshot_systems() -> int:
             "sel_odds": [f"{sel.get('odds')}"],
             "selections": sel.get("combo_markets") or [sel.get("market")],
             "status": "open",
+            "banker": bool(sel.get("banker")),
         } for sel in sels]
         tip_id = f"hqsys-{s.get('key')}-{day}"
         if s.get("key") == "hour":
@@ -8867,7 +8888,7 @@ async def live_annotate_sync() -> dict:
         {"status": {"$in": ["pending", "live"]},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1,
-         "is_parlay": 1, "source": 1, "username": 1, "status": 1}).to_list(1500)
+         "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
     # single-game member parlays too (home_team empty, teams live inside the one leg)
     parlays = await db.tips.find(
         {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
@@ -8898,6 +8919,33 @@ async def live_annotate_sync() -> dict:
         elif t.get("live_state"):
             await db.tips.update_one({"id": t["id"]}, {"$unset": {"live_state": ""}})
             cleared += 1
+        # PER-LEG live score — every running game in a parlay gets its own live score,
+        # not just the first one (owner 2026-07-24: "jedes live-spiel braucht ein live score").
+        legs = t.get("legs") or []
+        if len(legs) >= 1:
+            leg_changed = False
+            for lg in legs:
+                lh, la = _leg_teams(lg)
+                if not lh or not la:
+                    lh, la = (lh or home), (la or away)
+                lfx = _find_live_fixture(live, lh, la) if (lh and la) else None
+                if lfx:
+                    hg, ag = _align_goals(lfx, lh)
+                    lscore = f"{hg}:{ag}"
+                    lmin = ((lfx.get("fixture") or {}).get("status") or {}).get("elapsed")
+                    if (not lg.get("live") or lg.get("live_score") != lscore
+                            or lg.get("live_minute") != lmin):
+                        lg["live"], lg["live_score"], lg["live_minute"] = True, lscore, lmin
+                        leg_changed = True
+                elif lg.get("live"):
+                    lg.pop("live", None)
+                    lg.pop("live_score", None)
+                    lg.pop("live_minute", None)
+                    leg_changed = True
+            if leg_changed:
+                await db.tips.update_one(
+                    {"id": t["id"]},
+                    {"$set": {"legs": legs}, "$unset": {"share_image_path": ""}})
     return {"annotated": annotated, "cleared": cleared, "to_live": to_live}
 
 
@@ -8923,7 +8971,44 @@ async def enrich_member_picks() -> dict:
             continue
         home, away = _tip_match_teams(t)
         if not home or not away:
-            await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
+            # MULTI-GAME parlay: enrich each leg's league/kickoff individually so every
+            # game shows its competition (owner 2026-07-24: "ich brauche die liga an jedes spiel").
+            legs = t.get("legs") or []
+            leg_changed = False
+            for lg in legs:
+                if (lg.get("league") or "").strip():
+                    continue
+                lh, la = _leg_teams(lg)
+                if not lh or not la:
+                    continue
+                lmeta = None
+                ltid = await resolve_team_id(lh)
+                if ltid:
+                    lmeta = await asyncio.to_thread(find_upcoming_fixture, ltid, la)
+                if not lmeta:
+                    if live is None:
+                        live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+                    lfx = _find_live_fixture(live, lh, la)
+                    if lfx:
+                        lmeta = {"league": _fixture_league_label(lfx),
+                                 "date_iso": (lfx.get("fixture") or {}).get("date")}
+                if lmeta and (lmeta.get("league") or "").strip():
+                    lg["league"] = lmeta["league"].strip()
+                    if not (lg.get("kickoff") or "").strip() and lmeta.get("date_iso"):
+                        try:
+                            lko = datetime.fromisoformat(lmeta["date_iso"].replace("Z", "+00:00"))
+                            lg["kickoff"] = lko.strftime("%d/%m/%Y %H:%M")
+                        except Exception:
+                            pass
+                    leg_changed = True
+            if leg_changed:
+                await db.tips.update_one(
+                    {"id": t["id"]},
+                    {"$set": {"legs": legs}, "$inc": {"enrich_tries": 1},
+                     "$unset": {"share_image_path": ""}})
+                enriched += 1
+            else:
+                await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
             continue
         meta = None
         tid = await resolve_team_id(home)

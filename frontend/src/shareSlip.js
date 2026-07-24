@@ -1,11 +1,10 @@
-// Share a TipJar slip image to Telegram / native share, always including the
-// TipJar website link in the shared text.
+// Share a TipJar slip image to Telegram / native share. Discreet, value-provider tone —
+// no slogan/CTA in the visible text so it doesn't read like spam in third-party groups.
 const TIPJAR_URL = "https://tipjarglobal.com";
 
 export async function shareSlip({ imageUrl, username, odds }) {
   const text =
-    `🏆 Mein TipJar-Schein${odds ? ` — Gesamtquote ${odds}` : ""}${username ? ` · @${username}` : ""}\n` +
-    `Post it. Rate it. Cash it. 👉 ${TIPJAR_URL}`;
+    `Kombi-Schein${odds ? ` · Gesamtquote ${odds}` : ""}${username ? ` · @${username}` : ""}`;
   try {
     if (imageUrl && typeof navigator !== "undefined" && navigator.canShare) {
       const resp = await fetch(imageUrl);
