@@ -5021,15 +5021,19 @@ async def store_match_prediction(source, matchid, home, away, kickoff, ph, pa, f
 
 
 def _dc_odds(fav_prob):
+    # Double-chance fair-odds estimate, calibrated 2026-07-24 to real bookmaker bet-builder
+    # pricing (owner: "lern von mir" — e.g. an away/modest favourite's X2 is ~1.5-1.7, not 1.2).
     if fav_prob is None:
-        return 1.30
-    if fav_prob >= 65:
-        return 1.15
-    if fav_prob >= 55:
-        return 1.22
+        return 1.33
+    if fav_prob >= 68:
+        return 1.18
+    if fav_prob >= 60:
+        return 1.25
+    if fav_prob >= 52:
+        return 1.35
     if fav_prob >= 45:
-        return 1.30
-    return 1.40
+        return 1.50
+    return 1.72
 
 
 def _dnb_odds(fav_prob):
@@ -5197,11 +5201,11 @@ async def build_systems() -> dict:
         lopsided = fp >= 58 or underdog_goals == 0
         both_score = bool(p.get("btts")) and ph >= 1 and pa >= 1 and not lopsided
         if both_score and _risk_rot % 2 == 0:
-            leg2, mult = "Beide treffen", 1.70
+            leg2, mult = "Beide treffen", 1.62
         elif total >= 4 and (p.get("over25") or both_score):
             leg2, mult = "Über 2.5 Tore", 1.55
         else:
-            leg2, mult = "Über 1.5 Tore", 1.30
+            leg2, mult = "Über 1.5 Tore", 1.35
         _risk_rot += 1
         od = round(_dc_odds(fp) * mult, 2)
         risks.append(_sel(p, f"{team} Doppelte Chance {dc} + {leg2}", od, 6.5))

@@ -1052,3 +1052,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIX Risk-Kombi (build_systems ~5180): 2. Leg variiert. "Beide treffen" NUR wenn beide Seiten realistisch treffen (btts UND ph>=1 UND pa>=1 UND kein einseitiger Favorit: fav_prob<58 und underdog_goals>0). Sonst "Über 1.5 Tore" (2:0 gewinnt) bzw. "Über 2.5" bei torreichen Spielen. Rotation (_risk_rot) gegen Monotonie. Verifiziert: UTA Arad–Otelul jetzt "X2 + Über 1.5" statt "+ Beide treffen"; BTTS nur bei ausgeglichenen Spielen.
 - FEATURE tägliches Reset 14:00 Europe/Berlin: _berlin_now() (zoneinfo, DST-aware), _system_cycle_day() (Grenze rollt 14:00). snapshot_systems nutzt jetzt cycle-day statt UTC-Tag. Neuer system_reset_loop() (nur Leader, check alle 5 Min): ab 14:00 Berlin einmal pro Cycle → löscht pending hq-system Tips + snapshot_systems() neu. State in db.system_reset_state.
 - Getestet: cycle rollt exakt 13:59→14:01. Backend fehlerfrei. Wirkt produktiv nach Deploy.
+
+## 2026-07-24 — Ticket: Quote pro Spiel + realistischere Odds (owner "lern von mir")
+- Owner: (a) jedes Spiel soll eigene Quote rechts zeigen (fehlte in Screenshots) (b) Odds realistischer wie Wazamba (2.12/2.36/2.42).
+- (a) Quote-pro-Spiel: _render_slip_image hat group_odd-Logik bereits (zeigt kombinierte Quote pro Panel rechts). Verifiziert per Render (risk/lock Slip zeigt 1.59/2.21 etc. rechts). Screenshots des Users ohne Quoten = ALTER Prod-Build → nach Deploy live.
+- (b) _dc_odds neu kalibriert (war 1.15/1.22/1.30/1.40 → jetzt 1.18/1.25/1.35/1.50/1.72), realistischer für Auswärts-/modest-Favoriten X2. Risk-Multiplikatoren: BTTS 1.70→1.62, Über1.5 1.30→1.35. Ergebnis: Risk-Kombis jetzt 1.7-2.5 (vorher 1.59-1.69), matcht echte Buchmacher-Quoten. Gilt für alle Systeme, die _dc_odds nutzen.
+- Bestehende gefrorene Snapshots behalten alte Odds bis zum nächsten 14-Uhr-Reset; Live-/neue Snapshots nutzen neue Odds. Wirkt produktiv nach Deploy.
+- Hinweis: bei sehr langem Markt-Text + Quote wird der Markt leicht abgeschnitten ("Über 1.5 T...") — akzeptabel, Quote hat Priorität.
