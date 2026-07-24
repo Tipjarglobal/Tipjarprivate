@@ -4606,7 +4606,8 @@ TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "astana ii", "triangle united",
                          # owner-flagged 2026-07-24 (obscure/untrustworthy fixtures)
                          "abaseya", "reyadi", "asiagoal", "buxtu", "pakhator",
-                         "oshmu", "aldier", "qiziriq", "olimpik-mobiuz", "mobiuz")
+                         "oshmu", "aldier", "qiziriq", "olimpik-mobiuz", "mobiuz",
+                         "goulburn", "springvale", "ozgon", "ilbirs", "maldonado")
 
 # Owner MATCH blacklist: block ONE specific fixture only (BOTH team keywords must match).
 # Used when the teams themselves are legit clubs we must NOT ban globally (e.g. CSKA Moscow,

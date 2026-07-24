@@ -1026,3 +1026,8 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - WICHTIG: CSKA Moskau & Baltika sind echte RPL-Klubs → NICHT global gesperrt. Neue MATCH_BLACKLIST (Team-Paar) sperrt nur genau dieses eine Spiel. _team_or_league_blocked prüft jetzt Keywords UND Paare.
 - Blacklist neu in _pred_whitelisted eingehängt → wirkt jetzt auch in Systems/Bomben-Kombi & Prognose-Anzeige (vorher nur Feed/Ingestion). Greift zusätzlich an allen Scraper-Ingestion-Punkten (werden gar nicht mehr gespeichert).
 - 9 bestehende match_predictions bereinigt. Verifiziert: /api/systems → keine geblacklisteten Teams mehr. Auf Produktion wirkt der Read-Filter (_pred_whitelisted) sofort nach Deploy, auch ohne DB-Purge.
+
+## 2026-07-24 — Blacklist erweitert (+3)
+- Goulburn Valley Suns–Springvale, Ozgon–Ilbirs, Deportivo Maldonado–Juventud geflaggt.
+- Keywords ergänzt: goulburn, springvale, ozgon, ilbirs, maldonado (Juventud weggelassen — zu allgemein; maldonado deckt das Spiel ab).
+- 4 Prognosen bereinigt. Verifiziert: /api/systems clean. Wirkt produktiv nach Deploy.
