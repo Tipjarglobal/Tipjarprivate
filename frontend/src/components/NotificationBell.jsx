@@ -153,7 +153,7 @@ export default function NotificationBell() {
 
   const pushHistory = (entry) => {
     setHistory((h) => {
-      const next = [entry, ...h].slice(0, HISTORY_CAP);
+      const next = [entry, ...h.filter((x) => x.key !== entry.key)].slice(0, HISTORY_CAP);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });

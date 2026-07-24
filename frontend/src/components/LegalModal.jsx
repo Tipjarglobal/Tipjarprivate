@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { X, FileText, Shield, ScrollText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useI18n } from "../i18n";
 
 const CONTACT_EMAIL = "kontakt@tipjarglobal.com";
 const SITE = "tipjarglobal.com";
@@ -154,9 +153,14 @@ const CONTENT = {
 };
 
 export default function LegalModal({ open, initialTab = "impressum", onClose }) {
-  const { t } = useI18n();
   const [tab, setTab] = useState(initialTab);
   React.useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   return (
     <AnimatePresence>

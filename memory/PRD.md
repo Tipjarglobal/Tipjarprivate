@@ -1082,3 +1082,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - LIVE-SCORE pro Spiel: live_annotate_sync annotiert JEDES Parlay-Leg mit live_score/live_minute (nicht nur eins); Bild zeigt roten Live-Score-Chip pro Gruppe; RateWall zeigt roten Live-Score pro Leg (data-testid=leg-live-score-{i}). Hinweis: Per-Leg-Live-Match hängt an Team-Namens-Matching (funktioniert für System-/kanonische Namen; stark transliterierte Member-Legs matchen ggf. nicht → Fallback "Live now"-Pille).
 - Share-Cache (share_image_path) wird bei Liga-/Live-Änderung der Legs invalidiert, damit Produktions-Scheine neu rendern.
 - Wirkt produktiv erst NACH Deploy.
+
+## 2026-07-24 (Teil 2) — Board + Legal + Modularisierung (DONE, getestet iter39)
+- BENACHRICHTIGUNGS-BOARD (NotificationBell.jsx): Glocke hat jetzt zwei Tabs — "Board" (gesammelte Meldungen) + "Einstellungen". Board poolt alle gefeuerten Alerts (localStorage tj_alert_history, cap 60, dedupe per key), mit farbigem Area-Punkt, Titel/Body, relativer Zeit, Klick→Pick öffnen, "Alle löschen". i18n-Keys bell.board* (en+de).
+- LEGAL-SEITEN (LegalModal.jsx + App.js Footer): Impressum / Datenschutz / AGB als Modal über Footer-Links (footer-impressum/datenschutz/agb). Deutschsprachig, ESC schließt. WICHTIG: Impressum enthält PLATZHALTER [Betreiber-Name], [Adresse], [Vertretung], [USt-IdNr.] — müssen mit echten Daten gefüllt werden (rechtlich erforderlich §5 DDG).
+- MODULARISIERUNG: PIL-Ticket-Renderer aus server.py in NEUES Modul ticket_render.py extrahiert (_fmt_selection,_to_float,_split_match,_tip_to_render_legs,_render_slip_image,FONT_DIR,CREST_PATH; ~410 Zeilen). server.py importiert diese zurück. _render_slip_image nutzt lazy 'from server import _match_key' (kein Zirkelimport). Share-Image e2e verifiziert. server.py jetzt ~9180 Zeilen (weiter modularisierbar: snapshots.py, live_annotate.py).
+- EXPLIZIT NICHT umgesetzt (Userwunsch): Telegram, Stripe/Payments, Trefferquote.
+- Wirkt produktiv erst NACH Deploy.
