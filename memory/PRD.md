@@ -1012,3 +1012,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - FIXES: (a) DE+EL fehlten bell.test/bell.test_sent/bell.test_fail komplett → Test-Button zeigte rohe Keys; ergänzt. (b) neuer Key bell.test_hint (alle 8 Sprachen). (c) Test-Button zeigt jetzt den KONKRETEN Fehlergrund vom Backend (push-error-Code/expired) statt generisch → Diagnose auf Produktion möglich.
 - WAHRSCHEINLICHSTE PRODUKTIONS-URSACHE: Samsung/Android aggressive Akku-Optimierung ("Schlafende Apps") killt Hintergrund-Push. Nutzer-Fix: Chrome/PWA auf "Nicht eingeschränkt" + aus "Schlafende Apps" entfernen + System-Benachrichtigungen an.
 - NÄCHSTER SCHRITT (User): nach Deploy Test-Button tippen, Handy sperren, Ergebnis/Fehlertext melden.
+
+## 2026-07-24 — Hall of Fame: Showcase-Schein @TipJarLogic (DONE + Screenshot-verifiziert)
+- Owner: gewonnenen 2er-Kombi (Hammarby & Panevezys, 2× X, Quote 12.25, 4€→49€) als premium TipJar-Ticket in die Hall of Fame; Name "TipJarLogic", Label MITGESPIELT, normale Quoten-Sortierung (kein Pin).
+- Hall of Fame speichert bereits das gerenderte TipJar-Ticket (_render_slip_image), nicht das Roh-Bild.
+- Eintrag in Preview-DB eingefügt (win_claims, type=played → MITGESPIELT-Footer, GEWONNEN-Badge grün). Erscheint als #1 (höchste Quote). Bild via /api/files abrufbar & korrekt gerendert.
+- WICHTIG: Hall of Fame = DB-Daten, kein Code → Deploy allein trägt es NICHT auf Produktion. Deshalb neuer idempotenter Startup-Seed _seed_showcase_wins() (registriert in @app.on_event startup), dedupe per leg-signature. Läuft gegen die jeweilige DB → legt den Showcase-Eintrag auf tipjarglobal.com beim nächsten Deploy automatisch an, ohne Dupes.
+- Verifiziert: Neustart lief Seed, keine Duplikate (HOF=3), Eintrag sichtbar.

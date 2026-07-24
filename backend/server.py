@@ -9033,10 +9033,59 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     _BG_TASKS.append(asyncio.create_task(_regenerate_win_slips_once()))
+    _BG_TASKS.append(asyncio.create_task(_seed_showcase_wins()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:
         logger.info("Auto-settlement idle — set API_FOOTBALL_KEY to enable")
+
+
+async def _seed_showcase_wins():
+    """Idempotently seed owner-curated Hall-of-Fame showcase slips (runs on startup, incl.
+    production). Data — not code — so a deploy alone wouldn't carry it over; this seed inserts
+    it into whichever DB the backend connects to, guarded by the leg signature (never dupes)."""
+    showcase = [
+        {
+            "username": "TipJarLogic", "type": "played",
+            "total_odds": 12.25, "stake": "4,00 \u20ac", "winnings": "49,00 \u20ac",
+            "legs": [
+                {"home": "Hammarby IF", "away": "RSC Anderlecht", "market": "Unentschieden (X)",
+                 "odds": 3.50, "result": "1:1", "league": "UEFA Europa League", "date": "",
+                 "time": "23.07. \u00b7 19:00"},
+                {"home": "FK Panevezys", "away": "Tobol Kostanay", "market": "Unentschieden (X)",
+                 "odds": 3.50, "result": "1:1", "league": "UCL Quali", "date": "",
+                 "time": "23.07. \u00b7 17:30"},
+            ],
+        },
+    ]
+    for s in showcase:
+        try:
+            legs = s["legs"]
+            sig = hashlib.md5(("|".join(sorted(f"{l['home']}-{l['away']}-{l['market']}" for l in legs))
+                               + f"|{s['total_odds']}").encode()).hexdigest()
+            if await db.win_claims.find_one({"sig": sig}):
+                continue
+            img = await asyncio.to_thread(
+                _render_slip_image, legs, s["total_odds"], s["stake"], s["winnings"],
+                s["username"], s["type"])
+            res = await asyncio.to_thread(
+                put_object, f"{APP_NAME}/wins/showcase/{uuid.uuid4()}.webp", img, "image/webp")
+            image_path = res["path"]
+            now = datetime.now(timezone.utc).isoformat()
+            await db.files.insert_one({
+                "id": str(uuid.uuid4()), "storage_path": image_path,
+                "original_filename": "tipjar-slip.webp", "content_type": "image/webp",
+                "owner": "tipjar-showcase", "is_deleted": False, "created_at": now})
+            await db.win_claims.insert_one({
+                "id": str(uuid.uuid4()), "sig": sig, "user_id": "tipjar-showcase",
+                "username": s["username"], "type": s["type"], "image_path": image_path,
+                "legs": legs, "legs_count": len(legs), "matched_legs": len(legs),
+                "total_odds": s["total_odds"], "stake": s["stake"], "winnings": s["winnings"],
+                "credits": 0, "status": "approved", "created_at": now})
+            logger.info(f"Seeded showcase win: {s['username']} @ {s['total_odds']}")
+        except Exception as ex:
+            logger.error(f"showcase win seed failed: {ex}")
+
 
 
 async def _cleanup_smart_junk():
