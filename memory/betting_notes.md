@@ -133,3 +133,16 @@ CRITICAL logic the AI + combo/system builder MUST follow:
 
 Apply in: build_systems / combo candidate generation / _finalize_system, and in the
 match-analysis prose (explain WHY, EMP-Tips style, with implied-goal reasoning).
+
+### IMPLEMENTED 2026-07-24
+- New module `betting_logic.py`: market_constraint() (parses handicaps/totals/BTTS/1X2/DC over a
+  scoreline grid), dedupe_implied_legs() (fixpoint: removes the weakest logically-entailed leg),
+  scoreline_to_combo() (predicted score → non-redundant market combination, never a correct score).
+- server.py `_dedupe_builder_legs()` applied in mental_autopost + favourite_smart_autopost.
+- JACKPOT system: correct-score ("Genaues Ergebnis X:Y") REPLACED by scoreline_to_combo combinations.
+- Prompts: _ANALYST_SYSTEM upgraded to sharp EMP-tipster style (NO fabricated stats — only given
+  data; no exact score; explains handicaps). AI_SYSTEM (slip reader) now flags redundant selections.
+- VERIFIED live: mental "FK Crvena Zvezda v Vojvodina" dropped redundant "Crvena Zvezda Über 2.5",
+  kept {Über 4.5, BTTS, Tor je HZ, -1.5}. /api/systems JACKPOT has NO correct-score.
+- PENDING: real historical hit-rates ("BTTS 6/7") need a stats feed (API-Football, quota-limited).
+  @EmpTips X monitoring needs X API credentials (route via integration_expert).

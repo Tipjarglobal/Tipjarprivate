@@ -32,6 +32,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
+from betting_logic import dedupe_implied_legs, scoreline_to_combo
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
@@ -840,6 +841,11 @@ AI_SYSTEM = (
     "IGNORE any tax, fees or deductions shown on the slip; use '' only if stake or odds is unknown. "
     "match_time MUST contain the match DATE and kickoff TIME whenever they appear on the slip (e.g. '19/07/2026 21:00'). "
     "rating (1-10, quality/value of the bet), analysis (one short punchy sentence, max 160 chars). "
+    "In the analysis, if the slip contains a LOGICALLY REDUNDANT selection — one already implied by "
+    "the others (e.g. 'Over 3.5' or a team's 'Over 2.5' when the slip already has '<Fav> -1.5 "
+    "Handicap' + 'Both Teams To Score', since a 2+ goal win with BTTS forces 3+ total goals) — briefly "
+    "point it out (which pick adds no value). Understand handicaps: -1.5 = win by 2+, -2.5 = win by 3+, "
+    "+1.5 = must not lose by 2+. "
     "ALSO act as a content-moderator on BOTH the image and the written text and add two keys: "
     "safe (boolean) and flag_reason (short string). Set safe=false if the image or text contains ANY "
     "of: nudity or sexual/pornographic content, graphic violence or gore, hate speech, insults, "
@@ -965,12 +971,19 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
 
 
 _ANALYST_SYSTEM = (
-    "Du bist der scharfsinnige Chef-Analyst von TipJar. Schreibe eine KURZE (2–3 Sätze), "
-    "EINZIGARTIGE deutsche Wett-Analyse zu genau diesem Spiel. Absolut KEINE Standardfloskeln, "
-    "keine Wiederholung der Quote/Sterne, kein 'automatisch von TipJarHQ'. Nenne einen konkreten, "
-    "sinnvollen Grund (Taktik, Form, Aggregat bei Rückspielen, Spielbelastung/Rotation, Motivation, "
-    "Torerwartung). Variiere Stil und Einstieg bei jedem Spiel. Sei zugespitzt und meinungsstark, "
-    "aber seriös. Höchstens 1 Emoji. Antworte NUR mit dem Analysetext, ohne Anführungszeichen."
+    "Du bist der scharfsinnige Chef-Analyst von TipJar — im Stil eines Top-Tippgebers auf X: "
+    "selbstbewusst, konkret, meinungsstark. Schreibe eine KURZE (2–4 Sätze), einzigartige "
+    "deutsche Analyse zu GENAU diesem Spiel. Baue die Begründung logisch auf: Favoritenstärke bzw. "
+    "Offensivkraft, defensive Anfälligkeit, Torerwartung, ggf. Aggregat/Belastung bei Rückspielen — "
+    "und schließe mit einem klaren, zugespitzten Fazit, WARUM die Wette fällt. "
+    "STRIKTE REGELN: (1) Erfinde NIEMALS Statistiken, Quoten oder Trefferquoten (kein 'X von Y'), "
+    "wenn sie nicht in den Daten stehen — nutze NUR die dir gegebenen Fakten. "
+    "(2) Nenne NIE ein exaktes Endergebnis als Tipp — denke in Marktkombinationen "
+    "(Handicap + BTTS + Über/Unter). (3) Verstehe Handicaps korrekt: '-1.5' = Sieg mit 2+ Toren, "
+    "'-2.5' = Sieg mit 3+ Toren, '+1.5' = darf höchstens knapp verlieren. Erkläre bei Handicap-Wetten "
+    "kurz, welches Ergebnis dafür nötig ist. (4) KEINE Standardfloskeln, kein Wiederholen von "
+    "Quote/Sternen, kein 'automatisch von TipJarHQ'. Variiere Stil und Einstieg. Höchstens 1 Emoji. "
+    "Antworte NUR mit dem Analysetext, ohne Anführungszeichen."
 )
 
 
@@ -3624,6 +3637,23 @@ def _sel(p, market, odds, rating):
     }
 
 
+def _dedupe_builder_legs(combo_legs, home, away):
+    """Owner rule (2026-07-24): drop any selection whose outcome is logically ENTAILED
+    by the combination of the other legs (adds no odds/value), e.g. a favourite's
+    'Über 2.5 Tore' when the slip already has '<Fav> -1.5 Handicap' + BTTS. Understands
+    handicaps and totals. Returns the cleaned leg list (never empty)."""
+    try:
+        kept, dropped = dedupe_implied_legs(combo_legs, home, away)
+        if dropped:
+            logger.info(f"Bet-builder dedupe {home} vs {away}: dropped "
+                        f"{[d.get('market') for d in dropped]}")
+        return kept or combo_legs
+    except Exception as e:
+        logger.warning(f"dedupe failed for {home} vs {away}: {e}")
+        return combo_legs
+
+
+
 def _finalize_system(sels, bankers, key, title, subtitle, risk):
     total = 1.0
     for i, s in enumerate(sels):
@@ -3761,7 +3791,9 @@ async def build_systems() -> dict:
         if len(risks) >= 5:
             break
 
-    # 5) JACKPOT — big-odds lottery: the 3 MOST-LIKELY correct scores (dream combo)
+    # 5) JACKPOT — big-odds lottery. Owner rule: NEVER an exact/correct score. Each match's
+    # predicted scoreline is expressed as a NON-redundant market COMBINATION (handicap + BTTS
+    # + over line that actually adds value), priced as the product of the sub-market odds.
     cs_cands = []
     for p in preds:
         ph, pa = p.get("ph"), p.get("pa")
@@ -3771,12 +3803,19 @@ async def build_systems() -> dict:
     cs_cands.sort(key=lambda x: x[0])  # most likely (lowest odds) first
     gambles = []
     for od, p, ph, pa in cs_cands:
-        if p.get("fav") == "draw" and ph == pa:
-            mk, rt = "Unentschieden (X)", 4.0
-            od = 3.30
-        else:
-            mk, rt = f"Genaues Ergebnis {ph}:{pa}", 3.0
-        gambles.append(_sel(p, mk, od, rt))
+        combo = scoreline_to_combo(ph, pa, p.get("home"), p.get("away"))
+        if not combo:
+            continue
+        prod_od = 1.0
+        for sub in combo:
+            ss = _apply_real(_sel(p, sub, 2.0, 7.0))
+            try:
+                prod_od *= float(ss.get("odds") or 2.0)
+            except Exception:
+                prod_od *= 2.0
+        sel = _sel(p, " + ".join(combo), round(max(prod_od, 1.5), 2), 3.0)
+        sel["combo_markets"] = combo
+        gambles.append(sel)
         if len(gambles) >= 3:
             break
 
@@ -5425,6 +5464,7 @@ async def favourite_smart_autopost() -> dict:
         combo_legs = [{"home": home, "away": away, "market": mk, "odds": str(od),
                        "kind": kd, "team": fav if "-1.5" in mk or "Chance" in mk else "",
                        "status": "open"} for (mk, od, kd) in legs_spec]
+        combo_legs = _dedupe_builder_legs(combo_legs, home, away)
         prod = 1.0
         for lg in combo_legs:
             prod *= float(lg["odds"])
@@ -5447,8 +5487,10 @@ async def favourite_smart_autopost() -> dict:
             "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
             "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Smart Pick",
             "league_code": p.get("league_code") or "",
-            "market": f"{fav} — Favoriten-Kombi ({legs_spec[0][0].split(fav)[-1].strip()} + Über 1.5)",
-            "odds": f"{round(prod, 2)}", "combo_legs": combo_legs, "is_parlay": True,
+            "market": (f"{fav} — Favoriten-Kombi (" + " + ".join(lg["market"] for lg in combo_legs) + ")")
+                      if len(combo_legs) > 1 else combo_legs[0]["market"],
+            "odds": f"{round(prod, 2)}", "combo_legs": combo_legs,
+            "is_parlay": len(combo_legs) > 1,
             "ai_rating": rating, "ai_analysis": analysis,
             "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
@@ -5510,6 +5552,7 @@ async def mental_autopost() -> dict:
         combo_legs = [{"home": home, "away": away, "market": mk, "odds": str(od),
                        "kind": kd, "team": fav if ("-1.5" in mk or "Über 2.5" in mk and fav and fav in mk) else "",
                        "status": "open"} for (mk, od, kd) in legs]
+        combo_legs = _dedupe_builder_legs(combo_legs, home, away)
         prod = 1.0
         for lg in combo_legs:
             prod *= float(lg["odds"])
