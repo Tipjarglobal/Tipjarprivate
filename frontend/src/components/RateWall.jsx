@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -71,7 +71,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [lostTips, setLostTips] = useState([]);
   const [cashedTips, setCashedTips] = useState([]);
   const [bestwonTips, setBestwonTips] = useState([]);
-  const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0 });
+  const [voidTips, setVoidTips] = useState([]);
+  const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0, void: 0 });
   const [settledTab, setSettledTab] = useState(null);
 
   useEffect(() => {
@@ -145,19 +146,21 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
   const loadSettled = useCallback(async () => {
     try {
-      const [w, l, c, bw, counts] = await Promise.all([
+      const [w, l, c, bw, v, counts] = await Promise.all([
         api.get("/tips", { params: { status: "won", source: "normalwon", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "lost", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "cashed_out", sort: "new", limit: 1000 } }),
         api.get("/tips", { params: { status: "won", source: "bestwon", sort: "new", limit: 1000 } }),
+        api.get("/tips", { params: { status: "void", sort: "new", limit: 1000 } }),
         api.get("/tips/counts"),
       ]);
-      setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); setBestwonTips(bw.data);
+      setWonTips(w.data); setLostTips(l.data); setCashedTips(c.data); setBestwonTips(bw.data); setVoidTips(v.data);
       setSettledCounts({
         won: counts.data.won_normal ?? w.data.length,
         lost: counts.data.lost ?? l.data.length,
         cashed: counts.data.cashed ?? c.data.length,
         bestwon: counts.data.bestwon ?? bw.data.length,
+        void: counts.data.void ?? v.data.length,
       });
     } catch { /* ignore */ }
   }, []);
@@ -307,7 +310,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
             <Clock size={16} className="text-zinc-400 shrink-0" />
             <p className="text-sm text-zinc-300">{t("settled.note")}</p>
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
             <button
               type="button"
               data-testid="settled-won-toggle"
@@ -372,6 +375,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
                 <span className={`text-[9px] sm:text-[10px] font-mono rounded-full px-1 ${settledTab === "special" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.cashed}</span>
               </span>
             </button>
+            <button
+              type="button"
+              data-testid="settled-void-toggle"
+              onClick={() => setSettledTab((v) => (v === "void" ? null : "void"))}
+              className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-4 font-heading font-black text-base transition-all ${
+                settledTab === "void"
+                  ? "bg-zinc-400 text-void border-zinc-400 shadow-[0_0_18px_rgba(161,161,170,0.4)]"
+                  : "bg-zinc-500/10 border-zinc-500/40 text-zinc-300 hover:bg-zinc-500/20"
+              }`}
+            >
+              <Ban size={20} /> Annulliert
+              <span className={`text-xs font-mono rounded-full px-1.5 ${settledTab === "void" ? "bg-black/20" : "bg-void/60"}`}>{settledCounts.void}</span>
+            </button>
           </div>
 
           {settledTab === null && (
@@ -413,6 +429,21 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {(bestwonTips.length + cashedTips.length) === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch nichts hier — sobald ein Smart/Risk/Community/System-Pick gewinnt (oder ein Schein ausgezahlt wird), erscheint er hier.</p>
                 : [...bestwonTips, ...cashedTips].map((tip, i) => (
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
+                  ))}
+            </div>
+          )}
+
+          {settledTab === "void" && (
+            <div data-testid="settled-void-col" className="space-y-5">
+              <p className="text-sm mb-1 flex items-center gap-2">
+                <Ban size={15} className="text-zinc-400" />
+                <span className="text-zinc-300">Annulliert</span>
+                <span className="text-zinc-500 text-xs">— Spiel vorbei, aber nicht automatisch bewertbar (Einsatz gilt als zurück)</span>
+              </p>
+              {voidTips.length === 0
+                ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Nichts annulliert — alle abgeschlossenen Picks konnten bewertet werden. 👍</p>
+                : voidTips.map((tip, i) => (
                     <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
                   ))}
             </div>
@@ -519,6 +550,7 @@ const STATUS_META = {
   live: { cls: "bg-live/15 text-live", text: "text-live", Icon: Radio, key: "wall.live" },
   pending: { cls: "bg-amber-500/15 text-amber-400", text: "text-amber-400", Icon: Clock, key: "wall.pending" },
   cashed_out: { cls: "bg-sky-400/15 text-sky-400", text: "text-sky-400", Icon: Banknote, key: "wall.cashed" },
+  void: { cls: "bg-zinc-500/15 text-zinc-400", text: "text-zinc-400", Icon: Ban, key: "wall.void" },
 };
 
 function StatusBadge({ status, t, report }) {

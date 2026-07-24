@@ -1095,3 +1095,13 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - BUG: Keine Quote pro Spiel. Fix: pro GAME wird jetzt EINE kombinierte Quote (Produkt der Leg-Quoten des Spiels) rechts, vertikal zentriert angezeigt (Bet-Builder-Stil). Per-Markt-Quoten entfallen zugunsten der klaren Spiel-Gesamtquote. Verifiziert mit 6-Spiele-Slip: 5.85/6.10/3.40/2.90/2.10/1.60.
 - CACHE-BUSTING: SHARE_RENDER_VER=3 in server.py. tip_share_image nutzt Cache nur bei passender Version → nach Deploy regenerieren alle alten (eingefrorenen System-)Share-Bilder einmalig mit dem neuen Renderer.
 - Wirkt produktiv erst NACH erneutem Deploy.
+
+## 2026-07-26 (Teil 2) — Sicherheitsnetz "Annulliert" für nicht-bewertbare Picks (Option A, DONE)
+- URSACHE: Spieler-Wetten (z.B. "Zivkovic über 0.5 Torschüsse aufs Tor") brauchen API-Football Spieler-Statistiken. Für viele Quali-/Kleinspiele fehlen die → Pick bleibt ewig OFFEN. Zudem wurden SMART-Picks von expire_stale_pending GELÖSCHT (statt gevoidet) → verschwanden komplett, nie in "Abgerechnet".
+- FIX (server.py expire_stale_pending): ai_src (Löschen) = nur ("hq-auto","hq-live","hq-system"). SMART-Picks fallen jetzt in die VOID-Gruppe → status="void", settled_by="expired", nach EXPIRE_GRACE_HOURS=30h. Nichts bleibt hängen, nichts wird still gelöscht.
+- /tips/counts: neues Feld "void" (exkl. seed-).
+- FRONTEND (RateWall.jsx): neuer 4. Reiter "Annulliert" im Settled-Grid (grid-cols-2 sm:grid-cols-4), lädt status=void, eigene Spalte mit Erklärtext + VOIDED-Badge. STATUS_META.void + i18n wall.void (en VOIDED / de ANNULLIERT). Ban-Icon.
+- Verifiziert: void count/list via curl + Screenshot des Annulliert-Buckets.
+- Hinweis: void-Tips werden wie won/lost nach 24h purged (rollierende Abgerechnet-Ansicht).
+- Der konkrete Zivkovic-Pick HAT GEWONNEN (PAOK 3:2 Dynamo, Zivkovic 1 SOT) — Admin kann manuell auf Gewonnen setzen.
+- Wirkt produktiv erst NACH Deploy.

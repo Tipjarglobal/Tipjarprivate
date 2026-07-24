@@ -703,6 +703,7 @@ async def tips_counts():
     won_n = await db.tips.count_documents({"status": "won"})
     lost_n = await db.tips.count_documents({"status": "lost"})
     cashed_n = await db.tips.count_documents({"status": "cashed_out"})
+    void_n = await db.tips.count_documents({"status": "void", "id": {"$not": {"$regex": "^seed-"}}})
     bestwon_n = await db.tips.count_documents({
         "status": "won",
         "id": {"$not": {"$regex": "^seed-"}},
@@ -729,7 +730,7 @@ async def tips_counts():
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
             "systems": systems_n, "smart": smart, "settled": settled,
             "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
-            "won_normal": won_normal_n}
+            "won_normal": won_normal_n, "void": void_n}
 
 
 
@@ -4030,7 +4031,10 @@ async def expire_stale_pending() -> dict:
          "home_team": 1, "away_team": 1, "league": 1, "league_code": 1}).to_list(5000)
     ai_ids, member_ids, affected = [], [], []
     league_hits = {}
-    ai_src = ("hq-auto", "smart", "hq-live", "hq-system")
+    # Auto-generated AI noise (hq-auto/hq-live/hq-system) is DELETED when stale. SMART picks
+    # are curated community-insider picks the owner tracks — they are VOIDed (kept, shown in
+    # 'Abgerechnet' → Annulliert), never silently deleted (owner 2026-07-26, option A).
+    ai_src = ("hq-auto", "hq-live", "hq-system")
     for d in docs:
         legs = d.get("legs") or []
         kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
