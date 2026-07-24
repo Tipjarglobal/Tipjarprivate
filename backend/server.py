@@ -2289,25 +2289,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         d.text((col2, row_y), wlabel, font=f_small, fill=FAINT)
         d.text((col2, row_y + 28), str(winnings), font=f_fval, fill=VOLT)
 
-    # QR → tipjarglobal.com (bottom-right corner), on a light tile for scannability
-    qs = 116
-    qx, qy = cx1 - qs, fy + 188
-    try:
-        import qrcode
-        qr = qrcode.QRCode(border=1, box_size=10,
-                           error_correction=qrcode.constants.ERROR_CORRECT_M)
-        qr.add_data("https://tipjarglobal.com")
-        qr.make(fit=True)
-        qimg = qr.make_image(fill_color=(12, 14, 18), back_color=(233, 255, 210)).convert("RGB")
-        qimg = qimg.resize((qs, qs), Image.NEAREST)
-        d.rounded_rectangle([qx - 9, qy - 9, qx + qs + 9, qy + qs + 9], 14, fill=(233, 255, 210))
-        base.paste(qimg, (qx, qy))
-    except Exception:
-        pass
-    d.text((qx - 20 - tw("SCAN &", f_url), qy + 30), "SCAN &", font=f_url, fill=SOFT)
-    d.text((qx - 20 - tw("MITSPIELEN", f_url), qy + 62), "MITSPIELEN", font=f_url, fill=VOLT)
-    d.text((qx - 20 - tw("tipjarglobal.com", f_small), qy + qs - 8),
-           "tipjarglobal.com", font=f_small, fill=FAINT)
+    # discreet footer wordmark (right) — value-provider vibe. NO QR code and no "join now"
+    # call-to-action, so the slip can be dropped into third-party groups without looking like
+    # spam/poaching (owner 2026-07-24: "sei diskret, eher Wertanbieter als krasse Werbung").
+    d.text((cx1 - tw("tipjarglobal.com", f_fval), row_y + 28),
+           "tipjarglobal.com", font=f_fval, fill=SOFT)
 
     out = io.BytesIO()
     base.convert("RGB").save(out, format="WEBP", quality=94, method=6)
