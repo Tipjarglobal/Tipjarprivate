@@ -365,7 +365,7 @@ function Home() {
                 } else if (v === "live") {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
                 } else if (v === "scorers") {
-                  cls = active ? "bg-[#2ECC57] text-black shadow-[0_0_14px_rgba(46,204,87,0.4)]" : "bg-[#2ECC57]/15 border border-[#2ECC57]/40 text-[#2ECC57] hover:bg-[#2ECC57]/25";
+                  cls = active ? "bg-[#F9A8D4] text-black shadow-[0_0_14px_rgba(249,168,212,0.45)]" : "bg-[#F9A8D4]/15 border border-[#F9A8D4]/40 text-[#F9A8D4] hover:bg-[#F9A8D4]/25";
                 } else if (v === "settled") {
                   cls = active ? "bg-white text-black shadow-[0_0_14px_rgba(255,255,255,0.35)]" : "bg-surface border border-white/40 text-white hover:bg-white/10";
                 } else {
