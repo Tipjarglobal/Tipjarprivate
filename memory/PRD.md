@@ -1105,3 +1105,12 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - Hinweis: void-Tips werden wie won/lost nach 24h purged (rollierende Abgerechnet-Ansicht).
 - Der konkrete Zivkovic-Pick HAT GEWONNEN (PAOK 3:2 Dynamo, Zivkovic 1 SOT) — Admin kann manuell auf Gewonnen setzen.
 - Wirkt produktiv erst NACH Deploy.
+
+## 2026-07-26 (Teil 3) — Ελληνικά/Greek market-localization fix (DONE, verifiziert)
+- BUG (Greek + alle nicht-lateinischen Sprachen): Markets zeigten Englisch/Deutsch ("GG/NG GG", "Double chance Draw or X", "Over 3.5 Goals") statt übersetzt.
+- URSACHE 1: formatSelection lief `toLatin(_formatSelection(...))` → toLatin latinisierte den BEREITS übersetzten griechischen Text (harmlos für DE/EN, zerstörerisch für EL/AR). FIX: Reihenfolge → `normalizeBetTerms(_formatSelection(toLatin(sel)))` (toLatin zuerst auf Roh-Input für Team-Namen, dann lokalisieren).
+- URSACHE 2: localizeMarket kannte nur DEUTSCHE Marktform. Englische Rohformen ("GG/NG", "Double chance ...", "Over/Under X Goals", "Both Teams to Score") wurden nicht übersetzt. FIX: englische Regex-Regeln + neue i18n-Keys mkt.ggng_yes/ggng_no/doublechance/or in allen 8 Sprachen.
+- URSACHE 3: el/es/fr/it/ar/tr-Blöcke fehlten mkt.goals/ovr/und/corners/half → EN-Fallback "Goals". FIX: zu EL (griechisch) hinzugefügt (mkt.goals="γκολ", ovr/und="Over/Under" (Wett-Jargon), corners="κόρνερ", half="ημίχρονο").
+- Verifiziert: node-Test + Greek-Screenshot (Systems). DE unverändert (toLatin no-op für Latein).
+- OFFEN/Hinweis: System-Untertitel ("15 Legs · nächste 48h ...", "6 Banker · läuft bis ...") sind backend-generiertes Deutsch, noch nicht lokalisiert (separater, größerer i18n-Task). es/fr/it/ar/tr fehlen weiterhin mkt.goals/ovr/und (Pre-existing, EN-Fallback).
+- Wirkt produktiv erst NACH Deploy.

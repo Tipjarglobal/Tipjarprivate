@@ -167,12 +167,28 @@ export function localizeMarket(market, t) {
   m = m.replace(/Beide\s+treffen/gi, t("mkt.btts"));
   m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
   m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  // English "Over/Under X Goals" (raw member/bookmaker slips) → locale, so it doesn't stay
+  // half-English on non-Latin locales (owner 2026-07-26).
+  m = m.replace(/\bOver\s+(\d+(?:[.,]\d+)?)\s+Goals?\b/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/\bUnder\s+(\d+(?:[.,]\d+)?)\s+Goals?\b/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
   m = m.replace(/Doppelte\s+Chance\s+12/gi, t("mkt.dc12"));
   m = m.replace(/Doppelte\s+Chance\s+1X/gi, t("mkt.dc1x"));
   m = m.replace(/Doppelte\s+Chance\s+X2/gi, t("mkt.dcx2"));
   m = m.replace(/Draw\s+No\s+Bet/gi, t("mkt.dnb"));
   m = m.replace(/Genaues\s+Ergebnis/gi, t("mkt.cs"));
   m = m.replace(/Unentschieden(?:\s*\(X\))?/gi, t("mkt.draw"));
+  // English-worded raw selections (member/bookmaker slips) → locale, so a slip that was
+  // parsed in English also reads correctly in Greek/any language (owner 2026-07-26).
+  m = m.replace(/\bGG\s*\/\s*NG\s+GG\b/gi, t("mkt.ggng_yes"));
+  m = m.replace(/\bGG\s*\/\s*NG\s+NG\b/gi, t("mkt.ggng_no"));
+  m = m.replace(/\bGG\s*\/\s*NG\b/gi, t("mkt.ggng_yes"));
+  m = m.replace(/\bBoth\s+Teams\s+to\s+Score\b/gi, t("mkt.btts"));
+  m = m.replace(/\bDouble\s+chance\s+1X\b/gi, t("mkt.dc1x"));
+  m = m.replace(/\bDouble\s+chance\s+X2\b/gi, t("mkt.dcx2"));
+  m = m.replace(/\bDouble\s+chance\s+12\b/gi, t("mkt.dc12"));
+  m = m.replace(/\bDouble\s+chance\b/gi, t("mkt.doublechance"));
+  m = m.replace(/\bDraw\b/gi, t("mkt.draw"));
+  m = m.replace(/\bor\b/gi, t("mkt.or"));
   m = m.replace(/\(?\s*Asiatisch\s*\)?/gi, ` ${t("mkt.asian")}`);
   m = m.replace(/\bHandicap\b/gi, t("mkt.handicap"));
   m = m.replace(/\btrifft\b/gi, t("mkt.scores"));
@@ -188,7 +204,10 @@ export function localizeMarket(market, t) {
 //  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
 //  - already-correct German markets pass through localizeMarket unchanged.
 export function formatSelection(sel, t) {
-  return normalizeBetTerms(toLatin(_formatSelection(sel, t)), t);
+  // toLatin FIRST on the raw input (latinises Cyrillic/foreign TEAM names), then localise —
+  // otherwise toLatin would strip the Greek/Arabic market words we just translated, leaving
+  // English on non-Latin locales (owner 2026-07-26: Greek slip still showed "GG/NG", "Double chance").
+  return normalizeBetTerms(_formatSelection(toLatin(sel), t), t);
 }
 
 // Clean up phonetically-transliterated foreign betting terms into the reader's language
@@ -630,6 +649,10 @@ const T = {
     "mkt.goals": "Goals",
     "mkt.half": "Half",
     "mkt.btts": "Both Teams to Score (BTTS)",
+    "mkt.ggng_yes": "Both Teams to Score",
+    "mkt.ggng_no": "Not Both Teams to Score",
+    "mkt.doublechance": "Double Chance",
+    "mkt.or": "or",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Double Chance 1X",
     "mkt.dcx2": "Double Chance X2",
@@ -975,6 +998,10 @@ const T = {
     "mkt.over15": "Más de 1.5 goles",
     "mkt.over25": "Más de 2.5 goles",
     "mkt.btts": "Ambos marcan (BTTS)",
+    "mkt.ggng_yes": "Ambos marcan",
+    "mkt.ggng_no": "No ambos marcan",
+    "mkt.doublechance": "Doble oportunidad",
+    "mkt.or": "o",
     "mkt.dnb": "Empate no válido (DNB)",
     "mkt.dc1x": "Doble oportunidad 1X",
     "mkt.dcx2": "Doble oportunidad X2",
@@ -1410,6 +1437,10 @@ const T = {
     "mkt.goals": "Tore",
     "mkt.half": "Halbzeit",
     "mkt.btts": "Beide Teams treffen (BTTS)",
+    "mkt.ggng_yes": "Beide treffen",
+    "mkt.ggng_no": "Nicht beide treffen",
+    "mkt.doublechance": "Doppelte Chance",
+    "mkt.or": "oder",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Doppelte Chance 1X",
     "mkt.dcx2": "Doppelte Chance X2",
@@ -1755,7 +1786,16 @@ const T = {
     "mkt.over05": "Over 0.5 γκολ",
     "mkt.over15": "Over 1.5 γκολ",
     "mkt.over25": "Over 2.5 γκολ",
+    "mkt.goals": "γκολ",
+    "mkt.ovr": "Over",
+    "mkt.und": "Under",
+    "mkt.corners": "κόρνερ",
+    "mkt.half": "ημίχρονο",
     "mkt.btts": "Να σκοράρουν και οι δύο (BTTS)",
+    "mkt.ggng_yes": "Γκολ Γκολ",
+    "mkt.ggng_no": "Νο Γκολ",
+    "mkt.doublechance": "Διπλή ευκαιρία",
+    "mkt.or": "ή",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Διπλή ευκαιρία 1X",
     "mkt.dcx2": "Διπλή ευκαιρία X2",
@@ -2091,6 +2131,10 @@ const T = {
     "mkt.over15": "Plus de 1,5 but",
     "mkt.over25": "Plus de 2,5 buts",
     "mkt.btts": "Les deux marquent (BTTS)",
+    "mkt.ggng_yes": "Les deux marquent",
+    "mkt.ggng_no": "Pas les deux marquent",
+    "mkt.doublechance": "Double chance",
+    "mkt.or": "ou",
     "mkt.dnb": "Remboursé si nul (DNB)",
     "mkt.dc1x": "Double chance 1X",
     "mkt.dcx2": "Double chance X2",
@@ -2426,6 +2470,10 @@ const T = {
     "mkt.over15": "Over 1.5 gol",
     "mkt.over25": "Over 2.5 gol",
     "mkt.btts": "Entrambe segnano (BTTS)",
+    "mkt.ggng_yes": "Entrambe segnano",
+    "mkt.ggng_no": "Non entrambe segnano",
+    "mkt.doublechance": "Doppia chance",
+    "mkt.or": "o",
     "mkt.dnb": "Draw No Bet",
     "mkt.dc1x": "Doppia chance 1X",
     "mkt.dcx2": "Doppia chance X2",
@@ -2760,6 +2808,10 @@ const T = {
     "mkt.over15": "أكثر من 1.5 هدف",
     "mkt.over25": "أكثر من 2.5 هدف",
     "mkt.btts": "كلا الفريقين يسجل (BTTS)",
+    "mkt.ggng_yes": "كلا الفريقين يسجل",
+    "mkt.ggng_no": "لا يسجل كلا الفريقين",
+    "mkt.doublechance": "فرصة مزدوجة",
+    "mkt.or": "أو",
     "mkt.dnb": "بدون تعادل (DNB)",
     "mkt.dc1x": "فرصة مزدوجة 1X",
     "mkt.dcx2": "فرصة مزدوجة X2",
@@ -3094,6 +3146,10 @@ const T = {
     "mkt.over15": "1.5 Üst gol",
     "mkt.over25": "2.5 Üst gol",
     "mkt.btts": "Karşılıklı gol (KG Var)",
+    "mkt.ggng_yes": "Karşılıklı gol",
+    "mkt.ggng_no": "Karşılıklı gol yok",
+    "mkt.doublechance": "Çifte şans",
+    "mkt.or": "veya",
     "mkt.dnb": "Beraberlikte iade (DNB)",
     "mkt.dc1x": "Çifte şans 1X",
     "mkt.dcx2": "Çifte şans X2",
