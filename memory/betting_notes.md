@@ -146,3 +146,16 @@ match-analysis prose (explain WHY, EMP-Tips style, with implied-goal reasoning).
   kept {Über 4.5, BTTS, Tor je HZ, -1.5}. /api/systems JACKPOT has NO correct-score.
 - PENDING: real historical hit-rates ("BTTS 6/7") need a stats feed (API-Football, quota-limited).
   @EmpTips X monitoring needs X API credentials (route via integration_expert).
+
+### IMPLEMENTED 2026-07-24 (part 2) — real stats + EMP ingestion
+- `match_stats.py`: team_form()/h2h_stats() from API-Football last-N (cached 12h in db.stats_cache,
+  quota-safe short-circuit, NEVER fabricates). compute_form/compute_h2h are pure + unit-tested.
+- server `_pick_stats_line(p)` resolves team ids + builds real hit-rate line
+  ("Form WWDWW · BTTS 6/8 · Über 2.5 7/8 · H2H BTTS 4/5"). Appended (📊) to mental & favourite
+  auto-picks + stored as tip.stats_line; passed into llm_pick_analysis(context, stats_line).
+- EMP Tips ingestion: POST /api/admin/emptips/ingest (image(s)+/or text) → analyze_tip vision →
+  posts public pick source="emptips", username "EMP Tips", category "expert", enriched with stats_line.
+  VERIFIED: AI flagged redundant "Over 3.5" (−1.5+BTTS ⇒ 3-1 ⇒ 4+ goals) automatically.
+- Free auto X-polling of @EmpTips is NOT reliably possible (syndication 429 / token-gated, nitter dead).
+  Owner won't pay for X API → use the ingestion endpoint (forward/paste the slip). Needs a small admin
+  UI button (backend ready). If X API key is ever provided, add a poller on top of the same ingestion.

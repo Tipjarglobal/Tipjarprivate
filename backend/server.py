@@ -33,6 +33,7 @@ from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
 from betting_logic import dedupe_implied_legs, scoreline_to_combo
+import match_stats
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
@@ -987,9 +988,10 @@ _ANALYST_SYSTEM = (
 )
 
 
-async def llm_pick_analysis(context: str) -> str:
+async def llm_pick_analysis(context: str, stats_line: str = "") -> str:
     """Generate a unique, opinionated German analysis for a pick. Returns "" on failure so
-    the caller keeps its template fallback."""
+    the caller keeps its template fallback. `stats_line` (if given) are REAL numbers the
+    model may cite — it must not invent others."""
     if not EMERGENT_LLM_KEY:
         return ""
     try:
@@ -998,7 +1000,9 @@ async def llm_pick_analysis(context: str) -> str:
             session_id=f"anal-{uuid.uuid4()}",
             system_message=_ANALYST_SYSTEM,
         ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
-        resp = await chat.send_message(UserMessage(text=f"Spiel-Daten:\n{context}\n\nSchreibe die Analyse."))
+        extra = (f"\n\nECHTE Statistiken (zitiere passende Zahlen hieraus, erfinde KEINE weiteren):\n{stats_line}"
+                 if stats_line else "")
+        resp = await chat.send_message(UserMessage(text=f"Spiel-Daten:\n{context}{extra}\n\nSchreibe die Analyse."))
         out = (resp if isinstance(resp, str) else str(resp)).strip()
         if out.startswith(('"', "„", "»")):
             out = out.strip('"„»«”')
@@ -1427,6 +1431,73 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     })
     tip.pop("_id", None)
     return tip
+
+
+@api_router.post("/admin/emptips/ingest")
+async def admin_emptips_ingest(
+    file: Optional[UploadFile] = File(default=None),
+    files: List[UploadFile] = File(default=[]),
+    text: str = Form(default=""),
+    admin: dict = Depends(require_admin),
+):
+    """Ingest an EMP Tips betslip (screenshot(s) and/or text) → vision-AI extracts the
+    selections → post it as a public 'EMP Tips' pick (source=emptips) enriched with our
+    real hit-rate stats. Free path: forward/paste the tweet's slip — no X API needed."""
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        raise HTTPException(status_code=400, detail="HQ account missing")
+    uploads = [f for f in ([file] + list(files)) if f is not None and getattr(f, "filename", None)][:4]
+    images_b64, raw_list = [], []
+    for f in uploads:
+        rb = await f.read()
+        images_b64.append(base64.b64encode(rb).decode("utf-8"))
+        raw_list.append((rb, f))
+    if not images_b64 and not text.strip():
+        raise HTTPException(status_code=400, detail="Bitte ein Wettschein-Bild oder Text angeben.")
+    detected = await analyze_tip(images_b64 or None, text)
+    if not detected.get("safe", True):
+        raise HTTPException(status_code=422, detail=detected.get("flag_reason") or "Inhalt nicht erlaubt.")
+    image_paths = []
+    for rb, fm in raw_list:
+        ext = (fm.filename.rsplit(".", 1)[-1] if fm.filename and "." in fm.filename else "png").lower()
+        path = f"{APP_NAME}/emptips/{uuid.uuid4()}.{ext}"
+        try:
+            res = put_object(path, rb, fm.content_type or "image/png")
+            image_paths.append(res["path"])
+        except Exception as e:
+            logger.warning(f"emptips image store failed: {e}")
+    legs = _sanitize_legs(detected.get("legs"))
+    is_parlay = bool(detected.get("is_parlay") or len(legs) > 1
+                     or (legs and len(legs[0].get("selections", [])) > 1))
+    stats_line = ""
+    if detected.get("home_team") and detected.get("away_team"):
+        stats_line = await _pick_stats_line({"home": detected["home_team"], "away": detected["away_team"]})
+    analysis = (detected.get("analysis") or "").strip()
+    analysis = f"📣 EMP Tips: {analysis}" if analysis else "📣 EMP Tips Pick"
+    if stats_line:
+        analysis += f"\n\n📊 {stats_line}"
+    tip = {
+        "id": f"emptips-{uuid.uuid4().hex[:10]}",
+        "user_id": hq["id"], "username": "EMP Tips",
+        "raw_text": text, "image_path": image_paths[0] if image_paths else None,
+        "image_paths": image_paths,
+        "home_team": detected.get("home_team", ""), "away_team": detected.get("away_team", ""),
+        "match_time": detected.get("match_time", ""),
+        "country": detected.get("country", ""), "league": detected.get("league", ""),
+        "market": detected.get("market", ""), "odds": detected.get("odds", ""),
+        "ai_rating": detected.get("rating", 7.0), "ai_analysis": analysis,
+        "stats_line": stats_line,
+        "legs": legs, "is_parlay": is_parlay,
+        "stake": detected.get("stake", ""),
+        "potential_return": detected.get("potential_return", ""),
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "emptips", "category": "expert",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    tip.pop("_id", None)
+    return {"ok": True, "tip": tip}
+
 
 
 @api_router.post("/tips/{tip_id}/clarify")
@@ -2801,6 +2872,22 @@ async def resolve_team_id(name: str):
             break
     await db.team_cache.update_one({"key": key}, {"$set": {"key": key, "team_id": team_id}}, upsert=True)
     return team_id
+
+
+async def _pick_stats_line(p) -> str:
+    """Real hit-rates (form / BTTS / Over 2.5 / H2H) for a prediction, cited from
+    API-Football last-N fixtures. '' when data/quota unavailable (never fabricated)."""
+    try:
+        home, away = p.get("home"), p.get("away")
+        hid = await resolve_team_id(home)
+        aid = await resolve_team_id(away)
+        hf = await match_stats.team_form(hid)
+        af = await match_stats.team_form(aid)
+        h2h = await match_stats.h2h_stats(hid, aid)
+        return match_stats.stats_summary_text(home, away, hf, af, h2h)
+    except Exception as e:
+        logger.warning(f"stats line failed for {p.get('home')} vs {p.get('away')}: {e}")
+        return ""
 
 
 def _is_corner_market(market) -> bool:
@@ -5078,7 +5165,7 @@ async def qualifier_autopost() -> dict:
                 f"Erkläre in 2-3 Sätzen, warum das ein guter Pick ist: berücksichtige Aggregat "
                 f"(zurückliegendes Team MUSS offensiv spielen → Tore/Verlängerung), Weiterkommen "
                 f"und Belastung/mögliche Rotation, falls ein Team ein schlechtes Ligaspiel dazwischen hatte.")
-        _llm = await llm_pick_analysis(_ctx)
+        _llm = await llm_pick_analysis(_ctx, await _pick_stats_line(p))
         analysis = _llm or base_analysis
         await db.tips.insert_one({
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
@@ -5481,6 +5568,9 @@ async def favourite_smart_autopost() -> dict:
         analysis = (f"{stars} Favoriten-Smart-Pick: {why} Anstoß {p.get('kickoff')}. "
                     f"Genau das Muster erfolgreicher Tipper — auf den dominanten Favoriten setzen, "
                     f"der selbst für die Tore sorgt. Quoten sind Schätzungen.")
+        stats_line = await _pick_stats_line(p)
+        if stats_line:
+            analysis += f"\n\n📊 {stats_line}"
         await db.tips.insert_one({
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -5491,7 +5581,7 @@ async def favourite_smart_autopost() -> dict:
                       if len(combo_legs) > 1 else combo_legs[0]["market"],
             "odds": f"{round(prod, 2)}", "combo_legs": combo_legs,
             "is_parlay": len(combo_legs) > 1,
-            "ai_rating": rating, "ai_analysis": analysis,
+            "ai_rating": rating, "ai_analysis": analysis, "stats_line": stats_line,
             "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
@@ -5566,6 +5656,9 @@ async def mental_autopost() -> dict:
                     f"{home} vs {away} ist ein absolutes Torfest-Kandidat (Prognose {p.get('ph')}:{p.get('pa')}). "
                     f"Kleiner Einsatz, riesiger Traum — genau EIN Leg reicht zum Zittern. Nur mit Spaßgeld spielen! "
                     f"Quoten sind Schätzungen.")
+        stats_line = await _pick_stats_line(p)
+        if stats_line:
+            analysis += f"\n\n📊 {stats_line}"
         await db.tips.insert_one({
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -5575,6 +5668,7 @@ async def mental_autopost() -> dict:
             "market": f"{home} vs {away} — MENTAL Bet-Builder ({len(combo_legs)} Legs)",
             "odds": f"{round(prod, 2)}", "combo_legs": combo_legs, "is_parlay": True,
             "ai_rating": 3.5, "ai_analysis": analysis, "category": "mental",
+            "stats_line": stats_line,
             "legs": display_legs, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": datetime.now(timezone.utc).isoformat(),
