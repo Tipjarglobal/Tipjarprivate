@@ -1059,3 +1059,10 @@ Order (left→right): 1) KI Single-Game-Picks (ai, source=hq-auto) 2) Smart Bets
 - (b) _dc_odds neu kalibriert (war 1.15/1.22/1.30/1.40 → jetzt 1.18/1.25/1.35/1.50/1.72), realistischer für Auswärts-/modest-Favoriten X2. Risk-Multiplikatoren: BTTS 1.70→1.62, Über1.5 1.30→1.35. Ergebnis: Risk-Kombis jetzt 1.7-2.5 (vorher 1.59-1.69), matcht echte Buchmacher-Quoten. Gilt für alle Systeme, die _dc_odds nutzen.
 - Bestehende gefrorene Snapshots behalten alte Odds bis zum nächsten 14-Uhr-Reset; Live-/neue Snapshots nutzen neue Odds. Wirkt produktiv nach Deploy.
 - Hinweis: bei sehr langem Markt-Text + Quote wird der Markt leicht abgeschnitten ("Über 1.5 T...") — akzeptabel, Quote hat Priorität.
+
+## 2026-07-24 — Echte Live-Quoten für Bet-Builder-Kombis
+- Owner: "Echte live quoten ja" → API-Football-Quoten nutzen wo verfügbar.
+- Real-Odds-System existierte für Einzelmärkte (_real_odd_for/_apply_real/ensure_match_odds, odds_cache 6h). Lücke: Kombi-Märkte ("X2 + Über 1.5") wurden nicht real bepreist.
+- FIX: _real_odd_for erkennt jetzt " + "-Kombis → splittet, holt echte Einzel-Quoten, gibt PRODUKT zurück (= Buchmacher-Bet-Builder-Pricing). Getestet: "Singapore X2 + Beide treffen" = 1.35×1.57 = 2.12 (exakt Wazamba). BTTS-Match erweitert ("beide"+"treffen" ODER "btts") für Kombi-Variante "Beide treffen".
+- Risk-Kombis jetzt in _apply_real gewickelt → nutzen echte Produkt-Quote wenn Cache vorhanden, sonst kalibrierte Schätzung. Verifiziert live: Saprissa (API-Football-Abdeckung) = echte 1.18; Cambodia/Otelul/Pogon = Schätzung 2.43/1.82/2.03.
+- Wirkt produktiv nach Deploy. Gilt automatisch für alle Systeme + apply_real_odds (Auto-Tips).

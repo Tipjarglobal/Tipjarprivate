@@ -5208,7 +5208,7 @@ async def build_systems() -> dict:
             leg2, mult = "Über 1.5 Tore", 1.35
         _risk_rot += 1
         od = round(_dc_odds(fp) * mult, 2)
-        risks.append(_sel(p, f"{team} Doppelte Chance {dc} + {leg2}", od, 6.5))
+        risks.append(_apply_real(_sel(p, f"{team} Doppelte Chance {dc} + {leg2}", od, 6.5)))
         if len(risks) >= 5:
             break
 
@@ -7247,10 +7247,20 @@ async def ensure_match_odds(home: str, away: str, kickoff: str) -> dict:
 
 
 def _real_odd_for(market: str, odds: dict, home: str, away: str):
-    """Map one of our German market strings to a real bookmaker odd, or None."""
+    """Map one of our German market strings to a real bookmaker odd, or None.
+    Bet-builder combos ("X2 + Über 1.5") aren't priced by API-Football, so we build them
+    from the REAL individual leg odds (product) — matches how bookmakers price them."""
     if not odds:
         return None
     m = (market or "").lower()
+    if " + " in market:
+        vals = [_real_odd_for(pt, odds, home, away) for pt in market.split(" + ")]
+        if vals and all(v for v in vals):
+            prod = 1.0
+            for v in vals:
+                prod *= float(v)
+            return round(prod, 2)
+        return None
     if "über 3.5 tore" in m:
         return odds.get("over35")
     if "über 2.5 tore" in m:
@@ -7265,7 +7275,7 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
         return odds.get("under25")
     if "unter 3.5 tore" in m:
         return odds.get("under35")
-    if "beide teams treffen" in m or "btts" in m:
+    if "beide" in m and "treffen" in m or "btts" in m:
         return odds.get("btts")
     if "doppelte chance" in m and "+" not in m:
         if "1x" in m:
