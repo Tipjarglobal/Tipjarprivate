@@ -1536,8 +1536,12 @@ _CHANNEL_BOTS = {
         "email": "capella@tipjar.com", "name": "Capella",
         "bio": "In-house Analyst — scharfe Singles & Kombis.",
     },
+    "totissports": {                      # Totis Sports website (totissports.gr) — all tipsters
+        "email": "atlas@tipjar.com", "name": "Atlas",
+        "bio": "In-house Analyst — tägliche Value-Analysen aus GR-Experten-Pool.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
-    # "somechannel": {"email": "atlas@tipjar.com", "name": "Atlas", "bio": "..."},
+    # "somechannel": {"email": "spica@tipjar.com", "name": "Spica", "bio": "..."},
 }
 
 
@@ -1759,6 +1763,119 @@ async def emptips_loop():
         except Exception as e:
             logger.error(f"EMP Tips watch loop error: {e}")
         await asyncio.sleep(20 * 60)  # every 20 minutes
+
+
+# --- Totis Sports website scraper (totissports.gr) — all tipsters → one bot "Atlas" -------
+TOTISSPORTS_PAGES = [
+    ("totis", "https://totissports.gr/analysi-agona-tis-imeras/"),
+    ("zak", "https://totissports.gr/analysis-agonon/analysi-agona-apo-zak/"),
+    ("dallop", "https://totissports.gr/analysis-agonon/analysi-agona-apo-dallop/"),
+    ("betstriker", "https://totissports.gr/analysis-agonon/analysi-agona-apo-betstriker/"),
+    ("arxigos", "https://totissports.gr/analysis-agonon/analysi-agona-apo-arxigos/"),
+]
+
+
+def _totissports_extract(html: str) -> str:
+    """Pull the compact pick block (teams + kickoff + Greek estimation w/ odds) from a
+    Totis Sports analysis page. Returns '' if no pick found. Feeds the LLM parser."""
+    # strip tags → plain text lines
+    txt = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.DOTALL | re.I)
+    txt = re.sub(r"<[^>]+>", "\n", txt)
+    txt = re.sub(r"&nbsp;|&#160;", " ", txt)
+    txt = re.sub(r"&amp;", "&", txt)
+    lines = [l.strip() for l in txt.split("\n") if l.strip()]
+    joined = "\n".join(lines)
+    _BAD = ("TOTIS", "ANALYS", "ΑΝΑΛΥΣ", "SPORT", "ΠΡΟΓΝΩΣ", "STOIXIMA", "ΣΤΟΙΧΗΜΑ",
+            "COOKIE", "MENU", "HOME", "ΑΡΧΙΚΗ")
+    def _looks_matchup(l):
+        if len(l) > 55 or ("-" not in l and "–" not in l and " vs" not in l.lower()):
+            return False
+        if re.search(r"\d", l) or any(b in l.upper() for b in _BAD):
+            return False
+        letters = sum(c.isalpha() for c in l)
+        return letters >= 6
+    kick = re.search(r"(\d{2}/\d{2}/\d{2,4}\s+\d{1,2}:\d{2})", joined)
+    # matchup: prefer a line right around the kickoff date, else first plausible one
+    teams_line = ""
+    date_idx = next((i for i, l in enumerate(lines) if kick and kick.group(1) in l), -1)
+    if date_idx >= 0:
+        for l in lines[max(0, date_idx - 3): date_idx + 4]:
+            if _looks_matchup(l):
+                teams_line = l
+                break
+    if not teams_line:
+        for l in lines:
+            if _looks_matchup(l):
+                teams_line = l
+                break
+    # estimation paragraph: after a line containing "Εκτίμηση"
+    est = ""
+    for i, l in enumerate(lines):
+        if "κτίμηση" in l and i + 1 < len(lines):
+            est = lines[i + 1]
+            break
+    if not est:
+        # fallback: first line that contains odds like 1.62 / 2.10
+        for l in lines:
+            if re.search(r"\b\d\.\d{2}\b", l) and len(l) > 25:
+                est = l
+                break
+    if not est or not re.search(r"\b\d\.\d{2}\b", est):
+        return ""  # no clear pick/odds → skip
+    if not teams_line:
+        return ""  # no identifiable matchup → skip (keep expert feed clean)
+    return " | ".join([f"Spiel: {teams_line}",
+                       *( [f"Anpfiff {kick.group(1)}"] if kick else [] ),
+                       f"Tipster-Einschätzung: {est}"])
+
+
+async def totissports_autopost() -> dict:
+    """Scrape all Totis Sports tipster pages → post each daily pick ANONYMOUSLY under the
+    single 'Atlas' expert bot (owner: all tipsters together, one expert). Dedup per pick."""
+    bot_cfg = _CHANNEL_BOTS["totissports"]
+    posted = 0
+    for tipster, url in TOTISSPORTS_PAGES:
+        try:
+            r = await asyncio.to_thread(
+                lambda: requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20))
+        except Exception as e:
+            logger.warning(f"totissports fetch {tipster}: {e}")
+            continue
+        if not getattr(r, "ok", False):
+            continue
+        block = _totissports_extract(r.text)
+        if not block:
+            continue
+        key = "tot-" + tipster + "-" + hashlib.md5(block.encode("utf-8")).hexdigest()[:12]
+        if await db.emptips_seen.find_one({"id": key}, {"_id": 1}):
+            continue
+        try:
+            tip = await _ingest_emptips([], [], block, source_url=url,
+                                        skip_if_empty=True, bot_cfg=bot_cfg)
+            await db.emptips_seen.insert_one({
+                "id": key, "at": datetime.now(timezone.utc).isoformat(),
+                "posted": bool(tip)})
+            if tip:
+                posted += 1
+        except Exception as e:
+            logger.warning(f"totissports ingest {tipster}: {e}")
+    if posted:
+        logger.info(f"Totis Sports: posted {posted} pick(s) as Atlas")
+    return {"posted": posted}
+
+
+async def totissports_loop():
+    await asyncio.sleep(180)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await totissports_autopost()
+            logger.info(f"Totis Sports loop: {res}")
+        except Exception as e:
+            logger.error(f"Totis Sports loop error: {e}")
+        await asyncio.sleep(6 * 3600)  # a few times a day
 
 
 
@@ -7195,6 +7312,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(footballpredictions_loop()))
     _BG_TASKS.append(asyncio.create_task(footballinsight_loop()))
     _BG_TASKS.append(asyncio.create_task(emptips_loop()))
+    _BG_TASKS.append(asyncio.create_task(totissports_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))

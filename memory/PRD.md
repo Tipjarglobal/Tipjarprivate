@@ -33,6 +33,11 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Added expert **Capella** (The Doc). Then added **Atlas** = Totis Sports WEBSITE
+  scraper (totissports.gr, all 5 tipsters → one bot). `totissports_autopost()` +
+  `totissports_loop()` (every 6h): fetches each analysis page, `_totissports_extract()`
+  pulls matchup+kickoff+Greek estimation, LLM-parses via `_ingest_emptips(bot_cfg=Atlas)`.
+  Quality-gated (requires teams+odds), dedup per pick (emptips_seen `tot-*`). 13 experts total.
 - 2026-06: Added expert **Antares** (betting with tyga, t.me/bettingwithtyga). 10 experts now:
   Orion, Vega, Nova, Sirius, Rigel, Polaris, Altair, Lyra, Vela, Antares.
 - 2026-06: **Hall of Fame overhaul** — deleted all old seeded/showcase win_claims, disabled
