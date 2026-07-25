@@ -7000,7 +7000,7 @@ async def expire_inactive_experts() -> int:
     cutoff = now - timedelta(days=EXPERT_INACTIVITY_DAYS)
     demoted = 0
     experts = await db.users.find(
-        {"role": "expert", "is_bot": {"$ne": True}},
+        {"role": "expert", "is_bot": {"$ne": True}, "expert_permanent": {"$ne": True}},
         {"_id": 0, "id": 1, "expert_since": 1, "created_at": 1}).to_list(2000)
     for e in experts:
         last_tip = await db.tips.find_one(
@@ -7437,9 +7437,20 @@ async def _startup_seed():
                                       {"$set": {"role": "admin"}})
         # Promote the community expert(s) (owner request): Ragazzi becomes an Expert.
         await db.users.update_many(
-            {"username": {"$regex": "^ragazzi$", "$options": "i"}, "role": "user"},
-            {"$set": {"role": "expert", "expert_trial": True,
+            {"username": {"$regex": "^ragazzi$", "$options": "i"}},
+            {"$set": {"role": "expert", "expert_permanent": True,
                       "expert_since": datetime.now(timezone.utc).isoformat()}})
+        # Ensure ALL configured tipster-clone bots exist so every expert (Orion/Vega/Nova/
+        # Sirius) always shows in the "Our Experts" showcase — not only after first post.
+        _seen_bot = set()
+        for _cfg in _CHANNEL_BOTS.values():
+            if _cfg["email"] in _seen_bot:
+                continue
+            _seen_bot.add(_cfg["email"])
+            try:
+                await _get_expert_bot(_cfg)
+            except Exception as e:
+                logger.warning(f"seed expert bot {_cfg.get('name')}: {e}")
         # Backfill mailbox (welcome + expert invite) for existing users who never got one.
         await _backfill_inbox()
         await seed_showcase()
