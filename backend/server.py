@@ -169,7 +169,7 @@ async def _tag_expert(tips: list) -> list:
         {"id": {"$in": uids}, "role": "expert"}, {"_id": 0, "id": 1}).to_list(len(uids))
     eset = {e["id"] for e in experts}
     for t in tips:
-        if t.get("user_id") in eset:
+        if t.get("user_id") in eset and not t.get("is_master"):
             t["is_expert"] = True
     return tips
 
@@ -796,10 +796,11 @@ async def tips_counts():
     ai = len(ai_docs)
     ai_total = ai
     members = await db.tips.count_documents({
-        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]},
+        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]},
         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
         "status": "pending"})
     live = await db.tips.count_documents({"status": "live"})
+    master = await db.tips.count_documents({"source": "hq-master", "status": {"$in": ["pending", "live"]}})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}})
     won_n = await db.tips.count_documents({"status": "won"})
@@ -813,7 +814,7 @@ async def tips_counts():
             {"source": "smart"},
             {"source": "hq-system"},
             {"source": "hq-auto", "category": "risk"},
-            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
+            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}},
         ],
     })
     won_normal_n = await db.tips.count_documents({
@@ -830,7 +831,7 @@ async def tips_counts():
     except Exception:
         systems_n = 0
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
-            "systems": systems_n, "smart": smart, "settled": settled,
+            "systems": systems_n, "smart": smart, "settled": settled, "master": master,
             "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
             "won_normal": won_normal_n, "void": void_n}
 
@@ -2017,10 +2018,12 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["category"] = {"$ne": "mental"}   # mental only in its own tab
     elif source == "smart":
         q["source"] = "smart"
+    elif source == "master":
+        q["source"] = "hq-master"
     elif source == "members":
         # Community = ONLY real member picks. All KI/HQ sources (AI singles, systems,
-        # live-AI, smart) are excluded so the AI never posts into Community.
-        q["source"] = {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}
+        # live-AI, smart, Master) are excluded so no bot ever posts into Community.
+        q["source"] = {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}
         q["username"] = {"$nin": ["TipJarHQ", "TipJarHQ System"]}
     elif source == "bestwon":
         # "Best Won" bucket (owner): all winning Smart + Risk-single + Community +
@@ -2029,7 +2032,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             {"source": "smart"},
             {"source": "hq-system"},
             {"source": "hq-auto", "category": "risk"},
-            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system"]}},
+            {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}},
         ]
         q["id"] = {"$not": {"$regex": "^seed-"}}
     elif source == "normalwon":
@@ -2966,7 +2969,7 @@ async def public_profile(username: str):
 async def list_experts():
     """Public list of Experts for the site-wide banner."""
     experts = await db.users.find(
-        {"role": "expert"}, {"_id": 0, "id": 1, "username": 1, "apex_flame": 1}).to_list(50)
+        {"role": "expert", "is_master": {"$ne": True}}, {"_id": 0, "id": 1, "username": 1, "apex_flame": 1}).to_list(50)
     out = []
     for e in experts:
         tips_count = await db.tips.count_documents({"user_id": e["id"]})
@@ -6974,6 +6977,226 @@ async def live_annotate_sync() -> dict:
     return {"annotated": annotated, "cleared": cleared, "to_live": to_live}
 
 
+# ----------------------------------------------------------- TipJarMaster ("der Papa")
+# The father of HQ: the best curator of all. Watches every expert, corrects the HQ's
+# live mistakes with a safer in-play alternative, and publishes ONLY the geballten
+# Experten-Konsens as his own pick (red cards, own red button). Learns statistically
+# from each expert's hit-rate and favours the ones who actually deliver.
+_MASTER_BOT = {
+    "email": "master@tipjar.com", "name": "TipJarMaster",
+    "bio": "Der Papa vom HQ — lernt von allen Experten, korrigiert Fehler live "
+           "und veröffentlicht nur den geballten Experten-Konsens.",
+}
+MASTER_CONSENSUS_MIN = 5  # ≥5 experts must agree before the Papa publishes it
+
+
+async def _get_master_bot():
+    bot = await db.users.find_one({"email": _MASTER_BOT["email"]})
+    if bot:
+        return bot
+    now = datetime.now(timezone.utc).isoformat()
+    bot = {
+        "id": str(uuid.uuid4()), "email": _MASTER_BOT["email"], "username": _MASTER_BOT["name"],
+        "password_hash": "", "role": "expert", "is_verified": True, "verified": True,
+        "credits": 0, "received_credits": 0, "referral_code": uuid.uuid4().hex[:8],
+        "apex_flame": True, "created_at": now, "is_bot": True, "is_master": True,
+        "bio": _MASTER_BOT["bio"],
+    }
+    await db.users.insert_one(bot)
+    logger.info("Created TipJarMaster bot")
+    return bot
+
+
+def _safer_live_alternative(market, kind, gh, ga, minute):
+    """An HQ pick is in danger live → return (new_market, category, odds, note) for a
+    SAFER in-play bet on the SAME match, or None if we can't genuinely improve it."""
+    m = (market or "").lower()
+    total = (gh or 0) + (ga or 0)
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and "halbzeit" not in m and " hz" not in m:
+        orig_line = int(gm.group(1))
+        new_line = total  # one more goal makes it → "Über {total}.5"
+        if new_line < orig_line:
+            odds = {0: "1.30", 1: "1.45", 2: "1.60", 3: "1.75"}.get(new_line, "1.50")
+            return (f"Über {new_line}.5 Tore", "banker", odds,
+                    f"HQ lag mit Über {orig_line}.5 daneben — der Papa geht runter auf die "
+                    f"sichere Linie Über {new_line}.5.")
+        return None
+    losing_home, losing_away = (ga or 0) > (gh or 0), (gh or 0) > (ga or 0)
+    if kind == "res_1" or "heimsieg" in m:
+        if losing_home:
+            return ("Doppelte Chance 1X", "banker", "1.50",
+                    "HQ tippte den Heimsieg, das Heim liegt hinten — der Papa sichert mit 1X ab.")
+    if kind == "res_2" or "auswärtssieg" in m or "away win" in m:
+        if losing_away:
+            return ("Doppelte Chance X2", "banker", "1.50",
+                    "HQ tippte den Auswärtssieg — der Papa sichert mit X2 ab.")
+    return None
+
+
+async def master_live_alternatives() -> dict:
+    """Phase 2: for every HQ single pick that has turned 'in danger' live, the Papa
+    publishes ONE safer in-play alternative on the same match (red master card)."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0}
+    dangers = await db.tips.find(
+        {"source": {"$in": ["hq-auto", "hq-live"]}, "live_danger": True,
+         "is_parlay": {"$ne": True}, "master_alt_done": {"$ne": True},
+         "status": {"$in": ["pending", "live"]}},
+        {"_id": 0}).to_list(100)
+    if not dangers:
+        return {"posted": 0}
+    bot = await _get_master_bot()
+    live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+    posted = 0
+    for src in dangers:
+        home, away = src.get("home_team"), src.get("away_team")
+        fx = _find_live_fixture(live, home, away) if home and away else None
+        if not fx:
+            await db.tips.update_one({"id": src["id"]}, {"$set": {"master_alt_done": True}})
+            continue
+        gh, ga = _align_goals(fx, home)
+        minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed")
+        alt = _safer_live_alternative(src.get("market"), src.get("kind"), gh, ga, minute)
+        if not alt:
+            await db.tips.update_one({"id": src["id"]}, {"$set": {"master_alt_done": True}})
+            continue
+        new_market, category, odds, note = alt
+        teams = fx.get("teams") or {}
+        tid = f"master-{uuid.uuid4().hex[:10]}"
+        tip = {
+            "id": tid, "user_id": bot["id"], "username": bot["username"],
+            "is_master": True, "is_expert": False,
+            "home_team": home, "away_team": away,
+            "home_team_latin": (teams.get("home") or {}).get("name") or home,
+            "away_team_latin": (teams.get("away") or {}).get("name") or away,
+            "match_time": src.get("match_time", ""), "country": src.get("country", ""),
+            "league": src.get("league", "") or _fixture_league_label(fx),
+            "league_code": src.get("league_code", ""),
+            "market": new_market, "odds": odds, "category": category,
+            "ai_rating": 8.5, "ai_analysis": f"👑 TipJarMaster: {note}",
+            "legs": [], "is_parlay": False,
+            "status": "live", "live_state": {"minute": minute, "score": f"{gh}:{ga}"},
+            "live_minute": minute, "live_score": f"{gh}:{ga}",
+            "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-master", "master_origin": src["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.tips.insert_one(tip)
+        await db.tips.update_one({"id": src["id"]}, {"$set": {"master_alt_done": True}})
+        posted += 1
+    return {"posted": posted}
+
+
+def _market_family(market: str):
+    """Coarse market family so different phrasings of the same bet group together."""
+    m = (market or "").lower()
+    if not m:
+        return None
+    if "beide teams treffen" in m or "btts" in m:
+        return "btts"
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and "halbzeit" not in m:
+        return f"over{gm.group(1)}5"
+    um = re.search(r"unter\s+(\d+)\.5", m)
+    if um and "halbzeit" not in m:
+        return f"under{um.group(1)}5"
+    if "1x" in m:
+        return "dc1x"
+    if "x2" in m:
+        return "dcx2"
+    return None
+
+
+async def _expert_hitrates() -> dict:
+    """Phase 4 'learning': username → win ratio from that expert's settled picks."""
+    rows = await db.tips.aggregate([
+        {"$match": {"is_expert": True, "status": {"$in": ["won", "lost"]}}},
+        {"$group": {"_id": "$username",
+                    "won": {"$sum": {"$cond": [{"$eq": ["$status", "won"]}, 1, 0]}},
+                    "total": {"$sum": 1}}},
+    ]).to_list(500)
+    return {r["_id"]: round(r["won"] / r["total"], 3) for r in rows if r.get("total")}
+
+
+async def master_consensus() -> dict:
+    """Phase 3+4: when ≥MASTER_CONSENSUS_MIN experts back the SAME fixture with a
+    compatible market, the Papa publishes it as his own pick (weighted by hit-rate)."""
+    tips = await db.tips.find(
+        {"is_expert": True, "status": "pending", "source": {"$ne": "hq-master"}},
+        {"_id": 0, "id": 1, "username": 1, "home_team": 1, "away_team": 1, "market": 1,
+         "legs": 1, "odds": 1, "match_time": 1, "league": 1, "league_code": 1,
+         "country": 1}).to_list(3000)
+    hit = await _expert_hitrates()
+    groups = {}
+    for t in tips:
+        home, away = _tip_match_teams(t)
+        market = t.get("market") or ""
+        if not market and (t.get("legs") or []):
+            first = (t["legs"][0].get("selections") or [])
+            market = " ".join(_fmt_selection(s) for s in first)
+        fam = _market_family(market)
+        if not home or not away or not fam:
+            continue
+        fixkey = "|".join(sorted([_norm(home), _norm(away)]))
+        key = (fixkey, fam)
+        g = groups.setdefault(key, {"experts": {}, "home": home, "away": away,
+                                    "market": market, "odds": t.get("odds", ""),
+                                    "match_time": t.get("match_time", ""),
+                                    "league": t.get("league", ""),
+                                    "league_code": t.get("league_code", ""),
+                                    "country": t.get("country", "")})
+        g["experts"][t["username"]] = hit.get(t["username"], 0.5)
+    bot = None
+    posted = 0
+    for (fixkey, fam), g in groups.items():
+        if len(g["experts"]) < MASTER_CONSENSUS_MIN:
+            continue
+        ckey = f"{fixkey}|{fam}"
+        if await db.tips.find_one({"source": "hq-master", "consensus_key": ckey}):
+            continue
+        if bot is None:
+            bot = await _get_master_bot()
+        n = len(g["experts"])
+        avg_hit = round(100 * sum(g["experts"].values()) / n)
+        tid = f"master-{uuid.uuid4().hex[:10]}"
+        tip = {
+            "id": tid, "user_id": bot["id"], "username": bot["username"],
+            "is_master": True, "is_expert": False,
+            "home_team": g["home"], "away_team": g["away"],
+            "match_time": g["match_time"], "country": g["country"],
+            "league": g["league"], "league_code": g["league_code"],
+            "market": g["market"], "odds": g["odds"], "category": "banker",
+            "ai_rating": 9.0,
+            "ai_analysis": (f"👑 TipJarMaster: {n} Experten sind sich einig ("
+                            f"Ø Trefferquote {avg_hit}%) — der Papa veröffentlicht den Konsens."),
+            "legs": [], "is_parlay": False,
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-master", "consensus_key": ckey, "consensus_n": n,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.tips.insert_one(tip)
+        posted += 1
+    return {"posted": posted}
+
+
+async def master_loop():
+    await asyncio.sleep(240)  # let experts + live states populate first
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            if API_FOOTBALL_KEY:
+                alt = await master_live_alternatives()
+                con = await master_consensus()
+                if alt.get("posted") or con.get("posted"):
+                    logger.info(f"Master: live-alt {alt}; consensus {con}")
+        except Exception as e:
+            logger.error(f"master_loop error: {e}")
+        await asyncio.sleep(120)
+
+
 async def enrich_member_picks() -> dict:
     """Member slips are AI-transliterated (e.g. Greek → 'Makara – Masoyk Royna') and
     often lack league / kickoff. Resolve the real fixture via API-Football and fill the
@@ -7413,6 +7636,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(daily_hof_loop()))
     _BG_TASKS.append(asyncio.create_task(system_reset_loop()))
     _BG_TASKS.append(asyncio.create_task(expert_expiry_loop()))
+    _BG_TASKS.append(asyncio.create_task(master_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

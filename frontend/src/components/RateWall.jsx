@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban, AlertTriangle } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban, AlertTriangle, Crown } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -42,6 +42,7 @@ const SMART_IDEA_STATUS = {
 };
 const VIEW_TITLE_KEY = {
   ai: "nav.viewtips",
+  master: "nav.viewmaster",
   systems: "nav.viewsystems",
   members: "nav.viewmembers",
   live: "nav.viewlive",
@@ -74,6 +75,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [voidTips, setVoidTips] = useState([]);
   const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0, void: 0 });
   const [settledTab, setSettledTab] = useState(null);
+  const [masterTab, setMasterTab] = useState("slips");
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -88,13 +90,14 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
+      else if (view === "master") { params.source = "master"; params.status = masterTab === "live" ? "live" : "pending"; }
       else if (view === "live") { if (liveCat === "community") { params.source = "members"; } else if (liveCat) params.category = liveCat; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
       setTips(data);
     } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
-  }, [sort, status, view, win, cat, liveCat]);
+  }, [sort, status, view, win, cat, liveCat, masterTab]);
 
   useEffect(() => {
     load();
@@ -464,8 +467,31 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view === "smart" && <QualifierBriefing t={t} />}
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {view === "members" && <MemberSearch onUserClick={onUserClick} t={t} />}
-      {/* filters — hidden entirely in Smart; no "live" toggle anywhere (dedicated Live tab exists) */}
-      {view !== "smart" && (
+
+      {/* Master (der Papa) — two panels: Slips (Δελτία) & Live */}
+      {view === "master" && (
+        <>
+          <div data-testid="master-explain" className="mb-5 rounded-xl border border-[#E11D2A]/30 bg-[#E11D2A]/5 px-4 py-3">
+            <p className="text-sm text-zinc-300 leading-snug flex items-center gap-2">
+              <Crown size={16} className="text-[#E11D2A]" />
+              <span><span className="font-heading font-black text-[#E11D2A]">TipJarMaster</span> — ο καλύτερος διαλογέας. Διορθώνει live τα λάθη του HQ και δημοσιεύει μόνο τον κοινό λόγο των experts.</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {[["slips", t("master.slips")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
+              <button key={v} data-testid={`master-tab-${v}`}
+                onClick={() => setMasterTab(v)}
+                className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>
+                {v === "live" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse mr-1.5 align-middle" />}
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* filters — hidden entirely in Smart & Master; no "live" toggle anywhere (dedicated Live tab exists) */}
+      {view !== "smart" && view !== "master" && (
       <div className="flex flex-wrap gap-2 mb-6">
         {view === "ai" ? (
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
@@ -840,8 +866,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       setSharing(false);
     }
   };
-  const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart"].includes(tip.source);
+  const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart", "hq-master"].includes(tip.source);
   const isExpert = !!tip.is_expert;
+  const isMaster = !!tip.is_master;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
@@ -850,7 +877,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       id={`pick-${tip.id}`}
       data-testid={`tip-card-${tip.id}`}
       className={`rounded-xl border p-4 hover:-translate-y-1 transition-all flex flex-col scroll-mt-24 ${
-        isExpert
+        isMaster
+          ? "bg-[#2a0808] border-[#E11D2A]/55 hover:border-[#E11D2A]/90 shadow-[0_0_18px_rgba(225,29,42,0.22)]"
+          : isExpert
           ? "bg-[#2a1a08] border-orange-500/45 hover:border-orange-400/80 shadow-[0_0_18px_rgba(249,115,22,0.18)]"
           : isMemberPick
           ? "bg-[#1b1030] border-purple-500/25 hover:border-purple-400/70"
@@ -871,7 +900,12 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{toLatin(tip.username)}</span></span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
-          {isExpert && (
+          {isMaster && (
+            <span data-testid="master-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[#E11D2A]/20 text-[#E11D2A] border border-[#E11D2A]/45">
+              <Crown size={10} /> Master
+            </span>
+          )}
+          {isExpert && !isMaster && (
             <span data-testid="expert-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40">
               <Star size={10} /> Experte
             </span>

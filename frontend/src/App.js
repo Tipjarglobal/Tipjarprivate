@@ -64,7 +64,7 @@ function Home() {
     try { return JSON.parse(localStorage.getItem("tj_seen_counts")) || {}; } catch { return {}; }
   });
   const [refreshKey, setRefreshKey] = useState(0);
-  const NAV_KEYS = ["ai", "smart", "systems", "members", "live", "settled"];
+  const NAV_KEYS = ["ai", "smart", "systems", "members", "live", "settled", "master"];
   const newCounts = {};
   NAV_KEYS.forEach((k) => { newCounts[k] = Math.max(0, (counts[k] || 0) - (seenCounts[k] || 0)); });
 
@@ -234,6 +234,7 @@ function Home() {
         onWallet={() => setWalletOpen(true)}
         onProfile={() => setProfileOpen(true)}
         onViewTips={() => openTipsView("ai")}
+        onViewMaster={() => openTipsView("master")}
         onViewSystems={() => openTipsView("systems")}
         onViewMembers={() => openTipsView("members")}
         onViewLive={() => openTipsView("live")}
@@ -361,10 +362,12 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"]].map(([v, lbl]) => {
+              {[["master", "nav.viewmaster"], ["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
-                if (v === "members") {
+                if (v === "master") {
+                  cls = active ? "bg-[#E11D2A] text-white shadow-[0_0_16px_rgba(225,29,42,0.6)]" : "bg-[#E11D2A]/15 border border-[#E11D2A]/50 text-red-300 hover:bg-[#E11D2A]/25";
+                } else if (v === "members") {
                   cls = active ? "bg-[#FFC02E] text-black shadow-[0_0_14px_rgba(255,192,46,0.45)]" : "bg-[#FFC02E]/15 border border-[#FFC02E]/40 text-[#FFC02E] hover:bg-[#FFC02E]/25";
                 } else if (v === "live") {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;

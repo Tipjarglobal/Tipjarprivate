@@ -1,0 +1,43 @@
+{
+  "summary": "Verified TipJarMaster (Master) engine + red header button + Master sub-tabs (Slips/Live) + live de-rating (danger badge) + Experts showcase flame gating. Backend: 5/5 pytest cases pass on public URL. Frontend: Master button is FIRST in header (red rgb(225,29,42)), Master tab (data-testid=tabview-master) opens, both Slips + Live sub-tabs render seeded tips with red card + master-badge (crown, no Experte badge). Live tab shows 3 'AT RISK' danger badges (data-testid=tip-live-danger) with 3-star rating. Our Experts showcase shows bold 20px/900 names, no flame emoji anywhere in showcase or expert-banner, and TipJarMaster is correctly excluded from experts list. One minor backend inconsistency observed on the SEED-QA-DANGER tip: live_danger stays True and ai_rating stays 3.0, but category field oscillates between 'risk' and 'banker' between polls — UI shows 'AT RISK' badge (correct, driven by live_danger flag) but the category chip may render 'BANKER' instead of 'RISK'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/tips?status=live (SEED-QA-DANGER)",
+        "issue": "category field oscillates: initial call returned category='risk'; subsequent call returned category='banker' while live_danger stayed True, category_orig='banker', ai_rating=3.0, ai_rating_orig=9.0. Something (likely live_annotate_sync path when the fake fixture is not in API-Football live list) reverts category without also clearing live_danger. UI badge (data-testid=tip-live-danger 'AT RISK') still works because it's flag-driven, but the category chip may still say BANKER instead of RISK — contradicting the requirement 'category shown as RISK (not BANKER)'."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_master_derating.py",
+    "/app/test_reports/pytest/it41_master.xml",
+    "/app/test_reports/it41_home.png",
+    "/app/test_reports/it41_master_slips.png",
+    "/app/test_reports/it41_master_live.png",
+    "/app/test_reports/it41_live_danger.png",
+    "/app/test_reports/it41_experts.png",
+    "/app/test_reports/it41_danger_zoom.png"
+  ],
+  "action_items": [
+    "Investigate why category reverts from 'risk' back to 'banker' on SEED-QA-DANGER while live_danger remains True. Possibly in live_annotate_sync or an alternative live-refresh path that resets category from an origin field without going through _derate_fields. Ensure category stays 'risk' as long as live_danger is True, or make the UI category chip render from live_danger (show 'RISK' if live_danger else category)."
+  ],
+  "critical_code_review_comments": [
+    "server.py _derate_fields only sets category='risk' on the danger transition (if not t.get('live_danger')). If another process later clears/rewrites category without going through _derate_fields (or without also flipping live_danger), state becomes inconsistent. Consider making the API response derive an effective category on read (e.g. return 'risk' whenever live_danger=True) so UI is always consistent regardless of write-path race."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_master_derating.py"
+  ],
+  "success_rate": {"backend": "100% (5/5 pytest); 1 minor state inconsistency noted", "frontend": "100% on all seeded UI checks"},
+  "test_credentials": "Not used — tips window is public.",
+  "seed_data_creation": "None (used main agent's seeds SEED-QA-MASTER-SLIP, SEED-QA-MASTER-LIVE, SEED-QA-DANGER — NOT deleted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All Master/derating/experts-showcase UI + endpoints verified on public URL. Seeded tips are still present. Only open item is the category-oscillation minor bug on SEED-QA-DANGER; UI danger badge works correctly. If main agent applies the effective-category fix, retest by hitting /api/tips?status=live and confirming SEED-QA-DANGER returns category='risk' whenever live_danger=true.",
+  "rca of the issue": "SEED-QA-DANGER's category flipped back to 'banker' after being set to 'risk'. Root cause hypothesis: live_annotate_sync (server.py:6871) iterates live tips and calls _derate_fields only when it locates the tip's fixture in the live API-Football feed. The seeded 'Epsilon FC vs Zeta SC' fixture is fake — not in the feed — so no explicit danger evaluation happens, but some other refresh path is resetting `category` from `category_orig` or the original tip document without going through _derate_fields (or without also flipping live_danger). live_danger remains True so the UI 'AT RISK' badge still renders, but the category chip shows BANKER. Mitigation: (1) in _derate_fields, always re-assert category='risk' whenever live_danger stays True; or (2) derive category on API read: `if t['live_danger']: t['category']='risk'` in list_tips serialization. Option (2) is safest."
+}
