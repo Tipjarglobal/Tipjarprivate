@@ -318,6 +318,11 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (d) — Hall of Fame in $
+- HoF now enforces $ everywhere: `hall_of_fame` endpoint reformats stake/winnings via `_money_to_usd`;
+  `daily_hof_autofill` runs `_disguise_stakes` on the tip (matches feed); showcase seed uses $.
+- Migrated all 12 existing approved win_claims: text €→$ AND re-rendered slip images in $ (verified image).
+
 ## Changelog 2026-07-25 (c) — Stake disguise & currency
 - New `_disguise_stakes(tip)` (server.py, deterministic per tip id) applied in `_tag_expert`
   (feed), `/tips/mine`, and the share-image render (SHARE_RENDER_VER 3→4 to regen cached imgs).

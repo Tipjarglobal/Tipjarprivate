@@ -2755,6 +2755,14 @@ def _is_house_single(username: str, is_parlay=None, legs_count=None) -> bool:
     return (legs_count or 1) <= 1
 
 
+def _money_to_usd(s):
+    """Reformat any money string to a $ amount (keeps the number, swaps the symbol)."""
+    n = _parse_num(s)
+    if n is not None and n > 0:
+        return _fmt_usd(n)
+    return (str(s or "").replace("€", "$").replace("£", "$").replace("EUR", "$"))
+
+
 @api_router.get("/wins/hall-of-fame")
 async def hall_of_fame():
     raw = await db.win_claims.find(
@@ -2763,6 +2771,11 @@ async def hall_of_fame():
     # House bots (TipJarHQ / TipJarMaster) only qualify with a system/parlay.
     docs = [d for d in raw
             if not _is_house_single(d.get("username"), legs_count=d.get("legs_count"))][:24]
+    for d in docs:  # trophies always show $ too (owner rule)
+        if d.get("stake"):
+            d["stake"] = _money_to_usd(d.get("stake"))
+        if d.get("winnings"):
+            d["winnings"] = _money_to_usd(d.get("winnings"))
     # Cashed-out slips are trophies too — surface them in the Hall of Fame.
     cashed = await db.tips.find(
         {"status": "cashed_out"}, {"_id": 0}
@@ -2773,7 +2786,7 @@ async def hall_of_fame():
         docs.append({
             "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
             "total_odds": _to_float(tp.get("odds")),
-            "winnings": tp.get("winnings") or tp.get("potential_return") or "",
+            "winnings": _money_to_usd(tp.get("winnings") or tp.get("potential_return") or ""),
             "legs_count": len(tp.get("legs") or []) or 1,
             "image_path": tp.get("image_path"),
             "created_at": tp.get("settled_at") or tp.get("created_at"),
@@ -8223,8 +8236,9 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
             rlegs = _tip_to_render_legs(tp)
             if not rlegs:
                 continue
-            stake = tp.get("stake") or "10,00 €"
-            winnings = tp.get("potential_return") or (f"{odds * 10:.2f} €".replace(".", ","))
+            _disguise_stakes(tp)  # HoF trophies match the feed: $ + expert 12x / TipJarLogic x2
+            stake = tp.get("stake") or "10 $"
+            winnings = tp.get("potential_return") or _fmt_usd(odds * 10)
             img = await asyncio.to_thread(
                 _render_slip_image, rlegs, odds, stake, winnings,
                 tp.get("username", "TipJar"), "played")
@@ -8397,7 +8411,7 @@ async def _seed_showcase_wins():
     showcase = [
         {
             "username": "TipJarLogic", "type": "played",
-            "total_odds": 12.25, "stake": "4,00 \u20ac", "winnings": "49,00 \u20ac",
+            "total_odds": 12.25, "stake": "4 $", "winnings": "49 $",
             "legs": [
                 {"home": "Hammarby IF", "away": "RSC Anderlecht", "market": "Unentschieden (X)",
                  "odds": 3.50, "result": "1:1", "league": "UEFA Europa League", "date": "",
