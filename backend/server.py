@@ -6982,17 +6982,17 @@ async def live_annotate_sync() -> dict:
     return {"annotated": annotated, "cleared": cleared, "to_live": to_live}
 
 
-# ----------------------------------------------------------- TipJarMaster ("der Papa")
-# The father of HQ: the best curator of all. Watches every expert, corrects the HQ's
-# live mistakes with a safer in-play alternative, and publishes ONLY the geballten
-# Experten-Konsens as his own pick (red cards, own red button). Learns statistically
-# from each expert's hit-rate and favours the ones who actually deliver.
+# ----------------------------------------------------------- TipJarMaster
+# The father of HQ: the best curator of all. Watches every expert, plays a safer live
+# alternative when an HQ pick turns, and publishes ONLY the geballten Experten-Konsens
+# as his own pick (red cards, own red button). Learns statistically from each expert's
+# hit-rate and favours the ones who actually deliver.
 _MASTER_BOT = {
     "email": "master@tipjar.com", "name": "TipJarMaster",
-    "bio": "Der Papa vom HQ — lernt von allen Experten, spielt live die sichere "
+    "bio": "TipJarMaster vom HQ — lernt von allen Experten, spielt live die sichere "
            "Alternative und veröffentlicht den geballten Experten-Konsens.",
 }
-MASTER_CONSENSUS_MIN = 5  # ≥5 experts must agree before the Papa publishes it
+MASTER_CONSENSUS_MIN = 5  # ≥5 experts must agree before TipJarMaster publishes it
 
 
 async def _get_master_bot():
@@ -7024,22 +7024,22 @@ def _safer_live_alternative(market, kind, gh, ga, minute):
         if new_line < orig_line:
             odds = {0: "1.30", 1: "1.45", 2: "1.60", 3: "1.75"}.get(new_line, "1.50")
             return (f"Über {new_line}.5 Tore", "banker", odds,
-                    f"Der Papa live: die sichere Linie Über {new_line}.5.")
+                    f"Master live: die sichere Linie Über {new_line}.5.")
         return None
     losing_home, losing_away = (ga or 0) > (gh or 0), (gh or 0) > (ga or 0)
     if kind == "res_1" or "heimsieg" in m:
         if losing_home:
             return ("Doppelte Chance 1X", "banker", "1.50",
-                    "Der Papa live: absichern mit 1X.")
+                    "Master live: absichern mit 1X.")
     if kind == "res_2" or "auswärtssieg" in m or "away win" in m:
         if losing_away:
             return ("Doppelte Chance X2", "banker", "1.50",
-                    "Der Papa live: absichern mit X2.")
+                    "Master live: absichern mit X2.")
     return None
 
 
 async def master_live_alternatives() -> dict:
-    """Phase 2: for every HQ single pick that has turned 'in danger' live, the Papa
+    """Phase 2: for every HQ single pick that has turned 'in danger' live, TipJarMaster
     publishes ONE safer in-play alternative on the same match (red master card)."""
     if not API_FOOTBALL_KEY:
         return {"posted": 0}
@@ -7125,7 +7125,7 @@ async def _expert_hitrates() -> dict:
 
 async def master_consensus() -> dict:
     """Phase 3+4: when ≥MASTER_CONSENSUS_MIN experts back the SAME fixture with a
-    compatible market, the Papa publishes it as his own pick (weighted by hit-rate)."""
+    compatible market, TipJarMaster publishes it as his own pick (weighted by hit-rate)."""
     tips = await db.tips.find(
         {"is_expert": True, "status": "pending", "source": {"$ne": "hq-master"}},
         {"_id": 0, "id": 1, "username": 1, "home_team": 1, "away_team": 1, "market": 1,
@@ -7173,7 +7173,7 @@ async def master_consensus() -> dict:
             "market": g["market"], "odds": g["odds"], "category": "banker",
             "ai_rating": 9.0,
             "ai_analysis": (f"👑 TipJarMaster: {n} Experten sind sich einig ("
-                            f"Ø Trefferquote {avg_hit}%) — der Papa veröffentlicht den Konsens."),
+                            f"Ø Trefferquote {avg_hit}%) — TipJarMaster veröffentlicht den Konsens."),
             "legs": [], "is_parlay": False,
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-master", "consensus_key": ckey, "consensus_n": n,

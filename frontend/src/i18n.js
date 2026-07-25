@@ -1983,7 +1983,7 @@ const T = {
     "wall.liveDanger": "Σε κίνδυνο",
     "nav.viewmaster": "Master",
     "master.slips": "Δελτία",
-    "master.showcase.sub": "Ο Μπαμπάς του HQ — live προτάσεις & ο κοινός λόγος των experts.",
+    "master.showcase.sub": "Ο διαλογέας του HQ — live προτάσεις & ο κοινός λόγος των experts.",
     "play.btn": "Παίξε στον πράκτορα",
     "play.overlayTitle": "Το παρολί σου",
     "play.overlayHint": "Πέρασε κάθε παιχνίδι στον πράκτορα και τσέκαρέ το εδώ — δεν ξεχνιέται κανένα.",

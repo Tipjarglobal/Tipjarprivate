@@ -468,7 +468,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {view === "members" && <MemberSearch onUserClick={onUserClick} t={t} />}
 
-      {/* Master (der Papa) — two panels: Slips (Δελτία) & Live */}
+      {/* Master — two panels: Slips (Δελτία) & Live */}
       {view === "master" && (
         <>
           <div data-testid="master-explain" className="mb-5 rounded-xl border border-[#E11D2A]/30 bg-[#E11D2A]/5 px-4 py-3">
