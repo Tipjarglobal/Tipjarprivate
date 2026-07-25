@@ -887,11 +887,18 @@ async def predictz_autopost() -> dict:
         if _market_family(market) in {"btts", "o25", "o25_btts", "gamble"}:
             continue
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
-        # Predictz picks also carry a Banker/Value category so they surface in the
-        # Single-Picks filters (sweet-spot 1.40–2.60 = Value, safer = Banker).
-        # Banker ONLY for near-certain markets (Über 0.5 / DC / DNB / safe unders) at short
-        # odds — never Über 1.5+ which can die on a 0-1/1-0. Everything else = Value.
-        pcategory = "banker" if (_od < 1.60 and _is_banker_safe(market)) else "value"
+        # Owner rule: the BANKER button must stay rare. A short-odds pick is a banker ONLY
+        # if it's near-certain (Über 0.5 / DC / DNB / safe unders). A sub-1.40 pick that is
+        # NOT banker-safe is neither a banker nor real value → DROP it (never dump in Value).
+        if _od < 1.40:
+            if _is_banker_safe(market):
+                pcategory = "banker"
+            else:
+                continue
+        elif _od <= 2.60:
+            pcategory = "value"
+        else:
+            continue
         # STABILITY (owner): keep the first pick per match+category fixed — don't add a
         # second (e.g. Predictz value on a match Forebet already gave a value pick).
         if await db.tips.find_one({
@@ -1334,7 +1341,16 @@ async def footballinsight_autopost() -> dict:
         except Exception:
             _od = fb_odds
         rating = 7.0 if _od <= 1.60 else (6.5 if _od <= 2.5 else 6.0)
-        pcategory = "banker" if (_od < 1.60 and _is_banker_safe(market)) else "value"
+        # Banker stays rare: sub-1.40 non-banker-safe picks are dropped, not dumped in Value.
+        if _od < 1.40:
+            if _is_banker_safe(market):
+                pcategory = "banker"
+            else:
+                continue
+        elif _od <= 2.60:
+            pcategory = "value"
+        else:
+            continue
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
         lg = league or "TipJarHQ Pick"
         if "friendl" in lg.lower():
