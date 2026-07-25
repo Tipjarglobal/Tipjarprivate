@@ -318,6 +318,16 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (g) — Strict bankers + Master push logo
+- Owner rule: BANKERS must be near-certain. New `_is_banker_safe(market)` (server.py) — only
+  Über 0.5 (incl. "<team> Über 0.5" = team scores 1+, e.g. Sporting), Doppelte Chance, Draw No Bet,
+  Unter 3.5/4.5 qualify. NEVER: Über 1.5/2.5/3.5 (die on 0-1/1-0), BTTS, straight win, handicap,
+  half-time markets. Applied in scrapers (forebet/predictz/footballinsight) + live category logic.
+  Migrated 42 existing pending/live unsafe "banker" singles → value. Remaining bankers = team-scores.
+- Master push notifications: dedicated branch in `_push_payload_for_tip` → "👑 Master Doppelpack" /
+  "👑 Master-Pick" with a RED crown logo `/frontend/public/push-master.png` (192×192). Master no longer
+  mislabeled as Community.
+
 ## Changelog 2026-07-25 (f) — Master Doppelpack, notifications & manual
 - NEW `master_doublepack()` (server.py): Master actively backs 2 favourites to WIN (real 1X2 odds),
   1 slip, product closest to ~6.0 (band 4–9, per-leg 1.5–3.6). `master_doublepack:True`, no

@@ -166,6 +166,14 @@ def _push_payload_for_tip(tip: dict) -> dict:
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
+    if tip.get("is_master") or src == "hq-master":
+        # The Master gets his OWN look: crown + a dedicated RED logo (owner request).
+        title = "👑 Master Doppelpack" if tip.get("master_doublepack") else "👑 Master-Pick"
+        return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}",
+                "kind": "tip", "sound": "coin", "pick_id": pid, "area": area,
+                "vibrate": [120, 60, 120, 60, 200],
+                "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
+                "icon": "/push-master.png", "badge": "/push-master.png", "tag": "tipjar-master"}
     if tip.get("is_expert"):
         title = f"🔮 Experten-Tipp · {uname}" if uname else "🔮 Neuer Experten-Tipp"
         sound = "expert"

@@ -45,6 +45,7 @@ from server import (
     _league_blocked_forebet,
     _league_blocked_predictz,
     _market_family,
+    _is_banker_safe,
     _match_key,
     _norm_team,
     _parse_kickoff,
@@ -503,15 +504,16 @@ async def forebet_autopost() -> dict:
             if "-1.5" in ml and "handicap" in ml:
                 o2["_ptype"] = "risk"
                 risk_opts.append(o2)
-            elif round(o["winprob"] * 10) >= 9:
-                # Owner rule: EVERY 9- or 10-star single pick (≈86 %+ win chance) is a
-                # Banker, regardless of odds — the safest picks always live in Banker.
+            elif round(o["winprob"] * 10) >= 9 and _is_banker_safe(o["market"]):
+                # Owner rule: a 9-/10-star single (≈86 %+) is a Banker ONLY if it's a
+                # near-certain market (Über 0.5 / team scores / DC / DNB). Über 1.5+ etc.
+                # can die on a 0-1/1-0 → never a banker.
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
             elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.62:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
-            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03:
+            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03 and _is_banker_safe(o["market"]):
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
             elif 2.00 <= final_odd <= 3.60 and o["winprob"] >= 0.55:
@@ -887,7 +889,9 @@ async def predictz_autopost() -> dict:
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
         # Predictz picks also carry a Banker/Value category so they surface in the
         # Single-Picks filters (sweet-spot 1.40–2.60 = Value, safer = Banker).
-        pcategory = "value" if 1.40 <= _od <= 2.60 else "banker"
+        # Banker ONLY for near-certain markets (Über 0.5 / DC / DNB / safe unders) at short
+        # odds — never Über 1.5+ which can die on a 0-1/1-0. Everything else = Value.
+        pcategory = "banker" if (_od < 1.60 and _is_banker_safe(market)) else "value"
         # STABILITY (owner): keep the first pick per match+category fixed — don't add a
         # second (e.g. Predictz value on a match Forebet already gave a value pick).
         if await db.tips.find_one({
@@ -1330,7 +1334,7 @@ async def footballinsight_autopost() -> dict:
         except Exception:
             _od = fb_odds
         rating = 7.0 if _od <= 1.60 else (6.5 if _od <= 2.5 else 6.0)
-        pcategory = "value" if 1.40 <= _od <= 2.60 else ("banker" if _od < 1.40 else "value")
+        pcategory = "banker" if (_od < 1.60 and _is_banker_safe(market)) else "value"
         ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
         lg = league or "TipJarHQ Pick"
         if "friendl" in lg.lower():

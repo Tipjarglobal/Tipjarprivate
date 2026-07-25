@@ -5248,6 +5248,28 @@ def _norm_team(name: str) -> str:
 VALUE_MIN_ODDS = 1.60
 WIN_PROB_MIN = 0.72          # value pick: ≥72% win chance (owner) — clearly no coin-flip
 BANKER_WIN_PROB = 0.85       # separate safe "banker" category (low odds, ~85%+), for combos
+
+
+# Owner rule (2026-07): a BANKER must be near-certain. "Über 1.5 / 2.5" (total OR team) can
+# die on a 0-1/1-0 and are NOT bankers — nor is BTTS, a straight win or a handicap. Only the
+# safest markets qualify: "at least 1 goal" (Über 0.5 — incl. a strong team scoring, e.g.
+# Sporting Über 0.5), Double Chance, Draw No Bet, and very safe unders (Unter 3.5/4.5).
+_BANKER_BAD_RE = re.compile(
+    r'(über|over)\s*(1\.5|2\.5|3\.5|4\.5)|(unter|under)\s*(0\.5|1\.5|2\.5)|'
+    r'beide|btts|\bgg\b|handicap|-\s*\d|\bsieg\b|gewinnt|\bwin\b|'
+    r'halbzeit|1\.\s*hz|\bhz\b|half|1st half|hälfte', re.I)
+_BANKER_OK_RE = re.compile(
+    r'(über|over)\s*0\.5|doppelte chance|double chance|draw no bet|\bdnb\b|'
+    r'(unter|under)\s*(3\.5|4\.5)', re.I)
+
+
+def _is_banker_safe(market: str) -> bool:
+    """True only for genuinely near-certain markets — the only ones allowed as bankers."""
+    m = market or ""
+    if _BANKER_BAD_RE.search(m):
+        return False
+    return bool(_BANKER_OK_RE.search(m))
+
 MARKET_MIN_SAMPLE = 8        # min settled tips before a market family can be judged
 MARKET_MIN_WINRATE = 0.55    # families below this observed win-rate get disabled
 
@@ -6804,7 +6826,7 @@ async def live_autopost() -> dict:
             _od = float(str(lt.get("odds") or "0").replace(",", "."))
         except Exception:
             _od = 0.0
-        _cat = "banger" if (lt.get("id", "").startswith("hqlive-banger-")) else ("value" if _od >= 1.60 else "banker")
+        _cat = "banger" if (lt.get("id", "").startswith("hqlive-banger-")) else ("banker" if (_od < 1.60 and _is_banker_safe(lt.get("market"))) else "value")
         await db.tips.update_one({"id": lt["id"]}, {"$set": {"category": _cat}})
         lt["category"] = _cat
     for lt in existing:
@@ -6944,7 +6966,7 @@ async def live_autopost() -> dict:
             "$set": {
                 "market": t.get("market"), "odds": f"{odd:.2f}",
                 "ai_rating": min(7.0, float(t.get("ai_rating") or 7.0)), "win_prob": 0.7,
-                "category": ("value" if odd >= 1.60 else "banker"),
+                "category": ("banker" if (odd < 1.60 and _is_banker_safe(t.get("market"))) else "value"),
                 "ai_analysis": analysis, "status": "live", "match_time": t.get("match_time"),
                 "league": t.get("league") or "Live-Spiel",
                 "country": t.get("country", ""), "league_code": t.get("league_code", ""),
@@ -7008,7 +7030,7 @@ async def live_autopost() -> dict:
                 "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.0,
                 "ai_analysis": analysis, "status": "live",
                 "win_prob": 0.7,
-                "category": ("value" if odd >= 1.60 else "banker"),
+                "category": ("banker" if (odd < 1.60 and _is_banker_safe(t.get("market"))) else "value"),
                 "league": _fixture_league_label(fx),
                 "country": _fixture_country(fx),
                 "league_code": "",
