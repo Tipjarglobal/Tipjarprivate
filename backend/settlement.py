@@ -32,6 +32,7 @@ from server import (
     _API_QUOTA,
     _api_quota_exhausted,
     _apifootball,
+    _canonical_team_name,
     _corner_total_for_fixture,
     _finished_eligible,
     _fmt_selection,
@@ -547,11 +548,16 @@ async def settle_pending_tips() -> dict:
         if not team_id:
             team_id = await resolve_team_id(tip["away_team"])
             opponent = tip["home_team"]
+        # Correct (canonical English) names for reliable fixture matching — from the
+        # enriched *_latin fields, or resolved on the fly for Greek/foreign names.
+        home_c = tip.get("home_team_latin") or (await _canonical_team_name(tip["home_team"])) or tip["home_team"]
+        away_c = tip.get("away_team_latin") or (await _canonical_team_name(tip["away_team"])) or tip["away_team"]
+        opponent = away_c if opponent == tip["away_team"] else home_c
         opponent_id = await resolve_team_id(opponent)
         fx = find_finished_fixture(team_id, opponent, dates, opponent_id) if team_id else None
         if not fx:
             # Fallback: scan the date's fixtures and match both team names directly.
-            fx = _datescan_fixture(tip["home_team"], tip["away_team"], dates, date_cache)
+            fx = _datescan_fixture(home_c, away_c, dates, date_cache)
         if not fx:
             if _api_quota_exhausted():
                 checked -= 1
@@ -579,7 +585,7 @@ async def settle_pending_tips() -> dict:
                 continue
             leg = {"market": outcome_market, "kind": _lk, "line": tip.get("line"),
                    "player": tip.get("player") or "", "team": tip.get("team", ""),
-                   "home": tip["home_team"], "away": tip["away_team"]}
+                   "home": home_c, "away": away_c}
             res = _grade_player_leg(leg, pmap or {}, team_cards or {}, fx)
             if res is None:
                 await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
@@ -594,7 +600,7 @@ async def settle_pending_tips() -> dict:
                 continue
             new_status = "won" if res else "lost"
         else:
-            outcome = await judge_market(tip.get("market", ""), tip["home_team"], tip["away_team"],
+            outcome = await judge_market(tip.get("market", ""), home_c, away_c,
                                          fx["home_goals"], fx["away_goals"])
             new_status = outcome if outcome in ("won", "lost") else "void"
         if new_status == "void":
@@ -602,8 +608,8 @@ async def settle_pending_tips() -> dict:
             continue
         # canonical (Latin) team names from API-Football, mapped to the tip's orientation,
         # so non-Greek readers see "Blumenau SC" instead of "Μπλούμεναου".
-        if _teams_match(fx.get("home_name", ""), tip["home_team"]) or \
-           _teams_match(fx.get("away_name", ""), tip["away_team"]):
+        if _teams_match(fx.get("home_name", ""), home_c) or \
+           _teams_match(fx.get("away_name", ""), away_c):
             home_latin, away_latin = fx.get("home_name"), fx.get("away_name")
         else:
             home_latin, away_latin = fx.get("away_name"), fx.get("home_name")
@@ -644,7 +650,8 @@ async def settle_hq_combos() -> dict:
         dates = [ko.date().isoformat(),
                  (ko + timedelta(days=1)).date().isoformat(),
                  (ko - timedelta(days=1)).date().isoformat()]
-        home, away = tip["home_team"], tip["away_team"]
+        home = tip.get("home_team_latin") or (await _canonical_team_name(tip["home_team"])) or tip["home_team"]
+        away = tip.get("away_team_latin") or (await _canonical_team_name(tip["away_team"])) or tip["away_team"]
         team_id = await resolve_team_id(home)
         opponent = away
         if not team_id:
@@ -840,6 +847,11 @@ async def settle_multimatch_parlays() -> dict:
                 any_lost, all_won = True, False
                 continue
             home, away = _split_match(leg.get("match") or "")
+            # Correct (canonical) names for reliable fixture matching (Greek → English).
+            if home:
+                home = (await _canonical_team_name(home)) or home
+            if away:
+                away = (await _canonical_team_name(away)) or away
             ko = _kickoff_dt(leg.get("kickoff")) or _kickoff_dt(tip.get("match_time"))
             if not home or not away or not (ko and ko < now - timedelta(hours=2)):
                 all_resolved, all_won = False, False

@@ -33,6 +33,15 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Correct names EVERYWHERE (settlement + live + consensus)**. Extended the
+  canonical-name fix beyond display: `_tip_match_teams` now prefers `*_latin` (so live-score
+  matching, master consensus & live-alternatives use real names for Greek-tipped games);
+  live_annotate & master_consensus projections include the latin fields. Settlement
+  (`settle_pending_tips`, `settle_hq_combos`, `settle_multimatch_parlays`) resolves canonical
+  names (from `*_latin` or `_canonical_team_name` fallback) before fixture lookup / datescan /
+  judge_market, so Greek-tipped games auto-settle reliably. Verified: `_tip_match_teams`
+  returns ('Luzern','Thun') for the ΛΟΥΚΕΡΝΗ tip; all settlement loops run clean.
+
 - 2026-06 (25th): **Team-name fix (Greek → canonical)**. GR/foreign tipster bots stored teams
   in Greek ("ΛΟΥΚΕΡΝΗ"/"ΤΟΥΝ") which `toLatin` turned into phonetic "LOYKERNI"/"TOYN" for
   non-Greek readers. Added `_canonical_team_name()` (server.py): LLM (Gemini) resolves a

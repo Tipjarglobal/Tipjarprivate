@@ -6815,10 +6815,14 @@ def _is_member_tip(t: dict) -> bool:
 
 
 def _tip_match_teams(t: dict):
-    """Home/away teams for a tip — from the fields, or parsed from a single-game
-    parlay's leg (\"A – B\"). Returns (None, None) for multi-game parlays."""
-    if t.get("home_team") and t.get("away_team"):
-        return t["home_team"], t["away_team"]
+    """Home/away teams for a tip — the canonical (Latin) names when known, else the raw
+    fields, else parsed from a single-game parlay's leg ("A – B"). Preferring the Latin
+    names makes live-score / settlement / consensus matching work for Greek-named tips.
+    Returns (None, None) for multi-game parlays."""
+    home = t.get("home_team_latin") or t.get("home_team")
+    away = t.get("away_team_latin") or t.get("away_team")
+    if home and away:
+        return home, away
     legs = t.get("legs") or []
     if len(legs) == 1:
         mt = legs[0].get("match") or ""
@@ -6926,6 +6930,7 @@ async def live_annotate_sync() -> dict:
     _live_proj = {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
                   "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1,
                   "market": 1, "kind": 1, "category": 1, "ai_rating": 1,
+                  "home_team_latin": 1, "away_team_latin": 1,
                   "category_orig": 1, "ai_rating_orig": 1, "live_danger": 1}
     tips = await db.tips.find(
         {"status": {"$in": ["pending", "live"]},
@@ -7175,6 +7180,7 @@ async def master_consensus() -> dict:
     tips = await db.tips.find(
         {"is_expert": True, "status": "pending", "source": {"$ne": "hq-master"}},
         {"_id": 0, "id": 1, "username": 1, "home_team": 1, "away_team": 1, "market": 1,
+         "home_team_latin": 1, "away_team_latin": 1,
          "legs": 1, "odds": 1, "match_time": 1, "league": 1, "league_code": 1,
          "country": 1}).to_list(3000)
     hit = await _expert_hitrates()
