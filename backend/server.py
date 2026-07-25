@@ -6488,7 +6488,7 @@ def find_upcoming_fixture(team_id: int, opponent_name: str):
 # ---------------------------------------------------------------------------
 LIVE_INPLAY_STATUSES = {"1H", "2H", "ET", "BT", "P", "LIVE", "INT"}
 LIVE_MAX_TIPS = 12
-LIVE_POLL_SECONDS = 3 * 60
+LIVE_POLL_SECONDS = 6 * 60
 LIVE_STAT_CALL_CAP = 20  # max /fixtures/statistics calls per live run (quota guard)
 
 

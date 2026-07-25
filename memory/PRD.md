@@ -328,8 +328,8 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Root cause of late settlement = API-Football DAILY quota exhausted (confirmed via /status). Added quota
   backoff to live_loop & member_live_loop so the settlement engine keeps budget. Manually settled the
   finished Gimcheon 3-2 Daejeon (Über 3.5 → won).
-- OPEN TRADEOFF: live polling (3min/90s) is the dominant quota consumer → can starve settlement.
-  Options: reduce live poll frequency OR upgrade API-Football plan. Awaiting user decision.
+- RESOLVED TRADEOFF: LIVE_POLL_SECONDS 3min → 6min (user choice) to halve live quota use and
+  keep budget for the settlement engine. member_live stays 90s.
 
 ## Backlog
 - P1: Add more tipster channels → new unique bot per channel (edit `_CHANNEL_BOTS`).
