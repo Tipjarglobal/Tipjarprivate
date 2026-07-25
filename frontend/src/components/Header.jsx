@@ -156,10 +156,10 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
       {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
       <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-8 gap-2">
-          <QuickView onClick={onViewMaster} icon={Crown} label={t("nav.viewmaster")} testId="view-master-btn" count={counts.master} newCount={newCounts.master} variant="master" />
           <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
           <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
           <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
+          <QuickView onClick={onViewMaster} icon={Crown} label={t("nav.viewmaster")} testId="view-master-btn" count={counts.master} newCount={newCounts.master} variant="master" />
           <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" />
           <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
           <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
@@ -175,7 +175,7 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
     green: "bg-[#2ECC57] text-black hover:bg-[#26b64c] shadow-[0_0_16px_rgba(46,204,87,0.3)]",
     master: "bg-[#E11D2A] text-white hover:bg-[#c4141f] shadow-[0_0_20px_rgba(225,29,42,0.55)]",
     pink: "bg-[#F9A8D4] text-black hover:bg-[#f48fc4] shadow-[0_0_16px_rgba(249,168,212,0.4)]",
-    gold: "bg-[#FFC02E] text-black hover:bg-[#e6ac1f] shadow-[0_0_16px_rgba(255,192,46,0.4)]",
+    gold: "bg-[#E3A81B] text-black hover:bg-[#c8920f] shadow-[0_0_16px_rgba(227,168,27,0.45)]",
     blue: "bg-[#2563eb] text-white hover:bg-[#1d4fd8] shadow-[0_0_18px_rgba(37,99,235,0.55)] animate-pulse",
     checkered: "bg-white text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(255,255,255,0.25)]",
   };

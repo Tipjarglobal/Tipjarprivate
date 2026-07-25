@@ -362,7 +362,7 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["master", "nav.viewmaster"], ["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "master") {
