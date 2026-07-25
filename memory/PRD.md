@@ -33,6 +33,21 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Zeitzonen-Anzeige + sicherere Experten-Void-Logik**.
+  • **Zeitzonen**: Anstoßzeiten werden jetzt in der vom Betrachter gewählten Zeitzone angezeigt.
+    Basis = Europe/Berlin (Berlin bleibt unverändert), Umrechnung via Intl in i18n.js
+    (`getViewerTz`/`setViewerTz`/`applyAccountTz`, `_toViewer` in `formatKickoff`). Header hat einen
+    Zeitzonen-Umschalter (`timezone-switcher`, `tz-<IANA>`) neben der Sprache; Default = Account-
+    Zeitzone (falls keine manuelle Wahl). Verifiziert: „08:00" → Berlin 08:00, Athen 09:00,
+    London 07:00, NY 02:00; Mitternachtswechsel korrekt. (Mobil: Account-Default; Umschalter ab sm.)
+  • **Void-Sicherheit** (`void_stale_expert_slips`): läuft NACH dem Settle-Pass. Ein offener
+    Experten-Schein wird nur annulliert, wenn er (a) zeitlos ist, (b) >3h nach Anstoß UND die Engine
+    ihn bereits ≥1× erfolglos versucht hat (settle_attempts≥1 → nicht abrechenbar), oder (c) >12h alt
+    ist (Backstop). Scheine, die die Engine noch gar nicht erreicht hat (attempts==0, z.B. während
+    Kontingent-Ausfall) bleiben bis zum 12h-Backstop → gradebare Scheine werden ABGERECHNET statt
+    vorschnell annulliert. (Nach Kontingent-Reset live gegenprüfen.)
+
+
 - 2026-06 (25th): **Schnellere Bereinigung abgelaufener Experten-Scheine**.
   • Problem: Ein „Fortuna Düsseldorf – Dortmund"-Schein (Polaris, exotischer Markt „Next Team to
     Score First Half") blieb ~7h nach Anstoß offen. Ursachen: (1) Feeds posten LOKALE Anstoßzeiten,

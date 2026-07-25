@@ -987,23 +987,33 @@ async def expire_stale_pending() -> dict:
 
 
 async def void_stale_expert_slips() -> dict:
-    """Owner 2026-06 ('cleanup the expert mess'): expert-bot slips must always carry a
-    playable match time. Any expert slip that is (a) unsettled >3h after its (last)
-    kickoff, or (b) has NO recognizable kickoff at all, is annulled (void) and drops out
-    of the pending/live feed. Runs after the settle pass so gradeable slips settle first.
-    NOTE: 3h — feeds post LOCAL kickoff times which we read as UTC, so the real match is
-    usually even older; a finished game must never linger in the feed."""
+    """Owner 2026-06/07 ('cleanup the expert mess' + 'gradebare Scheine sollen abgerechnet,
+    nicht nur annulliert werden'). Runs AFTER the settle pass, so any gradeable slip is
+    already won/lost and gone. A still-pending expert slip is voided when it is:
+      • timeless (no recognizable kickoff → can never settle), or
+      • past kickoff by >3h AND settlement already engaged it at least once
+        (settle_attempts>=1) but couldn't grade it → genuinely un-gradeable, or
+      • past kickoff by >12h (dead-slip backstop, e.g. after a long API-quota outage).
+    Slips settlement hasn't even reached yet (attempts==0, e.g. during a quota outage) are
+    kept until the 12h backstop so we never void something that could still be settled.
+    NOTE: feeds post LOCAL kickoff times read as UTC, so the real match is usually older."""
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=3)
+    soft = now - timedelta(hours=3)
+    hard = now - timedelta(hours=12)
     docs = await db.tips.find(
         {"is_expert": True, "status": {"$in": ["pending", "live"]}},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(5000)
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "settle_attempts": 1}).to_list(5000)
     void_ids = []
     for d in docs:
         legs = d.get("legs") or []
         kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
         latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
-        if latest is None or latest < cutoff:
+        attempts = d.get("settle_attempts", 0) or 0
+        if latest is None:
+            void_ids.append(d["id"])
+        elif latest < hard:
+            void_ids.append(d["id"])
+        elif latest < soft and attempts >= 1:
             void_ids.append(d["id"])
     if void_ids:
         await db.tips.update_many(

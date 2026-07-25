@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Star, Target, Crown } from "lucide-react";
+import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Star, Target, Crown } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import Mailbox from "./Mailbox";
 import api from "../api";
-import { useI18n, LANGUAGES, toLatin, flamesActive } from "../i18n";
+import { useI18n, LANGUAGES, TIMEZONES, toLatin, flamesActive } from "../i18n";
 import { useAuth } from "../auth";
 
 function InstallAppButton() {
@@ -49,23 +49,35 @@ function InstallAppButton() {
 }
 
 export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewScorers, onViewSettled, onExpertClick, counts = {}, newCounts = {} }) {
-  const { t, lang, setLang } = useI18n();
+  const { t, lang, setLang, tz, setTz } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
+  const [tzOpen, setTzOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const langRef = useRef();
+  const tzRef = useRef();
   const menuRef = useRef();
 
   useEffect(() => {
     const h = (e) => {
       if (langRef.current && !langRef.current.contains(e.target)) setLangOpen(false);
+      if (tzRef.current && !tzRef.current.contains(e.target)) setTzOpen(false);
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Apply the account's chosen timezone as the default (only if the viewer hasn't
+  // already picked one in this browser).
+  useEffect(() => {
+    if (user && user.timezone) {
+      try { if (!localStorage.getItem("tj_tz")) setTz(user.timezone); } catch { /* ignore */ }
+    }
+  }, [user, setTz]);
+
   const cur = LANGUAGES.find((l) => l.code === lang) || LANGUAGES[0];
+  const curTz = TIMEZONES.find((z) => z.tz === tz);
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/60 border-b border-white/10">
@@ -100,6 +112,27 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
                     <button key={l.code} data-testid={`lang-${l.code}`} onClick={() => { setLang(l.code); setLangOpen(false); }}
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${l.code === lang ? "bg-volt/10 text-volt" : "text-zinc-300 hover:bg-elevated"}`}>
                       <span>{l.flag}</span> {l.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* timezone switcher */}
+          <div className="relative hidden sm:block" ref={tzRef}>
+            <button data-testid="timezone-switcher" onClick={() => setTzOpen(!tzOpen)}
+              className="flex items-center gap-1 rounded-full border border-elevated px-2 py-1.5 sm:px-2.5 sm:py-2 text-sm text-zinc-300 hover:border-volt/50 transition-colors">
+              <Clock size={15} /> <span className="hidden md:inline text-xs font-semibold">{curTz ? curTz.label.split(" / ")[0] : tz}</span> <ChevronDown size={13} />
+            </button>
+            <AnimatePresence>
+              {tzOpen && (
+                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                  className="absolute right-0 mt-2 z-[60] w-48 max-h-80 overflow-y-auto rounded-xl bg-surface border border-elevated p-1 shadow-2xl">
+                  {TIMEZONES.map((z) => (
+                    <button key={z.tz} data-testid={`tz-${z.tz}`} onClick={() => { setTz(z.tz); setTzOpen(false); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${z.tz === tz ? "bg-volt/10 text-volt" : "text-zinc-300 hover:bg-elevated"}`}>
+                      {z.label}
                     </button>
                   ))}
                 </motion.div>

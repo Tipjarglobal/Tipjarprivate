@@ -39,6 +39,67 @@ export const LANGUAGES = [
 
 export const RTL_LANGS = ["ar"];
 
+// ── Viewer timezone ──────────────────────────────────────────────────────────
+// Kickoff strings are stored/displayed as Europe/Berlin wall-clock, so a Berlin
+// viewer sees them unchanged and every other city gets the correct offset
+// (Athens = Berlin +1, London = Berlin −1, …). Selectable in the header.
+export const KICKOFF_BASE_TZ = "Europe/Berlin";
+export const TIMEZONES = [
+  { tz: "Europe/London", label: "London" },
+  { tz: "Europe/Berlin", label: "Berlin" },
+  { tz: "Europe/Paris", label: "Paris" },
+  { tz: "Europe/Madrid", label: "Madrid" },
+  { tz: "Europe/Rome", label: "Rom / Roma" },
+  { tz: "Europe/Athens", label: "Athen / Αθήνα" },
+  { tz: "Europe/Istanbul", label: "Istanbul" },
+  { tz: "Europe/Moscow", label: "Moskau" },
+  { tz: "America/New_York", label: "New York" },
+  { tz: "America/Sao_Paulo", label: "São Paulo" },
+  { tz: "Africa/Lagos", label: "Lagos" },
+  { tz: "Asia/Dubai", label: "Dubai" },
+  { tz: "Asia/Kolkata", label: "Mumbai / Delhi" },
+  { tz: "Asia/Bangkok", label: "Bangkok" },
+  { tz: "Asia/Singapore", label: "Singapore" },
+  { tz: "UTC", label: "UTC" },
+];
+
+let _viewerTz = null;
+export function getViewerTz() {
+  if (_viewerTz) return _viewerTz;
+  try {
+    const saved = localStorage.getItem("tj_tz");
+    if (saved) { _viewerTz = saved; return saved; }
+  } catch { /* ignore */ }
+  try {
+    _viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone || KICKOFF_BASE_TZ;
+  } catch { _viewerTz = KICKOFF_BASE_TZ; }
+  return _viewerTz;
+}
+export function setViewerTz(tz) {
+  _viewerTz = tz;
+  try { localStorage.setItem("tj_tz", tz); } catch { /* ignore */ }
+}
+// Apply the account timezone once, only if the viewer hasn't chosen one yet.
+export function applyAccountTz(tz) {
+  if (!tz) return;
+  try { if (localStorage.getItem("tj_tz")) return; } catch { /* ignore */ }
+  setViewerTz(tz);
+}
+
+function _tzParts(tz, ms) {
+  const dtf = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, hour12: false, year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  const p = {};
+  dtf.formatToParts(new Date(ms)).forEach((x) => { p[x.type] = x.value; });
+  return { y: +p.year, mo: +p.month, da: +p.day, hh: p.hour, mm: p.minute };
+}
+function _tzOffsetMin(tz, ms) {
+  const q = _tzParts(tz, ms);
+  return Math.round((Date.UTC(q.y, q.mo - 1, q.da, +q.hh, +q.mm) - ms) / 60000);
+}
+
 // ── Kickoff date/time parsing + prominent formatting (shared by RateWall / Systems) ──
 const _KO_MONTHS = { jan: 0, feb: 1, "mär": 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
 
@@ -70,9 +131,18 @@ export function kickoffInfo(mt) {
   return empty;
 }
 
+// Convert a parsed kickoffInfo (Europe/Berlin wall-clock) to the viewer's timezone.
+function _toViewer(info) {
+  if (!info || info.ts == null) return info; // bare time / unknown date → leave as-is
+  const berlinOff = _tzOffsetMin(KICKOFF_BASE_TZ, info.ts);
+  const realMs = info.ts - berlinOff * 60000; // true instant behind the Berlin wall-clock
+  const v = _tzParts(getViewerTz(), realMs);
+  return { ts: realMs, y: v.y, mo: v.mo, da: v.da, time: `${v.hh}:${v.mm}` };
+}
+
 // A clear, human label: "Heute 17:00" / "Morgen 15:00" / "24.07. 15:00".
 export function formatKickoff(mt, t) {
-  const info = kickoffInfo(mt);
+  const info = _toViewer(kickoffInfo(mt));
   if (!info.y && !info.time) return "";
   const tr = typeof t === "function" ? t : (k) => (k === "date.today" ? "Heute" : "Morgen");
   let dayLabel = "";
@@ -3408,6 +3478,7 @@ function detectInitialLang() {
 
 export function I18nProvider({ children }) {
   const [lang, setLangState] = useState(detectInitialLang);
+  const [tz, setTzState] = useState(getViewerTz);
   const applyDir = useCallback((l) => {
     const rtl = RTL_LANGS.includes(l);
     document.documentElement.dir = rtl ? "rtl" : "ltr";
@@ -3419,8 +3490,9 @@ export function I18nProvider({ children }) {
     localStorage.setItem("tj_lang", l);
     applyDir(l);
   }, [applyDir]);
+  const setTz = useCallback((z) => { setViewerTz(z); setTzState(z); }, []);
   const t = useCallback((key) => (T[lang] && T[lang][key]) || T.en[key] || key, [lang]);
-  return <I18nContext.Provider value={{ t, lang, setLang }}>{children}</I18nContext.Provider>;
+  return <I18nContext.Provider value={{ t, lang, setLang, tz, setTz }}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {
