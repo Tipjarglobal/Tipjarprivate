@@ -1504,6 +1504,10 @@ _CHANNEL_BOTS = {
         "email": "sirius@tipjar.com", "name": "Sirius",
         "bio": "In-house Tipp-Analyst — scharfe Value-Picks & Bet-Builder.",
     },
+    "grizzlybetslive": {                  # Grizzly Bets (@grizzlybetslive) X/Twitter handle
+        "email": "rigel@tipjar.com", "name": "Rigel",
+        "bio": "In-house Analyst — datengetriebene Freepicks & Live-Tipps.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
     # "somechannel": {"email": "atlas@tipjar.com", "name": "Atlas", "bio": "..."},
 }
@@ -1634,7 +1638,7 @@ EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
 # Source of truth = code (works in production without env juggling). Each channel/handle
 # MUST have a matching persona in _CHANNEL_BOTS. Env vars only ADD extra sources.
 _CODE_TG_CHANNELS = ["EMPTipsTele", "thesuperbets", "Chrisbetsbets"]   # public Telegram channels
-_CODE_X_HANDLES = ["EmpTips", "LevyKingTips"]          # public X/Twitter handles
+_CODE_X_HANDLES = ["EmpTips", "LevyKingTips", "grizzlybetslive"]          # public X/Twitter handles
 _env_tg = [c.strip().lstrip("@") for c in
            (os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")).split(",") if c.strip()]
 _env_x = [h.strip().lstrip("@") for h in
