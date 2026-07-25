@@ -319,12 +319,14 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
 ## Changelog 2026-07-25 (e) — Realistic SGM odds + $ everywhere
-- Fixed wildly inflated single-match builder odds. New `_correlated_combo_odds(legs)` shrinks the
-  profit portion when ≥2 correlated GOAL legs stack (Über HZ + BTTS + Über 2.5 …) like a real
-  Same-Game-Multi. Shrink 2→0.55, 3→0.40, 4→0.30. Non-goal legs (corners/props/handicap) full weight.
-  Applied in `_combo_odd` (the 8.66 source), Favoriten-Smart, Mega builder. Mental jackpot untouched.
-- Recomputed 5 same-match builder HoF trophies (8.66→4.06 etc.); multi-match parlays untouched.
-- $ now enforced in `/wins/mine`, win-claim submit (image + stored) and cash-out receipts too.
+- Fixed wildly inflated single-match builder odds. `_correlated_combo_odds(legs)` shrinks ONLY the
+  correlated GOAL cluster: shrink 2→0.55, 3→0.40, 4→0.30. Handicap, 1X2/Sieg, Doppelte Chance, Ecken
+  & Spieler-Props keep FULL odds (Handicap-1X2 legitimately pays more; multi-match parlays untouched).
+  Applied in `_combo_odd`, Favoriten-Smart, Mega. Mental jackpot untouched. Verified: handicap double
+  5.0×4.25 stays 21.25.
+- Recomputed same-match GOAL builder HoF trophy 8.66→4.06 (bundled-odds legs → shrink on stored total,
+  `orig_total_odds` preserved for idempotency); mixed/handicap trophies left at full odds.
+- $ enforced in `/wins/mine`, win-claim submit (image + stored) and cash-out receipts.
 
 ## Changelog 2026-07-25 (d) — Hall of Fame in $
 - HoF now enforces $ everywhere: `hall_of_fame` endpoint reformats stake/winnings via `_money_to_usd`;

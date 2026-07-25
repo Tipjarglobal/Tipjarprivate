@@ -4463,27 +4463,35 @@ _GOAL_MKT_RE = re.compile(
 
 def _correlated_combo_odds(legs) -> float:
     """Realistic Same-Game-Multi price. The naive product OVERSTATES a single-match builder
-    that stacks correlated goal markets (Über 1.5 HZ, BTTS, Über 2.5 … all rise/fall
-    together). Like a real bookmaker SGM we shrink the PROFIT portion the more goal-legs
-    stack. Non-goal legs (handicap, corners, player props) keep full weight."""
-    odds = []
+    that stacks correlated GOAL markets (Über 1.5 HZ, BTTS, Über 2.5 … all rise/fall
+    together). We shrink ONLY the goal-cluster's profit portion the more goal-legs stack.
+    Everything else (Handicap, 1X2/Sieg, Doppelte Chance, Ecken, Spieler-Props) keeps its
+    FULL odds — those legitimately carry high prices (a Handicap-1X2 pays far more than a
+    plain win) and must not be dampened."""
+    goal_odds, other_odds = [], []
     for lg in legs:
         try:
             o = float(lg.get("odds"))
         except (TypeError, ValueError):
             o = 0.0
-        if o > 1:
-            odds.append(o)
-    if not odds:
+        if o <= 1:
+            continue
+        if _GOAL_MKT_RE.search(str(lg.get("market") or "")):
+            goal_odds.append(o)
+        else:
+            other_odds.append(o)
+    if not goal_odds and not other_odds:
         return 0.0
-    product = 1.0
-    for o in odds:
-        product *= o
-    goal_legs = sum(1 for lg in legs if _GOAL_MKT_RE.search(str(lg.get("market") or "")))
-    if goal_legs >= 2:
-        shrink = {2: 0.55, 3: 0.40, 4: 0.30}.get(goal_legs, 0.24)
-        product = 1.0 + (product - 1.0) * shrink
-    return round(product, 2)
+    goal_prod = 1.0
+    for o in goal_odds:
+        goal_prod *= o
+    if len(goal_odds) >= 2:  # correlated goal cluster → dampen its profit portion only
+        shrink = {2: 0.55, 3: 0.40, 4: 0.30}.get(len(goal_odds), 0.24)
+        goal_prod = 1.0 + (goal_prod - 1.0) * shrink
+    other_prod = 1.0
+    for o in other_odds:
+        other_prod *= o
+    return round(goal_prod * other_prod, 2)
 
 
 def _dedupe_builder_legs(combo_legs, home, away):
