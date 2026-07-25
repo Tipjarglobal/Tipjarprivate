@@ -986,6 +986,33 @@ async def expire_stale_pending() -> dict:
     return {"deleted": len(ai_ids), "voided": len(member_ids)}
 
 
+async def void_stale_expert_slips() -> dict:
+    """Owner 2026-06 ('cleanup the expert mess'): expert-bot slips must always carry a
+    playable match time. Any expert slip that is (a) unsettled >6h after its (last)
+    kickoff, or (b) has NO recognizable kickoff at all, is annulled (void) and drops out
+    of the pending/live feed. Runs after the settle pass so gradeable slips settle first."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=6)
+    docs = await db.tips.find(
+        {"is_expert": True, "status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(5000)
+    void_ids = []
+    for d in docs:
+        legs = d.get("legs") or []
+        kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
+        latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
+        if latest is None or latest < cutoff:
+            void_ids.append(d["id"])
+    if void_ids:
+        await db.tips.update_many(
+            {"id": {"$in": void_ids}},
+            {"$set": {"status": "void", "settled_by": "expired",
+                      "settled_at": now.isoformat()}})
+        logger.info(f"Voided {len(void_ids)} stale/timeless expert slips")
+    return {"voided": len(void_ids)}
+
+
+
 async def settlement_loop():
     while True:
         await asyncio.sleep(SETTLE_INTERVAL_SECONDS)
@@ -998,9 +1025,10 @@ async def settlement_loop():
                 combos = await settle_hq_combos()
                 parlays = await settle_multimatch_parlays()
                 expired = await expire_stale_pending()
+                voided_exp = await void_stale_expert_slips()
                 purged = await purge_settled_tips()
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
                             f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; systems snap {snap}; "
-                            f"expired {expired}; purged24h {purged}")
+                            f"expired {expired}; voided_exp {voided_exp}; purged24h {purged}")
         except Exception as e:
             logger.error(f"settlement_loop error: {e}")

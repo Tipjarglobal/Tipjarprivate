@@ -1585,6 +1585,20 @@ def _scrub_source(text: str) -> str:
     return re.sub(r'[ \t]{2,}', ' ', t).strip()
 
 
+def _expert_playable_time(match_time, legs, now) -> bool:
+    """Owner 2026-06 ('cleanup the expert mess'): an expert slip MUST carry a recognized,
+    still-playable match/kickoff time. True when a time is present AND (if fully datable)
+    the match hasn't been over for hours. No time → the slip is rejected at ingest."""
+    has_time = bool((match_time or "").strip()) or any(
+        (lg.get("kickoff") or "").strip() for lg in (legs or []))
+    if not has_time:
+        return False
+    ko = _parse_kickoff(match_time)
+    if ko and ko < now - timedelta(hours=3):
+        return False  # already well past kickoff → not live/pregame anymore
+    return True
+
+
 async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False, bot_cfg=None):
     """Shared core: vision-AI a betslip (image/text) → re-post it ANONYMOUSLY as an expert
     community pick (orange), enriched with real hit-rate stats. The posting bot is resolved
@@ -1602,6 +1616,12 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
     legs = _sanitize_legs(detected.get("legs"))
     if skip_if_empty and not legs and not (detected.get("market") or "").strip() and not (detected.get("odds") or "").strip():
         return None  # promo / results / hype post → not an actual pick
+    # Enforce a recognized, still-playable match time before posting (feed quality).
+    if not _expert_playable_time(detected.get("match_time", ""), legs, datetime.now(timezone.utc)):
+        if skip_if_empty:
+            return None
+        raise HTTPException(status_code=422,
+                            detail="Kein gültiger Spielzeitpunkt erkannt — Schein nicht veröffentlicht.")
     image_paths = []
     for rb, ext, ct in image_blobs:
         path = f"{APP_NAME}/expert/{uuid.uuid4()}.{ext}"
@@ -1998,7 +2018,8 @@ async def purge_demo_tips() -> int:
 @api_router.get("/tips")
 async def list_tips(status: Optional[str] = None, sort: str = "new",
                     source: Optional[str] = None, window: Optional[str] = None,
-                    category: Optional[str] = None, limit: int = 50):
+                    category: Optional[str] = None, mcat: Optional[str] = None,
+                    limit: int = 50):
     q = {}
     # Silent scrapers (e.g. Capella) feed the Master in the background but never surface
     # publicly — hide their picks from every feed.
@@ -2029,6 +2050,12 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["source"] = "smart"
     elif source == "master":
         q["source"] = "hq-master"
+        # Master sub-categories: Einfach / Mittel / Challenge packs carry a
+        # master_category; "slips" = the consensus + live-alternative picks (no category).
+        if mcat in ("einfach", "mittel", "challenge"):
+            q["master_category"] = mcat
+        elif mcat == "slips":
+            q["master_category"] = {"$exists": False}
     elif source == "members":
         # Community = ONLY real member picks. All KI/HQ sources (AI singles, systems,
         # live-AI, smart, Master) are excluded so no bot ever posts into Community.
@@ -7321,6 +7348,207 @@ async def master_consensus() -> dict:
     return {"posted": posted}
 
 
+# ---------- Master packs: Einfach / Mittel / Challenge (owner 2026-06) ----------
+CHALLENGE_START = 10.0
+CHALLENGE_STEPS = 4
+
+
+async def _master_leg_candidates(now, min_odds, max_odds):
+    """Upcoming (pregame) single picks — from experts (weighted by hit-rate) and the
+    HQ-auto pool — usable as parlay legs. One leg per fixture, odds within [min,max]."""
+    tips = await db.tips.find(
+        {"status": "pending", "source": {"$ne": "hq-master"}, "is_parlay": {"$ne": True},
+         "hidden": {"$ne": True},
+         "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
+        {"_id": 0, "home_team": 1, "away_team": 1, "home_team_latin": 1,
+         "away_team_latin": 1, "market": 1, "odds": 1, "match_time": 1,
+         "league": 1, "is_expert": 1, "username": 1}).to_list(3000)
+    hit = await _expert_hitrates()
+    seen = {}
+    for t in tips:
+        ko = _parse_kickoff(t.get("match_time"))
+        if not ko or ko <= now + timedelta(minutes=20):
+            continue  # only clearly upcoming games (pregame)
+        try:
+            od = float(str(t.get("odds") or "0").replace(",", "."))
+        except (ValueError, TypeError):
+            od = 0
+        if not (min_odds <= od <= max_odds):
+            continue
+        market = (t.get("market") or "").strip()
+        if not market:
+            continue
+        home = t.get("home_team_latin") or t.get("home_team")
+        away = t.get("away_team_latin") or t.get("away_team")
+        fixkey = "|".join(sorted([_norm(home), _norm(away)]))
+        weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
+        cand = {"match": f"{home} – {away}", "market": market, "odds": od,
+                "kickoff": ko, "match_time": t.get("match_time"),
+                "league": t.get("league", ""), "weight": weight, "fixkey": fixkey}
+        if fixkey not in seen or weight > seen[fixkey]["weight"]:
+            seen[fixkey] = cand
+    return sorted(seen.values(), key=lambda c: (-c["weight"], c["odds"]))
+
+
+def _assemble_parlay(cands, target, min_legs, max_legs):
+    """Greedily combine distinct-fixture legs until the odds product nears target."""
+    chosen, prod = [], 1.0
+    for c in cands:
+        if len(chosen) >= max_legs:
+            break
+        chosen.append(c)
+        prod *= c["odds"]
+        if len(chosen) >= min_legs and prod >= target * 0.85:
+            break  # close enough — don't overshoot the band
+    if len(chosen) < min_legs or prod < target * 0.7:
+        return None, 0.0
+    return chosen, round(prod, 2)
+
+
+def _pack_legs(chosen):
+    return [{"match": c["match"], "league": c["league"], "kickoff": c["match_time"],
+             "status": "pending", "selections": [c["market"]],
+             "sel_odds": [f"{c['odds']:.2f}"]} for c in chosen]
+
+
+async def master_build_packs() -> dict:
+    """Einfach (2–4 Spiele ~3.0) & Mittel (3–5 Spiele ~6–8): the Master publishes up to
+    2 of each per day, only when a solid combination can be assembled from the pool."""
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    posted, bot = {}, None
+    specs = [
+        ("einfach", 3.0, 2, 4, 1.25, 1.80),
+        ("mittel", 7.0, 3, 5, 1.40, 2.40),
+    ]
+    for cat, target, minl, maxl, lo, hi in specs:
+        made = await db.tips.count_documents(
+            {"source": "hq-master", "master_category": cat, "master_day": day})
+        if made >= 2:
+            continue
+        openx = await db.tips.count_documents(
+            {"source": "hq-master", "master_category": cat, "status": {"$in": ["pending", "live"]}})
+        if openx:
+            continue  # never stack — one open pack of each category at a time
+        cands = await _master_leg_candidates(now, lo, hi)
+        cands = sorted(cands, key=lambda c: c["odds"])  # build up gradually → hit target tightly
+        chosen, prod = _assemble_parlay(cands, target, minl, maxl)
+        if not chosen:
+            continue
+        if bot is None:
+            bot = await _get_master_bot()
+        tid = f"master-{uuid.uuid4().hex[:10]}"
+        first_ko = min(c["kickoff"] for c in chosen)
+        label = "Einfach" if cat == "einfach" else "Mittel"
+        tip = {
+            "id": tid, "user_id": bot["id"], "username": bot["username"],
+            "is_master": True, "is_expert": False,
+            "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+            "market": f"{len(chosen)}-fach Kombi", "odds": f"{prod:.2f}",
+            "category": "banker" if cat == "einfach" else "value",
+            "master_category": cat, "master_day": day, "ai_rating": 8.5,
+            "ai_analysis": (f"👑 TipJarMaster {label}: {len(chosen)} Spiele, "
+                            f"Gesamtquote {prod:.2f}."),
+            "legs": _pack_legs(chosen), "is_parlay": True,
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-master", "created_at": now.isoformat(),
+        }
+        await db.tips.insert_one(tip)
+        posted[cat] = len(chosen)
+    return {"posted": posted}
+
+
+async def _master_challenge_state():
+    st = await db.master_challenge.find_one({"id": "state"})
+    if not st:
+        st = {"id": "state", "step": 1, "stake": CHALLENGE_START, "status": "idle",
+              "current_tip_id": None, "updated_at": datetime.now(timezone.utc).isoformat()}
+        await db.master_challenge.insert_one(st)
+    return st
+
+
+async def master_challenge() -> dict:
+    """One active Challenge at a time: start 10 €, roll the FULL win over 4 steps.
+    Each step = 2 safe low-odds picks (~1.2 & ~1.3). Loss → reset to step 1. Only opens
+    a new step when a genuinely safe combination is available (no fixed rhythm)."""
+    now = datetime.now(timezone.utc)
+    st = await _master_challenge_state()
+    action = None
+    if st.get("current_tip_id"):
+        cur = await db.tips.find_one({"id": st["current_tip_id"]},
+                                     {"_id": 0, "status": 1, "odds": 1})
+        if not cur:
+            await db.master_challenge.update_one({"id": "state"}, {"$set": {"current_tip_id": None}})
+            st["current_tip_id"] = None
+        else:
+            cst = cur.get("status")
+            if cst == "won":
+                try:
+                    od = float(str(cur.get("odds") or "1").replace(",", "."))
+                except (ValueError, TypeError):
+                    od = 1.0
+                won_amount = round(st["stake"] * od, 2)
+                if st["step"] >= CHALLENGE_STEPS:
+                    await db.master_challenge.update_one({"id": "state"}, {"$set": {
+                        "step": 1, "stake": CHALLENGE_START, "status": "idle",
+                        "current_tip_id": None, "last_result": "completed",
+                        "last_win": won_amount, "updated_at": now.isoformat()}})
+                    return {"action": "completed", "win": won_amount}
+                await db.master_challenge.update_one({"id": "state"}, {"$set": {
+                    "step": st["step"] + 1, "stake": won_amount, "status": "active",
+                    "current_tip_id": None, "updated_at": now.isoformat()}})
+                st["step"] += 1
+                st["stake"] = won_amount
+                st["current_tip_id"] = None
+                action = "advanced"
+            elif cst == "lost":
+                await db.master_challenge.update_one({"id": "state"}, {"$set": {
+                    "step": 1, "stake": CHALLENGE_START, "status": "idle",
+                    "current_tip_id": None, "last_result": "lost", "updated_at": now.isoformat()}})
+                return {"action": "reset_lost"}
+            elif cst == "void":
+                await db.master_challenge.update_one({"id": "state"},
+                                                     {"$set": {"current_tip_id": None}})
+                st["current_tip_id"] = None
+            else:
+                return {"action": "waiting", "step": st["step"]}
+    if st.get("current_tip_id"):
+        return {"action": action or "waiting", "step": st["step"]}
+    # Open the next step only on a genuinely safe opportunity (2 low-odds picks).
+    cands = await _master_leg_candidates(now, 1.12, 1.42)
+    safe = [c for c in cands if re.search(
+        r"über 0\.5|über 1\.5|doppelte chance|1x|x2|beide teams treffen", c["market"].lower())]
+    pool = sorted(safe or cands, key=lambda c: c["odds"])
+    chosen = pool[:2]
+    if len(chosen) < 2:
+        return {"action": "no_opportunity", "step": st["step"]}
+    prod = round(chosen[0]["odds"] * chosen[1]["odds"], 2)
+    stake = st["stake"]
+    pot = round(stake * prod, 2)
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min(c["kickoff"] for c in chosen)
+    tip = {
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"Challenge Stufe {st['step']}/{CHALLENGE_STEPS}", "odds": f"{prod:.2f}",
+        "category": "banker", "master_category": "challenge", "master_day": now.date().isoformat(),
+        "challenge_step": st["step"], "stake": f"{stake:.2f} €", "potential_return": f"{pot:.2f} €",
+        "ai_rating": 9.0,
+        "ai_analysis": (f"👑 TipJarMaster Challenge — Stufe {st['step']}/{CHALLENGE_STEPS}. "
+                        f"Einsatz {stake:.2f} €, Quote {prod:.2f} → {pot:.2f} €. "
+                        f"Zwei sichere Picks; der komplette Gewinn rollt weiter."),
+        "legs": _pack_legs(chosen), "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    await db.master_challenge.update_one({"id": "state"}, {"$set": {
+        "current_tip_id": tid, "status": "active", "updated_at": now.isoformat()}})
+    return {"action": "opened", "step": st["step"], "odds": prod}
+
+
 async def master_loop():
     await asyncio.sleep(240)  # let experts + live states populate first
     while True:
@@ -7331,8 +7559,11 @@ async def master_loop():
             if API_FOOTBALL_KEY:
                 alt = await master_live_alternatives()
                 con = await master_consensus()
-                if alt.get("posted") or con.get("posted"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}")
+                packs = await master_build_packs()
+                chal = await master_challenge()
+                if alt.get("posted") or con.get("posted") or packs.get("posted") \
+                        or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; packs {packs}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)

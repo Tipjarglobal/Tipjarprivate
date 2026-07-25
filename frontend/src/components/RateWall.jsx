@@ -90,7 +90,12 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const st = view === "live" ? "live" : status;
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
-      else if (view === "master") { params.source = "master"; params.status = masterTab === "live" ? "live" : "pending"; }
+      else if (view === "master") {
+        params.source = "master";
+        params.status = masterTab === "live" ? "live" : "pending";
+        if (masterTab === "slips") params.mcat = "slips";
+        else if (["einfach", "mittel", "challenge"].includes(masterTab)) params.mcat = masterTab;
+      }
       else if (view === "live") { if (liveCat === "community") { params.source = "members"; } else if (liveCat) params.category = liveCat; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
@@ -478,7 +483,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
             </p>
           </div>
           <div className="flex flex-wrap gap-2 mb-6">
-            {[["slips", t("master.slips")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
+            {[["slips", t("master.slips")], ["einfach", "Einfach"], ["mittel", "Mittel"], ["challenge", "Challenge"], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
               <button key={v} data-testid={`master-tab-${v}`}
                 onClick={() => setMasterTab(v)}
                 className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>
@@ -903,6 +908,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           {isMaster && (
             <span data-testid="master-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[#E11D2A]/20 text-[#E11D2A] border border-[#E11D2A]/45">
               <Crown size={10} /> Master
+            </span>
+          )}
+          {tip.master_category && (
+            <span data-testid={`master-cat-${tip.master_category}`} className="inline-flex items-center text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-400/15 text-amber-300 border border-amber-400/40">
+              {tip.master_category === "einfach" ? "Einfach" : tip.master_category === "mittel" ? "Mittel" : `Challenge${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
             </span>
           )}
           {isExpert && !isMaster && (

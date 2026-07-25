@@ -1,0 +1,15 @@
+{
+  "summary": "Verified TipJarMaster sub-tabs (Slips/Einfach/Mittel/Challenge/Live) render with data-testids and backend mcat filtering works. All 5 tabs present; Mittel card shows master-badge + master-cat-mittel with 3 legs and per-leg odds; Challenge card shows master-badge + master-cat-challenge with challenge_step badge (Stufe 1/4), 2 legs, stake 10.00€, payout 13.70€. Backend GET /api/tips?source=master&mcat=<x>&status=pending returns HTTP 200 for all four values; mittel/challenge/slips return correctly filtered docs, einfach is currently empty (acceptable per instructions — no valid combination in candidate pool).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/test_reports/iter42_mittel.png", "/app/test_reports/iter42_challenge.png"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Master sub-tab UI + mcat filter verified via preview URL. Einfach candidate pool was empty at test time — not a bug. API-Football quota exhausted so settlement not tested. No JS console errors during tab navigation.",
+  "rca of the issue": "N/A — all validations passed."
+}
