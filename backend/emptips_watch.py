@@ -90,3 +90,36 @@ def fetch_image(url):
     except Exception as e:
         logger.info(f"EMP image fetch failed: {type(e).__name__}")
     return None
+
+
+def fetch_telegram(channel):
+    """Read EMP's PUBLIC Telegram channel via the free t.me/s/ web preview (no API/keys,
+    reliable). Returns [{id,text,images,url}] newest-last, or [] if unavailable. Each tip
+    post carries a betslip screenshot (telesco.pe) which vision-AI turns into the legs."""
+    import html as _html
+    channel = (channel or "").lstrip("@").strip()
+    if not channel:
+        return []
+    try:
+        r = requests.get(f"https://t.me/s/{channel}", headers={"User-Agent": UA}, timeout=15)
+        if r.status_code != 200 or "tgme_widget_message" not in r.text:
+            return []
+    except Exception as e:
+        logger.warning(f"EMP Telegram fetch failed: {type(e).__name__}")
+        return []
+    out = []
+    for w in re.split(r'(?=<div class="tgme_widget_message[ "])', r.text):
+        mid = re.search(r'data-post="' + re.escape(channel) + r'/(\d+)"', w)
+        if not mid:
+            continue
+        tm = re.search(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', w, re.DOTALL)
+        txt = ""
+        if tm:
+            txt = re.sub(r'<[^>]+>', '', _html.unescape(re.sub(r'<br ?/?>', '\n', tm.group(1)))).strip()
+        photos = [p for p in re.findall(r"background-image:url\('([^']+)'\)", w)
+                  if "telesco" in p or "/file/" in p or "cdn" in p]
+        out.append({"id": f"tg-{mid.group(1)}", "text": txt, "images": photos,
+                    "url": f"https://t.me/{channel}/{mid.group(1)}"})
+    logger.info(f"EMP Telegram {channel}: {len(out)} messages")
+    return out
+

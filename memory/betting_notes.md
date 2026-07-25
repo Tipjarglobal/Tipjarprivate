@@ -159,3 +159,20 @@ match-analysis prose (explain WHY, EMP-Tips style, with implied-goal reasoning).
 - Free auto X-polling of @EmpTips is NOT reliably possible (syndication 429 / token-gated, nitter dead).
   Owner won't pay for X API → use the ingestion endpoint (forward/paste the slip). Needs a small admin
   UI button (backend ready). If X API key is ever provided, add a poller on top of the same ingestion.
+
+### IMPLEMENTED 2026-07-25 — EMP Tips AUTOMATIC monitoring (free, no X API)
+- X free access (Nitter mirrors) is unreliable (403/challenge). SOLUTION: read EMP's PUBLIC
+  Telegram channel via free t.me/s/ web preview — reliable, no keys.
+- `emptips_watch.py`: fetch_telegram(channel) parses messages (text, betslip image URLs telesco.pe,
+  ids) newest-last; fetch_timeline(handle) = X/Nitter fallback; fetch_image().
+- server `emptips_autopost()`: Telegram-first (EMPTIPS_TG_CHANNEL) then X fallback. FIRST run =
+  BASELINE (mark backlog seen, post nothing). Then each NEW post: download betslip → analyze_tip
+  vision-AI → _ingest_emptips → public 'EMP Tips' pick (+ real stats). skip_if_empty drops
+  promo/results posts; _EMP_RESULT_KW filters "BOOOM/winner". MAX_PER_RUN=4 (vision is slow),
+  dedup via db.emptips_seen. `emptips_loop()` every 20min (leader-gated); startup task added.
+- Admin: POST /api/admin/emptips/ingest (manual image/text), POST /api/admin/emptips/run
+  (fires autopost in BACKGROUND — vision calls exceed the 100s gateway limit, so never block).
+- .env: EMPTIPS_HANDLE="EmpTips", EMPTIPS_TG_CHANNEL="EMPTipsTele".
+- VERIFIED: baseline marked 18 posts, 0 dumped; simulated 3 new → auto-posted 2 real accas
+  (5-leg @10.00, 2-leg @2.10) with legs parsed from betslip screenshots via vision-AI.
+- NOTE: vision-AI ingestion uses Emergent LLM credits (~1 call per new EMP betslip).

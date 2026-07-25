@@ -1433,15 +1433,21 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     return tip
 
 
-async def _ingest_emptips(images_b64, image_blobs, text, source_url=""):
+async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False):
     """Shared core: vision-AI a betslip (image/text) → post it as a public 'EMP Tips'
-    pick enriched with real hit-rate stats. image_blobs = list of (bytes, ext, content_type)."""
+    pick enriched with real hit-rate stats. image_blobs = list of (bytes, ext, content_type).
+    When skip_if_empty (auto path), returns None for promo/results posts with no real pick."""
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         raise HTTPException(status_code=400, detail="HQ account missing")
     detected = await analyze_tip(images_b64 or None, text)
     if not detected.get("safe", True):
+        if skip_if_empty:
+            return None
         raise HTTPException(status_code=422, detail=detected.get("flag_reason") or "Inhalt nicht erlaubt.")
+    legs = _sanitize_legs(detected.get("legs"))
+    if skip_if_empty and not legs and not (detected.get("market") or "").strip() and not (detected.get("odds") or "").strip():
+        return None  # promo / results / hype tweet → not an actual pick
     image_paths = []
     for rb, ext, ct in image_blobs:
         path = f"{APP_NAME}/emptips/{uuid.uuid4()}.{ext}"
@@ -1450,7 +1456,6 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url=""):
             image_paths.append(res["path"])
         except Exception as e:
             logger.warning(f"emptips image store failed: {e}")
-    legs = _sanitize_legs(detected.get("legs"))
     is_parlay = bool(detected.get("is_parlay") or len(legs) > 1
                      or (legs and len(legs[0].get("selections", [])) > 1))
     stats_line = ""
@@ -1507,33 +1512,56 @@ async def admin_emptips_ingest(
 
 @api_router.post("/admin/emptips/run")
 async def admin_emptips_run(admin: dict = Depends(require_admin)):
-    """Manually trigger the auto @EMPTIPS_HANDLE reader (free Nitter mirrors)."""
-    return await emptips_autopost()
+    """Trigger the auto EMP reader in the BACKGROUND (vision-AI on betslips is slow, so we
+    don't block the request past the gateway timeout). Check results via the tips feed."""
+    _BG_TASKS.append(asyncio.create_task(emptips_autopost()))
+    return {"ok": True, "scheduled": True, "note": "Running in background; new EMP picks appear in the feed shortly."}
 
 
 EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
+EMPTIPS_TG_CHANNEL = os.environ.get("EMPTIPS_TG_CHANNEL", "").strip()
+_EMP_RESULT_KW = re.compile(
+    r'(boo+m|fl(y|ies|ys)\s*in|winner+|congrats|landed|cash(ed)?|smashed|\bgreen\b|'
+    r'\+\d+(\.\d+)?u\b|nap won|banked|paid out)', re.I)
 
 
 async def emptips_autopost() -> dict:
-    """Auto-read @EMPTIPS_HANDLE's latest tweets via free Nitter mirrors, turn each NEW
-    betslip tweet into a public 'EMP Tips' pick. No X API / no cost. Tracked in db.emptips_seen."""
-    if not EMPTIPS_HANDLE:
-        return {"posted": 0, "reason": "EMPTIPS_HANDLE not configured"}
+    """Auto-read EMP Tips' latest posts for FREE (public Telegram web preview first, then X
+    via Nitter mirrors), turn each NEW betslip post into a public 'EMP Tips' pick via vision-AI.
+    No API/keys/cost. Results/hype posts (no real pick) are skipped. Tracked in db.emptips_seen."""
+    if not EMPTIPS_TG_CHANNEL and not EMPTIPS_HANDLE:
+        return {"posted": 0, "reason": "no EMP source configured"}
     import emptips_watch
-    tweets = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
-    if not tweets:
-        return {"posted": 0, "reason": "no tweets (mirrors down)"}
-    tip_kw = re.compile(r'(acca|odds|btts|over|under|handicap|\bwin\b|\+?\d\.\d\d|@\s?\d|\bftts\b|goals?)', re.I)
+    posts = []
+    if EMPTIPS_TG_CHANNEL:
+        posts = await asyncio.to_thread(emptips_watch.fetch_telegram, EMPTIPS_TG_CHANNEL)
+    if not posts and EMPTIPS_HANDLE:
+        posts = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
+    if not posts:
+        return {"posted": 0, "reason": "source unavailable"}
+    # First activation: baseline the current backlog as 'seen' WITHOUT posting stale tips.
+    if await db.emptips_seen.count_documents({}) == 0:
+        base = [{"id": tw["id"], "at": datetime.now(timezone.utc).isoformat(),
+                 "posted": False, "baseline": True} for tw in posts]
+        if base:
+            await db.emptips_seen.insert_many(base)
+        return {"posted": 0, "baseline": len(base)}
+    MAX_PER_RUN = 4  # bound slow vision-AI calls per run (20-min loop catches up)
     posted, scanned = 0, 0
-    for tw in tweets[:25]:
+    for tw in reversed(posts):  # newest first
+        if scanned >= MAX_PER_RUN:
+            break
         if await db.emptips_seen.find_one({"id": tw["id"]}, {"_id": 1}):
             continue
-        scanned += 1
-        is_tip = bool(tw["images"]) or bool(tip_kw.search(tw["text"] or ""))
+        text = tw["text"] or ""
+        low = text.lower()
+        looks_tip = ("add to your bet slip" in low
+                     or (bool(tw["images"]) and not _EMP_RESULT_KW.search(text)))
         seen_doc = {"id": tw["id"], "at": datetime.now(timezone.utc).isoformat(), "posted": False}
-        if not is_tip:
+        if not looks_tip:
             await db.emptips_seen.insert_one(seen_doc)
             continue
+        scanned += 1
         images_b64, image_blobs = [], []
         for iu in tw["images"][:4]:
             raw = await asyncio.to_thread(emptips_watch.fetch_image, iu)
@@ -1541,13 +1569,14 @@ async def emptips_autopost() -> dict:
                 images_b64.append(base64.b64encode(raw).decode("utf-8"))
                 image_blobs.append((raw, "jpg", "image/jpeg"))
         try:
-            tip = await _ingest_emptips(images_b64, image_blobs, tw["text"], source_url=tw["url"])
-            seen_doc.update({"posted": True, "tip_id": tip["id"]})
-            posted += 1
+            tip = await _ingest_emptips(images_b64, image_blobs, text, source_url=tw["url"], skip_if_empty=True)
+            if tip:
+                seen_doc.update({"posted": True, "tip_id": tip["id"]})
+                posted += 1
         except Exception as e:
             logger.warning(f"emptips auto-ingest failed for {tw['id']}: {e}")
         await db.emptips_seen.insert_one(seen_doc)
-    return {"posted": posted, "scanned": scanned, "fetched": len(tweets)}
+    return {"posted": posted, "scanned": scanned, "fetched": len(posts)}
 
 
 async def emptips_loop():
