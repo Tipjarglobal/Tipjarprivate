@@ -33,6 +33,21 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Experten-UI aufgeräumt + Bot-Voting/🔥-Mechanik**.
+  • **Experten-Panel entfernt**: Das große „Οι ειδικοί μας"-Showcase (`ExpertsShowcase`, inkl.
+    Master-Karte) UND der dünne Experten-Streifen (`ExpertBanner` im Header) sind vollständig
+    entfernt. Master bleibt über den Header-Button erreichbar. Ungenutzte Imports/Props bereinigt.
+  • **Apex-Box im Profil entfernt**: Die rote/Bell-Box `profile-apex-flame` in `PublicProfileModal`
+    ist weg (das 🔥 neben dem Namen bleibt, gated durch flamesActive ab 1.9.).
+  • **Experten-Bots voten & verdienen 🔥**: Neuer `expert_vote_loop` → `expert_bot_voting`: jeder
+    Experten-Bot bewertet täglich 1–4 zufällige Tipps ANDERER Experten + des Masters (Sterne 3–5,
+    in `tip_ratings`, aktualisiert avg/count des Tipps). Ein Vote-Tag = +1 Serie via
+    `_bump_rating_streak`; 30-Tage-Serie → `apex_flame`=True (bestehende Logik). Bots werden nun mit
+    `apex_flame:False` erstellt (bei Erstellung vergebene Flammen werden im Loop zurückgesetzt →
+    echt verdient). Flammen erst ab 1.9.2026 sichtbar; bis dahin sind die 30-Tage-Serien aufgebaut.
+  • **Deployment-Check bestanden** (deployment_agent: pass, keine Blocker).
+
+
 - 2026-06 (25th): **Zeitzonen-Anzeige + sicherere Experten-Void-Logik**.
   • **Zeitzonen**: Anstoßzeiten werden jetzt in der vom Betrachter gewählten Zeitzone angezeigt.
     Basis = Europe/Berlin (Berlin bleibt unverändert), Umrechnung via Intl in i18n.js
