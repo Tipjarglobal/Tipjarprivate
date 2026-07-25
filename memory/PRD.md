@@ -33,6 +33,18 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Correct names in leg boxes + leagues/countries + live-score unlock**.
+  Expert-bot tips (Deneb/Sirius/Nova/Atlas…) are stored fully in Greek incl. a `legs[]` box
+  and league/country. Added `_canonical_league_name` (LLM, cached in `label_alias`) and
+  `_canonicalize_display(tip)` which rewrites each `leg.match` ("Μάιντζ–Κρόιτσλ." → "Mainz –
+  Kreuzlingen"), `leg.league`, and top-level `league`/`country`/`*_latin` to canonical English
+  — independent of any API-Football fixture (friendlies work too). Runs at the top of
+  `enrich_member_picks` every pass (idempotent, cached); picks query broadened to catch any
+  Greek label. Because the live per-leg loop matches by `leg.match`, fixing the names ALSO
+  unlocks the **live score + real minute** in the leg box for these mostly-live tips.
+  Verified: 0 Greek-labelled pending/live tips remain; all leg matches canonical (Luzern–Thun,
+  Girona–Alaves, Kaiserslautern–Sudtirol, …); countries translated (Norway/Spain/Switzerland/Finland).
+
 - 2026-06 (25th): **Correct names EVERYWHERE (settlement + live + consensus)**. Extended the
   canonical-name fix beyond display: `_tip_match_teams` now prefers `*_latin` (so live-score
   matching, master consensus & live-alternatives use real names for Greek-tipped games);

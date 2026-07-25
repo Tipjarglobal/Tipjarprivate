@@ -3232,6 +3232,81 @@ COUNTRY_NAME_EN = {
 }
 
 
+async def _canonical_league_name(name: str):
+    """Greek league/country labels ('Ευρώπη - Φιλικά', 'Φινλανδία') → their common English
+    name ('Friendlies', 'Finland'). Cached in label_alias. None for already-Latin/unknown."""
+    name = (name or "").strip()
+    if not name or not _NON_LATIN_RE.search(name):
+        return None
+    key = _norm(name)
+    cached = await db.label_alias.find_one({"key": key})
+    if cached:
+        return cached.get("alias") or None
+    if not EMERGENT_LLM_KEY:
+        return None
+    alias = None
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"lbl-{uuid.uuid4()}",
+            system_message=("You convert football league/competition or country names into their "
+                            "common English name as used by bookmakers. Reply with ONLY the name."),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=(
+            f"Label (may be Greek): '{name}'.\n"
+            "Examples: 'Ευρώπη - Φιλικά' -> Friendlies; 'Φινλανδία' -> Finland; "
+            "'Φιλικά' -> Friendlies; 'Αγγλία - Πρέμιερ Λιγκ' -> Premier League.\n"
+            "Give the English name only.")))
+        alias = (resp if isinstance(resp, str) else str(resp)).strip().strip('".\n ')
+        if not alias or len(alias) > 60 or _NON_LATIN_RE.search(alias):
+            alias = None
+    except Exception as e:
+        logger.warning(f"league alias LLM failed for {name}: {e}")
+        alias = None
+    if alias:
+        await db.label_alias.update_one(
+            {"key": key}, {"$set": {"key": key, "alias": alias, "src": name}}, upsert=True)
+    return alias
+
+
+async def _canonicalize_display(t: dict) -> dict:
+    """Rewrite a tip's Greek team/league/country labels into canonical English for DISPLAY
+    (and so live-score / settlement name-matching works), independent of any fixture lookup.
+    Returns the $set update dict (empty when nothing changed)."""
+    upd = {}
+    legs = t.get("legs") or []
+    legs_changed = False
+    for lg in legs:
+        lh, la = _leg_teams(lg)
+        if lh and la:
+            lh_c = await _canonical_team_name(lh) or lh
+            la_c = await _canonical_team_name(la) or la
+            newm = f"{lh_c} \u2013 {la_c}"
+            if newm != (lg.get("match") or ""):
+                lg["match"] = newm
+                legs_changed = True
+        lgl = lg.get("league") or ""
+        if _NON_LATIN_RE.search(lgl):
+            lc = await _canonical_league_name(lgl)
+            if lc and lc != lgl:
+                lg["league"] = lc
+                legs_changed = True
+    if legs_changed:
+        upd["legs"] = legs
+    for fld in ("league", "country"):
+        val = t.get(fld) or ""
+        if _NON_LATIN_RE.search(val):
+            cv = await _canonical_league_name(val)
+            if cv and cv != val:
+                upd[fld] = cv
+    for fld, raw in (("home_team_latin", t.get("home_team")), ("away_team_latin", t.get("away_team"))):
+        if not t.get(fld) and raw and _NON_LATIN_RE.search(raw):
+            cv = await _canonical_team_name(raw)
+            if cv:
+                upd[fld] = cv
+    return upd
+
+
 async def _canonical_team_name(name: str):
     """Greek (and other non-Latin) team names from GR/foreign tipsters → the club's
     canonical English/international name as used by API-Football & bookmakers
@@ -7265,12 +7340,26 @@ async def enrich_member_picks() -> dict:
          "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
          "$or": [{"home_team_latin": {"$in": [None, ""]}},
                  {"league": {"$in": [None, ""]}},
+                 {"league": {"$regex": "[Α-Ωα-ω]"}},
+                 {"country": {"$regex": "[Α-Ωα-ω]"}},
+                 {"legs.match": {"$regex": "[Α-Ωα-ω]"}},
                  {"match_time": {"$in": [None, "", "Multibet"]}}]},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1,
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "country": 1,
+         "home_team_latin": 1, "away_team_latin": 1,
          "match_time": 1, "legs": 1, "enrich_tries": 1}).to_list(400)
     live = None
     enriched = 0
     for t in picks:
+        # Display fix (independent of any fixture): Greek team/league/country labels →
+        # canonical English, and rewrite each leg's "A – B" so both the card AND the
+        # live-score / settlement name-matching use real names (owner: "schreib die Teams
+        # immer richtig"). Runs every pass but is idempotent (cached, no-op when clean).
+        disp = await _canonicalize_display(t)
+        if disp:
+            await db.tips.update_one({"id": t["id"]}, {"$set": disp, "$unset": {"share_image_path": ""}})
+            for k, v in disp.items():
+                t[k] = v
+            enriched += 1
         if (t.get("enrich_tries") or 0) >= 6:
             continue
         home, away = _tip_match_teams(t)
