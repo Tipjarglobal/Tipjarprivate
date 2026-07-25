@@ -7435,11 +7435,6 @@ async def _startup_seed():
         for oe in owner_emails:
             await db.users.update_one({"email": oe.lower(), "role": {"$ne": "admin"}},
                                       {"$set": {"role": "admin"}})
-        # Promote the community expert(s) (owner request): Ragazzi becomes an Expert.
-        await db.users.update_many(
-            {"username": {"$regex": "^ragazzi$", "$options": "i"}},
-            {"$set": {"role": "expert", "expert_permanent": True,
-                      "expert_since": datetime.now(timezone.utc).isoformat()}})
         # Ensure ALL configured tipster-clone bots exist so every expert (Orion/Vega/Nova/
         # Sirius) always shows in the "Our Experts" showcase — not only after first post.
         _seen_bot = set()
