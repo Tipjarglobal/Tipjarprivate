@@ -33,6 +33,29 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **TipJarMaster ("der Papa"/Μπαμπάς)** — new red bot, the "father of HQ".
+  Backend (server.py): `_get_master_bot` (email master@tipjar.com, is_master=True, role expert
+  but EXCLUDED from /experts & _tag_expert). `source="hq-master"`, added to all members/bestwon
+  $nin exclusions. `/tips?source=master`; `/tips/counts` now returns `master`.
+  • **Phase 2 — live corrections**: `_live_pick_in_danger()` detects a goals/result pick failing
+    live (Über X.5 short of goals late, BTTS one-sided late, backing a losing side late).
+    `_derate_fields()` strips 'banker'→'risk' + drops stars to 3 + sets `live_danger` (auto-restore
+    if the game turns), applied in `live_annotate_sync` for singles AND per-leg (banker_was). Effective
+    category derived on read in list_tips (`live_danger ⇒ risk`) to avoid write-path races.
+  • `master_live_alternatives()`: for each in-danger HQ single, Papa posts a SAFER in-play pick on the
+    same match (`_safer_live_alternative`: Über line down to current total+0.5, or DC 1X/X2 for a losing backed side).
+  • **Phase 3+4 — consensus/learning**: `master_consensus()` publishes when ≥5 experts (`MASTER_CONSENSUS_MIN`)
+    back the same fixture+market family (`_market_family`), weighted by `_expert_hitrates()` (won/total from settled).
+  • `master_loop()` every 120s (registered in startup).
+  Frontend: RED 'Master' quick-view button FIRST in Header (variant "master", Crown icon); 'Master' tab
+  FIRST in tips window; RateWall view=="master" with 2 sub-tabs (Slips `master-tab-slips` / Live `master-tab-live`);
+  RED master card + crown `master-badge` (no Experte badge); red `tip-live-danger`/`leg-live-danger` "Σε κίνδυνο"
+  warning badges. i18n: `wall.liveDanger`, `nav.viewmaster`, `master.slips` (all langs / en+el).
+  Verified: unit + live-fixture e2e (backend), testing_agent iteration_41 (100% frontend, 5/5 backend).
+- 2026-06 (25th): **Flames 🔥 removed from all expert-name displays** (ExpertsShowcase, Header ExpertBanner,
+  RateWall member search) and **date-gated** via `flamesActive()` (i18n.js) — hidden now, auto-return **1 Sep 2026**.
+  Expert showcase names enlarged (text-lg/xl, bold, no truncate) for readability.
+
 - 2026-06: Added expert **Capella** (The Doc). Then added **Atlas** = Totis Sports WEBSITE
   scraper (totissports.gr, all 5 tipsters → one bot). `totissports_autopost()` +
   `totissports_loop()` (every 6h): fetches each analysis page, `_totissports_extract()`

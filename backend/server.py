@@ -2063,6 +2063,11 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     # Never surface a team-less ('Unknown') slip publicly — the poster is asked to fill
     # the teams first; until then it stays out of every feed (owner rule 2026-07-23).
     tips = [t for t in tips if _tip_has_known_teams(t)]
+    # A pick flagged 'in danger' live is ALWAYS shown as risk (never banker), regardless
+    # of any write-path race that might leave a stale category on the document.
+    for t in tips:
+        if t.get("live_danger"):
+            t["category"] = "risk"
     return await _tag_expert(tips[:limit])
 
 
