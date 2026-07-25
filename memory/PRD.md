@@ -33,6 +33,10 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Added LEVY (@LevyKingTips) as new tipster → own unique bot **Vega**
+  (`vega@tipjar.com`). Its private Telegram invite link is unscrapeable, so we read its
+  public X profile via Nitter. Generalized to multi X-handle watching via `WATCH_X_HANDLES`
+  env (each handle routed to its channel bot). Verified routing + /api/tips 200.
 - 2026-06: Multi-bot per-channel architecture. `_CHANNEL_BOTS` map (channel→{email,name,bio}),
   `_bot_for_channel()`, generic `_get_expert_bot(bot_cfg)` and `_ingest_emptips(..., bot_cfg)`.
   Each source channel posts under its own unique expert bot (tip id/source use bot slug).

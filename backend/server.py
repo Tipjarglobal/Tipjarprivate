@@ -1444,6 +1444,10 @@ _DEFAULT_EXPERT_BOT = {
 _CHANNEL_BOTS = {
     "emptipstele": _DEFAULT_EXPERT_BOT,   # EMP Tips Telegram channel
     "emptips": _DEFAULT_EXPERT_BOT,       # EMP Tips X/Twitter handle
+    "levykingtips": {                     # LEVY (@LevyKingTips) X/Twitter handle
+        "email": "vega@tipjar.com", "name": "Vega",
+        "bio": "In-house Sports-Analyst — datenbasierte Tipps für Fußball & Basketball.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
     # "somechannel": {"email": "nova@tipjar.com", "name": "Nova", "bio": "..."},
 }
@@ -1574,6 +1578,9 @@ EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
 # Comma-separated list of public Telegram channels to monitor (sources stay anonymous).
 _WATCH_RAW = os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")
 WATCH_TG_CHANNELS = [c.strip().lstrip("@") for c in _WATCH_RAW.split(",") if c.strip()]
+# Comma-separated list of public X/Twitter handles to monitor (via free Nitter mirrors).
+_WATCH_X_RAW = os.environ.get("WATCH_X_HANDLES", "") or EMPTIPS_HANDLE
+WATCH_X_HANDLES = [h.strip().lstrip("@") for h in _WATCH_X_RAW.split(",") if h.strip()]
 _EMP_RESULT_KW = re.compile(
     r'(boo+m|fl(y|ies|ys)\s*in|winner+|congrats|landed|cash(ed)?|smashed|\bgreen\b|'
     r'\+\d+(\.\d+)?u\b|nap won|banked|paid out)', re.I)
@@ -1583,7 +1590,7 @@ async def emptips_autopost() -> dict:
     """Auto-read EMP Tips' latest posts for FREE (public Telegram web preview first, then X
     via Nitter mirrors), turn each NEW betslip post into a public 'EMP Tips' pick via vision-AI.
     No API/keys/cost. Results/hype posts (no real pick) are skipped. Tracked in db.emptips_seen."""
-    if not WATCH_TG_CHANNELS and not EMPTIPS_HANDLE:
+    if not WATCH_TG_CHANNELS and not WATCH_X_HANDLES:
         return {"posted": 0, "reason": "no source configured"}
     import emptips_watch
     posts = []
@@ -1592,10 +1599,11 @@ async def emptips_autopost() -> dict:
         for p in chan_posts:
             p["_channel"] = ch  # remember source → resolve its unique bot later
         posts += chan_posts
-    if not posts and EMPTIPS_HANDLE:
-        posts = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
-        for p in posts:
-            p["_channel"] = EMPTIPS_HANDLE
+    for h in WATCH_X_HANDLES:
+        x_posts = await asyncio.to_thread(emptips_watch.fetch_timeline, h)
+        for p in x_posts:
+            p["_channel"] = h
+        posts += x_posts
     if not posts:
         return {"posted": 0, "reason": "source unavailable"}
     # First activation: baseline the current backlog as 'seen' WITHOUT posting stale tips.
