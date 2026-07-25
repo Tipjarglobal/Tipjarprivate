@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2 } from "lucide-react";
+import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
@@ -152,6 +152,10 @@ export default function NotificationBell() {
   const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("board");
+  const [toastCount, setToastCount] = useState(0);
+  const bumpToast = () => setToastCount((n) => n + 1);
+  const dropToast = () => setToastCount((n) => Math.max(0, n - 1));
+  const clearToasts = () => { toast.dismiss(); setToastCount(0); };
   const [history, setHistory] = useState(loadHistory);
 
   const pushHistory = (entry) => {
@@ -253,7 +257,9 @@ export default function NotificationBell() {
     });
     toast[isLive ? "message" : "success"](title, {
       description: body,
-      duration: isLive ? 15000 : 10000,
+      duration: isLive ? 15000 : 8000,
+      onDismiss: dropToast,
+      onAutoClose: dropToast,
       action: {
         label: tp.id ? t("bell.view_pick") : t(`nav.${VIEW_KEY[area] || "viewtips"}`),
         onClick: () => window.dispatchEvent(
@@ -263,7 +269,34 @@ export default function NotificationBell() {
         ),
       },
     });
+    bumpToast();
     setUnseen((u) => u + 1);
+  };
+
+  // Coalesce a whole WAVE of new picks (same area) into ONE toast, so the user isn't
+  // buried under a never-ending stack (owner: "es hört nie auf").
+  const fireAlertBatch = (tps, area) => {
+    const areaLabel = t(`bell.area.${area}`);
+    const navArea = area.startsWith("live") ? "live" : area;
+    const title = `${tps.length} × ${areaLabel}`;
+    const names = tps.slice(0, 3).map((tp) => tp.is_parlay
+      ? `${(tp.legs || []).length}-leg`
+      : (toLatin(tp.home_team) || "Tip")).join(", ");
+    const body = tps.length > 3 ? `${names} +${tps.length - 3}` : names;
+    if (area === "experts") { try { playCoin("expert"); } catch { /* ignore */ } }
+    pushHistory({ key: `batch-${area}-${Date.now()}`, title, body, area, navArea, pickId: null, ts: Date.now() });
+    toast.message(title, {
+      description: body,
+      duration: 8000,
+      onDismiss: dropToast,
+      onAutoClose: dropToast,
+      action: {
+        label: t(`nav.${VIEW_KEY[area] || "viewtips"}`),
+        onClick: () => window.dispatchEvent(new CustomEvent("tj-open-view", { detail: navArea })),
+      },
+    });
+    bumpToast();
+    setUnseen((u) => u + tps.length);
   };
 
   useEffect(() => {
@@ -279,6 +312,7 @@ export default function NotificationBell() {
         if (seen.current === null) {
           seen.current = new Set(data.map((tp) => tp.id));
         } else {
+          const newByArea = {};
           for (const tp of data) {
             if (!seen.current.has(tp.id)) {
               const area = tipArea(tp);
@@ -288,10 +322,15 @@ export default function NotificationBell() {
               const bypassThreshold = isLive || area === "experts";
               if (onRef.current && (areasRef.current[area] !== false) &&
                   (bypassThreshold || tipRating(tp) >= minRef.current)) {
-                fireAlert(tp, area);
+                (newByArea[area] = newByArea[area] || []).push(tp);
               }
               seen.current.add(tp.id);
             }
+          }
+          // One toast per area per poll: single pick → detailed, a wave → one summary.
+          for (const [area, tps] of Object.entries(newByArea)) {
+            if (tps.length === 1) fireAlert(tps[0], area);
+            else fireAlertBatch(tps, area);
           }
         }
 
@@ -301,14 +340,19 @@ export default function NotificationBell() {
         if (seenLive.current === null) {
           seenLive.current = new Set(live.data.map((tp) => tp.id));
         } else {
+          const newLiveByArea = {};
           for (const tp of live.data) {
             if (!seenLive.current.has(tp.id)) {
               const larea = tipArea({ ...tp, status: "live" });
               if (onRef.current && areasRef.current[larea] !== false) {
-                fireAlert({ ...tp, status: "live" }, larea);
+                (newLiveByArea[larea] = newLiveByArea[larea] || []).push({ ...tp, status: "live" });
               }
               seenLive.current.add(tp.id);
             }
+          }
+          for (const [larea, tps] of Object.entries(newLiveByArea)) {
+            if (tps.length === 1) fireAlert(tps[0], larea);
+            else fireAlertBatch(tps, larea);
           }
         }
 
@@ -374,6 +418,16 @@ export default function NotificationBell() {
 
   return (
     <div className="relative">
+      {toastCount > 0 && (
+        <button
+          type="button"
+          data-testid="clear-toasts-btn"
+          onClick={clearToasts}
+          className="fixed top-2 right-2 z-[9999] flex items-center gap-1.5 rounded-full bg-bell text-white text-xs font-bold px-3 py-2 shadow-[0_0_20px_rgba(255,30,86,0.6)] active:scale-95 transition-transform"
+        >
+          <X size={14} /> {t("bell.clearToasts")} ({toastCount})
+        </button>
+      )}
       <motion.button
         data-testid="notification-bell"
         onClick={() => setOpen((o) => { const nx = !o; if (nx) setUnseen(0); return nx; })}

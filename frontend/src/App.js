@@ -552,7 +552,7 @@ function App() {
   return (
     <I18nProvider>
       <AuthProvider>
-        <Toaster theme="dark" position="top-center" richColors toastOptions={{ style: { background: "#18181b", border: "1px solid #27272a", color: "#fff" } }} />
+        <Toaster theme="dark" position="top-center" richColors closeButton visibleToasts={3} toastOptions={{ style: { background: "#18181b", border: "1px solid #27272a", color: "#fff" } }} />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Home />} />

@@ -33,6 +33,15 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Notification-toast flood fix**. In-app sonner toasts fired one-per-pick in
+  waves and were hard to clear. NotificationBell now (a) **coalesces** a whole wave of new picks
+  per area into ONE summary toast ("4 × Expert Picks — …"), (b) shows a floating red
+  **"Dismiss all (n)"** button (`clear-toasts-btn`, calls `toast.dismiss()`), tracking a live
+  `toastCount`, (c) toasts have a close button + `visibleToasts={3}`, shorter durations.
+  Verified e2e: 4 seeded picks → 1 bundled toast; clear-all wiped all toasts (0 left).
+  i18n `bell.clearToasts`. Also: Master quick-view moved to 4th position (after greens, before
+  gold); gold button deepened (#E3A81B).
+
 - 2026-06 (25th): **Correct names in leg boxes + leagues/countries + live-score unlock**.
   Expert-bot tips (Deneb/Sirius/Nova/Atlas…) are stored fully in Greek incl. a `legs[]` box
   and league/country. Added `_canonical_league_name` (LLM, cached in `label_alias`) and
