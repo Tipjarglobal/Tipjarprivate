@@ -1903,7 +1903,7 @@ async def totissports_loop():
             logger.info(f"Totis Sports loop: {res}")
         except Exception as e:
             logger.error(f"Totis Sports loop error: {e}")
-        await asyncio.sleep(6 * 3600)  # a few times a day
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
 
 
 
@@ -2684,16 +2684,33 @@ async def claim_win(file: Optional[UploadFile] = File(None),
     return {"claim": claim, "credits_awarded": credits, "user": public_user(updated)}
 
 
+def _is_house_single(username: str, is_parlay=None, legs_count=None) -> bool:
+    """Owner rule: TipJarHQ AND TipJarMaster earn a Hall-of-Fame spot ONLY with their
+    systems/parlays — never with single picks."""
+    u = (username or "")
+    house = u.startswith("TipJarHQ") or u == "TipJarMaster"
+    if not house:
+        return False
+    if is_parlay is not None:
+        return not is_parlay
+    return (legs_count or 1) <= 1
+
+
 @api_router.get("/wins/hall-of-fame")
 async def hall_of_fame():
-    docs = await db.win_claims.find(
+    raw = await db.win_claims.find(
         {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
-    ).sort("total_odds", -1).limit(24).to_list(24)
+    ).sort("total_odds", -1).limit(48).to_list(48)
+    # House bots (TipJarHQ / TipJarMaster) only qualify with a system/parlay.
+    docs = [d for d in raw
+            if not _is_house_single(d.get("username"), legs_count=d.get("legs_count"))][:24]
     # Cashed-out slips are trophies too — surface them in the Hall of Fame.
     cashed = await db.tips.find(
         {"status": "cashed_out"}, {"_id": 0}
     ).sort("settled_at", -1).limit(24).to_list(24)
     for tp in cashed:
+        if _is_house_single(tp.get("username"), is_parlay=tp.get("is_parlay")):
+            continue
         docs.append({
             "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
             "total_odds": _to_float(tp.get("odds")),
@@ -8134,6 +8151,9 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
     for tp in won:
         if added >= max_new:
             break
+        # Owner rule: TipJarHQ / TipJarMaster singles never enter the Hall of Fame.
+        if _is_house_single(tp.get("username"), is_parlay=tp.get("is_parlay")):
+            continue
         odds = _to_float(tp.get("odds"))
         if odds < 1.5:
             continue  # only juicy wins belong in the Hall of Fame

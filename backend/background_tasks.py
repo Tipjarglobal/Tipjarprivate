@@ -17,6 +17,7 @@ from server import (
     API_FOOTBALL_KEY,
     LIVE_POLL_SECONDS,
     MEMBER_LIVE_POLL_SECONDS,
+    _api_quota_exhausted,
     VAPID_PRIVATE_KEY,
     VAPID_SUBJECT,
     _INSTANCE_ID,
@@ -327,6 +328,11 @@ async def live_loop():
         if not _is_leader():
             await asyncio.sleep(45)
             continue
+        # API-Football daily quota gone → back off so the settlement engine keeps its
+        # budget instead of both loops hammering the exhausted quota.
+        if _api_quota_exhausted():
+            await asyncio.sleep(LIVE_POLL_SECONDS * 4)
+            continue
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop D (Live): {await live_autopost()}")
@@ -339,6 +345,9 @@ async def member_live_loop():
     while True:
         if not _is_leader():
             await asyncio.sleep(45)
+            continue
+        if _api_quota_exhausted():
+            await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS * 4)
             continue
         try:
             res = await live_annotate_sync()

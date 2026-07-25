@@ -318,6 +318,19 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25
+- HoF filter: TipJarHQ & TipJarMaster qualify ONLY with systems/parlays (helper `_is_house_single`
+  in server.py; applied in `hall_of_fame` + `daily_hof_autofill`). Removed 48 stale house-single win_claims.
+- Scrapers now post near-real-time: forebet/predictz/statarea/footballpredictions/footballinsight/
+  totissports loops reduced 2–6h → 30min (Chromium/static scrapers, quota-safe). apifootball_predictions
+  kept at 6h (quota-heavy). emptips stays 20min.
+- Master naming: never "Papa/Vater" — always "Master". Cleaned existing tip prose + stale el translation cache.
+- Root cause of late settlement = API-Football DAILY quota exhausted (confirmed via /status). Added quota
+  backoff to live_loop & member_live_loop so the settlement engine keeps budget. Manually settled the
+  finished Gimcheon 3-2 Daejeon (Über 3.5 → won).
+- OPEN TRADEOFF: live polling (3min/90s) is the dominant quota consumer → can starve settlement.
+  Options: reduce live poll frequency OR upgrade API-Football plan. Awaiting user decision.
+
 ## Backlog
 - P1: Add more tipster channels → new unique bot per channel (edit `_CHANNEL_BOTS`).
 - P2: Telegram outbound notifications.

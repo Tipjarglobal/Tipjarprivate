@@ -703,7 +703,7 @@ async def forebet_loop():
                 continue
         except Exception as e:
             logger.error(f"HQ loop A error: {e}")
-        await asyncio.sleep(3 * 3600)  # every 3 hours
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
 
 def _predictz_date_paths() -> list[str]:
     """Tomorrow + day-after-tomorrow pages (covers the ~50h look-ahead window)."""
@@ -945,7 +945,7 @@ async def predictz_loop():
                 continue
         except Exception as e:
             logger.error(f"HQ loop B error: {e}")
-        await asyncio.sleep(3 * 3600)  # every 3 hours
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
 
 def _goal_est(line) -> int:
     """Estimate a team's predicted goals from API-Football's goal-line advice string
@@ -1154,7 +1154,7 @@ async def statarea_loop():
                 continue
         except Exception as e:
             logger.error(f"HQ loop F error: {e}")
-        await asyncio.sleep(3 * 3600)  # every 3 hours
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
 
 
 async def footballpredictions_autopost() -> dict:
@@ -1212,7 +1212,7 @@ async def footballpredictions_loop():
             logger.info(f"HQ loop G (FootballPredictions): {res}")
         except Exception as e:
             logger.error(f"HQ loop G error: {e}")
-        await asyncio.sleep(3 * 3600)  # every 3 hours
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
 
 
 
@@ -1370,4 +1370,4 @@ async def footballinsight_loop():
             logger.info(f"HQ loop FI (footballinsight01): {res}")
         except Exception as e:
             logger.error(f"HQ loop FI error: {e}")
-        await asyncio.sleep(2 * 3600)  # every 2 hours
+        await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
