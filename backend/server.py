@@ -3232,18 +3232,64 @@ COUNTRY_NAME_EN = {
 }
 
 
+async def _canonical_team_name(name: str):
+    """Greek (and other non-Latin) team names from GR/foreign tipsters → the club's
+    canonical English/international name as used by API-Football & bookmakers
+    (e.g. 'ΛΟΥΚΕΡΝΗ' → 'Luzern', 'Τουν' → 'Thun', 'Χιρόνα' → 'Girona'). Cached in
+    team_alias. Returns None for already-Latin names or when unavailable."""
+    name = (name or "").strip()
+    if not name or not _NON_LATIN_RE.search(name):
+        return None
+    key = _norm(name)
+    cached = await db.team_alias.find_one({"key": key})
+    if cached:
+        return cached.get("alias") or None
+    if not EMERGENT_LLM_KEY:
+        return None
+    alias = None
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"team-{uuid.uuid4()}",
+            system_message=("You convert football (soccer) club or national-team names into "
+                            "their common English/international name exactly as API-Football and "
+                            "bookmakers spell it. Reply with ONLY the name — no quotes, no notes."),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=(
+            f"Team name (may be Greek): '{name}'.\n"
+            "Examples: 'Λουκέρνη' -> Luzern; 'Τουν' -> Thun; 'Χιρόνα' -> Girona; "
+            "'Αλαβές' -> Alaves; 'Άλκμααρ' -> AZ Alkmaar; 'Ολυμπιακός' -> Olympiacos; "
+            "'Ελντένσε' -> Eldense; 'Αλ Ετιφάκ' -> Al-Ettifaq.\n"
+            "Give the canonical English name only.")))
+        alias = (resp if isinstance(resp, str) else str(resp)).strip().strip('".\n ')
+        if not alias or len(alias) > 60 or _NON_LATIN_RE.search(alias):
+            alias = None
+    except Exception as e:
+        logger.warning(f"team alias LLM failed for {name}: {e}")
+        alias = None
+    if alias:
+        await db.team_alias.update_one(
+            {"key": key}, {"$set": {"key": key, "alias": alias, "src": name}}, upsert=True)
+    return alias
+
+
 async def resolve_team_id(name: str):
     if not name or len(name.strip()) < 3:
         return None
     key = _norm(name)
     cached = await db.team_cache.find_one({"key": key})
-    if cached:
+    if cached and cached.get("team_id") is not None:
         return cached.get("team_id")
     # localized national-team name → API-Football English name (e.g. Frankreich → France)
     base_name = COUNTRY_NAME_EN.get(key, name.strip())
-    # Try each Latin transliteration candidate (Greek/Cyrillic → Latin) until one resolves.
+    candidates = _latin_variants(base_name) or [base_name]
+    # Greek/foreign club names → canonical English (LLM, cached) so the search actually hits.
+    alias = await _canonical_team_name(name)
+    if alias:
+        candidates = [alias] + [c for c in candidates if c != alias]
+    # Try each candidate until one resolves.
     team_id = None
-    for search_name in _latin_variants(base_name) or [base_name]:
+    for search_name in candidates:
         resp = _apifootball("/teams", {"search": search_name})
         # fallbacks for name mismatches (hyphens, city suffixes)
         if not resp:
@@ -7234,13 +7280,15 @@ async def enrich_member_picks() -> dict:
                 if not lh or not la:
                     continue
                 lmeta = None
+                lh_c = await _canonical_team_name(lh) or lh
+                la_c = await _canonical_team_name(la) or la
                 ltid = await resolve_team_id(lh)
                 if ltid:
-                    lmeta = await asyncio.to_thread(find_upcoming_fixture, ltid, la)
+                    lmeta = await asyncio.to_thread(find_upcoming_fixture, ltid, la_c)
                 if not lmeta:
                     if live is None:
                         live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
-                    lfx = _find_live_fixture(live, lh, la)
+                    lfx = _find_live_fixture(live, lh_c, la_c)
                     if lfx:
                         lmeta = {"home_name": (lfx.get("teams", {}).get("home", {}) or {}).get("name", ""),
                                  "away_name": (lfx.get("teams", {}).get("away", {}) or {}).get("name", ""),
@@ -7253,7 +7301,7 @@ async def enrich_member_picks() -> dict:
                     # transliterated ones (owner 2026-07-24: "jedes live-spiel braucht live score").
                     hn, an = (lmeta.get("home_name") or "").strip(), (lmeta.get("away_name") or "").strip()
                     if hn and an:
-                        if _teams_match(an, lh) or _teams_match(hn, la):
+                        if _teams_match(an, lh_c) or _teams_match(hn, la_c):
                             hn, an = an, hn  # leg is reversed vs fixture
                         lg["match"] = f"{hn} \u2013 {an}"
                     if not (lg.get("kickoff") or "").strip() and lmeta.get("date_iso"):
@@ -7262,6 +7310,10 @@ async def enrich_member_picks() -> dict:
                             lg["kickoff"] = lko.strftime("%d/%m/%Y %H:%M")
                         except Exception:
                             pass
+                    leg_changed = True
+                elif (lh_c != lh or la_c != la):
+                    # No fixture yet, but fix the DISPLAY names from the canonical aliases.
+                    lg["match"] = f"{lh_c} \u2013 {la_c}"
                     leg_changed = True
             if leg_changed:
                 await db.tips.update_one(
@@ -7273,22 +7325,38 @@ async def enrich_member_picks() -> dict:
                 await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
             continue
         meta = None
+        home_c = await _canonical_team_name(home) or home
+        away_c = await _canonical_team_name(away) or away
         tid = await resolve_team_id(home)
         if tid:
-            meta = await asyncio.to_thread(find_upcoming_fixture, tid, away)
+            meta = await asyncio.to_thread(find_upcoming_fixture, tid, away_c)
         if not meta:  # currently in-play?
             if live is None:
                 live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
-            fx = _find_live_fixture(live, home, away)
+            fx = _find_live_fixture(live, home_c, away_c)
             if fx:
                 meta = {"home_name": (fx.get("teams", {}).get("home", {}) or {}).get("name", ""),
                         "away_name": (fx.get("teams", {}).get("away", {}) or {}).get("name", ""),
                         "date_iso": (fx.get("fixture") or {}).get("date"),
                         "league": _fixture_league_label(fx)}
         if not meta or not meta.get("home_name"):
-            await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
+            # No fixture (past / not on API-Football) → still fix the DISPLAY names from the
+            # canonical aliases so "ΛΟΥΚΕΡΝΗ" shows as "Luzern", not phonetic "LOYKERNI".
+            partial = {}
+            if _NON_LATIN_RE.search(home) and home_c and home_c != home:
+                partial["home_team_latin"] = home_c
+            if _NON_LATIN_RE.search(away) and away_c and away_c != away:
+                partial["away_team_latin"] = away_c
+            if partial:
+                await db.tips.update_one(
+                    {"id": t["id"]},
+                    {"$set": partial, "$inc": {"enrich_tries": 1},
+                     "$unset": {"share_image_path": ""}})
+                enriched += 1
+            else:
+                await db.tips.update_one({"id": t["id"]}, {"$inc": {"enrich_tries": 1}})
             continue
-        if _teams_match(meta["away_name"], home) or _teams_match(meta["home_name"], away):
+        if _teams_match(meta["away_name"], home_c) or _teams_match(meta["home_name"], away_c):
             hl, al = meta["away_name"], meta["home_name"]   # tip is reversed vs fixture
         else:
             hl, al = meta["home_name"], meta["away_name"]   # default: fixture home/away order

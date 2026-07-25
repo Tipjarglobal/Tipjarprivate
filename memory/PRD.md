@@ -33,6 +33,19 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Team-name fix (Greek → canonical)**. GR/foreign tipster bots stored teams
+  in Greek ("ΛΟΥΚΕΡΝΗ"/"ΤΟΥΝ") which `toLatin` turned into phonetic "LOYKERNI"/"TOYN" for
+  non-Greek readers. Added `_canonical_team_name()` (server.py): LLM (Gemini) resolves a
+  non-Latin team name → the club's canonical English name (cached in `team_alias`).
+  `resolve_team_id` now prepends the alias to its API-Football search and ignores stale
+  `None` cache hits. `enrich_member_picks` computes canonical home/away for both the
+  opponent match AND the live-fixture fallback, and — crucially — writes `home_team_latin`/
+  `away_team_latin` (and rewrites parlay leg `match`) from the alias EVEN when no fixture is
+  found, so the display name is always correct. Runs automatically in member_live_loop.
+  Verified: Luzern/Thun, Girona/Alaves, AZ Alkmaar/Olympiacos, Eldense/Al-Ettifaq all resolved.
+- 2026-06 (25th): Master texts — removed "Papa/Μπαμπάς" and "corrections/διορθώσεις" wording;
+  now purely "live" / "TipJarMaster" / "διαλογέας".
+
 - 2026-06 (25th): **Master special box + card-name visibility**. Added a distinct RED
   "TipJarMaster" tile (crown, `showcase-master`, spans full width) at the top of the
   ExpertsShowcase alongside the expert "friends"; clicking opens the Master area
