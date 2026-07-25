@@ -504,16 +504,16 @@ async def forebet_autopost() -> dict:
             if "-1.5" in ml and "handicap" in ml:
                 o2["_ptype"] = "risk"
                 risk_opts.append(o2)
-            elif round(o["winprob"] * 10) >= 9 and _is_banker_safe(o["market"]):
-                # Owner rule: a 9-/10-star single (≈86 %+) is a Banker ONLY if it's a
-                # near-certain market (Über 0.5 / team scores / DC / DNB). Über 1.5+ etc.
-                # can die on a 0-1/1-0 → never a banker.
+            elif round(o["winprob"] * 10) >= 9 and _is_banker_safe(o["market"], o["winprob"]):
+                # Owner rule: a 9-/10-star single is a Banker only if it's near-certain —
+                # full-match Über 0.5 / team scores / DC / DNB, OR a goal-over on a strongly
+                # offensive matchup (winprob ≥ 0.88 = a 0-0 is basically impossible).
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
             elif 1.40 <= final_odd <= 2.60 and o["winprob"] >= 0.62:
                 o2["_ptype"] = "value"
                 value_opts.append(o2)
-            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03 and _is_banker_safe(o["market"]):
+            elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03 and _is_banker_safe(o["market"], o["winprob"]):
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
             elif 2.00 <= final_odd <= 3.60 and o["winprob"] >= 0.55:
