@@ -798,11 +798,12 @@ async def tips_counts():
     ai = len(ai_docs)
     ai_total = ai
     members = await db.tips.count_documents({
-        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]},
+        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master", *SILENT_SOURCE_SLUGS]},
         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
         "hidden": {"$ne": True},
         "status": "pending"})
-    live = await db.tips.count_documents({"status": "live", "hidden": {"$ne": True}})
+    live = await db.tips.count_documents({"status": "live", "hidden": {"$ne": True},
+                                          "source": {"$nin": list(SILENT_SOURCE_SLUGS)}})
     master = await db.tips.count_documents({"source": "hq-master", "status": {"$in": ["pending", "live"]}})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}, "hidden": {"$ne": True}})
@@ -1607,6 +1608,29 @@ _CHANNEL_BOTS = {
 }
 
 
+# Source slugs of SILENT scrapers (e.g. Capella) — they feed the Master in the background
+# but must NEVER surface in any public feed. Derived from the bot personas so a bot marked
+# silent is excluded everywhere, even for legacy picks stored before the `hidden` flag
+# existed (belt-and-suspenders alongside q["hidden"]={"$ne":True}).
+SILENT_SOURCE_SLUGS = sorted({
+    re.sub(r'[^a-z0-9]+', '', (cfg.get("name") or "").lower())
+    for cfg in _CHANNEL_BOTS.values() if cfg.get("silent")
+} - {""})
+
+
+def _exclude_silent_sources(q: dict) -> None:
+    """Merge the silent-scraper source exclusion into a tips query without clobbering an
+    existing `source` constraint."""
+    if not SILENT_SOURCE_SLUGS:
+        return
+    existing = q.get("source")
+    if existing is None:
+        q["source"] = {"$nin": list(SILENT_SOURCE_SLUGS)}
+    elif isinstance(existing, dict) and "$nin" in existing:
+        existing["$nin"] = sorted(set(existing["$nin"]) | set(SILENT_SOURCE_SLUGS))
+    # A specific string source is never a silent slug in practice → leave it untouched.
+
+
 def _bot_for_channel(channel: str) -> dict:
     """Resolve the unique expert bot persona for a given source channel/handle."""
     key = (channel or "").lstrip("@").strip().lower()
@@ -2224,6 +2248,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             {"source": "hq-auto", "category": {"$ne": "risk"}},
         ]
         q["id"] = {"$not": {"$regex": "^seed-"}}
+    # Silent scrapers (Capella) must never surface — enforced by source, not just `hidden`.
+    _exclude_silent_sources(q)
     limit = max(1, min(limit, 1000))
     fetch = 300 if window in ("24", "48", "48plus") else (200 if source == "ai" else limit)
     if sort == "top":
