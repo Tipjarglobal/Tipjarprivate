@@ -6988,6 +6988,67 @@ from background_tasks import (
 )
 
 
+EXPERT_INACTIVITY_DAYS = 7
+
+
+async def expire_inactive_experts() -> int:
+    """Experts (real users, NOT in-house tipster bots) lose their title after 7 days without
+    a new tip. They receive a mail with a 2-click reactivation CTA and can instantly become
+    expert again. In-house bots (Orion/Vega/Nova/Sirius) are exempt (permanent personas)."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=EXPERT_INACTIVITY_DAYS)
+    demoted = 0
+    experts = await db.users.find(
+        {"role": "expert", "is_bot": {"$ne": True}},
+        {"_id": 0, "id": 1, "expert_since": 1, "created_at": 1}).to_list(2000)
+    for e in experts:
+        last_tip = await db.tips.find_one(
+            {"user_id": e["id"]}, sort=[("created_at", -1)], projection={"created_at": 1})
+        ref = (last_tip or {}).get("created_at") or e.get("expert_since") or e.get("created_at")
+        try:
+            last_active = datetime.fromisoformat(ref)
+            if last_active.tzinfo is None:
+                last_active = last_active.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if last_active >= cutoff:
+            continue  # still active within the last week
+        await db.users.update_one(
+            {"id": e["id"]},
+            {"$set": {"role": "user", "expert_trial": False,
+                      "expert_expired_at": now.isoformat()},
+             "$unset": {"expert_since": ""}})
+        demoted += 1
+        # Reactivation letter — reuses the expert_invite CTA which /inbox/expert-accept
+        # handles (2 clicks: open mail → "Wieder Experte werden"). Skip if one is pending.
+        already = await db.inbox_messages.find_one(
+            {"user_id": e["id"], "type": "expert_expired", "handled": {"$ne": True}})
+        if not already:
+            await db.inbox_messages.insert_one({
+                "id": str(uuid.uuid4()), "user_id": e["id"], "type": "expert_expired",
+                "title": "Dein Experten-Status ist pausiert ⏳",
+                "body": ("Du warst 7 Tage inaktiv, daher haben wir deinen Experten-Titel "
+                         "vorübergehend pausiert. Kein Problem — hol ihn dir mit nur 2 Klicks "
+                         "sofort zurück und poste weiter deine Tipps! 🔥"),
+                "cta": "expert_invite", "read": False, "handled": False,
+                "created_at": now.isoformat(),
+            })
+    if demoted:
+        logger.info(f"Expert expiry: {demoted} inactive expert(s) demoted + mailed")
+    return demoted
+
+
+async def expert_expiry_loop():
+    """Checks for inactive experts a few times a day."""
+    await asyncio.sleep(90)
+    while True:
+        try:
+            await expire_inactive_experts()
+        except Exception as e:
+            logger.error(f"expert_expiry_loop error: {e}")
+        await asyncio.sleep(6 * 3600)
+
+
 @app.on_event("startup")
 async def startup():
     # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
@@ -7049,6 +7110,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(_regenerate_win_slips_once()))
     _BG_TASKS.append(asyncio.create_task(_seed_showcase_wins()))
     _BG_TASKS.append(asyncio.create_task(system_reset_loop()))
+    _BG_TASKS.append(asyncio.create_task(expert_expiry_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

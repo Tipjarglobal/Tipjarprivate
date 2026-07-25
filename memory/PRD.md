@@ -33,6 +33,12 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: **Expert auto-expiry** — real experts (NOT in-house bots) lose the title after
+  `EXPERT_INACTIVITY_DAYS`=7 days without a new tip. `expire_inactive_experts()` +
+  `expert_expiry_loop()` (every 6h). Demote → role=user, `expert_expired_at`, and a mailbox
+  letter (`type=expert_expired`, `cta=expert_invite`) → 2-click reactivation via existing
+  `/inbox/expert-accept`. Bots (is_bot) exempt. Tested (inactive demoted+mailed, recent kept,
+  bot exempt).
 - 2026-06: Added **Chris bets (t.me/Chrisbetsbets)** → new unique bot **Sirius**. Added new
   **"Our Experts" showcase** section prominently at top of home page (`ExpertsShowcase.jsx`,
   fetches `/experts`, clickable → profile). Moved **Statistics quick-nav to LAST** in BOTH
