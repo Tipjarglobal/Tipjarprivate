@@ -40,6 +40,14 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
     Zeitzonen-Umschalter (`timezone-switcher`, `tz-<IANA>`) neben der Sprache; Default = Account-
     Zeitzone (falls keine manuelle Wahl). Verifiziert: „08:00" → Berlin 08:00, Athen 09:00,
     London 07:00, NY 02:00; Mitternachtswechsel korrekt. (Mobil: Account-Default; Umschalter ab sm.)
+  • **Live-Frühabrechnung erweitert** (`live_autopost` Abschnitt 1b): JEDER offene Einzel-Schein
+    (Experten, HQ-Auto, Mitglieder) mit Über-Tore- oder BTTS-Markt wird SOFORT als GEWONNEN
+    abgerechnet, sobald das Live-Spiel die nötigen Tore erreicht (owner 2026-07: „über 2.5 / beide
+    treffen → sofort abrechnen, sobald 3 Tore fallen / beide treffen"). Nutzt `_live_bet_landed` +
+    `_align_goals` + `_find_live_fixture` (fixture_id ODER Teamnamen). Nur WIN früh (Verlust wartet
+    auf Full-Time). Team-spezifische Über-≥1.5-Linien ausgeschlossen (nicht sicher aus Gesamttoren
+    gradebar). Läuft im live_loop (LIVE_POLL_SECONDS). E2E mit gemocktem 2:1/61.: Über 2.5 & BTTS →
+    won, Über 3.5 → bleibt offen.
   • **Void-Timing marktabhängig** (`_grade_window_min` + `void_stale_expert_slips`): Erste-Halbzeit-
     Märkte (Ergebnis steht zur HZ fest) werden ~1h nach Anstoß bereinigt; Ganzspiel-Märkte ~2,5h;
     Kombis mit Ganzspiel-Bein warten bis Full-Time. Void läuft NACH dem Settle-Pass: Ganzspiel-Scheine

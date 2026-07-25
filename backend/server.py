@@ -6743,6 +6743,43 @@ async def live_autopost() -> dict:
                 "status": "void", "settled_by": "auto-live", "settled_at": now}})
         closed += 1
 
+    # 1b) EARLY-SETTLE — any PENDING single over-goals / BTTS pick (expert bots, HQ-auto,
+    #     members) is moved straight to WON the moment its live match reaches the required
+    #     goals (owner 2026-07: "über 2.5 / beide treffen → sofort abrechnen, sobald 3 Tore
+    #     fallen oder beide treffen"). Goals only rise, so an early WIN is irreversible. We
+    #     never LOSE early — that still waits for full time.
+    early = 0
+    if live:
+        cand = await db.tips.find(
+            {"status": {"$in": ["pending", "live"]}, "is_parlay": {"$ne": True},
+             "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
+            {"_id": 0, "id": 1, "market": 1, "home_team": 1, "away_team": 1,
+             "fixture_id": 1}).to_list(3000)
+        for t in cand:
+            m = (t.get("market") or "").lower()
+            if not ("über" in m or "over" in m or "beide" in m or "btts" in m):
+                continue
+            side = _market_team_side(t.get("market"), t["home_team"], t["away_team"])
+            # team-specific over ≥1.5 lines aren't reliably early-gradable from total goals
+            if side is not None and re.search(r"(über|over)\s*[1-9]\.5", m):
+                continue
+            fx = live_by_id.get(str(t.get("fixture_id") or "")) or _find_live_fixture(live, t["home_team"], t["away_team"])
+            if not fx:
+                continue
+            short = ((fx.get("fixture") or {}).get("status") or {}).get("short")
+            if short not in LIVE_STATUSES:
+                continue
+            hg, ag = _align_goals(fx, t["home_team"])
+            if _live_bet_landed(t.get("market"), hg, ag, t["home_team"], t["away_team"]) is True:
+                minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+                await db.tips.update_one({"id": t["id"]}, {"$set": {
+                    "status": "won", "final_home": hg, "final_away": ag,
+                    "live_score": f"{hg}:{ag}", "live_minute": minute,
+                    "settled_by": "auto-live-early", "settled_at": now}})
+                early += 1
+    if early:
+        logger.info(f"Early-settled {early} live over/BTTS tips as WON")
+
     if not live:
         return {"posted": 0, "closed": closed, "live": 0}
 
