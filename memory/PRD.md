@@ -318,6 +318,14 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (e) — Realistic SGM odds + $ everywhere
+- Fixed wildly inflated single-match builder odds. New `_correlated_combo_odds(legs)` shrinks the
+  profit portion when ≥2 correlated GOAL legs stack (Über HZ + BTTS + Über 2.5 …) like a real
+  Same-Game-Multi. Shrink 2→0.55, 3→0.40, 4→0.30. Non-goal legs (corners/props/handicap) full weight.
+  Applied in `_combo_odd` (the 8.66 source), Favoriten-Smart, Mega builder. Mental jackpot untouched.
+- Recomputed 5 same-match builder HoF trophies (8.66→4.06 etc.); multi-match parlays untouched.
+- $ now enforced in `/wins/mine`, win-claim submit (image + stored) and cash-out receipts too.
+
 ## Changelog 2026-07-25 (d) — Hall of Fame in $
 - HoF now enforces $ everywhere: `hall_of_fame` endpoint reformats stake/winnings via `_money_to_usd`;
   `daily_hof_autofill` runs `_disguise_stakes` on the tip (matches feed); showcase seed uses $.

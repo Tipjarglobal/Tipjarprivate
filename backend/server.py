@@ -2715,6 +2715,7 @@ async def claim_win(file: Optional[UploadFile] = File(None),
 
     # store a STANDARDISED TipJar-branded slip (never the raw bookmaker screenshot)
     ext, store_ct = "webp", "image/webp"
+    stake, winnings = _money_to_usd(stake), _money_to_usd(winnings)  # always $
     store_bytes = _render_slip_image(legs, total_odds, stake, winnings, user["username"], ctype)
     image_path = None
     try:
@@ -2799,6 +2800,11 @@ async def my_wins(user: dict = Depends(get_current_user)):
     docs = await db.win_claims.find(
         {"user_id": user["id"]}, {"_id": 0, "sig": 0, "user_id": 0}
     ).sort("created_at", -1).limit(50).to_list(50)
+    for d in docs:  # always show $ (owner rule)
+        if d.get("stake"):
+            d["stake"] = _money_to_usd(d.get("stake"))
+        if d.get("winnings"):
+            d["winnings"] = _money_to_usd(d.get("winnings"))
     total = sum(d.get("credits", 0) for d in docs)
     return {"claims": docs, "total_credits": total, "count": len(docs)}
 
@@ -4451,6 +4457,35 @@ def _sel(p, market, odds, rating):
     }
 
 
+_GOAL_MKT_RE = re.compile(
+    r'(tore\b|\btor\b|beide teams|btts|\bgg\b|both teams|goals?\b|halbzeit)', re.I)
+
+
+def _correlated_combo_odds(legs) -> float:
+    """Realistic Same-Game-Multi price. The naive product OVERSTATES a single-match builder
+    that stacks correlated goal markets (Über 1.5 HZ, BTTS, Über 2.5 … all rise/fall
+    together). Like a real bookmaker SGM we shrink the PROFIT portion the more goal-legs
+    stack. Non-goal legs (handicap, corners, player props) keep full weight."""
+    odds = []
+    for lg in legs:
+        try:
+            o = float(lg.get("odds"))
+        except (TypeError, ValueError):
+            o = 0.0
+        if o > 1:
+            odds.append(o)
+    if not odds:
+        return 0.0
+    product = 1.0
+    for o in odds:
+        product *= o
+    goal_legs = sum(1 for lg in legs if _GOAL_MKT_RE.search(str(lg.get("market") or "")))
+    if goal_legs >= 2:
+        shrink = {2: 0.55, 3: 0.40, 4: 0.30}.get(goal_legs, 0.24)
+        product = 1.0 + (product - 1.0) * shrink
+    return round(product, 2)
+
+
 def _dedupe_builder_legs(combo_legs, home, away):
     """Owner rule (2026-07-24): drop any selection whose outcome is logically ENTAILED
     by the combination of the other legs (adds no odds/value), e.g. a favourite's
@@ -4652,11 +4687,11 @@ async def build_systems() -> dict:
             near.append((ko, p))
     near.sort(key=lambda x: x[0])
     def _combo_odd(p, legs):
-        tot = 1.0
+        lg_dicts = []
         for mk, base in legs:
             s = _apply_real(_sel(p, mk, base, 7.0))
-            tot *= float(s.get("odds") or base)
-        return round(tot, 2)
+            lg_dicts.append({"market": mk, "odds": s.get("odds") or base})
+        return _correlated_combo_odds(lg_dicts)
 
     combo_games, single_cands, used_h = [], [], set()
     for ko, p in near:
@@ -6215,12 +6250,7 @@ async def smart_autopost() -> dict:
         combo_legs.append({"home": home, "away": away, "market": "Über 8.5 Ecken",
                            "odds": "1.80", "kind": "corner_o", "line": 8.5,
                            "team": "", "status": "open"})
-        prod = 1.0
-        for lg in combo_legs:
-            try:
-                prod *= float(lg["odds"])
-            except Exception:
-                pass
+        prod = _correlated_combo_odds(combo_legs)
         # Frontend display leg (one match, all selections bundled) — mirrors AI bet-builders
         display_legs = [{
             "match": f"{home} – {away}",
@@ -6313,9 +6343,7 @@ async def favourite_smart_autopost() -> dict:
                        "kind": kd, "team": fav if "-1.5" in mk or "Chance" in mk else "",
                        "status": "open"} for (mk, od, kd) in legs_spec]
         combo_legs = _dedupe_builder_legs(combo_legs, home, away)
-        prod = 1.0
-        for lg in combo_legs:
-            prod *= float(lg["odds"])
+        prod = _correlated_combo_odds(combo_legs)
         display_legs = [{
             "match": f"{home} – {away}", "league": p.get("league") or "TipJarHQ Smart Pick",
             "kickoff": p.get("kickoff") or "",
