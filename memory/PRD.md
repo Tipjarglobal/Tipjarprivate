@@ -33,6 +33,20 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Echte Master-Quoten + Übersetzung der Statistik-Tabs**.
+  • **Real bookmaker odds für Master-Packs**: `_enrich_legs_real_odds` ersetzt Pool-Quoten der
+    GEWÄHLTEN Beine durch echte API-Football-Quoten (bestehendes `ensure_match_odds` /
+    `_real_odd_for`, 6h-Cache in `odds_cache`) — nur die gewählten Beine, um das Kontingent zu
+    schonen. Team-spezifische Über/Unter-Märkte werden übersprungen (nicht einzeln gepreist →
+    keine Fehlzuordnung zur Match-Total-Linie); Fallback = plausibilitätsgefilterte Pool-Quote,
+    wenn keine echte Quote/kein Kontingent. Eingebunden in `master_build_packs` & `master_challenge`.
+  • **Übersetzungs-Cache auf Statistik-Tabs erweitert**: `useProseTranslations` jetzt auch in
+    ScorerRadar (`s.reason`, `m.note`, `m.zero_zero_label`) und HtGoals (`r.market`). Verifiziert in
+    Greek (z.B. „Να σκοράρουν και οι δύο ομάδες", „ΤΟ 0:0 ΠΡΑΚΤΙΚΑ ΑΠΟΚΛΕΙΕΤΑΙ") und EN. GoalThirst
+    war bereits vollständig über i18n-Keys abgedeckt. Getestet: testing_agent iteration_43 (alle
+    Übersetzungen el/de/en/fr + Stats/Master-Integration bestehen, keine Regression).
+
+
 - 2026-06 (25th): **Mehrsprachige dynamische Texte + Quoten-Plausibilität**.
   • **Dynamic i18n (lazy LLM translation cache)**: frei generierte Prosa (KI-Analysen `ai_analysis`,
     Smart-Berichte report=True, Master-Texte, Qualifier-Briefing `narrative`) wird jetzt in ALLE 8
