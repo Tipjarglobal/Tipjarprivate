@@ -9,6 +9,7 @@ const SRC = {
   coin: "/coin.wav",
   explosion: "/coin_explosion.wav",
   fire: "/coin_fire.wav",
+  expert: "/coin_expert.wav",
 };
 
 const _cache = {};

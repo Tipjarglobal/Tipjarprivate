@@ -3,7 +3,7 @@ import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2 } from 
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
-import { isMobileDevice } from "../coinSound";
+import { isMobileDevice, playCoin } from "../coinSound";
 import { useI18n, toLatin } from "../i18n";
 
 function anonId() {
@@ -245,6 +245,7 @@ export default function NotificationBell() {
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
     const vibrate = area === "live_banger" ? [200, 80, 200, 80, 300] : undefined;
     const icon = area === "experts" ? "/push-expert.png" : undefined;
+    if (area === "experts") { try { playCoin("expert"); } catch { /* ignore */ } }
     pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate, icon);
     pushHistory({
       key: `${tp.id || area}-${Date.now()}`, title, body, area, navArea,

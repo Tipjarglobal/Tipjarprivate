@@ -164,6 +164,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
     cat = (tip.get("category") or "").lower()
     if tip.get("is_expert"):
         title = f"🔮 Experten-Tipp · {uname}" if uname else "🔮 Neuer Experten-Tipp"
+        sound = "expert"
     elif src == "hq-auto":
         if cat == "banker" and stars >= 10:
             title = "💥 10-Sterne-Banker!"
@@ -203,7 +204,7 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
     title = (f"🔮 {n} neue Experten-Tipps" if is_expert
              else f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else ""))
     return {"title": title, "body": body, "url": f"/?area={area}" if area else "/",
-            "kind": "digest", "sound": "coin", "area": area,
+            "kind": "digest", "sound": "expert" if is_expert else "coin", "area": area,
             "actions": [{"action": "open", "title": "Ansehen →"}],
             "icon": "/push-expert.png" if is_expert else "/icon-192.png",
             "badge": "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}
