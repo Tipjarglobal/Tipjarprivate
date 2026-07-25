@@ -925,7 +925,7 @@ async def expire_stale_pending() -> dict:
     # Auto-generated AI noise (hq-auto/hq-live/hq-system) is DELETED when stale. SMART picks
     # are curated community-insider picks the owner tracks — they are VOIDed (kept, shown in
     # 'Abgerechnet' → Annulliert), never silently deleted (owner 2026-07-26, option A).
-    ai_src = ("hq-auto", "hq-live", "hq-system")
+    ai_src = ("hq-auto", "hq-live", "hq-system", "hq-master")
     for d in docs:
         legs = d.get("legs") or []
         kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]

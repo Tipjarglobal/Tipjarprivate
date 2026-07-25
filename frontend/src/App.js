@@ -288,7 +288,7 @@ function Home() {
       </section>
 
       {/* EXPERTS — prominently at the top of the home page */}
-      <ExpertsShowcase onExpertClick={openProfile} />
+      <ExpertsShowcase onExpertClick={openProfile} onMasterClick={() => openTipsView("master")} />
 
       {/* INTRO VIDEO — right under the logo / Tipjarglobal.com */}
       <section className="relative max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-10" data-testid="intro-video-section">

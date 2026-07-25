@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Star, Flame, TrendingUp } from "lucide-react";
+import { Star, Flame, TrendingUp, Crown } from "lucide-react";
 import api from "../api";
 import { useI18n, toLatin, flamesActive } from "../i18n";
 
-export default function ExpertsShowcase({ onExpertClick }) {
+export default function ExpertsShowcase({ onExpertClick, onMasterClick }) {
   const { t } = useI18n();
   const [experts, setExperts] = useState([]);
 
@@ -14,7 +14,7 @@ export default function ExpertsShowcase({ onExpertClick }) {
     return () => { alive = false; };
   }, []);
 
-  if (experts.length === 0) return null;
+  if (experts.length === 0 && !onMasterClick) return null;
 
   return (
     <section
@@ -30,6 +30,32 @@ export default function ExpertsShowcase({ onExpertClick }) {
         <p className="text-sm text-zinc-400 mb-5 max-w-2xl">{t("experts.showcase.sub")}</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {onMasterClick && (
+            <motion.button
+              type="button"
+              data-testid="showcase-master"
+              onClick={onMasterClick}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -3 }}
+              className="group text-left rounded-2xl bg-gradient-to-br from-[#E11D2A]/25 to-void/50 border border-[#E11D2A]/50 hover:border-[#E11D2A] p-4 transition-colors col-span-2 sm:col-span-3 lg:col-span-4 shadow-[0_0_28px_rgba(225,29,42,0.12)]"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-11 h-11 rounded-full bg-gradient-to-br from-[#E11D2A] to-[#8f0f18] text-white flex items-center justify-center shrink-0 shadow-[0_0_14px_rgba(225,29,42,0.5)]">
+                  <Crown size={20} />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-heading font-black text-white text-lg sm:text-2xl leading-tight break-words group-hover:text-red-300 transition-colors">
+                    TipJarMaster
+                  </div>
+                  <div className="text-xs sm:text-sm text-red-200/90 leading-snug">{t("master.showcase.sub")}</div>
+                </div>
+                <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] sm:text-xs font-black uppercase tracking-widest text-white bg-[#E11D2A] rounded-full px-3 py-1">
+                  <Crown size={12} /> Master
+                </span>
+              </div>
+            </motion.button>
+          )}
           {experts.map((e, i) => (
             <motion.button
               key={e.username}

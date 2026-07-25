@@ -886,20 +886,20 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           : "bg-surface border-elevated hover:border-volt/50"
       }`}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <button
           type="button"
           onClick={() => onUserClick?.(tip.username)}
           data-testid={`gift-user-btn-${tip.id}`}
           title={t("wall.giftUser")}
-          className="flex items-center gap-2 min-w-0 group"
+          className="flex items-center gap-2 group"
         >
           <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0 group-hover:bg-volt group-hover:text-void transition-colors">
             {tip.username?.[0]?.toUpperCase() || "?"}
           </div>
-          <span className="text-sm text-zinc-400 truncate">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors">{toLatin(tip.username)}</span></span>
+          <span className="text-sm text-zinc-400">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors break-words">{toLatin(tip.username)}</span></span>
         </button>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {isMaster && (
             <span data-testid="master-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[#E11D2A]/20 text-[#E11D2A] border border-[#E11D2A]/45">
               <Crown size={10} /> Master

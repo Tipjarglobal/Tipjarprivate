@@ -6764,7 +6764,7 @@ MEMBER_LIVE_POLL_SECONDS = 90
 
 def _is_member_tip(t: dict) -> bool:
     """A pick posted by a real human member (not KI/HQ)."""
-    return (t.get("source") not in ("hq-auto", "hq-live", "hq-system", "smart")
+    return (t.get("source") not in ("hq-auto", "hq-live", "hq-system", "smart", "hq-master")
             and t.get("username") not in ("TipJarHQ", "TipJarHQ System"))
 
 
@@ -7210,7 +7210,7 @@ async def enrich_member_picks() -> dict:
         return {"enriched": 0}
     picks = await db.tips.find(
         {"status": {"$in": ["pending", "live"]},
-         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart"]},
+         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"]},
          "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
          "$or": [{"home_team_latin": {"$in": [None, ""]}},
                  {"league": {"$in": [None, ""]}},
@@ -7326,7 +7326,7 @@ async def _purge_unclarified_slips() -> int:
     'teams' is still unresolved — enrichment clears the flag once teams are known."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
     q = {"needs_clarification": True, "clarification_fields": "teams",
-         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart"]}}
+         "source": {"$nin": ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"]}}
     stale = []
     for t in await db.tips.find(q, {"id": 1, "created_at": 1}).to_list(500):
         try:
