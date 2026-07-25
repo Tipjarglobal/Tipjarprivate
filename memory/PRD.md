@@ -318,6 +318,17 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (f) — Master Doppelpack, notifications & manual
+- NEW `master_doublepack()` (server.py): Master actively backs 2 favourites to WIN (real 1X2 odds),
+  1 slip, product closest to ~6.0 (band 4–9, per-leg 1.5–3.6). `master_doublepack:True`, no
+  master_category → shows in the (renamed) Doppelpack tab. Added to `master_loop`. One open at a time.
+- Renamed "slips" tab → Doppelpack per language (en Doppelpack, es Doblete, el Ντιπλό, fr Le Doublé,
+  it La Doppietta, ar الثنائية, tr Çifte). Fixed master.showcase.sub "father"→"Master"; master-explain
+  now uses translated key (was hardcoded Greek).
+- Notifications: added dedicated "master" push area (`_tip_push_area`) + a 👑 Master checkbox at top of
+  the bell settings (bell.area.master). Verified in UI.
+- Manual banner above AI Single-Game Picks (master.manual.title/body) in all 8 languages — verified.
+
 ## Changelog 2026-07-25 (e) — Realistic SGM odds + $ everywhere
 - Fixed wildly inflated single-match builder odds. `_correlated_combo_odds(legs)` shrinks ONLY the
   correlated GOAL cluster: shrink 2→0.55, 3→0.40, 4→0.30. Handicap, 1X2/Sieg, Doppelte Chance, Ecken

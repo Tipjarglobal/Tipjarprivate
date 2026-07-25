@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2, X } from "lucide-react";
+import { Bell, BellRing, Star, Volume2, VolumeX, Inbox, Settings, Trash2, X, Crown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import api from "../api";
@@ -569,10 +569,11 @@ export default function NotificationBell() {
 
             <div className="mt-3 pt-3 border-t border-elevated">
               <p className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("bell.areas")}</p>
-              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["experts", "bell.area.experts"], ["members", "bell.area.members"]].map(([k, lbl]) => (
+              {[["master", "bell.area.master"], ["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["experts", "bell.area.experts"], ["members", "bell.area.members"]].map(([k, lbl]) => (
                 <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1.5 cursor-pointer">
-                  <span className="text-sm text-zinc-300 flex items-center gap-2">
+                  <span className={`text-sm flex items-center gap-2 ${k === "master" ? "text-[#E11D2A] font-black" : "text-zinc-300"}`}>
                     {k === "experts" && <span className="w-2 h-2 rounded-full bg-orange-500" />}
+                    {k === "master" && <Crown size={13} className="text-[#E11D2A]" />}
                     {t(lbl)}
                   </span>
                   <input

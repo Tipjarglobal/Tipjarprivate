@@ -7736,6 +7736,99 @@ def _pack_legs(chosen):
              "sel_odds": [f"{c['odds']:.2f}"]} for c in chosen]
 
 
+_WIN_MKT_RE = re.compile(
+    r'(heimsieg|heim\s*sieg|auswärtssieg|auswarts\s*sieg|gastsieg|\bsieg\b|gewinnt|'
+    r'to win|match winner|\bwin\b|home win|away win|\b1x2\b)', re.I)
+
+
+def _win_team_name(market: str, home: str, away: str) -> str:
+    m = (market or "").lower()
+    if "heim" in m or "home" in m:
+        return home
+    if "gast" in m or "auswärts" in m or "auswarts" in m or "away" in m:
+        return away
+    for team in (home, away):
+        if team and team.lower() in m:
+            return team
+    return home
+
+
+async def master_doublepack() -> dict:
+    """Owner headline slip: the Master actively backs 2 teams to SIMPLY WIN, one ticket,
+    landing ~6.0. Lives in the (renamed) 'Doppelpack' tab. Only one open at a time.
+    Uses REAL 1X2 odds from the feed — picks the pair whose product sits closest to 6."""
+    now = datetime.now(timezone.utc)
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_doublepack": True,
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    cands = await _master_leg_candidates(now, 1.01, 999)
+    seen_fx, fixtures = set(), []
+    for c in cands:
+        if c["fixkey"] in seen_fx:
+            continue
+        seen_fx.add(c["fixkey"])
+        fixtures.append(c)
+        if len(fixtures) >= 14:
+            break
+    win_legs = []
+    for c in fixtures:
+        try:
+            odds = await ensure_match_odds(c.get("home", ""), c.get("away", ""), c.get("match_time", ""))
+        except Exception:
+            odds = {}
+        opts = []
+        for od, team in ((odds.get("win_home"), c["home"]), (odds.get("win_away"), c["away"])):
+            try:
+                v = float(od)
+            except (TypeError, ValueError):
+                continue
+            if 1.5 <= v <= 3.6:
+                opts.append((v, team))
+        if not opts:
+            continue
+        v, team = min(opts)  # the favourite side within the band
+        win_legs.append({"match": c["match"], "home": c["home"], "away": c["away"],
+                         "market": f"{team} Sieg", "odds": round(v, 2), "team": team,
+                         "kickoff": c["kickoff"], "match_time": c["match_time"],
+                         "league": c["league"], "fixkey": c["fixkey"], "real": True})
+    if len(win_legs) < 2:
+        return {"skipped": "no-wins"}
+    # pick the pair whose product lands closest to ~6.0 (band 4.0–9.0)
+    best = None
+    for i in range(len(win_legs)):
+        for j in range(i + 1, len(win_legs)):
+            a, b = win_legs[i], win_legs[j]
+            if a["fixkey"] == b["fixkey"]:
+                continue
+            p = a["odds"] * b["odds"]
+            if 4.0 <= p <= 9.0:
+                score = abs(p - 6.0)
+                if best is None or score < best[0]:
+                    best = (score, [a, b], round(p, 2))
+    if not best:
+        return {"skipped": "no-pair"}
+    chosen, prod = best[1], best[2]
+    names = [c["team"] for c in chosen]
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min(c["kickoff"] for c in chosen)
+    tip = {
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False, "master_doublepack": True,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": "Doppelpack", "odds": f"{prod:.2f}", "category": "value",
+        "ai_rating": 9.0,
+        "ai_analysis": (f"👑 TipJarMaster Doppelpack: {names[0]} & {names[1]} gewinnen — "
+                        f"1 Schein, Gesamtquote {prod:.2f}. Immer mit kontrolliertem Einsatz."),
+        "legs": _pack_legs(chosen), "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    return {"posted": 1, "odds": prod, "teams": names}
+
+
 async def master_build_packs() -> dict:
     """Einfach (2–4 Spiele ~3.0) & Mittel (3–5 Spiele ~6–8): the Master publishes up to
     2 of each per day, only when a solid combination can be assembled from the pool."""
@@ -7885,11 +7978,12 @@ async def master_loop():
             if API_FOOTBALL_KEY:
                 alt = await master_live_alternatives()
                 con = await master_consensus()
+                dp = await master_doublepack()
                 packs = await master_build_packs()
                 chal = await master_challenge()
-                if alt.get("posted") or con.get("posted") or packs.get("posted") \
+                if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; packs {packs}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)

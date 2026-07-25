@@ -77,6 +77,9 @@ async def notify_all_push(payload: dict):
 
 
 def _tip_push_area(tip: dict) -> str:
+    # The Master gets his OWN dedicated alert area so users can subscribe to him alone.
+    if tip.get("is_master") or tip.get("source") == "hq-master":
+        return "master"
     # Cloned tipster bots (Orion / Vega / …) get their OWN generic "experts" alert area
     # so users can toggle expert picks independently — no per-bot boxes.
     if tip.get("is_expert"):
