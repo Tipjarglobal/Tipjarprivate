@@ -15,17 +15,18 @@ function anonId() {
   return id;
 }
 
-async function pushNotify(title, body, url, vibrate) {
+async function pushNotify(title, body, url, vibrate, icon) {
   try {
     // Foreground buzz: showNotification's vibrate is often ignored while the tab is
     // focused, so trigger the device vibration directly too (mobile only).
     if (vibrate && navigator.vibrate) { try { navigator.vibrate(vibrate); } catch { /* ignore */ } }
     if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const ic = icon || "/tipjar-crest.png";
     if (navigator.serviceWorker) {
       const reg = await navigator.serviceWorker.ready;
       reg.showNotification(title, {
         body,
-        icon: "/tipjar-crest.png",
+        icon: ic,
         badge: "/tipjar-crest.png",
         tag: "tipjar-tip",
         renotify: true,
@@ -243,7 +244,8 @@ export default function NotificationBell() {
       : `${t(`bell.new.${area}`)}`;
     const body = `${areaLabel}: ${name}${rating ? ` — ${rating}/10 \u2b50` : ""}`;
     const vibrate = area === "live_banger" ? [200, 80, 200, 80, 300] : undefined;
-    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate);
+    const icon = area === "experts" ? "/push-expert.png" : undefined;
+    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate, icon);
     pushHistory({
       key: `${tp.id || area}-${Date.now()}`, title, body, area, navArea,
       pickId: tp.id || null, ts: Date.now(),

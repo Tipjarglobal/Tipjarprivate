@@ -182,10 +182,11 @@ def _push_payload_for_tip(tip: dict) -> dict:
     # (newest wins) instead of stacking → no endless-swipe. Community picks use their OWN
     # tag so a member post never overwrites/merges with a KI pick (owner: distinct alert).
     tag = "tipjar-expert" if tip.get("is_expert") else ("tipjar-community" if community else "tipjar-pick")
+    icon = "/push-expert.png" if tip.get("is_expert") else "/icon-192.png"
     return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}", "kind": "tip",
             "sound": sound, "pick_id": pid, "area": area,
             "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
-            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": tag}
+            "icon": icon, "badge": "/icon-192.png", "tag": tag}
 
 
 def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
@@ -198,11 +199,14 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
         return f"{h} vs {a}" if a else (t.get("market") or h or "Pick")
     names = [_short(t) for t in tips[:3]]
     body = " · ".join(names) + (f" +{n - 3} mehr" if n > 3 else "")
-    title = f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else "")
+    is_expert = area == "experts"
+    title = (f"🔮 {n} neue Experten-Tipps" if is_expert
+             else f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else ""))
     return {"title": title, "body": body, "url": f"/?area={area}" if area else "/",
             "kind": "digest", "sound": "coin", "area": area,
             "actions": [{"action": "open", "title": "Ansehen →"}],
-            "icon": "/icon-192.png", "badge": "/icon-192.png", "tag": "tipjar-pick"}
+            "icon": "/push-expert.png" if is_expert else "/icon-192.png",
+            "badge": "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}
 
 
 async def push_watch_loop():
