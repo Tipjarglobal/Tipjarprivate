@@ -383,44 +383,53 @@ async def member_live_loop():
 
 
 
-def _earliest_kickoff(tip: dict):
-    """Earliest clock-timed kickoff across a tip's match_time + all its legs (date-only
-    slips are ignored — we can't prove those have started)."""
+def _is_unplayable(tip: dict, now) -> bool:
+    """True when a pick can no longer be played as a pre-match bet:
+    - a clock-timed kickoff has passed (15 min grace), OR
+    - a date-only slip whose day is already over (yesterday's games), OR
+    - no usable time at all AND it was posted > 24h ago (stale).
+    Parlays use the EARLIEST leg (once any leg starts the slip isn't placeable)."""
     times = [tip.get("match_time")]
     for lg in (tip.get("legs") or []):
         times.append(lg.get("kickoff"))
     for lg in (tip.get("combo_legs") or []):
         times.append(lg.get("kickoff") or lg.get("match_time"))
-    kos = []
+    deadlines = []
     for tt in times:
-        if not (tt or "").strip() or _kickoff_is_date_only(tt):
+        if not (tt or "").strip():
             continue
         ko = _parse_kickoff(tt)
-        if ko:
-            kos.append(ko)
-    return min(kos) if kos else None
+        if not ko:
+            continue
+        if _kickoff_is_date_only(tt):
+            deadlines.append(ko.replace(hour=23, minute=59, second=59))  # playable until end of that day
+        else:
+            deadlines.append(ko + timedelta(minutes=15))  # small grace past kickoff
+    if deadlines:
+        return min(deadlines) < now
+    ca = _parse_kickoff(tip.get("created_at") or "")
+    return bool(ca and ca < now - timedelta(hours=24))
 
 
 async def hide_unplayable_loop():
-    """Keep the OPEN feed clean automatically: hide any PENDING pick the moment its kickoff
-    has passed (no longer placeable pre-match). Settlement still processes it in the
-    background by id (it never filters on `hidden`), so win/loss results are unaffected —
+    """Keep the OPEN feed clean automatically: hide any PENDING pick once it's no longer
+    playable (kickoff passed, or a date-only day that's over, or a stale timeless slip).
+    Settlement still processes it by id (never filters `hidden`), so win/loss is unaffected —
     this only removes dead slips from the live feed even when the API quota delays grading."""
     await asyncio.sleep(90)
     while True:
         try:
             if _is_leader():
-                grace = datetime.now(timezone.utc) - timedelta(minutes=15)
+                now = datetime.now(timezone.utc)
                 docs = await db.tips.find(
                     {"status": "pending", "hidden": {"$ne": True}},
-                    {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "combo_legs": 1}).to_list(4000)
-                stale = [t["id"] for t in docs
-                         if (ko := _earliest_kickoff(t)) is not None and ko < grace]
+                    {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "combo_legs": 1, "created_at": 1}).to_list(6000)
+                stale = [t["id"] for t in docs if _is_unplayable(t, now)]
                 if stale:
                     r = await db.tips.update_many(
                         {"id": {"$in": stale}},
-                        {"$set": {"hidden": True, "hidden_reason": "kickoff_passed"}})
-                    logger.info(f"hide_unplayable: hid {r.modified_count} pending picks past kickoff")
+                        {"$set": {"hidden": True, "hidden_reason": "not_playable"}})
+                    logger.info(f"hide_unplayable: hid {r.modified_count} non-playable pending picks")
         except Exception as e:
             logger.error(f"hide_unplayable_loop error: {e}")
         await asyncio.sleep(10 * 60)
