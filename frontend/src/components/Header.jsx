@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import Mailbox from "./Mailbox";
 import api from "../api";
-import { useI18n, LANGUAGES, toLatin } from "../i18n";
+import { useI18n, LANGUAGES, toLatin, flamesActive } from "../i18n";
 import { useAuth } from "../auth";
 
 function InstallAppButton() {
@@ -246,7 +246,7 @@ function ExpertBanner({ onExpertClick }) {
               <span className="w-4 h-4 rounded-full bg-orange-500 text-void flex items-center justify-center text-[9px] font-black">
                 {e.username?.[0]?.toUpperCase() || "?"}
               </span>
-              {toLatin(e.username)}{e.apex_flame ? " 🔥" : ""}
+              {toLatin(e.username)}{flamesActive() && e.apex_flame ? " 🔥" : ""}
             </button>
           ))}
         </div>

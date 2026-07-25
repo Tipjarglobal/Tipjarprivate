@@ -98,6 +98,14 @@ export function isKickoffLive(mt) {
   return elapsedH >= 0 && elapsedH <= 3;
 }
 
+// Apex-Flame season gate (owner): flames are OFF during the summer break and come
+// back automatically when the new season starts on 1 September 2026.
+export const FLAMES_START = new Date("2026-09-01T00:00:00Z");
+export function flamesActive() {
+  return Date.now() >= FLAMES_START.getTime();
+}
+
+
 // Earliest kickoff (ms) across a tip's match_time + legs — for ascending sort.
 // Tips without a resolvable kickoff sort last.
 export function kickoffTs(tip) {

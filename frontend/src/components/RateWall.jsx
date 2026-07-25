@@ -10,7 +10,7 @@ import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { shareSlip } from "../shareSlip";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
-import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive, flamesActive } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -791,7 +791,7 @@ function MemberSearch({ onUserClick, t }) {
                     {toLatin(m.username)?.[0]?.toUpperCase() || "?"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white font-semibold truncate">{toLatin(m.username)}{m.apex_flame ? " 🔥" : ""}</p>
+                    <p className="text-sm text-white font-semibold truncate">{toLatin(m.username)}{flamesActive() && m.apex_flame ? " 🔥" : ""}</p>
                     <p className="text-[11px] text-zinc-500">{m.tips_count} {t("wall.tipsLabel")} · {m.received_credits} Credits</p>
                   </div>
                 </button>

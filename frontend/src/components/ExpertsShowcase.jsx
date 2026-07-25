@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Star, Flame, TrendingUp } from "lucide-react";
 import api from "../api";
-import { useI18n, toLatin } from "../i18n";
+import { useI18n, toLatin, flamesActive } from "../i18n";
 
 export default function ExpertsShowcase({ onExpertClick }) {
   const { t } = useI18n();
@@ -45,14 +45,14 @@ export default function ExpertsShowcase({ onExpertClick }) {
               <div className="flex items-center gap-3">
                 <span className="relative w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-void flex items-center justify-center text-lg font-black shrink-0">
                   {e.username?.[0]?.toUpperCase() || "?"}
-                  {e.apex_flame && (
+                  {flamesActive() && e.apex_flame && (
                     <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-void flex items-center justify-center">
                       <Flame size={12} className="text-orange-400 fill-orange-500" />
                     </span>
                   )}
                 </span>
                 <div className="min-w-0">
-                  <div className="font-heading font-black text-white text-base truncate group-hover:text-orange-300 transition-colors">
+                  <div className="font-heading font-black text-white text-lg sm:text-xl leading-tight break-words group-hover:text-orange-300 transition-colors">
                     {toLatin(e.username)}
                   </div>
                   <div className="flex items-center gap-1 text-[11px] text-zinc-400">
