@@ -1433,36 +1433,20 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     return tip
 
 
-@api_router.post("/admin/emptips/ingest")
-async def admin_emptips_ingest(
-    file: Optional[UploadFile] = File(default=None),
-    files: List[UploadFile] = File(default=[]),
-    text: str = Form(default=""),
-    admin: dict = Depends(require_admin),
-):
-    """Ingest an EMP Tips betslip (screenshot(s) and/or text) → vision-AI extracts the
-    selections → post it as a public 'EMP Tips' pick (source=emptips) enriched with our
-    real hit-rate stats. Free path: forward/paste the tweet's slip — no X API needed."""
+async def _ingest_emptips(images_b64, image_blobs, text, source_url=""):
+    """Shared core: vision-AI a betslip (image/text) → post it as a public 'EMP Tips'
+    pick enriched with real hit-rate stats. image_blobs = list of (bytes, ext, content_type)."""
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         raise HTTPException(status_code=400, detail="HQ account missing")
-    uploads = [f for f in ([file] + list(files)) if f is not None and getattr(f, "filename", None)][:4]
-    images_b64, raw_list = [], []
-    for f in uploads:
-        rb = await f.read()
-        images_b64.append(base64.b64encode(rb).decode("utf-8"))
-        raw_list.append((rb, f))
-    if not images_b64 and not text.strip():
-        raise HTTPException(status_code=400, detail="Bitte ein Wettschein-Bild oder Text angeben.")
     detected = await analyze_tip(images_b64 or None, text)
     if not detected.get("safe", True):
         raise HTTPException(status_code=422, detail=detected.get("flag_reason") or "Inhalt nicht erlaubt.")
     image_paths = []
-    for rb, fm in raw_list:
-        ext = (fm.filename.rsplit(".", 1)[-1] if fm.filename and "." in fm.filename else "png").lower()
+    for rb, ext, ct in image_blobs:
         path = f"{APP_NAME}/emptips/{uuid.uuid4()}.{ext}"
         try:
-            res = put_object(path, rb, fm.content_type or "image/png")
+            res = put_object(path, rb, ct or "image/png")
             image_paths.append(res["path"])
         except Exception as e:
             logger.warning(f"emptips image store failed: {e}")
@@ -1479,7 +1463,8 @@ async def admin_emptips_ingest(
     tip = {
         "id": f"emptips-{uuid.uuid4().hex[:10]}",
         "user_id": hq["id"], "username": "EMP Tips",
-        "raw_text": text, "image_path": image_paths[0] if image_paths else None,
+        "raw_text": (text or "").strip(), "source_url": source_url,
+        "image_path": image_paths[0] if image_paths else None,
         "image_paths": image_paths,
         "home_team": detected.get("home_team", ""), "away_team": detected.get("away_team", ""),
         "match_time": detected.get("match_time", ""),
@@ -1496,7 +1481,89 @@ async def admin_emptips_ingest(
     }
     await db.tips.insert_one(tip)
     tip.pop("_id", None)
+    return tip
+
+
+@api_router.post("/admin/emptips/ingest")
+async def admin_emptips_ingest(
+    file: Optional[UploadFile] = File(default=None),
+    files: List[UploadFile] = File(default=[]),
+    text: str = Form(default=""),
+    admin: dict = Depends(require_admin),
+):
+    """Manually ingest an EMP Tips betslip (screenshot(s) and/or text)."""
+    uploads = [f for f in ([file] + list(files)) if f is not None and getattr(f, "filename", None)][:4]
+    images_b64, image_blobs = [], []
+    for f in uploads:
+        rb = await f.read()
+        images_b64.append(base64.b64encode(rb).decode("utf-8"))
+        ext = (f.filename.rsplit(".", 1)[-1] if f.filename and "." in f.filename else "png").lower()
+        image_blobs.append((rb, ext, f.content_type or "image/png"))
+    if not images_b64 and not text.strip():
+        raise HTTPException(status_code=400, detail="Bitte ein Wettschein-Bild oder Text angeben.")
+    tip = await _ingest_emptips(images_b64, image_blobs, text)
     return {"ok": True, "tip": tip}
+
+
+@api_router.post("/admin/emptips/run")
+async def admin_emptips_run(admin: dict = Depends(require_admin)):
+    """Manually trigger the auto @EMPTIPS_HANDLE reader (free Nitter mirrors)."""
+    return await emptips_autopost()
+
+
+EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
+
+
+async def emptips_autopost() -> dict:
+    """Auto-read @EMPTIPS_HANDLE's latest tweets via free Nitter mirrors, turn each NEW
+    betslip tweet into a public 'EMP Tips' pick. No X API / no cost. Tracked in db.emptips_seen."""
+    if not EMPTIPS_HANDLE:
+        return {"posted": 0, "reason": "EMPTIPS_HANDLE not configured"}
+    import emptips_watch
+    tweets = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
+    if not tweets:
+        return {"posted": 0, "reason": "no tweets (mirrors down)"}
+    tip_kw = re.compile(r'(acca|odds|btts|over|under|handicap|\bwin\b|\+?\d\.\d\d|@\s?\d|\bftts\b|goals?)', re.I)
+    posted, scanned = 0, 0
+    for tw in tweets[:25]:
+        if await db.emptips_seen.find_one({"id": tw["id"]}, {"_id": 1}):
+            continue
+        scanned += 1
+        is_tip = bool(tw["images"]) or bool(tip_kw.search(tw["text"] or ""))
+        seen_doc = {"id": tw["id"], "at": datetime.now(timezone.utc).isoformat(), "posted": False}
+        if not is_tip:
+            await db.emptips_seen.insert_one(seen_doc)
+            continue
+        images_b64, image_blobs = [], []
+        for iu in tw["images"][:4]:
+            raw = await asyncio.to_thread(emptips_watch.fetch_image, iu)
+            if raw:
+                images_b64.append(base64.b64encode(raw).decode("utf-8"))
+                image_blobs.append((raw, "jpg", "image/jpeg"))
+        try:
+            tip = await _ingest_emptips(images_b64, image_blobs, tw["text"], source_url=tw["url"])
+            seen_doc.update({"posted": True, "tip_id": tip["id"]})
+            posted += 1
+        except Exception as e:
+            logger.warning(f"emptips auto-ingest failed for {tw['id']}: {e}")
+        await db.emptips_seen.insert_one(seen_doc)
+    return {"posted": posted, "scanned": scanned, "fetched": len(tweets)}
+
+
+async def emptips_loop():
+    await asyncio.sleep(120)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await emptips_autopost()
+            logger.info(f"EMP Tips watch loop: {res}")
+        except Exception as e:
+            logger.error(f"EMP Tips watch loop error: {e}")
+        await asyncio.sleep(20 * 60)  # every 20 minutes
+
+
 
 
 
@@ -6804,6 +6871,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
     _BG_TASKS.append(asyncio.create_task(statarea_loop()))
     _BG_TASKS.append(asyncio.create_task(footballpredictions_loop()))
+    _BG_TASKS.append(asyncio.create_task(emptips_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
