@@ -1,0 +1,30 @@
+{
+  "summary": "Tested the 3 owner-requested changes (Gifts tab, VOID settle button, removed big LIVE top bar) end-to-end via backend curl + Playwright UI as admin. All three features work. Regression on Banker/Value/Risk/Mental tabs OK.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TipCard (parlay branch)", "issue": "gift-badge chip (data-testid=gift-badge) and the gold 'ΔΩΡΟ' category chip only render inside the single-game (non-parlay) branch (lines 1026-1036). The current pending gift pick (hqtip-a-2468074-favsafe) is a parlay (is_parlay=true), so NO visible 'Δώρο'/'ΔΩΡΟ' chip is shown on its card — even though it's a gift. The gold '🎁 ΔΩΡΑ' tab correctly shows a count=1 badge, and the card DOES appear in the filtered list, but a user browsing Banker/Value tabs would not see a gift indicator on parlay gift cards.", "selector": "[data-testid=gift-badge]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "In RateWall.jsx, also render the '🎁 Δώρο' gift chip (data-testid=gift-badge) inside the parlay branch (near the PARLAY · N GAMES pill around line 941-945), so parlay gift picks visually show they are gifts when viewed in other category tabs."
+  ],
+  "critical_code_review_comments": [
+    "RateWall.jsx is 1122 lines — consider splitting TipCard, category tabs and settle logic into separate modules for maintainability.",
+    "gift-badge conditional is duplicated logic tightly coupled to pick_type meta lookup; extracting a small <CategoryChips tip={tip} /> component would DRY up single vs parlay branches and prevent this class of miss."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026!",
+  "seed_data_creation": "None. Used existing pending gift pick hqtip-a-2468074-favsafe. Voided via UI + reverted to pending via API after test to leave data clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature verification results:\n1) GIFTS TAB: '[data-testid=cat-gifts]' present with text '🎁 Δώρα1' (badge=1). Clicking filters to exactly the 1 gift pick (Club Tijuana parlay @2.05). Backend GET /api/tips?source=ai&category=gifts&status=pending returns only picks with is_gift=true. Other cat tabs (banker=3, value=2, risk=3, mental=0) unaffected. ✓\n2) VOID BUTTON: '[data-testid=settle-void-<id>]' rendered on every tip card as admin, text 'Annulliert · Push (Einsatz zurück)'. Clicked → PUT /api/tips/{id}/status {status:'void'} returned 200, card status changed to VOIDED, success toast 'Annulliert ✓ — Einsatz zurück' appeared. ✓\n3) BIG LIVE BAR REMOVED: DOM scan for any data-testid starting with 'live-state-' returned []. Discreet per-leg live badge '[data-testid=leg-live-score-0]' renders on the RIGHT inside the leg row. Single-game live badge selector '[data-testid=single-live-<id>]' has 0 instances currently because there are no live single-game (non-parlay) tips; code review of RateWall.jsx lines 1003-1016 confirms the discreet single-live badge is implemented correctly. ✓\n\nOnly minor gap: parlay tip cards viewed OUTSIDE the gifts tab do not render a visible '🎁 Δώρο' gift-badge because the render block sits in the single-game branch (line 1031). See action_items.",
+  "rca of the issue": "gift-badge visibility gap RCA: The conditional {tip.is_gift && cat !== 'gift' && <span data-testid='gift-badge'>...</span>} lives inside the non-parlay JSX branch of TipCard (RateWall.jsx ~line 1026-1036 inside the `) : (<>` after `tip.legs && tip.legs.length`). The parlay branch (lines 939-995) has no equivalent chip. Since the seeded gift pick is a parlay, no chip renders. Fix: add the same gift-badge span next to the PARLAY pill at line 942-944."
+}

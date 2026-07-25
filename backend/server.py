@@ -1789,10 +1789,14 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     elif category == "mental":
         q["category"] = "mental"
     elif category == "value":
-        q["category"] = {"$nin": ["banker", "risk", "banger", "mental"]}
+        q["category"] = {"$nin": ["banker", "risk", "banger", "mental", "gift"]}
+    elif category == "gifts":
+        # "Δώρα" (Gifts): cross-cutting — generous odds for a likely-ish outcome.
+        # Flagged on the pick itself (singles & bet-builder combos), any base category.
+        q["is_gift"] = True
     if source == "ai":
         q["source"] = "hq-auto"
-        if category not in ("mental", "banker", "risk", "banger", "value"):
+        if category not in ("mental", "banker", "risk", "banger", "value", "gifts"):
             q["category"] = {"$ne": "mental"}   # mental only in its own tab
     elif source == "smart":
         q["source"] = "smart"

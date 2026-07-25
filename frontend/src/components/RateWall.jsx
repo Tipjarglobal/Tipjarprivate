@@ -106,21 +106,26 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   // Every AI single lands in exactly one bucket (risk = -1.5 handicaps, banker,
   // else value). A red count sits on a tab until the user opens that category.
   const CAT_SEEN_KEY = "tj_cat_seen_ids";
-  const catIdsRef = useRef({ banker: [], value: [], risk: [] });
-  const [catUnread, setCatUnread] = useState({ banker: 0, value: 0, risk: 0 });
+  const catIdsRef = useRef({ banker: [], value: [], risk: [], gifts: [] });
+  const [catUnread, setCatUnread] = useState({ banker: 0, value: 0, risk: 0, gifts: 0 });
   const getCatSeen = () => {
     try { return JSON.parse(localStorage.getItem(CAT_SEEN_KEY) || "{}"); } catch { return {}; }
   };
-  const bucketOf = (tp) => (tp.category === "risk" ? "risk" : tp.category === "banker" ? "banker" : "value");
+  const bucketOf = (tp) => (tp.category === "risk" ? "risk" : tp.category === "banker" ? "banker" : tp.category === "gift" ? null : "value");
   const loadCatBadges = useCallback(async () => {
     if (view !== "ai") return;
     try {
       const { data } = await api.get("/tips", { params: { source: "ai", status: "pending", limit: 300 } });
       const seen = getCatSeen();
-      const counts = { banker: 0, value: 0, risk: 0 };
-      const byCat = { banker: [], value: [], risk: [] };
+      const counts = { banker: 0, value: 0, risk: 0, gifts: 0 };
+      const byCat = { banker: [], value: [], risk: [], gifts: [] };
       data.forEach((tp) => {
+        if (tp.is_gift) {
+          byCat.gifts.push(tp.id);
+          if (!(seen.gifts || []).includes(tp.id)) counts.gifts += 1;
+        }
         const c = bucketOf(tp);
+        if (!c) return;
         byCat[c].push(tp.id);
         if (!(seen[c] || []).includes(tp.id)) counts[c] += 1;
       });
@@ -224,7 +229,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
       const { data } = await api.put(`/tips/${tip.id}/status`, { status: s });
       setTips((ts) => ts.map((x) => (x.id === tip.id ? data : x)));
       if (view === "settled") loadSettled();
-      toast.success(t(`wall.${s === "cashed_out" ? "cashed" : s}`) || "OK");
+      toast.success(s === "void" ? "Annulliert ✓ — Einsatz zurück" : (t(`wall.${s === "cashed_out" ? "cashed" : s}`) || "OK"));
     } catch (err) { toast.error(apiErr(err)); }
   };
 
@@ -466,6 +471,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
            ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
            ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
+           ["gifts", "🎁 Δώρα", "bg-amber-400 text-void border-amber-400", "text-amber-300 border-amber-400/40"],
            ["mental", "🤯 Mental", "bg-fuchsia-600 text-white border-fuchsia-600", "text-fuchsia-400 border-fuchsia-500/40"]].map(([v, lbl, on, off]) => (
             <button key={v} data-testid={`cat-${v}`}
               onClick={() => { markCatSeen(v); setCat((c) => (c === v ? null : v)); }}
@@ -904,26 +910,6 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
       </div>
 
       {(() => {
-        const liveState = tip.live_state
-          || ((tip.live_minute != null || tip.live_score)
-            ? { minute: tip.live_minute, score: tip.live_score }
-            : null);
-        if (!liveState) return null;
-        // Guard a STUCK live badge: if kickoff was clearly long ago (>2.5h) the match is over,
-        // so never show LIVE even if the backend live loop froze (e.g. API-quota outage that
-        // stopped updates mid-match) — owner 2026-07-26: "Vasteras kollierte auf live".
-        const mtLive = tip.match_time || (tip.legs || []).map((l) => l.kickoff).find(Boolean) || "";
-        const koTs = kickoffInfo(mtLive).ts;
-        if (koTs != null && Date.now() - koTs > 2.5 * 3600 * 1000) return null;
-        return (
-          <div data-testid={`live-state-${tip.id}`} className="inline-flex items-center gap-2 bg-[#F0443C] text-white font-bold text-xs rounded-lg px-3 py-1.5 mb-2">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            LIVE{liveState.minute ? `  ${liveState.minute}'` : ""}{liveState.score ? `   ·   ${liveState.score}` : ""}
-          </div>
-        );
-      })()}
-
-      {(() => {
         const hasLiveState = tip.live_state || tip.live_minute != null || tip.live_score;
         const mt = tip.match_time || (tip.legs || []).map((l) => l.kickoff).find(Boolean) || "";
         const ko = formatKickoff(tip.match_time, t)
@@ -1009,9 +995,25 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         </div>
       ) : (
         <>
-          <h4 className="font-heading font-bold text-white text-lg leading-tight">
-            {displayTeam(tip.home_team, tip.home_team_latin) || "—"} <span className="text-zinc-600 text-sm">vs</span> {displayTeam(tip.away_team, tip.away_team_latin) || "—"}
-          </h4>
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="font-heading font-bold text-white text-lg leading-tight">
+              {displayTeam(tip.home_team, tip.home_team_latin) || "—"} <span className="text-zinc-600 text-sm">vs</span> {displayTeam(tip.away_team, tip.away_team_latin) || "—"}
+            </h4>
+            {(() => {
+              // Discreet per-game LIVE badge on the RIGHT (never a big top bar) — owner 2026-07.
+              const liveState = tip.live_state
+                || ((tip.live_minute != null || tip.live_score) ? { minute: tip.live_minute, score: tip.live_score } : null);
+              if (!liveState) return null;
+              const koTs = kickoffInfo(tip.match_time || "").ts;
+              if (koTs != null && Date.now() - koTs > 2.5 * 3600 * 1000) return null;
+              return (
+                <span data-testid={`single-live-${tip.id}`} className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#F0443C] rounded px-1.5 py-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  {liveState.score || "LIVE"}{liveState.minute ? ` ${liveState.minute}'` : ""}
+                </span>
+              );
+            })()}
+          </div>
           {(tip.category || tip.pick_type) && (() => {
             const cat = tip.category || (tip.pick_type === "value" || tip.pick_type === "combo" ? "value" : tip.pick_type);
             const meta = {
@@ -1019,12 +1021,18 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               value: ["VALUE", "bg-volt/15 text-volt"],
               risk: ["RISK", "bg-orange-500/15 text-orange-400"],
               banger: ["BANGER", "bg-orange-500/15 text-orange-400"],
+              gift: ["🎁 ΔΩΡΟ", "bg-amber-400/20 text-amber-300"],
             }[cat] || ["VALUE", "bg-volt/15 text-volt"];
             return (
               <div className="flex items-center gap-2 mt-1.5" data-testid={`pick-type-${cat}`}>
                 <span className={`text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 ${meta[1]}`}>
                   {meta[0]}
                 </span>
+                {tip.is_gift && cat !== "gift" && (
+                  <span data-testid="gift-badge" className="text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 bg-amber-400/20 text-amber-300 flex items-center gap-1">
+                    🎁 Δώρο
+                  </span>
+                )}
               </div>
             );
           })()}
@@ -1102,6 +1110,10 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             <button onClick={() => onSettle(tip, "cashed_out")} data-testid={`settle-cashed-${tip.id}`}
               className={`flex items-center justify-center gap-1 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${tip.status === "cashed_out" ? "bg-sky-400 text-void" : "bg-sky-400/15 text-sky-400 hover:bg-sky-400/25"}`}><Banknote size={12} /> {t("wall.cashed")}</button>
           </div>
+          <button onClick={() => onSettle(tip, "void")} data-testid={`settle-void-${tip.id}`}
+            className={`mt-1.5 w-full flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg transition-colors ${tip.status === "void" ? "bg-zinc-400 text-void" : "bg-zinc-500/15 text-zinc-300 hover:bg-zinc-500/25"}`}>
+            <Ban size={12} /> Annulliert · Push (Einsatz zurück)
+          </button>
         </div>
       )}
     </motion.div>

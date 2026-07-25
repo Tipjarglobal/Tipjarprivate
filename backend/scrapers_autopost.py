@@ -463,7 +463,7 @@ async def forebet_autopost() -> dict:
             odds_map = await ensure_match_odds(home, away, kickoff)
         except Exception:
             odds_map = {}
-        value_opts, banker_opts, risk_opts, combo_opts = [], [], [], []
+        value_opts, banker_opts, risk_opts, combo_opts, gift_opts = [], [], [], [], []
         for o in _forebet_candidates(r):
             if o.get("combo"):
                 legs, prod = [], 1.0
@@ -514,6 +514,12 @@ async def forebet_autopost() -> dict:
             elif o["winprob"] >= BANKER_WIN_PROB and final_odd >= 1.03:
                 o2["_ptype"] = "banker"
                 banker_opts.append(o2)
+            elif 2.00 <= final_odd <= 3.60 and o["winprob"] >= 0.55:
+                # "Δώρο" (Gift): generous odds (≥2.00) for a still-likely outcome (≥55%).
+                # These would otherwise be dropped (odds too high for VALUE) — we keep the
+                # best one per match so the Gifts tab always has real value bombs.
+                o2["_ptype"] = "gift"
+                gift_opts.append(o2)
             # else: DROP it (owner 2026-07-10: fewer picks, but only ones we actually win.
             # A single with <62% win chance is a coin-flip and is no longer posted.)
         # Post the best pick of EACH available category for this match so all three
@@ -525,6 +531,8 @@ async def forebet_autopost() -> dict:
             cat_best.append(("value", max(value_opts, key=lambda o: (o["_ptype"] == "combo", o["winprob"], o["_odd"]))))
         if risk_opts:
             cat_best.append(("risk", max(risk_opts, key=lambda o: o["_odd"])))
+        if gift_opts:
+            cat_best.append(("gift", max(gift_opts, key=lambda o: (o["winprob"], o["_odd"]))))
         if not cat_best:
             continue
         for cat, best in cat_best:
@@ -532,7 +540,7 @@ async def forebet_autopost() -> dict:
             b["_category"] = cat
             candidates.append((best["winprob"], r, b, kickoff))
     # order: value first, then risk, then bankers; within each by confidence/odds
-    _catrank = {"value": 3, "combo": 3, "risk": 2, "banker": 1}
+    _catrank = {"value": 3, "combo": 3, "risk": 2, "gift": 2, "banker": 1}
     candidates.sort(key=lambda x: (_catrank.get(x[2].get("_ptype"), 0), x[0], x[2]["_odd"]), reverse=True)
     ordered = candidates
 
@@ -629,6 +637,10 @@ async def forebet_autopost() -> dict:
         if _llm:
             analysis = _llm
         combo_legs = c.get("_legs", []) if is_combo else []
+        # "Δώρο" (Gift) flag — cross-cutting highlight for generous odds on a likely
+        # outcome (dedicated gift-category rescues, high-odds combos, or ≥2.20 value).
+        is_gift = (category == "gift") or (is_combo and odds >= 2.00) \
+            or (odds >= 2.20 and winprob >= 0.55)
         # Frontend-friendly single-match display: one fixture row with all selection
         # chips (settlement uses the separate `combo_legs` with kind/team info).
         display_legs = []
@@ -661,6 +673,7 @@ async def forebet_autopost() -> dict:
             "market": market,
             "odds": f"{odds:.2f}", "ai_rating": rating, "ai_analysis": analysis,
             "win_prob": round(winprob, 3), "pick_type": ptype, "category": category,
+            "is_gift": is_gift,
             "legs": display_legs, "combo_legs": combo_legs, "is_parlay": is_combo,
             "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
@@ -905,6 +918,7 @@ async def predictz_autopost() -> dict:
             "country": "", "league": league, "market": market,
             "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
             "pick_type": ptype, "category": pcategory,
+            "is_gift": (_od >= 2.20 and float(rating) >= 5.5),
             "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
             "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
             "source": "hq-auto", "created_at": now,
