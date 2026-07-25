@@ -474,7 +474,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           <div data-testid="master-explain" className="mb-5 rounded-xl border border-[#E11D2A]/30 bg-[#E11D2A]/5 px-4 py-3">
             <p className="text-sm text-zinc-300 leading-snug flex items-center gap-2">
               <Crown size={16} className="text-[#E11D2A]" />
-              <span><span className="font-heading font-black text-[#E11D2A]">TipJarMaster</span> — ο καλύτερος διαλογέας. Διορθώνει live τα λάθη του HQ και δημοσιεύει μόνο τον κοινό λόγο των experts.</span>
+              <span><span className="font-heading font-black text-[#E11D2A]">TipJarMaster</span> — ο καλύτερος διαλογέας. Live προτάσεις στο ίδιο ματς και ο κοινός λόγος των experts.</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2 mb-6">
