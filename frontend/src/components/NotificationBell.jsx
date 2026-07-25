@@ -317,9 +317,10 @@ export default function NotificationBell() {
             if (!seen.current.has(tp.id)) {
               const area = tipArea(tp);
               const isLive = area.startsWith("live");
-              // Expert-bot picks (Orion/Vega) always ring when their box is on —
-              // they aren't gated by the star threshold like normal community posts.
-              const bypassThreshold = isLive || area === "experts";
+              // The star slider now also governs EXPERT picks (they used to always ring
+              // and flood the feed). Only live picks bypass it — those are time-critical
+              // and already opt-in per area.
+              const bypassThreshold = isLive;
               if (onRef.current && (areasRef.current[area] !== false) &&
                   (bypassThreshold || tipRating(tp) >= minRef.current)) {
                 (newByArea[area] = newByArea[area] || []).push(tp);
