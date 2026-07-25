@@ -76,6 +76,10 @@ async def notify_all_push(payload: dict):
 
 
 def _tip_push_area(tip: dict) -> str:
+    # Cloned tipster bots (Orion / Vega / …) get their OWN generic "experts" alert area
+    # so users can toggle expert picks independently — no per-bot boxes.
+    if tip.get("is_expert"):
+        return "experts"
     is_ai = tip.get("source") in ("hq-auto", "hq-live", "hq-system", "smart")
     if tip.get("status") == "live" or tip.get("source") == "hq-live":
         # Live is the only area where KI and Community post together. KI-live is further
@@ -158,7 +162,9 @@ def _push_payload_for_tip(tip: dict) -> dict:
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
-    if src == "hq-auto":
+    if tip.get("is_expert"):
+        title = f"🔮 Experten-Tipp · {uname}" if uname else "🔮 Neuer Experten-Tipp"
+    elif src == "hq-auto":
         if cat == "banker" and stars >= 10:
             title = "💥 10-Sterne-Banker!"
         elif cat == "banker" and stars == 9:
@@ -175,7 +181,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
     # Fixed tag so a burst of queued pushes COLLAPSES into one visible notification
     # (newest wins) instead of stacking → no endless-swipe. Community picks use their OWN
     # tag so a member post never overwrites/merges with a KI pick (owner: distinct alert).
-    tag = "tipjar-community" if community else "tipjar-pick"
+    tag = "tipjar-expert" if tip.get("is_expert") else ("tipjar-community" if community else "tipjar-pick")
     return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}", "kind": "tip",
             "sound": sound, "pick_id": pid, "area": area,
             "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],

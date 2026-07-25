@@ -92,6 +92,7 @@ async function disableWebPush() {
 // Live is split: KI-live by category (live_banker / live_value / live_banger) vs
 // community-live (live). Each live class fires its OWN kind of notification.
 function tipArea(tp) {
+  if (tp.is_expert) return "experts";
   const isAI = ["hq-auto", "hq-live", "hq-system", "smart"].includes(tp.source);
   if (tp.status === "live") {
     if (!isAI) return "live";
@@ -104,8 +105,8 @@ function tipArea(tp) {
   return "members";
 }
 
-const DEFAULT_AREAS = { ai: true, systems: true, smart: true, members: true, live: true, live_banker: true, live_value: true, live_banger: true };
-const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", members: "viewmembers", live: "viewlive", live_banker: "viewlive", live_value: "viewlive", live_banger: "viewlive" };
+const DEFAULT_AREAS = { ai: true, systems: true, smart: true, experts: true, members: true, live: true, live_banker: true, live_value: true, live_banger: true };
+const VIEW_KEY = { ai: "viewtips", systems: "viewsystems", smart: "viewsmart", experts: "viewmembers", members: "viewmembers", live: "viewlive", live_banker: "viewlive", live_value: "viewlive", live_banger: "viewlive" };
 // Distinct emoji per live class so each alert type is instantly recognisable.
 const LIVE_EMOJI = { live: "🔴", live_banker: "🟢", live_value: "🔵", live_banger: "🔥" };
 
@@ -137,6 +138,7 @@ function timeAgo(ts, nowLabel) {
 }
 const AREA_DOT = {
   ai: "bg-[#2ECC57]", smart: "bg-sky-400", members: "bg-volt", systems: "bg-purple-400",
+  experts: "bg-orange-500",
   live: "bg-live", live_banker: "bg-cyan-400", live_value: "bg-[#E1FF00]", live_banger: "bg-orange-500",
 };
 
@@ -278,8 +280,11 @@ export default function NotificationBell() {
             if (!seen.current.has(tp.id)) {
               const area = tipArea(tp);
               const isLive = area.startsWith("live");
+              // Expert-bot picks (Orion/Vega) always ring when their box is on —
+              // they aren't gated by the star threshold like normal community posts.
+              const bypassThreshold = isLive || area === "experts";
               if (onRef.current && (areasRef.current[area] !== false) &&
-                  (isLive || tipRating(tp) >= minRef.current)) {
+                  (bypassThreshold || tipRating(tp) >= minRef.current)) {
                 fireAlert(tp, area);
               }
               seen.current.add(tp.id);
@@ -506,9 +511,10 @@ export default function NotificationBell() {
 
             <div className="mt-3 pt-3 border-t border-elevated">
               <p className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1.5">{t("bell.areas")}</p>
-              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["members", "bell.area.members"]].map(([k, lbl]) => (
+              {[["ai", "bell.area.ai"], ["systems", "bell.area.systems"], ["smart", "bell.area.smart"], ["experts", "bell.area.experts"], ["members", "bell.area.members"]].map(([k, lbl]) => (
                 <label key={k} data-testid={`bell-area-${k}`} className="flex items-center justify-between py-1.5 cursor-pointer">
                   <span className="text-sm text-zinc-300 flex items-center gap-2">
+                    {k === "experts" && <span className="w-2 h-2 rounded-full bg-orange-500" />}
                     {t(lbl)}
                   </span>
                   <input

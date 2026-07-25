@@ -33,6 +33,12 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Generic **"Experten" notification area** for cloned tipster bots (Orion/Vega).
+  Expert-bot posts route to area `experts` (backend `_tip_push_area` + frontend `tipArea`
+  check `is_expert`). New generic "Expert Picks" checkbox (orange dot) in NotificationBell
+  — NO per-bot boxes. Foreground alerts bypass the star threshold; background Web Push
+  fires with title "🔮 Experten-Tipp · <bot>" and its own `tipjar-expert` tag. i18n added
+  in all 8 languages. Verified: backend routing (python) + frontend smoke screenshot.
 - 2026-06: Added LEVY (@LevyKingTips) as new tipster → own unique bot **Vega**
   (`vega@tipjar.com`). Its private Telegram invite link is unscrapeable, so we read its
   public X profile via Nitter. Generalized to multi X-handle watching via `WATCH_X_HANDLES`
