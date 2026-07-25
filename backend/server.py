@@ -6976,6 +6976,7 @@ from scrapers_autopost import (
     apifootball_predictions_autopost, apifootball_predictions_loop,
     statarea_autopost, statarea_loop,
     footballpredictions_autopost, footballpredictions_loop,
+    footballinsight_autopost, footballinsight_loop,
 )
 
 
@@ -7101,6 +7102,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
     _BG_TASKS.append(asyncio.create_task(statarea_loop()))
     _BG_TASKS.append(asyncio.create_task(footballpredictions_loop()))
+    _BG_TASKS.append(asyncio.create_task(footballinsight_loop()))
     _BG_TASKS.append(asyncio.create_task(emptips_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))

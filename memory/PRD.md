@@ -33,6 +33,12 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: **footballinsight01 ("Magic Betting Tips") scraper** — feeds the TipJarHQ
+  `hq-auto` pool (NOT an expert bot, per owner). `footballinsight_autopost()` +
+  `footballinsight_loop()` (every 2h). Parses structured Telegram text picks
+  (teams · market · league · kickoff), maps goal/win markets to German labels, REJECTS
+  corners/cards/odd goal-lines, dedups per match+market, future-kickoff only. Posts as
+  TipJarHQ (source hq-auto, no expert badge). Tested (8 posted, corners rejected).
 - 2026-06: **Expert auto-expiry** — real experts (NOT in-house bots) lose the title after
   `EXPERT_INACTIVITY_DAYS`=7 days without a new tip. `expire_inactive_experts()` +
   `expert_expiry_loop()` (every 6h). Demote → role=user, `expert_expired_at`, and a mailbox

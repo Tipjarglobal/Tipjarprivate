@@ -1213,3 +1213,161 @@ async def footballpredictions_loop():
         except Exception as e:
             logger.error(f"HQ loop G error: {e}")
         await asyncio.sleep(3 * 3600)  # every 3 hours
+
+
+
+# --- footballinsight01 ("Magic Betting Tips") Telegram text-tip scraper ------------------
+# Owner: use this channel as a SCRAPER feeding the TipJarHQ hq-auto pool — NOT as a new
+# expert bot. Each post is a clean single pick (teams · market · league · kickoff).
+FOOTBALLINSIGHT_CHANNEL = "footballinsight01"
+FOOTBALLINSIGHT_MAX_PER_RUN = 8
+
+
+def _fi_market(pick: str):
+    """Map footballinsight's pick text → (German market label, fallback odds, family).
+    Returns None for markets we don't post (corners/cards/unknown/odd goal lines)."""
+    p = (pick or "").strip().lower()
+    # never post non-goal markets (corners, cards, bookings, fouls, offsides, throw-ins)
+    if any(w in p for w in ("corner", "card", "booking", "yellow", "red card",
+                            "foul", "offside", "throw")):
+        return None
+    _GOAL_LINES = {"0.5", "1.5", "2.5", "3.5", "4.5"}
+    m = re.search(r"over\s*(\d(?:\.\d)?)", p)
+    mu = re.search(r"under\s*(\d(?:\.\d)?)", p)
+    is_home = "home" in p
+    is_away = "away" in p
+    _over_fb = {"0.5": 1.30, "1.5": 1.55, "2.5": 1.90, "3.5": 3.00, "4.5": 5.00}
+    _team_over_fb = {"0.5": 1.35, "1.5": 2.10, "2.5": 4.00}
+    if ("both team" in p or "btts" in p or "gg" in p or "goal goal" in p) and not m:
+        return ("Beide Teams treffen", 1.80, "btts")
+    if m and m.group(1) in _GOAL_LINES:
+        ln = m.group(1)
+        if is_home:
+            return (f"Heim über {ln} Tore", _team_over_fb.get(ln, 2.10), "team_goals")
+        if is_away:
+            return (f"Auswärts über {ln} Tore", _team_over_fb.get(ln, 2.10), "team_goals")
+        return (f"Über {ln} Tore", _over_fb.get(ln, 2.00), "o25" if ln == "2.5" else "over")
+    if mu and mu.group(1) in _GOAL_LINES:
+        ln = mu.group(1)
+        return (f"Unter {ln} Tore", {"1.5": 3.20, "2.5": 1.90, "3.5": 1.35}.get(ln, 1.90), "under")
+    if "home" in p and ("win" in p or p.strip() == "home"):
+        return ("Heimsieg", 2.00, "win")
+    if "away" in p and ("win" in p or p.strip() == "away"):
+        return ("Auswärtssieg", 2.30, "win")
+    return None
+
+
+def _fi_parse(text: str):
+    """Parse a footballinsight 'Free pick' post → dict or None."""
+    if not text or "🆚" not in text or "➡️" not in text:
+        return None
+    tm = re.search(r"([^\n🆚]+?)\s*🆚\s*([^\n]+)", text)
+    pm = re.search(r"➡️\s*([^\n]+)", text)
+    if not tm or not pm:
+        return None
+    home = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", tm.group(1)).strip()
+    away = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", tm.group(2)).strip()
+    pick = re.sub(r"\bPick\b", "", pm.group(1), flags=re.I).strip()
+    dm = re.search(r"(\d{2})/(\d{2})/(\d{4}).*?\((\d{1,2}):(\d{2})\)", text, re.DOTALL)
+    league = ""
+    lm = re.search(r"➡️[^\n]+\n\s*\n?\s*([^\n]+)", text)
+    if lm:
+        league = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", lm.group(1)).strip()
+    match_time = ""
+    if dm:
+        d, mo, y, h, mi = map(int, dm.groups())
+        try:
+            match_time = datetime(y, mo, d, h, mi,
+                                  tzinfo=timezone(timedelta(hours=1))).isoformat()
+        except Exception:
+            match_time = ""
+    if not home or not away:
+        return None
+    return {"home": home, "away": away, "pick": pick, "league": league, "match_time": match_time}
+
+
+async def footballinsight_autopost() -> dict:
+    """Scrape footballinsight01's free single picks → post into the TipJarHQ hq-auto pool
+    (no expert bot, no expert badge). Owner-requested: source, not persona."""
+    if AUTOPOST_PAUSED:
+        return {"posted": 0, "reason": "autopost paused (curated mode)"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    import emptips_watch
+    posts = await asyncio.to_thread(emptips_watch.fetch_telegram, FOOTBALLINSIGHT_CHANNEL)
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    posted = 0
+    for p in posts:
+        if posted >= FOOTBALLINSIGHT_MAX_PER_RUN:
+            break
+        parsed = _fi_parse(p.get("text", ""))
+        if not parsed:
+            continue
+        mk = _fi_market(parsed["pick"])
+        if not mk:
+            continue
+        market, fb_odds, family = mk
+        home, away, league = parsed["home"], parsed["away"], parsed["league"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, league):
+            continue
+        ko = _parse_kickoff(parsed["match_time"])
+        if ko is None or ko < now:
+            continue  # only future kickoffs
+        tip_id = f"hqtip-fi-{p['id']}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        # keep one pick per match+market in the pool (avoid dupes across sources)
+        if await db.tips.find_one({"source": "hq-auto", "status": "pending",
+                                   "home_team": home, "away_team": away, "market": market}, {"_id": 1}):
+            continue
+        odds, real = await apply_real_odds(market, fb_odds, home, away, parsed["match_time"])
+        try:
+            _od = float(odds)
+        except Exception:
+            _od = fb_odds
+        rating = 7.0 if _od <= 1.60 else (6.5 if _od <= 2.5 else 6.0)
+        pcategory = "value" if 1.40 <= _od <= 2.60 else ("banker" if _od < 1.40 else "value")
+        ptype = "value" if _od >= VALUE_MIN_ODDS else "banker"
+        lg = league or "TipJarHQ Pick"
+        if "friendl" in lg.lower():
+            lg = "Freundschaftsspiel"
+        _ctx = (f"Wettbewerb: {lg}. Spiel: {home} vs {away}. Markt/Tipp: {market}. "
+                f"Quote: {odds}. Anstoß {parsed['match_time']}.")
+        analysis = await llm_pick_analysis(_ctx) or (
+            f"{market} — solider Einzeltipp für {home} vs {away}. "
+            f"{'Echte Buchmacher-Quote. ' if real else ''}Automatisch von TipJarHQ.")
+        tip = {
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": parsed["match_time"],
+            "country": "", "league": lg, "market": market,
+            "odds": odds, "ai_rating": rating, "ai_analysis": analysis,
+            "pick_type": ptype, "category": pcategory,
+            "is_gift": (_od >= 2.20 and rating >= 5.5),
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-auto", "created_at": now_iso,
+        }
+        await db.tips.insert_one(tip)
+        posted += 1
+        logger.info(f"HQ auto-posted (FI): {home} vs {away} — {market} ({odds})")
+    await _dedupe_hq_tips()
+    return {"posted": posted, "scanned": len(posts)}
+
+
+async def footballinsight_loop():
+    await asyncio.sleep(150)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await footballinsight_autopost()
+            logger.info(f"HQ loop FI (footballinsight01): {res}")
+        except Exception as e:
+            logger.error(f"HQ loop FI error: {e}")
+        await asyncio.sleep(2 * 3600)  # every 2 hours
