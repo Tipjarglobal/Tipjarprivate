@@ -1496,8 +1496,12 @@ _CHANNEL_BOTS = {
         "email": "vega@tipjar.com", "name": "Vega",
         "bio": "In-house Sports-Analyst — datenbasierte Tipps für Fußball & Basketball.",
     },
+    "thesuperbets": {                     # Super bets (t.me/thesuperbets) Telegram channel
+        "email": "nova@tipjar.com", "name": "Nova",
+        "bio": "In-house Value-Scout — sorgfältig kuratierte Multis & Einzeltipps.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
-    # "somechannel": {"email": "nova@tipjar.com", "name": "Nova", "bio": "..."},
+    # "somechannel": {"email": "sirius@tipjar.com", "name": "Sirius", "bio": "..."},
 }
 
 
@@ -1623,12 +1627,24 @@ async def admin_emptips_run(admin: dict = Depends(require_admin)):
 
 
 EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
-# Comma-separated list of public Telegram channels to monitor (sources stay anonymous).
-_WATCH_RAW = os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")
-WATCH_TG_CHANNELS = [c.strip().lstrip("@") for c in _WATCH_RAW.split(",") if c.strip()]
-# Comma-separated list of public X/Twitter handles to monitor (via free Nitter mirrors).
-_WATCH_X_RAW = os.environ.get("WATCH_X_HANDLES", "") or EMPTIPS_HANDLE
-WATCH_X_HANDLES = [h.strip().lstrip("@") for h in _WATCH_X_RAW.split(",") if h.strip()]
+# Source of truth = code (works in production without env juggling). Each channel/handle
+# MUST have a matching persona in _CHANNEL_BOTS. Env vars only ADD extra sources.
+_CODE_TG_CHANNELS = ["EMPTipsTele", "thesuperbets"]   # public Telegram channels
+_CODE_X_HANDLES = ["EmpTips", "LevyKingTips"]          # public X/Twitter handles
+_env_tg = [c.strip().lstrip("@") for c in
+           (os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")).split(",") if c.strip()]
+_env_x = [h.strip().lstrip("@") for h in
+          (os.environ.get("WATCH_X_HANDLES", "") or EMPTIPS_HANDLE).split(",") if h.strip()]
+# code list first, env additions appended, de-duplicated (case-insensitive).
+def _merge_sources(base, extra):
+    out, low = [], set()
+    for s in base + extra:
+        k = s.lower()
+        if k not in low:
+            low.add(k); out.append(s)
+    return out
+WATCH_TG_CHANNELS = _merge_sources(_CODE_TG_CHANNELS, _env_tg)
+WATCH_X_HANDLES = _merge_sources(_CODE_X_HANDLES, _env_x)
 _EMP_RESULT_KW = re.compile(
     r'(boo+m|fl(y|ies|ys)\s*in|winner+|congrats|landed|cash(ed)?|smashed|\bgreen\b|'
     r'\+\d+(\.\d+)?u\b|nap won|banked|paid out)', re.I)

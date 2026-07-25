@@ -33,6 +33,10 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Added **Super bets (t.me/thesuperbets)** → new unique bot **Nova**. Made
+  watch lists CODE-driven (`_CODE_TG_CHANNELS`/`_CODE_X_HANDLES`, env additive & deduped)
+  so cloning works in production without env changes. Baselined existing posts.
+  Bot map: EMPTips→Orion, LEVY(@LevyKingTips)→Vega, thesuperbets→Nova.
 - 2026-06: **"Δώρα" (Gifts)** cross-cutting tab in AI Single-Game Picks — `is_gift` flag on
   hq-auto picks (forebet gift bucket rescues generous singles; predictz + combos flagged;
   odds≥2.00/2.20 + winprob≥0.55). Endpoint `/api/tips?category=gifts` → `is_gift:True`.
