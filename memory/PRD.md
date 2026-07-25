@@ -33,6 +33,18 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Schnellere Bereinigung abgelaufener Experten-Scheine**.
+  • Problem: Ein „Fortuna Düsseldorf – Dortmund"-Schein (Polaris, exotischer Markt „Next Team to
+    Score First Half") blieb ~7h nach Anstoß offen. Ursachen: (1) Feeds posten LOKALE Anstoßzeiten,
+    die wir als UTC lesen → Spiel wirkt jünger, 6h-Void griff zu spät; (2) der laufende Prozess
+    hatte die Void-Logik noch nicht geladen.
+  • Fix: `void_stale_expert_slips` Grenze von 6h → **3h** nach (geparstem) Anstoß gesenkt (deckt den
+    Lokalzeit-Versatz + Spieldauer ab; Settle läuft davor, also werden gradebare Scheine zuerst
+    abgerechnet). Backend neu gestartet → Loop führt Void alle 15 Min aus. Sofort-Bereinigung
+    ausgeführt: 12 abgelaufene Experten-Scheine annulliert (inkl. der gemeldeten Polaris-Scheine).
+    Kombi mit einem noch offenen Bein (morgen) bleibt korrekt bestehen.
+
+
 - 2026-06 (25th): **Team-Total-Quoten aus dem API-Football-Feed**.
   • `_parse_odds` liest jetzt auch Team-Totals (Heim/Gast über/unter X.5) aus dem /odds-Feed —
     robust gegen Namensvarianten ("Total - Home", "Home Team Total", …) → Keys home_over05/15/25,

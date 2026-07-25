@@ -988,11 +988,13 @@ async def expire_stale_pending() -> dict:
 
 async def void_stale_expert_slips() -> dict:
     """Owner 2026-06 ('cleanup the expert mess'): expert-bot slips must always carry a
-    playable match time. Any expert slip that is (a) unsettled >6h after its (last)
+    playable match time. Any expert slip that is (a) unsettled >3h after its (last)
     kickoff, or (b) has NO recognizable kickoff at all, is annulled (void) and drops out
-    of the pending/live feed. Runs after the settle pass so gradeable slips settle first."""
+    of the pending/live feed. Runs after the settle pass so gradeable slips settle first.
+    NOTE: 3h — feeds post LOCAL kickoff times which we read as UTC, so the real match is
+    usually even older; a finished game must never linger in the feed."""
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=6)
+    cutoff = now - timedelta(hours=3)
     docs = await db.tips.find(
         {"is_expert": True, "status": {"$in": ["pending", "live"]}},
         {"_id": 0, "id": 1, "match_time": 1, "legs": 1}).to_list(5000)
