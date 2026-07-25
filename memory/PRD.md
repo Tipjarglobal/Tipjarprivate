@@ -40,12 +40,12 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
     Zeitzonen-Umschalter (`timezone-switcher`, `tz-<IANA>`) neben der Sprache; Default = Account-
     Zeitzone (falls keine manuelle Wahl). Verifiziert: „08:00" → Berlin 08:00, Athen 09:00,
     London 07:00, NY 02:00; Mitternachtswechsel korrekt. (Mobil: Account-Default; Umschalter ab sm.)
-  • **Void-Sicherheit** (`void_stale_expert_slips`): läuft NACH dem Settle-Pass. Ein offener
-    Experten-Schein wird nur annulliert, wenn er (a) zeitlos ist, (b) >3h nach Anstoß UND die Engine
-    ihn bereits ≥1× erfolglos versucht hat (settle_attempts≥1 → nicht abrechenbar), oder (c) >12h alt
-    ist (Backstop). Scheine, die die Engine noch gar nicht erreicht hat (attempts==0, z.B. während
-    Kontingent-Ausfall) bleiben bis zum 12h-Backstop → gradebare Scheine werden ABGERECHNET statt
-    vorschnell annulliert. (Nach Kontingent-Reset live gegenprüfen.)
+  • **Void-Timing marktabhängig** (`_grade_window_min` + `void_stale_expert_slips`): Erste-Halbzeit-
+    Märkte (Ergebnis steht zur HZ fest) werden ~1h nach Anstoß bereinigt; Ganzspiel-Märkte ~2,5h;
+    Kombis mit Ganzspiel-Bein warten bis Full-Time. Void läuft NACH dem Settle-Pass: Ganzspiel-Scheine
+    nur voiden, wenn die Engine sie bereits erfolglos versucht hat (attempts≥1) → gradebare werden
+    ABGERECHNET statt annulliert; zeitlose sofort; 12h-Backstop. Loop alle 15 Min. Unit-getestet
+    (H1-Einzel→60min, Ganzspiel→150min, H1-in-Kombi→150min).
 
 
 - 2026-06 (25th): **Schnellere Bereinigung abgelaufener Experten-Scheine**.

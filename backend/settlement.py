@@ -986,23 +986,38 @@ async def expire_stale_pending() -> dict:
     return {"deleted": len(ai_ids), "voided": len(member_ids)}
 
 
+def _grade_window_min(market, legs) -> int:
+    """Minutes after kickoff by which a slip's outcome is DECIDED (period-aware).
+    A first-half market (e.g. 'Team trifft das erste Tor in der 1. Halbzeit') is settled
+    at half-time, so it must not linger for hours — clean it ~1h after kickoff. Full-match
+    markets are decided at full time (~2h) → clean window 2.5h."""
+    legs = legs or []
+    text = ((market or "") + " " + " ".join(
+        (l.get("market") or "") + " " + " ".join(l.get("selections") or [])
+        for l in legs)).lower()
+    is_first_half = bool(re.search(
+        r"halbzeit|1\.?\s*hz|first half|1st half|halftime|ημίχρον|ημιχρον", text))
+    single = len(legs) <= 1  # a parlay with a full-match leg must still wait for full time
+    return 60 if (is_first_half and single) else 150
+
+
 async def void_stale_expert_slips() -> dict:
-    """Owner 2026-06/07 ('cleanup the expert mess' + 'gradebare Scheine sollen abgerechnet,
-    nicht nur annulliert werden'). Runs AFTER the settle pass, so any gradeable slip is
-    already won/lost and gone. A still-pending expert slip is voided when it is:
+    """Owner 2026-06/07 cleanup. Runs AFTER the settle pass so gradeable slips are already
+    won/lost and gone. A still-pending expert slip is voided when it is:
       • timeless (no recognizable kickoff → can never settle), or
-      • past kickoff by >3h AND settlement already engaged it at least once
-        (settle_attempts>=1) but couldn't grade it → genuinely un-gradeable, or
-      • past kickoff by >12h (dead-slip backstop, e.g. after a long API-quota outage).
-    Slips settlement hasn't even reached yet (attempts==0, e.g. during a quota outage) are
-    kept until the 12h backstop so we never void something that could still be settled.
+      • past its period window (first-half markets ~1h after kickoff, full-match ~2.5h) AND
+        either the market is a first-half market (our engine can't grade those → clean on time)
+        OR settlement already engaged it once (settle_attempts>=1 → tried & un-gradeable), or
+      • past 12h (dead-slip backstop).
+    Full-match slips the engine hasn't reached yet (attempts==0, e.g. during a quota outage)
+    are kept until the 12h backstop so a gradeable slip is settled, never voided prematurely.
     NOTE: feeds post LOCAL kickoff times read as UTC, so the real match is usually older."""
     now = datetime.now(timezone.utc)
-    soft = now - timedelta(hours=3)
     hard = now - timedelta(hours=12)
     docs = await db.tips.find(
         {"is_expert": True, "status": {"$in": ["pending", "live"]}},
-        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "settle_attempts": 1}).to_list(5000)
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "settle_attempts": 1,
+         "market": 1}).to_list(5000)
     void_ids = []
     for d in docs:
         legs = d.get("legs") or []
@@ -1011,9 +1026,12 @@ async def void_stale_expert_slips() -> dict:
         attempts = d.get("settle_attempts", 0) or 0
         if latest is None:
             void_ids.append(d["id"])
-        elif latest < hard:
+            continue
+        if latest < hard:
             void_ids.append(d["id"])
-        elif latest < soft and attempts >= 1:
+            continue
+        win = _grade_window_min(d.get("market"), legs)
+        if latest < now - timedelta(minutes=win) and (win <= 60 or attempts >= 1):
             void_ids.append(d["id"])
     if void_ids:
         await db.tips.update_many(
