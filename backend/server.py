@@ -2015,6 +2015,91 @@ async def purge_demo_tips() -> int:
     return len(tip_ids)
 
 
+# ------------------------------------------------------------ dynamic i18n
+# Free-form prose (KI-Analysen, Smart-Berichte, Master-Texte) is generated/stored in one
+# language. To show it in ALL 8 UI languages we translate on demand via the Emergent LLM
+# key and cache each (text, lang) permanently in db.translation_cache. First view of a
+# string in a language costs one LLM call; every later view is instant from cache.
+_LANG_NAMES = {"en": "English", "de": "German", "es": "Spanish", "el": "Greek",
+               "fr": "French", "it": "Italian", "ar": "Arabic", "tr": "Turkish"}
+
+
+def _extract_json_obj(raw: str):
+    import json
+    s = (raw or "").strip()
+    a, b = s.find("{"), s.rfind("}")
+    if a == -1 or b == -1 or b <= a:
+        return None
+    try:
+        return json.loads(s[a:b + 1])
+    except Exception:
+        return None
+
+
+async def _translate_batch(texts, lang: str) -> dict:
+    target = _LANG_NAMES.get(lang)
+    out, missing = {}, []
+    for txt in texts:
+        if not txt or not isinstance(txt, str):
+            continue
+        if txt in out:
+            continue
+        key = hashlib.sha1(f"{lang}:{txt}".encode("utf-8")).hexdigest()
+        doc = await db.translation_cache.find_one({"_id": key}, {"t": 1})
+        if doc:
+            out[txt] = doc["t"]
+        else:
+            missing.append((key, txt))
+    if not missing:
+        return out
+    if not (target and EMERGENT_LLM_KEY):
+        for _, t in missing:
+            out[t] = t
+        return out
+    for i in range(0, len(missing), 15):
+        chunk = missing[i:i + 15]
+        numbered = "\n".join(f"[{j}] {t}" for j, (_, t) in enumerate(chunk))
+        data = None
+        try:
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY, session_id=f"tr-{uuid.uuid4()}",
+                system_message=(
+                    f"You are a professional translator for a football betting-tips app. "
+                    f"Translate each numbered item into {target}. Keep team names, player names, "
+                    f"league names, numbers, odds and market lines (e.g. 'Über 2.5 Tore') intact and "
+                    f"natural. Preserve emojis and line breaks. If an item is already in {target}, return "
+                    f"it unchanged. Reply with ONLY a JSON object mapping each index as a string to its "
+                    f"translation, e.g. {{\"0\":\"…\",\"1\":\"…\"}}. No commentary."),
+            ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+            resp = await chat.send_message(UserMessage(text=numbered))
+            data = _extract_json_obj(resp if isinstance(resp, str) else str(resp))
+        except Exception as e:
+            logger.error(f"translate batch failed: {e}")
+        for j, (key, t) in enumerate(chunk):
+            tr = (data or {}).get(str(j)) if data else None
+            tr = tr if (isinstance(tr, str) and tr.strip()) else t
+            out[t] = tr
+            if data is not None:
+                await db.translation_cache.update_one(
+                    {"_id": key}, {"$set": {"t": tr, "lang": lang}}, upsert=True)
+    return out
+
+
+class TranslateReq(BaseModel):
+    lang: str
+    texts: List[str]
+
+
+@api_router.post("/i18n/translate")
+async def i18n_translate(req: TranslateReq):
+    """Translate a batch of prose strings into req.lang (cached). German is the source
+    language of most content, so it is returned unchanged."""
+    if not req.lang or req.lang == "de" or not req.texts:
+        return {"map": {}}
+    return {"map": await _translate_batch(req.texts[:60], req.lang)}
+
+
+
 @api_router.get("/tips")
 async def list_tips(status: Optional[str] = None, sort: str = "new",
                     source: Optional[str] = None, window: Optional[str] = None,
@@ -7353,6 +7438,28 @@ CHALLENGE_START = 10.0
 CHALLENGE_STEPS = 4
 
 
+def _plausible_odds(market: str, odds: float) -> bool:
+    """Reject implausibly low odds for a market so the Master never uses bad source data
+    (e.g. 'Heim über 1.5 Tore @1.12' — a team scoring 2+ is realistically ~1.5+). Keeps the
+    packs' odds honest without a live-odds feed."""
+    m = (market or "").lower()
+    if odds <= 1.0:
+        return False
+    team_ref = bool(re.search(r"heim|gast|home|away", m)) or bool(
+        re.search(r"^\s*\S.*\s(über|unter|over|under)\b", m))
+    if re.search(r"(über|over)\s*1\.5", m):
+        return odds >= (1.45 if team_ref else 1.18)   # team scores 2+ vs total >1.5
+    if re.search(r"(über|over)\s*2\.5", m):
+        return odds >= 1.40
+    if re.search(r"(über|over)\s*3\.5", m):
+        return odds >= 1.55
+    if re.search(r"(über|over)\s*0\.5", m):
+        return odds >= (1.15 if team_ref else 1.03)   # team scores vs any goal
+    if re.search(r"-1\.5|handicap.*-1", m):
+        return odds >= 1.70
+    return odds >= 1.08
+
+
 async def _master_leg_candidates(now, min_odds, max_odds):
     """Upcoming (pregame) single picks — from experts (weighted by hit-rate) and the
     HQ-auto pool — usable as parlay legs. One leg per fixture, odds within [min,max]."""
@@ -7377,6 +7484,8 @@ async def _master_leg_candidates(now, min_odds, max_odds):
             continue
         market = (t.get("market") or "").strip()
         if not market:
+            continue
+        if not _plausible_odds(market, od):
             continue
         home = t.get("home_team_latin") or t.get("home_team")
         away = t.get("away_team_latin") or t.get("away_team")

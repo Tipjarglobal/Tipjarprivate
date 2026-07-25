@@ -8,6 +8,7 @@ import { Systems } from "./Systems";
 import { QualifierBriefing } from "./QualifierBriefing";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
+import { useProseTranslations } from "../proseI18n";
 import { shareSlip } from "../shareSlip";
 import { PlaySlipOverlay } from "./PlaySlipOverlay";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive, flamesActive } from "../i18n";
@@ -837,6 +838,7 @@ function MemberSearch({ onUserClick, t }) {
 
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onPlay }) {
   const { lang } = useI18n();
+  const trProse = useProseTranslations(tip.ai_analysis, lang);
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
@@ -1140,7 +1142,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
 
       {tip.ai_analysis && (
         <p className="text-xs text-zinc-400 mt-2 border-l-2 border-volt pl-2 leading-snug">
-          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {localizeProse(toLatin(tip.ai_analysis), t, lang)}
+          <span className="text-volt font-semibold">{t("wall.aisays")}:</span> {(() => {
+            if (lang === "de") return localizeProse(toLatin(tip.ai_analysis), t, lang);
+            const tr = trProse(tip.ai_analysis);
+            return tr && tr !== tip.ai_analysis ? tr : localizeProse(toLatin(tip.ai_analysis), t, lang);
+          })()}
         </p>
       )}
 

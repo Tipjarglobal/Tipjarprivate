@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, ChevronDown, RefreshCw, Sparkles } from "lucide-react";
 import api from "../api";
+import { useI18n } from "../i18n";
+import { useProseTranslations } from "../proseI18n";
 
 const renderInline = (text, keyBase) => {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -18,9 +20,11 @@ const renderInline = (text, keyBase) => {
 };
 
 export const QualifierBriefing = ({ t }) => {
+  const { lang } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(true);
+  const trProse = useProseTranslations(data?.narrative, lang);
 
   useEffect(() => {
     let alive = true;
@@ -48,7 +52,8 @@ export const QualifierBriefing = ({ t }) => {
   }
   if (!data || (!data.narrative && !data.building)) return null;
 
-  const lines = (data.narrative || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const narrative = lang === "de" ? (data.narrative || "") : trProse(data.narrative || "");
+  const lines = narrative.split("\n").map((l) => l.trim()).filter(Boolean);
   const updated = data.generated_at ? new Date(data.generated_at).toLocaleDateString() : "";
 
   return (

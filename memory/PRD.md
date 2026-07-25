@@ -33,6 +33,25 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Mehrsprachige dynamische Texte + Quoten-Plausibilität**.
+  • **Dynamic i18n (lazy LLM translation cache)**: frei generierte Prosa (KI-Analysen `ai_analysis`,
+    Smart-Berichte report=True, Master-Texte, Qualifier-Briefing `narrative`) wird jetzt in ALLE 8
+    Sprachen übersetzt. Backend: `POST /api/i18n/translate` ({lang, texts}) → `_translate_batch`
+    übersetzt fehlende Strings per Emergent-LLM (batch, JSON-Rückgabe) und cacht jede (text,lang)
+    permanent in `db.translation_cache` (sha1-key). Deutsch = Quellsprache → unverändert. Frontend:
+    `src/proseI18n.js` `useProseTranslations(texts, lang)` Hook (mem + localStorage `tj_tr_<lang>`
+    Cache), verdrahtet in TipCard (`ai_analysis`, Fallback localizeProse während Laden) und
+    QualifierBriefing (`narrative`). Erster Aufruf eines Strings/Sprache = 1 LLM-Call, danach sofort.
+    Verifiziert e2e: el/fr/ar Übersetzungen im Browser + curl; Cache-Hit ~0.2s; de → {}.
+  • **Master-Quoten-Plausibilität**: `_plausible_odds(market, odds)` verwirft unrealistisch niedrige
+    Quellquoten (z.B. „Heim über 1.5 Tore @1.12" — Team-2+-Tore ist realistisch ~1.5+), angewandt
+    in `_master_leg_candidates`. Challenge-Quotenband auf 1.20–1.60 erweitert. Aktuellen
+    Challenge-Schein auf reale Buchmacher-Quoten korrigiert (1.55 & 1.30 → 2.02). Master-Labels
+    lokalisiert (i18n `master.cat.*`: Easy/Medium/Challenge · el Εύκολα/Μέτρια/Πρόκληση).
+    HINWEIS: noch keine echte Live-Odds-Quelle angebunden (API-Football-Odds wäre nächster Schritt);
+    aktuell Plausibilitätsfilter statt echter Quoten.
+
+
 - 2026-06 (25th): **Master sub-categories + expert cleanup**.
   • **Expert cleanup (owner "cleanup the expert mess")**: `_expert_playable_time()` (server.py)
     gates `_ingest_emptips` — an expert slip is now REJECTED at ingest unless it carries a
