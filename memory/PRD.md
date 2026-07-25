@@ -33,6 +33,9 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Added **BET OF THE DAY TIPS FREE** (public Telegram) → new bot **Polaris**
+  (image betslips via Vision-AI). Bot map: EMPTips→Orion, LEVY→Vega, thesuperbets→Nova,
+  Chrisbetsbets→Sirius, grizzlybetslive(X)→Rigel, bet_of_the_day_tips_free→Polaris.
 - 2026-06: Added **Grizzly Bets (@grizzlybetslive, X)** → new unique bot **Rigel** (scraped
   via free Nitter mirrors; their TG is a private invite). Added to `_CODE_X_HANDLES`.
   Bot map now: EMPTips→Orion, LEVY→Vega, thesuperbets→Nova, Chrisbetsbets→Sirius,
