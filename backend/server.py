@@ -798,18 +798,20 @@ async def tips_counts():
     members = await db.tips.count_documents({
         "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]},
         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
+        "hidden": {"$ne": True},
         "status": "pending"})
-    live = await db.tips.count_documents({"status": "live"})
+    live = await db.tips.count_documents({"status": "live", "hidden": {"$ne": True}})
     master = await db.tips.count_documents({"source": "hq-master", "status": {"$in": ["pending", "live"]}})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
-    settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}})
-    won_n = await db.tips.count_documents({"status": "won"})
-    lost_n = await db.tips.count_documents({"status": "lost"})
-    cashed_n = await db.tips.count_documents({"status": "cashed_out"})
+    settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}, "hidden": {"$ne": True}})
+    won_n = await db.tips.count_documents({"status": "won", "hidden": {"$ne": True}})
+    lost_n = await db.tips.count_documents({"status": "lost", "hidden": {"$ne": True}})
+    cashed_n = await db.tips.count_documents({"status": "cashed_out", "hidden": {"$ne": True}})
     void_n = await db.tips.count_documents({"status": "void", "id": {"$not": {"$regex": "^seed-"}}})
     bestwon_n = await db.tips.count_documents({
         "status": "won",
         "id": {"$not": {"$regex": "^seed-"}},
+        "hidden": {"$ne": True},
         "$or": [
             {"source": "smart"},
             {"source": "hq-system"},
@@ -820,6 +822,7 @@ async def tips_counts():
     won_normal_n = await db.tips.count_documents({
         "status": "won",
         "id": {"$not": {"$regex": "^seed-"}},
+        "hidden": {"$ne": True},
         "$or": [
             {"source": "hq-live"},
             {"source": "hq-auto", "category": {"$ne": "risk"}},
@@ -1536,6 +1539,7 @@ _CHANNEL_BOTS = {
     "docbettingg": {                      # The Doc (t.me/DocBettingg) Telegram channel
         "email": "capella@tipjar.com", "name": "Capella",
         "bio": "In-house Analyst — scharfe Singles & Kombis.",
+        "silent": True,                   # silent scraper: feeds the Master, never posts publicly
     },
     "totissports": {                      # Totis Sports website (totissports.gr) — all tipsters
         "email": "atlas@tipjar.com", "name": "Atlas",
@@ -1566,6 +1570,7 @@ async def _get_expert_bot(bot_cfg: dict = None):
         "password_hash": "", "role": "expert", "is_verified": True, "verified": True,
         "credits": 0, "received_credits": 0, "referral_code": uuid.uuid4().hex[:8],
         "apex_flame": True, "created_at": now, "is_bot": True,
+        "silent": bool(cfg.get("silent")),
         "bio": cfg.get("bio", ""),
     }
     await db.users.insert_one(bot)
@@ -1631,6 +1636,7 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
         "potential_return": detected.get("potential_return", ""),
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": bot_slug, "category": "value",
+        "hidden": bool((bot_cfg or {}).get("silent")),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.tips.insert_one(tip)
@@ -1994,6 +2000,9 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
                     source: Optional[str] = None, window: Optional[str] = None,
                     category: Optional[str] = None, limit: int = 50):
     q = {}
+    # Silent scrapers (e.g. Capella) feed the Master in the background but never surface
+    # publicly — hide their picks from every feed.
+    q["hidden"] = {"$ne": True}
     if status:
         q["status"] = status
     # Every AI single lands in exactly one bucket. Banker/Risk are strict;
@@ -2974,7 +2983,8 @@ async def public_profile(username: str):
 async def list_experts():
     """Public list of Experts for the site-wide banner."""
     experts = await db.users.find(
-        {"role": "expert", "is_master": {"$ne": True}}, {"_id": 0, "id": 1, "username": 1, "apex_flame": 1}).to_list(50)
+        {"role": "expert", "is_master": {"$ne": True}, "silent": {"$ne": True}},
+        {"_id": 0, "id": 1, "username": 1, "apex_flame": 1}).to_list(50)
     out = []
     for e in experts:
         tips_count = await db.tips.count_documents({"user_id": e["id"]})
@@ -7686,7 +7696,7 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
     now = datetime.now(timezone.utc)
     since = (now - timedelta(days=7)).isoformat()
     won = await db.tips.find(
-        {"status": "won", "created_at": {"$gte": since}}, {"_id": 0}).to_list(500)
+        {"status": "won", "created_at": {"$gte": since}, "hidden": {"$ne": True}}, {"_id": 0}).to_list(500)
     won.sort(key=lambda t: (_to_float(t.get("odds")) + (1.0 if t.get("is_parlay") else 0.0)),
              reverse=True)
     added = 0

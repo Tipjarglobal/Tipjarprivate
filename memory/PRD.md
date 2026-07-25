@@ -33,6 +33,15 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Capella → silent scraper**. Capella flooded the feed. Now marked a
+  "silent scraper": bot cfg `silent:True` (docbettingg), user `silent:True`, and every Capella
+  pick gets `hidden:True` at ingest. All public surfaces exclude `hidden` (list_tips base query,
+  /tips/counts members/live/settled/won/lost/bestwon/won_normal, /experts excludes `silent`
+  users, daily_hof_autofill). Because Capella tips keep `is_expert:True`, `master_consensus` &
+  `_expert_hitrates` STILL use them in the background — so the Master keeps learning from Capella
+  while she never posts publicly or notifies. Migration set 32 existing Capella tips hidden.
+  Verified: Capella absent from /experts & all feeds (0 visible), Master pool still sees 32 picks.
+
 - 2026-06 (25th): **Notification-toast flood fix**. In-app sonner toasts fired one-per-pick in
   waves and were hard to clear. NotificationBell now (a) **coalesces** a whole wave of new picks
   per area into ONE summary toast ("4 × Expert Picks — …"), (b) shows a floating red
