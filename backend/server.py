@@ -6797,21 +6797,91 @@ def _parlay_live_fixture(live, legs):
     return None
 
 
+def _live_pick_in_danger(market, kind, gh, ga, minute) -> bool:
+    """Heuristic: is a goals/result pick clearly IN TROUBLE given the LIVE score + minute?
+    Conservative — only fires when the pick is unlikely to come good in the time left, so
+    a 'banker' Über-1.5 on a 0-0 at the 80' stops pretending to be a safe banker (owner)."""
+    if minute is None:
+        return False
+    m = (market or "").lower()
+    k = (kind or "").lower()
+    gh, ga = gh or 0, ga or 0
+    total = gh + ga
+    late = minute >= 70
+    verylate = minute >= 80
+    # Over X.5 total goals ("Über 2.5 Tore"). Team-named lines fall back to the match
+    # total (safe side: if the match already cleared the line, it's not "in danger").
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and "halbzeit" not in m and " hz" not in m:
+        remaining = (int(gm.group(1)) + 1) - total
+        if remaining <= 0:
+            return False
+        return (remaining >= 2 and late) or (remaining >= 1 and verylate)
+    if ("über 0.5" in m or "over 0.5" in m) and "halbzeit" not in m:
+        return total < 1 and verylate
+    if ("über 1.0" in m or "over 1.0" in m) and "halbzeit" not in m:
+        return total < 2 and verylate
+    if k == "btts" or "beide teams treffen" in m:
+        return (gh == 0 or ga == 0) and verylate
+    losing_home, losing_away = ga > gh, gh > ga
+    if k == "res_1" or "heimsieg" in m:
+        return losing_home and late
+    if k == "res_2" or "auswärtssieg" in m or "away win" in m:
+        return losing_away and late
+    if k == "dc_1x" or " 1x" in f" {m}":
+        return losing_home and verylate
+    if k == "dc_x2" or " x2" in f" {m}":
+        return losing_away and verylate
+    return False
+
+
+def _derate_fields(t: dict, danger: bool) -> dict:
+    """Return the $set fields that down-rate (or restore) a single-match pick whose live
+    state has turned against it: strip the 'banker' category and drop the star rating while
+    it is in danger; put both back if the game turns and the pick recovers."""
+    upd = {}
+    cur_cat = t.get("category")
+    cur_rating = t.get("ai_rating")
+    if danger:
+        if not t.get("live_danger"):
+            if t.get("category_orig") is None and cur_cat is not None:
+                upd["category_orig"] = cur_cat
+            if t.get("ai_rating_orig") is None and cur_rating is not None:
+                upd["ai_rating_orig"] = cur_rating
+            upd["live_danger"] = True
+            if cur_cat == "banker":
+                upd["category"] = "risk"
+            try:
+                if cur_rating is None or float(cur_rating) > 3.0:
+                    upd["ai_rating"] = 3.0
+            except (TypeError, ValueError):
+                pass
+    elif t.get("live_danger"):
+        upd["live_danger"] = False
+        if t.get("category_orig") is not None:
+            upd["category"] = t["category_orig"]
+        if t.get("ai_rating_orig") is not None:
+            upd["ai_rating"] = t["ai_rating_orig"]
+    return upd
+
+
 async def live_annotate_sync() -> dict:
     if not API_FOOTBALL_KEY:
         return {"annotated": 0, "cleared": 0, "to_live": 0}
     live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+    _live_proj = {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
+                  "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1,
+                  "market": 1, "kind": 1, "category": 1, "ai_rating": 1,
+                  "category_orig": 1, "ai_rating_orig": 1, "live_danger": 1}
     tips = await db.tips.find(
         {"status": {"$in": ["pending", "live"]},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
-         "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
+        _live_proj).to_list(1500)
     # single-game member parlays too (home_team empty, teams live inside the one leg)
     parlays = await db.tips.find(
         {"status": {"$in": ["pending", "live"]}, "is_parlay": True,
          "$or": [{"home_team": {"$in": ["", None]}}, {"away_team": {"$in": ["", None]}}]},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "live_state": 1, "match_time": 1,
-         "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1}).to_list(1500)
+        _live_proj).to_list(1500)
     annotated = cleared = to_live = 0
     now_utc = datetime.now(timezone.utc)
     for t in tips + parlays:
@@ -6847,6 +6917,12 @@ async def live_annotate_sync() -> dict:
             if _is_member_tip(t) and t.get("status") != "live":
                 upd["status"] = "live"
                 to_live += 1
+            # Master-correction: a single-match pick whose live state has turned against it
+            # loses its 'banker' badge & star rating until (if) the game turns (owner).
+            if home and away and not t.get("is_parlay"):
+                _gh, _ga = _align_goals(fx, home)
+                _dg = _live_pick_in_danger(t.get("market"), t.get("kind"), _gh, _ga, st.get("minute"))
+                upd.update(_derate_fields(t, _dg))
             if upd:
                 await db.tips.update_one({"id": t["id"]}, {"$set": upd})
             annotated += 1
@@ -6870,6 +6946,21 @@ async def live_annotate_sync() -> dict:
                     if (not lg.get("live") or lg.get("live_score") != lscore
                             or lg.get("live_minute") != lmin):
                         lg["live"], lg["live_score"], lg["live_minute"] = True, lscore, lmin
+                        leg_changed = True
+                    # Master-correction per leg: a 'banker' leg going against us live is
+                    # stripped of its banker badge and flagged in danger (owner).
+                    _sel_txt = " ".join(_fmt_selection(s) for s in (lg.get("selections") or []))
+                    _ldg = _live_pick_in_danger(_sel_txt or lg.get("market"), lg.get("kind"), hg, ag, lmin)
+                    if _ldg and not lg.get("live_danger"):
+                        lg["live_danger"] = True
+                        if lg.get("banker"):
+                            lg["banker_was"] = True
+                            lg["banker"] = False
+                        leg_changed = True
+                    elif not _ldg and lg.get("live_danger"):
+                        lg["live_danger"] = False
+                        if lg.get("banker_was"):
+                            lg["banker"] = True
                         leg_changed = True
                 elif lg.get("live"):
                     lg.pop("live", None)

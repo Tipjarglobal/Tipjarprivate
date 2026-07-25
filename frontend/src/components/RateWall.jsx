@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban, AlertTriangle } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -895,6 +895,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               {t("wall.final")} {tip.final_home}-{tip.final_away}
             </span>
           )}
+          {tip.live_danger && (
+            <span data-testid="tip-live-danger" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[#F0443C]/20 text-[#F0443C] border border-[#F0443C]/40 animate-pulse">
+              <AlertTriangle size={10} /> {t("wall.liveDanger")}
+            </span>
+          )}
           <StatusBadge status={tip.status} t={t} report={tip.report} />
           {canDelete && (
             <button
@@ -963,6 +968,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   {leg.banker && (
                     <span data-testid={`leg-banker-${li}`} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300">
                       <ShieldCheck size={9} /> Banker
+                    </span>
+                  )}
+                  {leg.live_danger && (
+                    <span data-testid={`leg-live-danger-${li}`} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-[#F0443C]/20 text-[#F0443C] border border-[#F0443C]/40 animate-pulse">
+                      <AlertTriangle size={9} /> {t("wall.liveDanger")}
                     </span>
                   )}
                   {ls && (
