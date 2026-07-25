@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Target, Flame, RefreshCw, Clock, Table2, ShieldCheck } from "lucide-react";
 import api from "../api";
 import { useI18n, toLatin } from "../i18n";
+import { useProseTranslations } from "../proseI18n";
 
 const confStyle = (c) => {
   if (c >= 90) return { ring: "border-[#2ECC57]/50", chip: "bg-[#2ECC57] text-black", txt: "text-[#2ECC57]" };
@@ -42,6 +43,8 @@ const TeamGoalRow = ({ name, goals, dim }) => (
 );
 
 const RadarView = ({ rows, t }) => {
+  const { lang } = useI18n();
+  const tr = useProseTranslations(rows.map((r) => r.reason), lang);
   if (rows.length === 0) {
     return <div className="text-center text-zinc-500 py-20" data-testid="scorer-radar-empty">{t("scorers.empty")}</div>;
   }
@@ -71,7 +74,7 @@ const RadarView = ({ rows, t }) => {
                 {t("scorers.vs")} {toLatin(s.opponent)}{s.league ? ` · ${s.league}` : ""}
               </div>
               <div className={`text-[11px] mt-1 ${st.txt} font-semibold`}>
-                {t("scorers.willScore")} · {s.reason}
+                {t("scorers.willScore")} · {tr(s.reason)}
               </div>
             </div>
             {s.kickoff && (
@@ -93,6 +96,8 @@ const ZZ = {
 };
 
 const TableView = ({ matches, t }) => {
+  const { lang } = useI18n();
+  const tr = useProseTranslations(matches.flatMap((m) => [m.note, m.zero_zero_label]), lang);
   if (matches.length === 0) {
     return <div className="text-center text-zinc-500 py-20" data-testid="goals-table-empty">{t("scorers.empty")}</div>;
   }
@@ -122,13 +127,13 @@ const TableView = ({ matches, t }) => {
             <TeamGoalRow name={m.away} goals={m.away_goals} dim={goalless} />
             <div className="flex items-center justify-between gap-2 mt-2.5">
               <span className="text-[11px] text-zinc-400 font-medium truncate">
-                {m.note}{m.confidence ? ` · ${m.confidence}%` : ""}
+                {tr(m.note)}{m.confidence ? ` · ${m.confidence}%` : ""}
               </span>
               <span
                 data-testid="goals-zerozero-badge"
                 className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide rounded-full px-2 py-1 border ${zz.cls}`}
               >
-                {m.over_safe && <ShieldCheck size={10} />}{m.zero_zero_label}
+                {m.over_safe && <ShieldCheck size={10} />}{tr(m.zero_zero_label)}
               </span>
             </div>
           </motion.div>

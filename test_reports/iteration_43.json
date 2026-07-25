@@ -1,0 +1,34 @@
+{
+  "summary": "Tested dynamic prose translation cache (POST /api/i18n/translate) and its integration in Statistics + Master views across el/de/en/fr. All 4 backend cases pass (Greek translates + cached fast <3s, German returns empty map, French translates). Frontend: In Greek stats, goals-row shows 'Να σκοράρουν και οι δύο ομάδες' and zerozero badge shows 'ΤΟ 0:0 ΠΡΑΚΤΙΚΑ ΑΠΟΚΛΕΙΕΤΑΙ'. Master AI-analysis shows 'Η AI λέει: 👑 TipJarMaster: Το HQ έπεσε έξω στο Over 4.5...' (Greek). Category badges Εύκολα/Μέτρια/Πρόκληση visible. In EN, same texts show 'Both Teams to Score' and '0:0 PRACTICALLY IMPOSSIBLE'. DE remains German source unchanged. No console errors during navigation across de/el/en between Master/Community/Statistics.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Statistics view (DE)", "issues": ["Inner tab labels 'Scorer research / Goal thirst / 1st-half goal' at the top of the Statistics page render in English even when tj_lang=de (the surrounding UI is German: Statistiken, Tor-Prognose, Wer trifft?). Likely pre-existing static i18n gap unrelated to the new prose-cache feature."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_i18n_translate.py",
+    "/app/test_reports/pytest/iter43_i18n.xml",
+    "/app/test_reports/iter43_stats_el.png",
+    "/app/test_reports/iter43_master_el.png",
+    "/app/test_reports/iter43_master_de.png"
+  ],
+  "action_items": [
+    "(Low priority, likely pre-existing) Add static i18n keys for the three tab labels at the top of Statistics view ('Scorer research', 'Goal thirst', '1st-half goal') so they translate with tj_lang."
+  ],
+  "critical_code_review_comments": [
+    "proseI18n.js line 42 (`if (!(x in cache)) cache[x] = x;`) marks failed keys with their source as 'permanent' cache entries. If backend transiently omits a key, it will be stuck as source text in localStorage forever for that lang; consider caching failures separately with a TTL or skipping cache-write for unmapped entries.",
+    "ScorerRadar.TableView calls useProseTranslations with matches.flatMap(...) producing ~160 texts on first paint (80 rows × 2). Fine now, but any additional per-row prose fields will scale the initial batch and slow first render further."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_i18n_translate.py"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (Greek stats, Greek Master AI-analysis, EN translation, DE source unchanged, no JS errors)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dynamic prose translation cache is verified end-to-end. First-call latency: Greek ~1.5s for 2 texts, cache hit <100ms. Full statistics view triggers a single batch of ~160 texts on first EN visit — translates fully in ~2-5s and persists to localStorage tj_tr_en. Master AI-analysis lines are translated per-tip via useProseTranslations. API-Football quota still exhausted; master pack odds are the plausibility-filtered fallback (expected).",
+  "rca of the issue": "N/A — all validations passed."
+}

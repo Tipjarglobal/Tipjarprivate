@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Timer, RefreshCw, Clock, Zap } from "lucide-react";
 import api from "../api";
 import { useI18n, toLatin } from "../i18n";
+import { useProseTranslations } from "../proseI18n";
 
 const confStyle = (c) => {
   if (c >= 85) return { chip: "bg-[#2ECC57] text-black", txt: "text-[#2ECC57]" };
@@ -22,9 +23,10 @@ const fmtWhen = (iso) => {
 };
 
 export const HtGoals = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const tr = useProseTranslations(rows.map((r) => r.market), lang);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,7 +94,7 @@ export const HtGoals = () => {
 
                 <div className={`flex items-center gap-2 text-sm font-bold ${cs.txt} bg-void/40 rounded-lg px-3 py-2`}>
                   <Zap size={15} className="shrink-0" />
-                  <span>{r.market}</span>
+                  <span>{tr(r.market)}</span>
                 </div>
               </motion.div>
             );

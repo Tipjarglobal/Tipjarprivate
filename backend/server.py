@@ -7491,12 +7491,33 @@ async def _master_leg_candidates(now, min_odds, max_odds):
         away = t.get("away_team_latin") or t.get("away_team")
         fixkey = "|".join(sorted([_norm(home), _norm(away)]))
         weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
-        cand = {"match": f"{home} – {away}", "market": market, "odds": od,
-                "kickoff": ko, "match_time": t.get("match_time"),
+        cand = {"match": f"{home} – {away}", "home": home, "away": away, "market": market,
+                "odds": od, "kickoff": ko, "match_time": t.get("match_time"),
                 "league": t.get("league", ""), "weight": weight, "fixkey": fixkey}
         if fixkey not in seen or weight > seen[fixkey]["weight"]:
             seen[fixkey] = cand
     return sorted(seen.values(), key=lambda c: (-c["weight"], c["odds"]))
+
+
+async def _enrich_legs_real_odds(chosen):
+    """Replace pool odds with REAL bookmaker odds (API-Football /odds, 6h-cached) for the
+    chosen legs. Skips team-specific over/under markets (not priced individually by the
+    feed) so we never mis-map them to the match-total line. Returns (chosen, product)."""
+    prod = 1.0
+    for c in chosen:
+        m = (c.get("market") or "").lower()
+        skip = bool(re.search(r"(heim|gast|home|away)\b", m) and re.search(r"(über|unter|over|under)", m))
+        if not skip:
+            try:
+                odds = await ensure_match_odds(c.get("home", ""), c.get("away", ""), c.get("match_time", ""))
+                real = _real_odd_for(c.get("market", ""), odds, c.get("home", ""), c.get("away", ""))
+            except Exception:
+                real = None
+            if real and float(real) >= 1.01:
+                c["odds"] = round(float(real), 2)
+                c["real"] = True
+        prod *= c["odds"]
+    return chosen, round(prod, 2)
 
 
 def _assemble_parlay(cands, target, min_legs, max_legs):
@@ -7544,6 +7565,7 @@ async def master_build_packs() -> dict:
         chosen, prod = _assemble_parlay(cands, target, minl, maxl)
         if not chosen:
             continue
+        chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
         if bot is None:
             bot = await _get_master_bot()
         tid = f"master-{uuid.uuid4().hex[:10]}"
@@ -7631,7 +7653,7 @@ async def master_challenge() -> dict:
     chosen = pool[:2]
     if len(chosen) < 2:
         return {"action": "no_opportunity", "step": st["step"]}
-    prod = round(chosen[0]["odds"] * chosen[1]["odds"], 2)
+    chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
     stake = st["stake"]
     pot = round(stake * prod, 2)
     bot = await _get_master_bot()
