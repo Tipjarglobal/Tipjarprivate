@@ -33,6 +33,19 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Team-Total-Quoten aus dem API-Football-Feed**.
+  • `_parse_odds` liest jetzt auch Team-Totals (Heim/Gast über/unter X.5) aus dem /odds-Feed —
+    robust gegen Namensvarianten ("Total - Home", "Home Team Total", …) → Keys home_over05/15/25,
+    away_over05/15/25 etc.
+  • `_real_odd_for` mappt deutsche Team-Total-Märkte ("Heim über 1.5 Tore", "{Team} über 0.5 Tore")
+    via neuem `_side_in_market` (Heim/Gast-Keywords ODER signifikantes Team-Namenswort) auf die
+    echten Team-Total-Quoten — GEPRÜFT vor der Match-Total-Linie, damit team-spezifische Märkte nie
+    fälschlich auf die Gesamt-Tor-Linie gemappt werden.
+  • `_enrich_legs_real_odds`: Übersprung-Regel für Team-Über/Unter entfernt → auch diese Beine
+    bekommen echte Quoten; Fallback = plausibilitätsgefilterte Pool-Quote, wenn der Feed keinen
+    Preis hat. Unit-getestet mit simulierter API-Antwort (Heim/Gast/Team-Name-Mapping korrekt).
+
+
 - 2026-06 (25th): **Echte Master-Quoten + Übersetzung der Statistik-Tabs**.
   • **Real bookmaker odds für Master-Packs**: `_enrich_legs_real_odds` ersetzt Pool-Quoten der
     GEWÄHLTEN Beine durch echte API-Football-Quoten (bestehendes `ensure_match_odds` /

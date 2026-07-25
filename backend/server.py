@@ -5411,6 +5411,20 @@ def _parse_odds(resp) -> dict:
                     setd("dc_1x", vals.get("Home/Draw"))
                     setd("dc_x2", vals.get("Draw/Away"))
                     setd("dc_12", vals.get("Home/Away"))
+                else:
+                    # Team totals (home/away over/under X.5). API-Football names vary
+                    # ("Total - Home", "Home Team Total", …) → detect by keywords.
+                    lown = nm.lower()
+                    if "total" in lown and "corner" not in lown and "card" not in lown:
+                        pre = None
+                        if "home" in lown:
+                            pre = "home"
+                        elif "away" in lown:
+                            pre = "away"
+                        if pre:
+                            for ln in ("0.5", "1.5", "2.5", "3.5"):
+                                setd(f"{pre}_over{ln.replace('.', '')}", vals.get(f"Over {ln}"))
+                                setd(f"{pre}_under{ln.replace('.', '')}", vals.get(f"Under {ln}"))
     return out
 
 
@@ -5449,6 +5463,18 @@ async def ensure_match_odds(home: str, away: str, kickoff: str) -> dict:
     return odds
 
 
+def _side_in_market(m: str, home: str, away: str):
+    """Detect whether a market string references the HOME or AWAY side, via the German
+    'Heim'/'Gast'/'Auswärts' keywords or a significant word of the team's name."""
+    def _words(name):
+        return [w for w in (name or "").lower().split() if len(w) > 3]
+    if "heim" in m or any(w in m for w in _words(home)):
+        return "home"
+    if "gast" in m or "auswärt" in m or "auswaert" in m or any(w in m for w in _words(away)):
+        return "away"
+    return None
+
+
 def _real_odd_for(market: str, odds: dict, home: str, away: str):
     """Map one of our German market strings to a real bookmaker odd, or None.
     Bet-builder combos ("X2 + Über 1.5") aren't priced by API-Football, so we build them
@@ -5464,6 +5490,14 @@ def _real_odd_for(market: str, odds: dict, home: str, away: str):
                 prod *= float(v)
             return round(prod, 2)
         return None
+    # Team totals ("Heim/Gast über X.5", "{Team} über X.5") — check BEFORE the match-total
+    # lines so a team-specific market is never mis-mapped to the whole-match total.
+    tt = re.search(r"(über|over|unter|under)\s*(\d)\.5", m)
+    if tt:
+        side = _side_in_market(m, home, away)
+        if side:
+            over = tt.group(1) in ("über", "over")
+            return odds.get(f"{side}_{'over' if over else 'under'}{tt.group(2)}5")
     if "über 3.5 tore" in m:
         return odds.get("over35")
     if "über 2.5 tore" in m:
@@ -7501,21 +7535,18 @@ async def _master_leg_candidates(now, min_odds, max_odds):
 
 async def _enrich_legs_real_odds(chosen):
     """Replace pool odds with REAL bookmaker odds (API-Football /odds, 6h-cached) for the
-    chosen legs. Skips team-specific over/under markets (not priced individually by the
-    feed) so we never mis-map them to the match-total line. Returns (chosen, product)."""
+    chosen legs — incl. team-total markets (Heim/Gast über X.5), now priced via the feed.
+    Keeps the plausibility-filtered pool odds when the feed has no price. Returns (chosen, product)."""
     prod = 1.0
     for c in chosen:
-        m = (c.get("market") or "").lower()
-        skip = bool(re.search(r"(heim|gast|home|away)\b", m) and re.search(r"(über|unter|over|under)", m))
-        if not skip:
-            try:
-                odds = await ensure_match_odds(c.get("home", ""), c.get("away", ""), c.get("match_time", ""))
-                real = _real_odd_for(c.get("market", ""), odds, c.get("home", ""), c.get("away", ""))
-            except Exception:
-                real = None
-            if real and float(real) >= 1.01:
-                c["odds"] = round(float(real), 2)
-                c["real"] = True
+        try:
+            odds = await ensure_match_odds(c.get("home", ""), c.get("away", ""), c.get("match_time", ""))
+            real = _real_odd_for(c.get("market", ""), odds, c.get("home", ""), c.get("away", ""))
+        except Exception:
+            real = None
+        if real and float(real) >= 1.01:
+            c["odds"] = round(float(real), 2)
+            c["real"] = True
         prod *= c["odds"]
     return chosen, round(prod, 2)
 
