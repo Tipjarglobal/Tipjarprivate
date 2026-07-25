@@ -318,6 +318,17 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (h) — Auto-hide unplayable + banker rarity + feed cleanup
+- NEW `hide_unplayable_loop` (background_tasks.py, every 10 min): hides any PENDING pick once its
+  earliest clock-timed kickoff has passed (>15 min grace). Settlement never filters `hidden`, so
+  win/loss grading is unaffected — keeps the OPEN feed clean even while API quota delays settlement.
+  Manually cleaned 34 stale past-kickoff pending picks. Registered in server startup.
+- Banker rarity: non-banker sub-1.40 picks are DROPPED (not forced into Value) in predictz &
+  footballinsight. Hid 30 mislabeled short-odds picks from Value. Value tab now all ≥1.41.
+- `_is_banker_safe(market, winprob)` now context-aware: first-half goal / Über 1.5-2.5 qualify as
+  banker only when winprob ≥ 0.88 (krass offensive / consensus). Full Über 0.5 / DC / DNB / safe
+  unders always banker; Über 3.5+ / BTTS / win / handicap never.
+
 ## Changelog 2026-07-25 (g) — Strict bankers + Master push logo
 - Owner rule: BANKERS must be near-certain. New `_is_banker_safe(market)` (server.py) — only
   Über 0.5 (incl. "<team> Über 0.5" = team scores 1+, e.g. Sporting), Doppelte Chance, Draw No Bet,

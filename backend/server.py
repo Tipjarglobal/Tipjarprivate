@@ -8309,7 +8309,7 @@ from scrapers_autopost import (
 # does `from server import ...` (resolves the intentional circular import). ---
 from background_tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
-    smart_loop, live_loop, member_live_loop,
+    smart_loop, live_loop, member_live_loop, hide_unplayable_loop,
 )
 
 
@@ -8561,6 +8561,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(expert_expiry_loop()))
     _BG_TASKS.append(asyncio.create_task(expert_vote_loop()))
     _BG_TASKS.append(asyncio.create_task(master_loop()))
+    _BG_TASKS.append(asyncio.create_task(hide_unplayable_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

@@ -25,6 +25,8 @@ from server import (
     _LEADER_TTL_SECONDS,
     _berlin_now,
     _is_leader,
+    _kickoff_is_date_only,
+    _parse_kickoff,
     _purge_unclarified_slips,
     _system_cycle_day,
     build_qualifier_briefing,
@@ -371,3 +373,47 @@ async def member_live_loop():
         except Exception as e:
             logger.error(f"live_annotate_loop error: {e}")
         await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS)
+
+
+
+def _earliest_kickoff(tip: dict):
+    """Earliest clock-timed kickoff across a tip's match_time + all its legs (date-only
+    slips are ignored — we can't prove those have started)."""
+    times = [tip.get("match_time")]
+    for lg in (tip.get("legs") or []):
+        times.append(lg.get("kickoff"))
+    for lg in (tip.get("combo_legs") or []):
+        times.append(lg.get("kickoff") or lg.get("match_time"))
+    kos = []
+    for tt in times:
+        if not (tt or "").strip() or _kickoff_is_date_only(tt):
+            continue
+        ko = _parse_kickoff(tt)
+        if ko:
+            kos.append(ko)
+    return min(kos) if kos else None
+
+
+async def hide_unplayable_loop():
+    """Keep the OPEN feed clean automatically: hide any PENDING pick the moment its kickoff
+    has passed (no longer placeable pre-match). Settlement still processes it in the
+    background by id (it never filters on `hidden`), so win/loss results are unaffected —
+    this only removes dead slips from the live feed even when the API quota delays grading."""
+    await asyncio.sleep(90)
+    while True:
+        try:
+            if _is_leader():
+                grace = datetime.now(timezone.utc) - timedelta(minutes=15)
+                docs = await db.tips.find(
+                    {"status": "pending", "hidden": {"$ne": True}},
+                    {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "combo_legs": 1}).to_list(4000)
+                stale = [t["id"] for t in docs
+                         if (ko := _earliest_kickoff(t)) is not None and ko < grace]
+                if stale:
+                    r = await db.tips.update_many(
+                        {"id": {"$in": stale}},
+                        {"$set": {"hidden": True, "hidden_reason": "kickoff_passed"}})
+                    logger.info(f"hide_unplayable: hid {r.modified_count} pending picks past kickoff")
+        except Exception as e:
+            logger.error(f"hide_unplayable_loop error: {e}")
+        await asyncio.sleep(10 * 60)
