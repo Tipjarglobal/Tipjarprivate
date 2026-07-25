@@ -647,6 +647,54 @@ async def goal_thirst():
 
 
 
+@api_router.get("/ht-goal-forecast")
+async def ht_goal_forecast():
+    """Spiele mit SEHR wahrscheinlichem Tor in der 1. Halbzeit ("Über 0.5 Tore 1. Halbzeit").
+    Quota-frei aus den gespeicherten Forebet/Predictz-Vorhersagen (ph/pa/BTTS/Over2.5).
+    Owner-Idee: torreiche Spiele treffen fast immer schon vor der Pause."""
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({"status": "pending"}, {"_id": 0}).to_list(2000)
+    _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
+    preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
+    out, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if ko is None or not (now - timedelta(hours=2) <= ko <= now + timedelta(days=7)):
+            continue
+        home, away = p.get("home"), p.get("away")
+        ph, pa = p.get("ph"), p.get("pa")
+        if not home or not away or ph is None or pa is None:
+            continue
+        key = (home, away, p.get("kickoff"))
+        if key in seen:
+            continue
+        total = float(ph) + float(pa)
+        btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        # Only genuinely goal-heavy games qualify as a "sure" first-half goal.
+        if not (total >= 3 or (over25 and total >= 2.5)):
+            continue
+        seen.add(key)
+        c = 90 if total >= 4 else (84 if total >= 3 else 76)
+        if btts:
+            c += 3
+        if over25:
+            c += 2
+        try:
+            conf_val = int(float(str(p.get("conf"))))
+            c = int(0.65 * c + 0.35 * min(conf_val, 95))
+        except Exception:
+            pass
+        c = max(60, min(95, c))
+        out.append({"home": home, "away": away, "league": p.get("league") or "",
+                    "kickoff": ko.isoformat(), "predicted": f"{ph}-{pa}",
+                    "total": round(total, 1), "btts": btts, "over25": over25,
+                    "confidence": c, "market": "Über 0.5 Tore 1. Halbzeit"})
+    out.sort(key=lambda x: (-x["confidence"], x["kickoff"] or "z"))
+    return {"count": len(out), "matches": out[:40], "generated_at": now.isoformat()}
+
+
 @api_router.get("/goals-forecast")
 async def goals_forecast():
     """Tor-Prognose-Tabelle — zeigt pro Spiel, wie viele Tore JEDES Team laut

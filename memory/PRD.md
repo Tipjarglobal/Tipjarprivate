@@ -33,6 +33,16 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: **"Δώρα" (Gifts)** cross-cutting tab in AI Single-Game Picks — `is_gift` flag on
+  hq-auto picks (forebet gift bucket rescues generous singles; predictz + combos flagged;
+  odds≥2.00/2.20 + winprob≥0.55). Endpoint `/api/tips?category=gifts` → `is_gift:True`.
+  Gold 🎁 chip on single & parlay cards. **VOID/Annulliert** settle button (push/refund).
+  **Removed big top red LIVE bar**; discreet per-game LIVE badge on the right instead.
+  Tested (backend 100%, frontend 95%; parlay chip gap fixed).
+- 2026-06: **Statistics "Γκολ ημιχρόνου" tab** — `/api/ht-goal-forecast` (quota-free from
+  stored predictions; total≥3 or over2.5&≥2.5 → confidence). New `HtGoals.jsx`.
+  Moved **Statistics (scorers) quick-nav to LAST (after Settled)**.
+
 - 2026-06: Generic **"Experten" notification area** for cloned tipster bots (Orion/Vega).
   Expert-bot posts route to area `experts` (backend `_tip_push_area` + frontend `tipArea`
   check `is_expert`). New generic "Expert Picks" checkbox (orange dot) in NotificationBell

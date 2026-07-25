@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Target, Droplets } from "lucide-react";
+import { Target, Droplets, Timer } from "lucide-react";
 import { ScorerRadar } from "./ScorerRadar";
 import { GoalThirst } from "./GoalThirst";
+import { HtGoals } from "./HtGoals";
 import { useI18n } from "../i18n";
 
 export default function StatisticsView() {
@@ -10,6 +11,7 @@ export default function StatisticsView() {
   const TABS = [
     ["scorer", "stats.tab.scorer", Target],
     ["thirst", "stats.tab.thirst", Droplets],
+    ["htgoal", "stats.tab.htgoal", Timer],
   ];
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6" data-testid="statistics-view">
@@ -27,7 +29,7 @@ export default function StatisticsView() {
           </button>
         ))}
       </div>
-      {tab === "scorer" ? <ScorerRadar /> : <GoalThirst />}
+      {tab === "scorer" ? <ScorerRadar /> : tab === "thirst" ? <GoalThirst /> : <HtGoals />}
     </div>
   );
 }

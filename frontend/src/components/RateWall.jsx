@@ -938,10 +938,19 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
 
       {tip.legs && tip.legs.length ? (
         <div className="space-y-2">
-          {tip.is_parlay && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
-              {t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
-            </span>
+          {(tip.is_parlay || tip.is_gift) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {tip.is_parlay && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
+                  {t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
+                </span>
+              )}
+              {tip.is_gift && (
+                <span data-testid="gift-badge" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 bg-amber-400/20 text-amber-300">
+                  🎁 Δώρο
+                </span>
+              )}
+            </div>
           )}
           {[...tip.legs].sort((a, b) => (kickoffInfo(a.kickoff).ts ?? Infinity) - (kickoffInfo(b.kickoff).ts ?? Infinity)).map((leg, li) => {
             const ls = STATUS_META[leg.status];
