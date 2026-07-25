@@ -318,6 +318,14 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (b) — Expert tip timing
+- Expert bots (Altair etc.) were posting tips AFTER kickoff (games already over → useless).
+  Root cause: `_expert_playable_time` tolerated up to 3h PAST kickoff, and `emptips_loop` ran
+  every 20min with only 4 vision-AI picks/run (backlog).
+- Fix: `_expert_playable_time` now REJECTS any expert slip whose earliest timed kickoff is already
+  past (10-min grace); date-only/unparseable times still allowed. emptips_loop 20min→7min,
+  MAX_PER_RUN 4→8. Vision-AI (Emergent key) — no API-Football quota impact. Unit-tested.
+
 ## Changelog 2026-07-25
 - HoF filter: TipJarHQ & TipJarMaster qualify ONLY with systems/parlays (helper `_is_house_single`
   in server.py; applied in `hall_of_fame` + `daily_hof_autofill`). Removed 48 stale house-single win_claims.

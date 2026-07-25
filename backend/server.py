@@ -1587,17 +1587,20 @@ def _scrub_source(text: str) -> str:
 
 
 def _expert_playable_time(match_time, legs, now) -> bool:
-    """Owner 2026-06 ('cleanup the expert mess'): an expert slip MUST carry a recognized,
-    still-playable match/kickoff time. True when a time is present AND (if fully datable)
-    the match hasn't been over for hours. No time → the slip is rejected at ingest."""
-    has_time = bool((match_time or "").strip()) or any(
-        (lg.get("kickoff") or "").strip() for lg in (legs or []))
+    """Owner 2026-07 ('the tip arrived after the games were over — useless'): an expert
+    slip must be posted while it's STILL PLAYABLE, i.e. BEFORE the (earliest) kickoff.
+    A pre-match parlay/single whose kickoff has already passed can't be placed anymore, so
+    we drop it instead of posting a dead tip. Small grace for scrape/vision latency."""
+    times = [match_time] + [lg.get("kickoff") for lg in (legs or [])]
+    has_time = any((t or "").strip() for t in times)
     if not has_time:
-        return False
-    ko = _parse_kickoff(match_time)
-    if ko and ko < now - timedelta(hours=3):
-        return False  # already well past kickoff → not live/pregame anymore
-    return True
+        return False  # no time at all → reject at ingest
+    # Only judge kickoffs that carry an actual clock time (date-only slips can't be timed).
+    timed = [ko for t in times
+             if (ko := _parse_kickoff(t)) and not _kickoff_is_date_only(t)]
+    if not timed:
+        return True  # date-only / unparseable time present → allow (can't prove it's past)
+    return min(timed) >= now - timedelta(minutes=10)
 
 
 async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False, bot_cfg=None):
@@ -1745,7 +1748,7 @@ async def emptips_autopost() -> dict:
         if base:
             await db.emptips_seen.insert_many(base)
         return {"posted": 0, "baseline": len(base)}
-    MAX_PER_RUN = 4  # bound slow vision-AI calls per run (20-min loop catches up)
+    MAX_PER_RUN = 8  # bound slow vision-AI calls per run (fast loop clears backlog quickly)
     posted, scanned = 0, 0
     for tw in reversed(posts):  # newest first
         if scanned >= MAX_PER_RUN:
@@ -1790,7 +1793,7 @@ async def emptips_loop():
             logger.info(f"EMP Tips watch loop: {res}")
         except Exception as e:
             logger.error(f"EMP Tips watch loop error: {e}")
-        await asyncio.sleep(20 * 60)  # every 20 minutes
+        await asyncio.sleep(7 * 60)  # every 7 minutes — expert tips land BEFORE kickoff
 
 
 # --- Totis Sports website scraper (totissports.gr) — all tipsters → one bot "Atlas" -------
