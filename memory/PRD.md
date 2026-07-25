@@ -33,6 +33,34 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06 (25th): **Master sub-categories + expert cleanup**.
+  • **Expert cleanup (owner "cleanup the expert mess")**: `_expert_playable_time()` (server.py)
+    gates `_ingest_emptips` — an expert slip is now REJECTED at ingest unless it carries a
+    recognized, still-playable match/kickoff time (present AND, if fully datable, not >3h past).
+    New `void_stale_expert_slips()` (settlement.py, called each settlement cycle AFTER the settle
+    pass) auto-voids expert slips that are unsettled >6h after their (last) kickoff OR have NO
+    recognizable time at all. Migration voided 58 stale/timeless expert slips (64→6).
+  • **TipJarMaster packs**: three sub-categories published by the Master (`master_loop`):
+    - **Einfach** (Εύκολα): 2–4 games, target odds ~3.0, ≤2/day.
+    - **Mittel** (Μέτρια): 3–5 games, target odds ~6–8, ≤2/day.
+    - **Challenge** (Πρόκληση): ONE active pick at a time, start 10 €, rolls the FULL win over
+      4 steps; 2 safe low-odds picks per step (~1.2–1.6 each). Loss → reset to step 1.
+      State in `db.master_challenge` (id="state": step/stake/status/current_tip_id).
+    Backend: `_master_leg_candidates` (pregame pool from experts weighted by hit-rate + hq-auto,
+    one leg per fixture), `_assemble_parlay` (greedy to ~target*0.85), `_pack_legs`,
+    `master_build_packs`, `master_challenge`. Packs stored as source=hq-master, is_parlay=True,
+    `master_category` in {einfach,mittel,challenge}, `master_day`, `challenge_step` — auto-settled
+    by `settle_multimatch_parlays` (leg-by-leg). Stale/unsettleable master packs are DELETED by
+    `expire_stale_pending` (hq-master ∈ ai_src); challenge auto-reopens if its tip is gone.
+    `/api/tips?source=master&mcat=<einfach|mittel|challenge|slips>` filters (slips = no category).
+    Frontend RateWall.jsx: 5 master sub-tabs (`master-tab-slips/einfach/mittel/challenge/live`),
+    localized labels (i18n `master.cat.einfach/mittel/challenge` → Easy/Medium/Challenge · el:
+    Εύκολα/Μέτρια/Πρόκληση), card badge `master-cat-*` with challenge step. Odds on a posted
+    challenge slip are correctable (owner supplies real bookmaker odds when they differ from pool).
+    Verified: backend unit runs (pack/challenge open→win→advance→loss→reset), testing_agent
+    iteration_42 (sub-tabs + mcat filtering pass), Greek UI screenshot.
+
+
 - 2026-06 (25th): **Capella → silent scraper**. Capella flooded the feed. Now marked a
   "silent scraper": bot cfg `silent:True` (docbettingg), user `silent:True`, and every Capella
   pick gets `hidden:True` at ingest. All public surfaces exclude `hidden` (list_tips base query,

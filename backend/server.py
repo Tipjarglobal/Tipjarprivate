@@ -7515,7 +7515,7 @@ async def master_challenge() -> dict:
     if st.get("current_tip_id"):
         return {"action": action or "waiting", "step": st["step"]}
     # Open the next step only on a genuinely safe opportunity (2 low-odds picks).
-    cands = await _master_leg_candidates(now, 1.12, 1.42)
+    cands = await _master_leg_candidates(now, 1.20, 1.60)
     safe = [c for c in cands if re.search(
         r"über 0\.5|über 1\.5|doppelte chance|1x|x2|beide teams treffen", c["market"].lower())]
     pool = sorted(safe or cands, key=lambda c: c["odds"])
