@@ -9,6 +9,7 @@ import uuid
 import re
 import json
 import math
+import random
 import hashlib
 import base64
 import logging
@@ -1569,7 +1570,7 @@ async def _get_expert_bot(bot_cfg: dict = None):
         "id": str(uuid.uuid4()), "email": cfg["email"], "username": cfg["name"],
         "password_hash": "", "role": "expert", "is_verified": True, "verified": True,
         "credits": 0, "received_credits": 0, "referral_code": uuid.uuid4().hex[:8],
-        "apex_flame": True, "created_at": now, "is_bot": True,
+        "apex_flame": False, "streak": 0, "ratings_given": 0, "created_at": now, "is_bot": True,
         "silent": bool(cfg.get("silent")),
         "bio": cfg.get("bio", ""),
     }
@@ -8179,6 +8180,64 @@ async def daily_hof_loop():
         await asyncio.sleep(24 * 3600)  # once a day
 
 
+async def expert_bot_voting() -> dict:
+    """Owner 2026-07: in-house expert bots quietly rate each other's and the Master's tips
+    (a few random star votes per day). One vote-day advances a rating streak; a 30-day streak
+    unlocks the 🔥 Apex-Flamme — so experts EARN the badge over time instead of being handed
+    it. Flames only become visible on 1 Sep 2026 (flamesActive), by which point streaks are up."""
+    now = datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    bots = await db.users.find({"is_bot": True, "role": "expert"}, {"_id": 0}).to_list(200)
+    if not bots:
+        return {"voted": 0}
+    pool = await db.tips.find(
+        {"$or": [{"is_expert": True}, {"is_master": True}, {"source": "hq-master"}],
+         "hidden": {"$ne": True}},
+        {"_id": 0, "id": 1, "user_id": 1, "sum_stars": 1, "ratings_count": 1}
+    ).sort("created_at", -1).to_list(400)
+    voted = 0
+    for bot in bots:
+        if bot.get("last_rated_date") == today:
+            continue  # one streak-step per bot per day
+        # a flame handed out at creation is reset so it is genuinely earned via the streak
+        if bot.get("apex_flame") and bot.get("streak", 0) < APEX_FLAME_STREAK:
+            await db.users.update_one({"id": bot["id"]}, {"$set": {"apex_flame": False}})
+        targets = [t for t in pool if t.get("user_id") != bot["id"]]
+        if not targets:
+            continue
+        random.shuffle(targets)
+        for t in targets[:random.randint(1, 4)]:  # sparse: a few peer tips per day
+            if await db.tip_ratings.find_one({"tip_id": t["id"], "user_id": bot["id"]}):
+                continue
+            stars = random.choices([3, 4, 5], weights=[2, 4, 5])[0]
+            await db.tip_ratings.insert_one({
+                "id": str(uuid.uuid4()), "tip_id": t["id"], "user_id": bot["id"],
+                "stars": stars, "created_at": now.isoformat()})
+            new_sum = (t.get("sum_stars", 0) or 0) + stars
+            new_count = (t.get("ratings_count", 0) or 0) + 1
+            await db.tips.update_one({"id": t["id"]}, {"$set": {
+                "sum_stars": new_sum, "ratings_count": new_count,
+                "avg_rating": round(new_sum / new_count, 1)}})
+        await _bump_rating_streak(bot, now)  # +1 streak day → 🔥 at 30 (existing helper)
+        voted += 1
+    return {"voted": voted}
+
+
+async def expert_vote_loop():
+    await asyncio.sleep(300)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(120)
+            continue
+        try:
+            res = await expert_bot_voting()
+            if res.get("voted"):
+                logger.info(f"Expert bot voting: {res}")
+        except Exception as e:
+            logger.error(f"expert_vote_loop error: {e}")
+        await asyncio.sleep(3 * 3600)  # a few times/day; per-day guard prevents duplicates
+
+
 @app.on_event("startup")
 async def startup():
     # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
@@ -8243,6 +8302,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(daily_hof_loop()))
     _BG_TASKS.append(asyncio.create_task(system_reset_loop()))
     _BG_TASKS.append(asyncio.create_task(expert_expiry_loop()))
+    _BG_TASKS.append(asyncio.create_task(expert_vote_loop()))
     _BG_TASKS.append(asyncio.create_task(master_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")

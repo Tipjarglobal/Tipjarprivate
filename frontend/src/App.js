@@ -14,7 +14,7 @@ import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
 import StatisticsView from "./components/StatisticsView";
-import ExpertsShowcase from "./components/ExpertsShowcase";
+
 import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
@@ -241,7 +241,6 @@ function Home() {
         onViewSmart={() => openTipsView("smart")}
         onViewScorers={() => openTipsView("scorers")}
         onViewSettled={() => openTipsView("settled")}
-        onExpertClick={openProfile}
         counts={counts}
         newCounts={newCounts}
       />
@@ -286,9 +285,6 @@ function Home() {
           </motion.div>
         </div>
       </section>
-
-      {/* EXPERTS — prominently at the top of the home page */}
-      <ExpertsShowcase onExpertClick={openProfile} onMasterClick={() => openTipsView("master")} />
 
       {/* INTRO VIDEO — right under the logo / Tipjarglobal.com */}
       <section className="relative max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-10" data-testid="intro-video-section">
