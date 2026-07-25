@@ -318,6 +318,13 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (c) — Stake disguise & currency
+- New `_disguise_stakes(tip)` (server.py, deterministic per tip id) applied in `_tag_expert`
+  (feed), `/tips/mine`, and the share-image render (SHARE_RENDER_VER 3→4 to regen cached imgs).
+- Rules: Expert bots → 12x LESS than source stake; unit stakes ('1u','2u') → VARIED $ amount
+  (random 12–24 $/unit, stable per tip). TipJarLogic → DOUBLE the posted stake. Everyone else →
+  keep amount. ALWAYS "$" (no €/£). Winnings recomputed = stake × odds. Verified: feed shows 0 €.
+
 ## Changelog 2026-07-25 (b) — Expert tip timing
 - Expert bots (Altair etc.) were posting tips AFTER kickoff (games already over → useless).
   Root cause: `_expert_playable_time` tolerated up to 3h PAST kickoff, and `emptips_loop` ran

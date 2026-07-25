@@ -172,6 +172,7 @@ async def _tag_expert(tips: list) -> list:
     for t in tips:
         if t.get("user_id") in eset and not t.get("is_master"):
             t["is_expert"] = True
+        _disguise_stakes(t)
     return tips
 
 
@@ -1334,6 +1335,61 @@ def compute_return(stake, odds, fallback=""):
     return fallback
 
 
+def _fmt_usd(v: float) -> str:
+    """US-style money with a $ suffix; drop a trailing .00 so whole stakes look natural."""
+    s = f"{v:,.2f}"
+    if s.endswith(".00"):
+        s = s[:-3]
+    return f"{s} $"
+
+
+def _parse_units(s):
+    """A stake expressed in betting UNITS (e.g. '1u', '2 units', '1.5 u') → float units."""
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:u\b|units?\b)", str(s or ""), re.I)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _disguise_stakes(tip: dict) -> dict:
+    """Owner rule (2026-07): mask that expert picks are cloned, and ALWAYS show $.
+    - Expert bots: display 12x LESS than the source's real stake; unit-based stakes ('1u')
+      become a VARIED $ amount so it never looks formulaic.
+    - TipJarLogic: always show DOUBLE the posted stake.
+    - Everyone else: keep the amount, only switch the currency symbol to $.
+    Winnings are recomputed as stake x odds so the ticket stays consistent."""
+    raw = tip.get("stake")
+    if raw is None or not str(raw).strip():
+        return tip  # nothing to show
+    username = tip.get("username") or ""
+    odds = _parse_num(tip.get("odds"))
+    rnd = random.Random(str(tip.get("id", "")) + str(raw))
+    units = _parse_units(raw)
+    amount = _parse_num(raw)
+    disp = None
+    if username == "TipJarLogic":
+        base = amount if amount is not None else (round(units * rnd.uniform(12, 24)) if units else None)
+        disp = base * 2 if base is not None else None
+    elif tip.get("is_expert") and not tip.get("is_master"):
+        if units is not None:
+            disp = round(units * rnd.uniform(12, 24))  # varied $/unit → organic amounts
+        elif amount is not None:
+            disp = round(amount / 12.0, 2)
+    else:
+        disp = amount  # keep the amount, only the currency symbol changes
+    if disp is None or disp <= 0:
+        return tip
+    tip["stake"] = _fmt_usd(disp)
+    if odds and odds > 0:
+        tip["potential_return"] = _fmt_usd(disp * odds)
+    elif tip.get("potential_return") and _parse_num(tip.get("potential_return")) is not None:
+        tip["potential_return"] = _fmt_usd(_parse_num(tip.get("potential_return")))
+    return tip
+
+
 LIVE_MATCH_MAX_MINUTES = 150  # a football match (incl. HT/stoppage) rarely runs past ~2.5h
 
 
@@ -2216,7 +2272,7 @@ def _in_kickoff_window(match_time: str, window: str, now) -> bool:
 @api_router.get("/tips/mine")
 async def my_tips(user: dict = Depends(get_current_user)):
     tips = await db.tips.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
-    return tips
+    return [_disguise_stakes(t) for t in tips]
 
 
 @api_router.delete("/tips/{tip_id}")
@@ -3180,7 +3236,7 @@ async def inbox_expert_decline(user: dict = Depends(get_current_user)):
 
 
 # Bump this whenever _render_slip_image output changes, so cached share images regenerate.
-SHARE_RENDER_VER = 3
+SHARE_RENDER_VER = 4
 
 
 @api_router.post("/tips/{tip_id}/share-image")
@@ -3215,6 +3271,7 @@ async def tip_share_image(tip_id: str):
         except Exception:
             pass
     rlegs = _tip_to_render_legs(tip)
+    _disguise_stakes(tip)  # $ + expert 12x / TipJarLogic x2 must match the card
     # offload the CPU-heavy PIL render + the storage upload so we never block the event loop
     img = await asyncio.to_thread(
         _render_slip_image, rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
