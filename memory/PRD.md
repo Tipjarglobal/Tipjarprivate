@@ -318,6 +318,15 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - Prior: server.py modularization, footballpredictions scraper, betting_logic dedupe engine,
   match_stats caching engine, emptips_watch Telegram/Nitter scraper, anonymous Orion bot.
 
+## Changelog 2026-07-25 (i) — Playable-only philosophy
+- CONFIRMED: no win/result push notifications exist — pushes fire ONLY for new pending/live tips.
+  Hardened push_watch_loop: skips pushing pre-match picks whose kickoff already passed (live picks
+  always pass). Users only get pinged about tips they can still play.
+- Homepage hero: added prominent `hero.playable` badge in all 8 languages — "Only PLAYABLE tips
+  here — never win alerts. Just check in and copy the play, always with a controlled stake."
+- Owner intent recorded: TipJar = check in & replay playable tips, NOT outcome notifications.
+- Re-ran unplayable cleanup across all channels (0 stale remain; hide_unplayable_loop maintains it).
+
 ## Changelog 2026-07-25 (h) — Auto-hide unplayable + banker rarity + feed cleanup
 - NEW `hide_unplayable_loop` (background_tasks.py, every 10 min): hides any PENDING pick once its
   earliest clock-timed kickoff has passed (>15 min grace). Settlement never filters `hidden`, so

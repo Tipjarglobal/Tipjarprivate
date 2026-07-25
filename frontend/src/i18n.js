@@ -454,6 +454,7 @@ const T = {
     "nav.profile": "Profile",
 
     "hero.badge": "The global tip community",
+    "hero.playable": "Only PLAYABLE tips here — never win alerts. Just check in and copy the play, always with a controlled stake.",
     "hero.title": "Post it. Rate it. Cash it.",
     "hero.subtitle": "Drop your football tips into the jar. Our AI rates every slip instantly, the crowd rates it too — and winning tipsters turn credits into real money.",
     "hero.cta.submit": "Drop a Tip",
@@ -914,6 +915,7 @@ const T = {
     "nav.profile": "Perfil",
 
     "hero.badge": "La comunidad global de pronósticos",
+    "hero.playable": "Aquí SOLO tips jugables — nunca avisos de ganancias. Entra y copia la jugada, siempre con una apuesta controlada.",
     "hero.title": "Publícalo. Puntúalo. Cóbralo.",
     "hero.subtitle": "Suelta tus pronósticos de fútbol en el tarro. Nuestra IA valora cada boleto al instante, la comunidad también lo puntúa — y los tipsters ganadores convierten créditos en dinero real.",
     "hero.cta.submit": "Suelta un pronóstico",
@@ -1291,6 +1293,7 @@ const T = {
     "nav.profile": "Profil",
 
     "hero.badge": "Die globale Tipp-Community",
+    "hero.playable": "Hier gibt's NUR spielbare Tipps — niemals Gewinn-Benachrichtigungen. Einfach reinschauen & nachspielen, immer mit kontrolliertem Einsatz.",
     "hero.title": "Posten. Bewerten. Kassieren.",
     "hero.subtitle": "Wirf deine Fußballtipps in den Jar. Unsere KI bewertet jeden Schein sofort, die Community bewertet mit — und erfolgreiche Tipper verwandeln Credits in echtes Geld.",
     "hero.cta.submit": "Tipp einwerfen",
@@ -1747,6 +1750,7 @@ const T = {
     "nav.profile": "Προφίλ",
 
     "hero.badge": "Η παγκόσμια κοινότητα προγνωστικών",
+    "hero.playable": "Εδώ ΜΟΝΟ παίξιμα tips — ποτέ ειδοποιήσεις νίκης. Απλά μπες και παίξε ό,τι δίνει, πάντα με ελεγχόμενο ποντάρισμα.",
     "hero.title": "Ανέβασε. Βαθμολόγησε. Εισέπραξε.",
     "hero.subtitle": "Ρίξε τα ποδοσφαιρικά σου προγνωστικά στο βάζο. Η AI μας βαθμολογεί κάθε δελτίο αμέσως, το βαθμολογεί και το κοινό — και οι νικητές μετατρέπουν τους πόντους σε πραγματικά χρήματα.",
     "hero.cta.submit": "Ρίξε πρόγνωση",
@@ -2144,6 +2148,7 @@ const T = {
     "nav.wallet": "Portefeuille",
     "nav.profile": "Profil",
     "hero.badge": "La communauté mondiale des pronostics",
+    "hero.playable": "Ici, UNIQUEMENT des pronostics jouables — jamais d'alertes de gains. Tu regardes et tu rejoues, toujours avec une mise contrôlée.",
     "hero.title": "Poste-le. Note-le. Encaisse.",
     "hero.subtitle": "Dépose tes pronostics football dans le bocal. Notre IA note chaque ticket instantanément, la communauté aussi — et les meilleurs pronostiqueurs transforment leurs crédits en argent réel.",
     "hero.cta.submit": "Déposer un pronostic",
@@ -2490,6 +2495,7 @@ const T = {
     "nav.wallet": "Portafoglio",
     "nav.profile": "Profilo",
     "hero.badge": "La community globale dei pronostici",
+    "hero.playable": "Qui SOLO pronostici giocabili — mai avvisi di vincita. Entra e rigioca la giocata, sempre con una puntata controllata.",
     "hero.title": "Postalo. Votalo. Incassa.",
     "hero.subtitle": "Metti i tuoi pronostici di calcio nel barattolo. La nostra IA valuta ogni schedina all'istante, e anche la community — e i migliori tipster trasformano i crediti in soldi veri.",
     "hero.cta.submit": "Lascia un pronostico",
@@ -2835,6 +2841,7 @@ const T = {
     "nav.wallet": "المحفظة",
     "nav.profile": "الملف الشخصي",
     "hero.badge": "مجتمع التوقعات العالمي",
+    "hero.playable": "هنا توقعات قابلة للّعب فقط — أبدًا إشعارات فوز. فقط ادخل والعب ما يُنشر، دائمًا برهان محسوب.",
     "hero.title": "انشره. قيّمه. اربح.",
     "hero.subtitle": "ضع توقعاتك لكرة القدم في الجرة. يقيّم ذكاؤنا الاصطناعي كل قسيمة فوراً، والمجتمع يقيّمها أيضاً — وأفضل المتوقعين يحوّلون النقاط إلى مال حقيقي.",
     "hero.cta.submit": "أضف توقعاً",
@@ -3180,6 +3187,7 @@ const T = {
     "nav.wallet": "Cüzdan",
     "nav.profile": "Profil",
     "hero.badge": "Küresel tahmin topluluğu",
+    "hero.playable": "Burada SADECE oynanabilir tahminler var — asla kazanç bildirimi yok. Sadece gir ve oyna, her zaman kontrollü bir bahisle.",
     "hero.title": "Paylaş. Puanla. Kazan.",
     "hero.subtitle": "Futbol tahminlerini kavanoza bırak. Yapay zekâmız her kuponu anında puanlar, topluluk da puanlar — ve kazanan tahminciler kredilerini gerçek paraya çevirir.",
     "hero.cta.submit": "Tahmin bırak",

@@ -261,6 +261,10 @@ function Home() {
               {t("hero.title")}
             </h1>
             <p className="text-lg text-zinc-400 mt-5 max-w-xl leading-relaxed">{t("hero.subtitle")}</p>
+            <div data-testid="playable-only-badge" className="mt-5 flex items-start gap-2.5 rounded-xl border border-volt/40 bg-volt/10 px-4 py-3 max-w-xl">
+              <CheckCircle2 size={18} className="text-volt shrink-0 mt-0.5" />
+              <span className="text-sm font-semibold text-white leading-snug">{t("hero.playable")}</span>
+            </div>
             <div className="flex flex-wrap gap-3 mt-8">
               <button data-testid="hero-submit-btn" onClick={() => setSubmitOpen(true)}
                 className="flex items-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_30px_rgba(225,255,0,0.3)]">
