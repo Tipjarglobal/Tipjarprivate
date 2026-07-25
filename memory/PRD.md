@@ -33,6 +33,12 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: **Hall of Fame overhaul** — deleted all old seeded/showcase win_claims, disabled
+  the showcase seeds (`_seed_showcase_wins`, `_seed_hof_showcase_slip`). New `daily_hof_autofill()`
+  + `daily_hof_loop()` (once/day): turns the best recent WON tips into branded trophy slips
+  (auto-approved win_claims, dedup by `source_tip_id`, odds≥1.5, max 6/day).
+- 2026-06: Added experts **Lyra** (Betting Friends @bettingfriendss, X) and **Vela**
+  (DGD Football Tips @DGDFreeTips, X). 9 experts total now.
 - 2026-06: Added **BET KING.gr** (t.me/betmastersfreee) → new bot **Altair**. 7 experts now:
   Orion(EMPTips), Vega(LEVY-X), Nova(thesuperbets), Sirius(Chrisbetsbets),
   Rigel(grizzlybetslive-X), Polaris(bet_of_the_day_tips_free), Altair(betmastersfreee).

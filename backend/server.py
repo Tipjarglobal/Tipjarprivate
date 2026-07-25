@@ -1516,6 +1516,14 @@ _CHANNEL_BOTS = {
         "email": "altair@tipjar.com", "name": "Altair",
         "bio": "In-house Analyst — kuratierte Tages-Tipps & Kombis.",
     },
+    "bettingfriendss": {                  # Betting Friends (@bettingfriendss) X/Twitter handle
+        "email": "lyra@tipjar.com", "name": "Lyra",
+        "bio": "In-house Analyst — Accas, Inplays & Value-Picks.",
+    },
+    "dgdfreetips": {                      # DGD Football Tips (@DGDFreeTips) X/Twitter handle
+        "email": "vela@tipjar.com", "name": "Vela",
+        "bio": "In-house Analyst — Pre-Match & In-Play Bet-Builder.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
     # "somechannel": {"email": "atlas@tipjar.com", "name": "Atlas", "bio": "..."},
 }
@@ -1646,7 +1654,7 @@ EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
 # Source of truth = code (works in production without env juggling). Each channel/handle
 # MUST have a matching persona in _CHANNEL_BOTS. Env vars only ADD extra sources.
 _CODE_TG_CHANNELS = ["EMPTipsTele", "thesuperbets", "Chrisbetsbets", "bet_of_the_day_tips_free", "betmastersfreee"]   # public Telegram channels
-_CODE_X_HANDLES = ["EmpTips", "LevyKingTips", "grizzlybetslive"]          # public X/Twitter handles
+_CODE_X_HANDLES = ["EmpTips", "LevyKingTips", "grizzlybetslive", "bettingfriendss", "DGDFreeTips"]          # public X/Twitter handles
 _env_tg = [c.strip().lstrip("@") for c in
            (os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")).split(",") if c.strip()]
 _env_x = [h.strip().lstrip("@") for h in
@@ -7062,6 +7070,65 @@ async def expert_expiry_loop():
         await asyncio.sleep(6 * 3600)
 
 
+async def daily_hof_autofill(max_new: int = 6) -> int:
+    """Keep the Hall of Fame fresh: turn the best recent WON tips into branded trophy slips
+    (auto-approved win_claims). Runs daily. Dedup by source tip id, so each win is added once."""
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(days=7)).isoformat()
+    won = await db.tips.find(
+        {"status": "won", "created_at": {"$gte": since}}, {"_id": 0}).to_list(500)
+    won.sort(key=lambda t: (_to_float(t.get("odds")) + (1.0 if t.get("is_parlay") else 0.0)),
+             reverse=True)
+    added = 0
+    for tp in won:
+        if added >= max_new:
+            break
+        odds = _to_float(tp.get("odds"))
+        if odds < 1.5:
+            continue  # only juicy wins belong in the Hall of Fame
+        if await db.win_claims.find_one({"source_tip_id": tp["id"]}, {"_id": 1}):
+            continue
+        try:
+            rlegs = _tip_to_render_legs(tp)
+            if not rlegs:
+                continue
+            stake = tp.get("stake") or "10,00 €"
+            winnings = tp.get("potential_return") or (f"{odds * 10:.2f} €".replace(".", ","))
+            img = await asyncio.to_thread(
+                _render_slip_image, rlegs, odds, stake, winnings,
+                tp.get("username", "TipJar"), "played")
+            res = await asyncio.to_thread(
+                put_object, f"{APP_NAME}/wins/hof/{uuid.uuid4()}.webp", img, "image/webp")
+            path = res["path"]
+            await db.files.insert_one({
+                "id": str(uuid.uuid4()), "storage_path": path,
+                "original_filename": "tipjar-hof.webp", "content_type": "image/webp",
+                "owner": "tipjar-hof", "is_deleted": False, "created_at": now.isoformat()})
+            await db.win_claims.insert_one({
+                "id": str(uuid.uuid4()), "source_tip_id": tp["id"], "user_id": "tipjar-hof",
+                "username": tp.get("username", "TipJar"), "type": "played", "image_path": path,
+                "legs": rlegs, "legs_count": len(rlegs), "matched_legs": len(rlegs),
+                "total_odds": odds, "stake": stake, "winnings": winnings,
+                "credits": 0, "status": "approved", "auto_hof": True,
+                "created_at": now.isoformat()})
+            added += 1
+        except Exception as ex:
+            logger.error(f"daily HoF autofill failed for {tp.get('id')}: {ex}")
+    if added:
+        logger.info(f"Daily HoF autofill: added {added} trophy slip(s)")
+    return added
+
+
+async def daily_hof_loop():
+    await asyncio.sleep(120)
+    while True:
+        try:
+            await daily_hof_autofill()
+        except Exception as e:
+            logger.error(f"daily_hof_loop error: {e}")
+        await asyncio.sleep(24 * 3600)  # once a day
+
+
 @app.on_event("startup")
 async def startup():
     # Email is optional now: unique only when present (partial index). Drop old strict index if needed.
@@ -7122,7 +7189,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
     _BG_TASKS.append(asyncio.create_task(_regenerate_win_slips_once()))
-    _BG_TASKS.append(asyncio.create_task(_seed_showcase_wins()))
+    _BG_TASKS.append(asyncio.create_task(daily_hof_loop()))
     _BG_TASKS.append(asyncio.create_task(system_reset_loop()))
     _BG_TASKS.append(asyncio.create_task(expert_expiry_loop()))
     if API_FOOTBALL_KEY:
@@ -7461,7 +7528,6 @@ async def _startup_seed():
         # Backfill mailbox (welcome + expert invite) for existing users who never got one.
         await _backfill_inbox()
         await seed_showcase()
-        await _seed_hof_showcase_slip()
         await _migrate_stars_and_categories()
         await _cleanup_smart_junk()
     except Exception as e:
