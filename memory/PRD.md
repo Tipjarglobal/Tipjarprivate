@@ -33,6 +33,11 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - team_cache, emptips_seen, users (role=expert, is_bot for personas)
 
 ## Implemented (latest)
+- 2026-06: Added **Chris bets (t.me/Chrisbetsbets)** → new unique bot **Sirius**. Added new
+  **"Our Experts" showcase** section prominently at top of home page (`ExpertsShowcase.jsx`,
+  fetches `/experts`, clickable → profile). Moved **Statistics quick-nav to LAST** in BOTH
+  header pills (Header.jsx) and overlay nav (App.js). Bot map now:
+  EMPTips→Orion, LEVY→Vega, thesuperbets→Nova, Chrisbetsbets→Sirius.
 - 2026-06: Added **Super bets (t.me/thesuperbets)** → new unique bot **Nova**. Made
   watch lists CODE-driven (`_CODE_TG_CHANNELS`/`_CODE_X_HANDLES`, env additive & deduped)
   so cloning works in production without env changes. Baselined existing posts.
