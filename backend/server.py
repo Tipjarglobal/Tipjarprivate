@@ -1512,6 +1512,10 @@ _CHANNEL_BOTS = {
         "email": "polaris@tipjar.com", "name": "Polaris",
         "bio": "In-house Analyst — täglicher Value-Pick des Tages.",
     },
+    "betmastersfreee": {                  # BET KING.gr (t.me/betmastersfreee) Telegram channel
+        "email": "altair@tipjar.com", "name": "Altair",
+        "bio": "In-house Analyst — kuratierte Tages-Tipps & Kombis.",
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
     # "somechannel": {"email": "atlas@tipjar.com", "name": "Atlas", "bio": "..."},
 }
@@ -1641,7 +1645,7 @@ async def admin_emptips_run(admin: dict = Depends(require_admin)):
 EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
 # Source of truth = code (works in production without env juggling). Each channel/handle
 # MUST have a matching persona in _CHANNEL_BOTS. Env vars only ADD extra sources.
-_CODE_TG_CHANNELS = ["EMPTipsTele", "thesuperbets", "Chrisbetsbets", "bet_of_the_day_tips_free"]   # public Telegram channels
+_CODE_TG_CHANNELS = ["EMPTipsTele", "thesuperbets", "Chrisbetsbets", "bet_of_the_day_tips_free", "betmastersfreee"]   # public Telegram channels
 _CODE_X_HANDLES = ["EmpTips", "LevyKingTips", "grizzlybetslive"]          # public X/Twitter handles
 _env_tg = [c.strip().lstrip("@") for c in
            (os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")).split(",") if c.strip()]
