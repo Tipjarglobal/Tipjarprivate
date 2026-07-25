@@ -1433,27 +1433,46 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     return tip
 
 
-_EXPERT_BOT_EMAIL = "orion@tipjar.com"
-_EXPERT_BOT_NAME = "Orion"
+# --- One unique in-house expert bot per monitored tipster channel ---------
+# Each scraped source channel maps to exactly ONE anonymous bot persona. Add a new
+# entry here (unique name + email) whenever a new tipster channel is scraped — never
+# reuse Orion for a different source. Keys are channel names / X handles (lowercase).
+_DEFAULT_EXPERT_BOT = {
+    "email": "orion@tipjar.com", "name": "Orion",
+    "bio": "In-house Value-Analyst — kuratierte Multis & Bet-Builder.",
+}
+_CHANNEL_BOTS = {
+    "emptipstele": _DEFAULT_EXPERT_BOT,   # EMP Tips Telegram channel
+    "emptips": _DEFAULT_EXPERT_BOT,       # EMP Tips X/Twitter handle
+    # Future tipster channels → add a UNIQUE bot here, e.g.:
+    # "somechannel": {"email": "nova@tipjar.com", "name": "Nova", "bio": "..."},
+}
 
 
-async def _get_expert_bot():
-    """Anonymous in-house expert persona. Monitored tipster slips are re-posted under this
-    bot (role=expert → orange card + Experte badge in the community feed). Source channels
-    are never revealed."""
-    bot = await db.users.find_one({"email": _EXPERT_BOT_EMAIL})
+def _bot_for_channel(channel: str) -> dict:
+    """Resolve the unique expert bot persona for a given source channel/handle."""
+    key = (channel or "").lstrip("@").strip().lower()
+    return _CHANNEL_BOTS.get(key, _DEFAULT_EXPERT_BOT)
+
+
+async def _get_expert_bot(bot_cfg: dict = None):
+    """Anonymous in-house expert persona (one per tipster channel). Monitored slips are
+    re-posted under this bot (role=expert → orange card + Experte badge in the community
+    feed). Source channels are never revealed."""
+    cfg = bot_cfg or _DEFAULT_EXPERT_BOT
+    bot = await db.users.find_one({"email": cfg["email"]})
     if bot:
         return bot
     now = datetime.now(timezone.utc).isoformat()
     bot = {
-        "id": str(uuid.uuid4()), "email": _EXPERT_BOT_EMAIL, "username": _EXPERT_BOT_NAME,
+        "id": str(uuid.uuid4()), "email": cfg["email"], "username": cfg["name"],
         "password_hash": "", "role": "expert", "is_verified": True, "verified": True,
         "credits": 0, "received_credits": 0, "referral_code": uuid.uuid4().hex[:8],
         "apex_flame": True, "created_at": now, "is_bot": True,
-        "bio": "In-house Value-Analyst — kuratierte Multis & Bet-Builder.",
+        "bio": cfg.get("bio", ""),
     }
     await db.users.insert_one(bot)
-    logger.info(f"Created expert bot '{_EXPERT_BOT_NAME}'")
+    logger.info(f"Created expert bot '{cfg['name']}'")
     return bot
 
 
@@ -1464,12 +1483,15 @@ def _scrub_source(text: str) -> str:
     return re.sub(r'[ \t]{2,}', ' ', t).strip()
 
 
-async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False):
-    """Shared core: vision-AI a betslip (image/text) → re-post it ANONYMOUSLY as an 'Orion'
-    expert community pick (orange), enriched with real hit-rate stats. image_blobs = list of
+async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False, bot_cfg=None):
+    """Shared core: vision-AI a betslip (image/text) → re-post it ANONYMOUSLY as an expert
+    community pick (orange), enriched with real hit-rate stats. The posting bot is resolved
+    from bot_cfg (one unique persona per source channel). image_blobs = list of
     (bytes, ext, content_type). When skip_if_empty (auto path), returns None for promo/results
     posts with no real pick."""
-    bot = await _get_expert_bot()
+    bot = await _get_expert_bot(bot_cfg)
+    bot_name = bot.get("username") or (bot_cfg or _DEFAULT_EXPERT_BOT)["name"]
+    bot_slug = re.sub(r'[^a-z0-9]+', '', bot_name.lower()) or "expert"
     detected = await analyze_tip(images_b64 or None, text)
     if not detected.get("safe", True):
         if skip_if_empty:
@@ -1492,12 +1514,12 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
     if detected.get("home_team") and detected.get("away_team"):
         stats_line = await _pick_stats_line({"home": detected["home_team"], "away": detected["away_team"]})
     analysis = _scrub_source(detected.get("analysis") or "")
-    analysis = f"🔮 {_EXPERT_BOT_NAME}: {analysis}" if analysis else f"🔮 {_EXPERT_BOT_NAME} Pick"
+    analysis = f"🔮 {bot_name}: {analysis}" if analysis else f"🔮 {bot_name} Pick"
     if stats_line:
         analysis += f"\n\n📊 {stats_line}"
     tip = {
-        "id": f"orion-{uuid.uuid4().hex[:10]}",
-        "user_id": bot["id"], "username": _EXPERT_BOT_NAME,
+        "id": f"{bot_slug}-{uuid.uuid4().hex[:10]}",
+        "user_id": bot["id"], "username": bot_name,
         "raw_text": _scrub_source(text), "is_expert": True,
         "image_path": image_paths[0] if image_paths else None,
         "image_paths": image_paths,
@@ -1511,7 +1533,7 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
         "stake": detected.get("stake", ""),
         "potential_return": detected.get("potential_return", ""),
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-        "source": "orion", "category": "value",
+        "source": bot_slug, "category": "value",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.tips.insert_one(tip)
@@ -1566,9 +1588,14 @@ async def emptips_autopost() -> dict:
     import emptips_watch
     posts = []
     for ch in WATCH_TG_CHANNELS:
-        posts += await asyncio.to_thread(emptips_watch.fetch_telegram, ch)
+        chan_posts = await asyncio.to_thread(emptips_watch.fetch_telegram, ch)
+        for p in chan_posts:
+            p["_channel"] = ch  # remember source → resolve its unique bot later
+        posts += chan_posts
     if not posts and EMPTIPS_HANDLE:
         posts = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
+        for p in posts:
+            p["_channel"] = EMPTIPS_HANDLE
     if not posts:
         return {"posted": 0, "reason": "source unavailable"}
     # First activation: baseline the current backlog as 'seen' WITHOUT posting stale tips.
@@ -1601,7 +1628,8 @@ async def emptips_autopost() -> dict:
                 images_b64.append(base64.b64encode(raw).decode("utf-8"))
                 image_blobs.append((raw, "jpg", "image/jpeg"))
         try:
-            tip = await _ingest_emptips(images_b64, image_blobs, text, source_url=tw["url"], skip_if_empty=True)
+            bot_cfg = _bot_for_channel(tw.get("_channel", ""))
+            tip = await _ingest_emptips(images_b64, image_blobs, text, source_url=tw["url"], skip_if_empty=True, bot_cfg=bot_cfg)
             if tip:
                 seen_doc.update({"posted": True, "tip_id": tip["id"]})
                 posted += 1
