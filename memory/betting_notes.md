@@ -176,3 +176,16 @@ match-analysis prose (explain WHY, EMP-Tips style, with implied-goal reasoning).
 - VERIFIED: baseline marked 18 posts, 0 dumped; simulated 3 new → auto-posted 2 real accas
   (5-leg @10.00, 2-leg @2.10) with legs parsed from betslip screenshots via vision-AI.
 - NOTE: vision-AI ingestion uses Emergent LLM credits (~1 call per new EMP betslip).
+
+### UPDATED 2026-07-25 — Anonymous expert bot "Orion" + multi-channel
+- Monitored tipster slips are now re-posted ANONYMOUSLY under an in-house expert bot "Orion"
+  (user orion@tipjar.com, role="expert" → auto orange card + EXPERTE badge in Community feed).
+- source="orion", category="value", user_id=bot, username="Orion", is_expert=True. Lands in the
+  members/community bucket. No frontend change needed (is_expert already styles orange).
+- Source anonymity: _scrub_source() strips URLs / t.me links / @handles / "EMP Tips" from
+  raw_text + analysis. Tip id prefix orion-. Analysis prefixed "🔮 Orion:".
+- MULTI-CHANNEL: env WATCH_TG_CHANNELS = comma-separated Telegram channels (fallback to
+  EMPTIPS_TG_CHANNEL, then X handle). emptips_autopost() iterates all channels; Telegram msg ids
+  now "tg-<channel>-<id>" to avoid cross-channel collisions.
+- VERIFIED: Community feed shows 2 orange "by Orion" EXPERTE parlays parsed from betslips.
+- To add channels: append to WATCH_TG_CHANNELS in backend/.env (comma) + restart backend.

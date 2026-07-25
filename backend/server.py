@@ -1433,13 +1433,43 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     return tip
 
 
+_EXPERT_BOT_EMAIL = "orion@tipjar.com"
+_EXPERT_BOT_NAME = "Orion"
+
+
+async def _get_expert_bot():
+    """Anonymous in-house expert persona. Monitored tipster slips are re-posted under this
+    bot (role=expert → orange card + Experte badge in the community feed). Source channels
+    are never revealed."""
+    bot = await db.users.find_one({"email": _EXPERT_BOT_EMAIL})
+    if bot:
+        return bot
+    now = datetime.now(timezone.utc).isoformat()
+    bot = {
+        "id": str(uuid.uuid4()), "email": _EXPERT_BOT_EMAIL, "username": _EXPERT_BOT_NAME,
+        "password_hash": "", "role": "expert", "is_verified": True, "verified": True,
+        "credits": 0, "received_credits": 0, "referral_code": uuid.uuid4().hex[:8],
+        "apex_flame": True, "created_at": now, "is_bot": True,
+        "bio": "In-house Value-Analyst — kuratierte Multis & Bet-Builder.",
+    }
+    await db.users.insert_one(bot)
+    logger.info(f"Created expert bot '{_EXPERT_BOT_NAME}'")
+    return bot
+
+
+def _scrub_source(text: str) -> str:
+    """Remove anything that could reveal the original tipster/channel."""
+    t = re.sub(r'https?://\S+|t\.me/\S+|@\w+', '', text or '')
+    t = re.sub(r'(?i)\bemp\s*tips?\b', '', t)
+    return re.sub(r'[ \t]{2,}', ' ', t).strip()
+
+
 async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_empty=False):
-    """Shared core: vision-AI a betslip (image/text) → post it as a public 'EMP Tips'
-    pick enriched with real hit-rate stats. image_blobs = list of (bytes, ext, content_type).
-    When skip_if_empty (auto path), returns None for promo/results posts with no real pick."""
-    hq = await db.users.find_one({"email": "hq@tipjar.com"})
-    if not hq:
-        raise HTTPException(status_code=400, detail="HQ account missing")
+    """Shared core: vision-AI a betslip (image/text) → re-post it ANONYMOUSLY as an 'Orion'
+    expert community pick (orange), enriched with real hit-rate stats. image_blobs = list of
+    (bytes, ext, content_type). When skip_if_empty (auto path), returns None for promo/results
+    posts with no real pick."""
+    bot = await _get_expert_bot()
     detected = await analyze_tip(images_b64 or None, text)
     if not detected.get("safe", True):
         if skip_if_empty:
@@ -1447,28 +1477,28 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
         raise HTTPException(status_code=422, detail=detected.get("flag_reason") or "Inhalt nicht erlaubt.")
     legs = _sanitize_legs(detected.get("legs"))
     if skip_if_empty and not legs and not (detected.get("market") or "").strip() and not (detected.get("odds") or "").strip():
-        return None  # promo / results / hype tweet → not an actual pick
+        return None  # promo / results / hype post → not an actual pick
     image_paths = []
     for rb, ext, ct in image_blobs:
-        path = f"{APP_NAME}/emptips/{uuid.uuid4()}.{ext}"
+        path = f"{APP_NAME}/expert/{uuid.uuid4()}.{ext}"
         try:
             res = put_object(path, rb, ct or "image/png")
             image_paths.append(res["path"])
         except Exception as e:
-            logger.warning(f"emptips image store failed: {e}")
+            logger.warning(f"expert-bot image store failed: {e}")
     is_parlay = bool(detected.get("is_parlay") or len(legs) > 1
                      or (legs and len(legs[0].get("selections", [])) > 1))
     stats_line = ""
     if detected.get("home_team") and detected.get("away_team"):
         stats_line = await _pick_stats_line({"home": detected["home_team"], "away": detected["away_team"]})
-    analysis = (detected.get("analysis") or "").strip()
-    analysis = f"📣 EMP Tips: {analysis}" if analysis else "📣 EMP Tips Pick"
+    analysis = _scrub_source(detected.get("analysis") or "")
+    analysis = f"🔮 {_EXPERT_BOT_NAME}: {analysis}" if analysis else f"🔮 {_EXPERT_BOT_NAME} Pick"
     if stats_line:
         analysis += f"\n\n📊 {stats_line}"
     tip = {
-        "id": f"emptips-{uuid.uuid4().hex[:10]}",
-        "user_id": hq["id"], "username": "EMP Tips",
-        "raw_text": (text or "").strip(), "source_url": source_url,
+        "id": f"orion-{uuid.uuid4().hex[:10]}",
+        "user_id": bot["id"], "username": _EXPERT_BOT_NAME,
+        "raw_text": _scrub_source(text), "is_expert": True,
         "image_path": image_paths[0] if image_paths else None,
         "image_paths": image_paths,
         "home_team": detected.get("home_team", ""), "away_team": detected.get("away_team", ""),
@@ -1481,7 +1511,7 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
         "stake": detected.get("stake", ""),
         "potential_return": detected.get("potential_return", ""),
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-        "source": "emptips", "category": "expert",
+        "source": "orion", "category": "value",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.tips.insert_one(tip)
@@ -1519,7 +1549,9 @@ async def admin_emptips_run(admin: dict = Depends(require_admin)):
 
 
 EMPTIPS_HANDLE = os.environ.get("EMPTIPS_HANDLE", "").strip()
-EMPTIPS_TG_CHANNEL = os.environ.get("EMPTIPS_TG_CHANNEL", "").strip()
+# Comma-separated list of public Telegram channels to monitor (sources stay anonymous).
+_WATCH_RAW = os.environ.get("WATCH_TG_CHANNELS", "") or os.environ.get("EMPTIPS_TG_CHANNEL", "")
+WATCH_TG_CHANNELS = [c.strip().lstrip("@") for c in _WATCH_RAW.split(",") if c.strip()]
 _EMP_RESULT_KW = re.compile(
     r'(boo+m|fl(y|ies|ys)\s*in|winner+|congrats|landed|cash(ed)?|smashed|\bgreen\b|'
     r'\+\d+(\.\d+)?u\b|nap won|banked|paid out)', re.I)
@@ -1529,12 +1561,12 @@ async def emptips_autopost() -> dict:
     """Auto-read EMP Tips' latest posts for FREE (public Telegram web preview first, then X
     via Nitter mirrors), turn each NEW betslip post into a public 'EMP Tips' pick via vision-AI.
     No API/keys/cost. Results/hype posts (no real pick) are skipped. Tracked in db.emptips_seen."""
-    if not EMPTIPS_TG_CHANNEL and not EMPTIPS_HANDLE:
-        return {"posted": 0, "reason": "no EMP source configured"}
+    if not WATCH_TG_CHANNELS and not EMPTIPS_HANDLE:
+        return {"posted": 0, "reason": "no source configured"}
     import emptips_watch
     posts = []
-    if EMPTIPS_TG_CHANNEL:
-        posts = await asyncio.to_thread(emptips_watch.fetch_telegram, EMPTIPS_TG_CHANNEL)
+    for ch in WATCH_TG_CHANNELS:
+        posts += await asyncio.to_thread(emptips_watch.fetch_telegram, ch)
     if not posts and EMPTIPS_HANDLE:
         posts = await asyncio.to_thread(emptips_watch.fetch_timeline, EMPTIPS_HANDLE)
     if not posts:

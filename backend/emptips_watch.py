@@ -118,7 +118,7 @@ def fetch_telegram(channel):
             txt = re.sub(r'<[^>]+>', '', _html.unescape(re.sub(r'<br ?/?>', '\n', tm.group(1)))).strip()
         photos = [p for p in re.findall(r"background-image:url\('([^']+)'\)", w)
                   if "telesco" in p or "/file/" in p or "cdn" in p]
-        out.append({"id": f"tg-{mid.group(1)}", "text": txt, "images": photos,
+        out.append({"id": f"tg-{channel}-{mid.group(1)}", "text": txt, "images": photos,
                     "url": f"https://t.me/{channel}/{mid.group(1)}"})
     logger.info(f"EMP Telegram {channel}: {len(out)} messages")
     return out
