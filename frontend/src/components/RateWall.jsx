@@ -77,6 +77,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0, void: 0 });
   const [settledTab, setSettledTab] = useState(null);
   const [masterTab, setMasterTab] = useState("slips");
+  const [masterCounts, setMasterCounts] = useState({ slips: 0, einfach: 0, mittel: 0, challenge: 0, live: 0 });
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -207,6 +208,30 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     const iv = setInterval(loadLiveCounts, 20000);
     return () => clearInterval(iv);
   }, [view, refreshKey, loadLiveCounts]);
+
+  // ── Master sub-area counts — each area shows how many picks it holds ──
+  const loadMasterCounts = useCallback(async () => {
+    if (view !== "master") return;
+    try {
+      const [pend, live] = await Promise.all([
+        api.get("/tips", { params: { source: "master", status: "pending", limit: 300 } }),
+        api.get("/tips", { params: { source: "master", status: "live", limit: 200 } }),
+      ]);
+      const c = { slips: 0, einfach: 0, mittel: 0, challenge: 0, live: live.data.length };
+      pend.data.forEach((tp) => {
+        const mc = tp.master_category;
+        if (mc === "einfach" || mc === "mittel" || mc === "challenge") c[mc] += 1;
+        else c.slips += 1;
+      });
+      setMasterCounts(c);
+    } catch { /* ignore */ }
+  }, [view]);
+  useEffect(() => {
+    if (view !== "master") return;
+    loadMasterCounts();
+    const iv = setInterval(loadMasterCounts, 20000);
+    return () => clearInterval(iv);
+  }, [view, refreshKey, loadMasterCounts]);
 
   const rate = async (tip, stars) => {
     if (!user) { requireLogin(); return; }
@@ -503,6 +528,12 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
                 className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>
                 {v === "live" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse mr-1.5 align-middle" />}
                 {lbl}
+                {masterCounts[v] > 0 && (
+                  <span data-testid={`master-count-${v}`}
+                    className={`ml-2 text-[11px] font-mono rounded-full px-1.5 align-middle ${masterTab === v ? "bg-black/25 text-white" : "bg-void/60 text-red-200"}`}>
+                    {masterCounts[v] > 99 ? "99+" : masterCounts[v]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
