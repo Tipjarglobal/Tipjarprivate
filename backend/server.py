@@ -2794,22 +2794,25 @@ def _money_to_usd(s):
 async def hall_of_fame():
     raw = await db.win_claims.find(
         {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
-    ).sort("total_odds", -1).limit(48).to_list(48)
-    # House bots (TipJarHQ / TipJarMaster) only qualify with a system/parlay.
+    ).sort("total_odds", -1).limit(96).to_list(96)
+    # Owner rule 2026-07-26: Hall of Fame = SYSTEMS ONLY (≥ 2 legs) with a total quote
+    # of at least 3.00. Single picks are never shown, regardless of author.
     docs = [d for d in raw
-            if not _is_house_single(d.get("username"), legs_count=d.get("legs_count"))][:24]
+            if (d.get("legs_count") or 1) >= 2 and _to_float(d.get("total_odds")) >= 3.0][:24]
     for d in docs:  # trophies always show $ too (owner rule)
         if d.get("stake"):
             d["stake"] = _money_to_usd(d.get("stake"))
         if d.get("winnings"):
             d["winnings"] = _money_to_usd(d.get("winnings"))
-    # Cashed-out slips are trophies too — surface them in the Hall of Fame.
+    # Cashed-out slips are trophies too — but the SAME rule applies: systems + quote ≥ 3.00.
     cashed = await db.tips.find(
         {"status": "cashed_out"}, {"_id": 0}
     ).sort("settled_at", -1).limit(24).to_list(24)
     for tp in cashed:
-        if _is_house_single(tp.get("username"), is_parlay=tp.get("is_parlay")):
-            continue
+        if not tp.get("is_parlay"):
+            continue  # no single picks in the Hall of Fame
+        if _to_float(tp.get("odds")) < 3.0:
+            continue  # quote must be ≥ 3.00
         docs.append({
             "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
             "total_odds": _to_float(tp.get("odds")),
@@ -8413,12 +8416,14 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
     for tp in won:
         if added >= max_new:
             break
-        # Owner rule: TipJarHQ / TipJarMaster singles never enter the Hall of Fame.
-        if _is_house_single(tp.get("username"), is_parlay=tp.get("is_parlay")):
+        # Owner rule 2026-07-26: the Hall of Fame holds SYSTEMS ONLY (parlays) with a
+        # total quote of AT LEAST 3.00. Single picks are forbidden — from ANY author,
+        # TipJarHQ / TipJarMaster included. No exceptions.
+        if not tp.get("is_parlay"):
             continue
         odds = _to_float(tp.get("odds"))
-        if odds < 1.5:
-            continue  # only juicy wins belong in the Hall of Fame
+        if odds < 3.0:
+            continue  # only real system wins (quote ≥ 3.00) belong in the Hall of Fame
         if await db.win_claims.find_one({"source_tip_id": tp["id"]}, {"_id": 1}):
             continue
         try:
@@ -8926,6 +8931,11 @@ async def _startup_seed():
         await seed_showcase()
         await _migrate_stars_and_categories()
         await _cleanup_smart_junk()
+        # Owner rule 2026-07-26: Hall of Fame = SYSTEMS ONLY (≥ 2 legs) with total quote
+        # ≥ 3.00. Purge every single-pick or low-odds trophy so none can ever surface
+        # (runs on every environment, incl. production, after deploy).
+        await db.win_claims.delete_many(
+            {"$or": [{"legs_count": {"$lt": 2}}, {"total_odds": {"$lt": 3.0}}]})
     except Exception as e:
         logger.error(f"Startup seed failed: {e}")
 
