@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#050506; }
+  .stage {
+    width:1080px; height:1350px; position:relative; overflow:hidden;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(198,241,53,0.10), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, rgba(225,29,42,0.14), transparent 55%),
+      linear-gradient(180deg,#0a0a0c 0%, #060608 60%, #050506 100%);
+    font-family:'Archivo',sans-serif; color:#fff;
+    padding:64px 60px 56px;
+  }
+  .grain { position:absolute; inset:0; opacity:0.04; pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  .head { display:flex; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:16px; }
+  .jar { width:60px; height:60px; display:flex; align-items:center; justify-content:center;
+    border:3px solid #C6F135; border-radius:16px; background:rgba(198,241,53,0.08); box-shadow:0 0 30px rgba(198,241,53,0.25); }
+  .logo { font-family:'Anton',sans-serif; font-size:44px; letter-spacing:1px; line-height:1; }
+  .logo b { color:#C6F135; }
+  .logo span { display:block; font-family:'Archivo'; font-weight:800; font-size:15px; letter-spacing:8px; color:#8a8a92; margin-top:4px; }
+  .won-badge { display:flex; align-items:center; gap:12px; background:rgba(46,204,113,0.14);
+    border:2px solid rgba(46,204,113,0.55); color:#39E27D; padding:14px 24px; border-radius:999px;
+    font-family:'Anton'; font-size:30px; letter-spacing:2px; box-shadow:0 0 34px rgba(57,226,125,0.25); }
+
+  .title { margin:44px 0 28px; }
+  .kicker { font-weight:800; font-size:16px; letter-spacing:6px; color:#C6F135; }
+  .headline { font-family:'Anton'; font-size:76px; line-height:0.95; margin-top:10px; }
+  .headline em { font-style:normal; color:#C6F135; }
+
+  .legs { display:flex; flex-direction:column; gap:14px; }
+  .leg { display:flex; align-items:center; gap:20px; padding:22px 26px; border-radius:18px;
+    background:linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02));
+    border:1px solid rgba(255,255,255,0.08); }
+  .check { width:44px; height:44px; flex:0 0 44px; border-radius:50%; background:rgba(57,226,125,0.15);
+    border:2px solid #39E27D; display:flex; align-items:center; justify-content:center; }
+  .check svg { width:24px; height:24px; }
+  .leg-main { flex:1; min-width:0; }
+  .match { font-weight:800; font-size:28px; letter-spacing:0.2px; }
+  .market { font-weight:600; font-size:19px; color:#9aa0a6; margin-top:3px; }
+  .odd { font-family:'Anton'; font-size:34px; color:#fff; }
+
+  .foot { margin-top:30px; display:grid; grid-template-columns:1fr 1fr 1.35fr; gap:16px; }
+  .cell { border-radius:18px; padding:22px 24px; border:1px solid rgba(255,255,255,0.08);
+    background:rgba(255,255,255,0.03); }
+  .cell .lbl { font-weight:800; font-size:15px; letter-spacing:3px; color:#8a8a92; }
+  .cell .val { font-family:'Anton'; font-size:44px; margin-top:8px; }
+  .cell.win { background:linear-gradient(180deg,rgba(198,241,53,0.16),rgba(198,241,53,0.06));
+    border:2px solid rgba(198,241,53,0.6); box-shadow:0 0 40px rgba(198,241,53,0.22); }
+  .cell.win .lbl { color:#C6F135; }
+  .cell.win .val { color:#C6F135; font-size:56px; }
+
+  .url { position:absolute; left:0; right:0; bottom:24px; text-align:center; font-weight:800;
+    letter-spacing:4px; font-size:18px; color:#C6F135; }
+</style>
+</head>
+<body>
+  <div class="stage" id="slip">
+    <div class="grain"></div>
+
+    <div class="head">
+      <div class="brand">
+        <div class="jar">
+          <svg width="30" height="34" viewBox="0 0 24 24" fill="none" stroke="#C6F135" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2h8"/><path d="M9 2v3l-3 4v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9l-3-4V2"/><path d="M6 13h12"/>
+          </svg>
+        </div>
+        <div class="logo"><b>Tip</b>Jar<span>GLOBAL</span></div>
+      </div>
+      <div class="won-badge">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        GEWONNEN
+      </div>
+    </div>
+
+    <div class="title">
+      <div class="kicker">6ER-KOMBI · ALLE GETROFFEN</div>
+      <div class="headline">Aus 25&nbsp;€ mach <em>600&nbsp;€</em></div>
+    </div>
+
+    <div class="legs">
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Real Madrid – Girona</div><div class="market">Real Madrid Sieg</div></div>
+        <div class="odd">1.50</div>
+      </div>
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Bayern München – RB Leipzig</div><div class="market">Bayern Sieg</div></div>
+        <div class="odd">1.60</div>
+      </div>
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Liverpool – Newcastle</div><div class="market">Liverpool Sieg</div></div>
+        <div class="odd">1.60</div>
+      </div>
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Inter Mailand – Hellas Verona</div><div class="market">Inter Sieg</div></div>
+        <div class="odd">1.25</div>
+      </div>
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Arsenal – Chelsea</div><div class="market">Über 2.5 Tore</div></div>
+        <div class="odd">2.00</div>
+      </div>
+      <div class="leg">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#39E27D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="leg-main"><div class="match">Dortmund – Wolfsburg</div><div class="market">Beide Teams treffen</div></div>
+        <div class="odd">2.50</div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="cell"><div class="lbl">EINSATZ</div><div class="val">25&nbsp;€</div></div>
+      <div class="cell"><div class="lbl">GESAMTQUOTE</div><div class="val">24.00</div></div>
+      <div class="cell win"><div class="lbl">AUSZAHLUNG</div><div class="val">600&nbsp;€</div></div>
+    </div>
+
+    <div class="url">TIPJARGLOBAL.COM</div>
+  </div>
+</body>
+</html>
