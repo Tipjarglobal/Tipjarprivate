@@ -495,19 +495,6 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
 
       {view !== "systems" && view !== "settled" && (
         <>
-      {view === "ai" && (
-        <div data-testid="master-manual" className="mb-6 rounded-2xl border border-[#E11D2A]/40 bg-gradient-to-br from-[#E11D2A]/10 to-void px-5 py-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 shrink-0 rounded-full bg-[#E11D2A]/15 p-2">
-              <Crown size={18} className="text-[#E11D2A]" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-heading font-black text-lg md:text-xl text-white tracking-tight">{t("master.manual.title")}</h3>
-              <p className="text-zinc-300 text-sm md:text-base mt-1 leading-relaxed">{t("master.manual.body")}</p>
-            </div>
-          </div>
-        </div>
-      )}
       {view === "smart" && <QualifierBriefing t={t} />}
       {view === "smart" && <SmartLab t={t} user={user} onCreated={() => load(true)} />}
       {view === "members" && <MemberSearch onUserClick={onUserClick} t={t} />}
