@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown } from "lucide-react";
+import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown, Info } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import Mailbox from "./Mailbox";
@@ -190,6 +190,13 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
             <p className="text-xs sm:text-sm leading-snug">
               <span className="font-heading font-black text-white">{t("master.manual.title")} </span>
               <span className="text-zinc-300">{t("master.manual.body")}</span>
+            </p>
+          </div>
+          <div data-testid="ai-correction-guide" className="mb-2.5 rounded-xl border border-sky-400/40 bg-gradient-to-r from-sky-400/12 via-sky-400/5 to-transparent px-4 py-2.5 flex items-start gap-2.5">
+            <Info size={16} className="text-sky-300 shrink-0 mt-0.5" />
+            <p className="text-xs sm:text-sm leading-snug">
+              <span className="font-heading font-black text-sky-200">{t("ai.correct.guide.title")} </span>
+              <span className="text-zinc-300">{t("ai.correct.guide.body")}</span>
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-8 gap-2">
