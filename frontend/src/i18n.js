@@ -338,7 +338,18 @@ export function formatSelection(sel, t) {
   // toLatin FIRST on the raw input (latinises Cyrillic/foreign TEAM names), then localise —
   // otherwise toLatin would strip the Greek/Arabic market words we just translated, leaving
   // English on non-Latin locales (owner 2026-07-26: Greek slip still showed "GG/NG", "Double chance").
-  return normalizeBetTerms(_formatSelection(toLatin(sel), t), t);
+  const raw = String(sel || "");
+  const lat = toLatin(raw);
+  // Greek 1X2 full-time DRAW: sources post "Ισοπαλία" or "Χ (τελικό)". toLatin mangles the
+  // Greek draw "Χ τελικό" into e.g. "H teliko" — always show the proper localised
+  // "Draw (X)" / "Unentschieden (X)" / "Ισοπαλία (X)" label instead (owner 2026-07-29).
+  if (/ισοπαλ/i.test(raw)) return t("mkt.draw");
+  if (/^[xχ]$/i.test(lat.trim()) || /^[Χχ]$/.test(raw.trim())) return t("mkt.draw");
+  const isFullTime = /ισοπαλ|τελικ/i.test(raw) || /\btelik[oó]\b/i.test(lat);
+  if (isFullTime && /(?:^|[\s(/])(?:x|h|ch|χ)(?:[\s)/.]|$)/i.test(`${raw} ¦ ${lat}`)) {
+    return t("mkt.draw");
+  }
+  return normalizeBetTerms(_formatSelection(lat, t), t);
 }
 
 // Clean up phonetically-transliterated foreign betting terms into the reader's language
