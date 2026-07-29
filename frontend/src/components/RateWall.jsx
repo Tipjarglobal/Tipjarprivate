@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, Ticket, ShieldCheck, Ban, AlertTriangle, Crown } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, ShieldCheck, Ban, AlertTriangle, Crown } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
@@ -10,7 +10,6 @@ import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { useProseTranslations } from "../proseI18n";
 import { shareSlip } from "../shareSlip";
-import { PlaySlipOverlay } from "./PlaySlipOverlay";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive, flamesActive } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
@@ -65,7 +64,6 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [liveCat, setLiveCat] = useState(null);
   const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0, community: 0 });
   const [myRatings, setMyRatings] = useState({});
-  const [playData, setPlayData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [streakBubble, setStreakBubble] = useState(false);
@@ -78,6 +76,10 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
   const [settledTab, setSettledTab] = useState(null);
   const [masterTab, setMasterTab] = useState("slips");
   const [masterCounts, setMasterCounts] = useState({ slips: 0, einfach: 0, mittel: 0, challenge: 0, live: 0 });
+  // Owner 2026-07-26: sort (newest / most stars) + a quick "Top 9–10★" filter so the best
+  // tips surface instantly without scrolling/searching.
+  const [starSort, setStarSort] = useState(false);
+  const [topOnly, setTopOnly] = useState(false);
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -440,7 +442,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {wonTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
                 : wonTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
           )}
@@ -450,7 +452,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {lostTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
                 : lostTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
           )}
@@ -468,7 +470,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {(bestwonTips.length + cashedTips.length) === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch nichts hier — sobald ein Smart/Risk/Community/System-Pick gewinnt (oder ein Schein ausgezahlt wird), erscheint er hier.</p>
                 : [...bestwonTips, ...cashedTips].map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
           )}
@@ -483,7 +485,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {voidTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Nichts annulliert — alle abgeschlossenen Picks konnten bewertet werden. 👍</p>
                 : voidTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
                   ))}
             </div>
           )}
@@ -534,7 +536,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           [["banker", "Banker", "bg-[#2ECC57] text-void border-[#2ECC57]", "text-[#2ECC57] border-[#2ECC57]/40"],
            ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
            ["risk", "Risk", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
-           ["gifts", "🎁 Δώρα", "bg-amber-400 text-void border-amber-400", "text-amber-300 border-amber-400/40"],
+           ["gifts", `🎁 ${t("cat.gifts")}`, "bg-amber-400 text-void border-amber-400", "text-amber-300 border-amber-400/40"],
            ["mental", "🤯 Mental", "bg-fuchsia-600 text-white border-fuchsia-600", "text-fuchsia-400 border-fuchsia-500/40"]].map(([v, lbl, on, off]) => (
             <button key={v} data-testid={`cat-${v}`}
               onClick={() => { markCatSeen(v); setCat((c) => (c === v ? null : v)); }}
@@ -599,16 +601,48 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
           <Trophy className="mx-auto text-zinc-700 mb-3" size={40} />
           <p className="text-zinc-500">{t("wall.empty")}</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {[...tips].sort((a, b) => kickoffTs(a) - kickoffTs(b)).map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onPlay={setPlayData} />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const starOf = (tp) => {
+          const c = [Number(tp.ai_rating) || 0, Number(tp.avg_rating) || 0, Number(tp.self_rating) || 0];
+          if (tp.win_prob) c.push(Number(tp.win_prob) * 10);
+          return Math.max(0, ...c);
+        };
+        let list = [...tips];
+        if (topOnly) list = list.filter((tp) => starOf(tp) >= 9);
+        list.sort(starSort ? (a, b) => starOf(b) - starOf(a) : (a, b) => kickoffTs(a) - kickoffTs(b));
+        return (
+          <>
+            <div className="flex flex-wrap items-center gap-2 mb-5" data-testid="tip-controls">
+              <button data-testid="sort-newest" onClick={() => setStarSort(false)}
+                className={`px-4 py-1.5 rounded-full text-xs font-heading font-black uppercase tracking-wide border transition-all ${!starSort ? "bg-volt text-void border-volt" : "bg-surface border-elevated text-zinc-400 hover:text-white"}`}>
+                {t("sort.newest")}
+              </button>
+              <button data-testid="sort-stars" onClick={() => setStarSort(true)}
+                className={`px-4 py-1.5 rounded-full text-xs font-heading font-black uppercase tracking-wide border transition-all ${starSort ? "bg-volt text-void border-volt" : "bg-surface border-elevated text-zinc-400 hover:text-white"}`}>
+                {t("sort.stars")}
+              </button>
+              <span className="w-px h-5 bg-elevated mx-1" />
+              <button data-testid="filter-top" onClick={() => setTopOnly((v) => !v)}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-heading font-black uppercase tracking-wide border transition-all ${topOnly ? "bg-amber-400 text-void border-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.5)]" : "bg-surface border-amber-400/40 text-amber-300 hover:text-white"}`}>
+                <Star size={13} className={topOnly ? "fill-void" : "fill-amber-300"} /> {t("filter.top")}
+              </button>
+            </div>
+            {list.length === 0 ? (
+              <div className="text-center py-16 rounded-2xl border border-dashed border-elevated" data-testid="wall-top-empty">
+                <p className="text-zinc-500">{t("filter.top.empty")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {list.map((tip, i) => (
+                  <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
         </>
       )}
-      <PlaySlipOverlay data={playData} onClose={() => setPlayData(null)} />
     </section>
   );
 }
@@ -867,7 +901,7 @@ function MemberSearch({ onUserClick, t }) {
   );
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onPlay }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
   const { lang } = useI18n();
   const trProse = useProseTranslations(tip.ai_analysis, lang);
   const flags = tipFlags(tip);
@@ -897,7 +931,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         path = data.path;
         warmedPath.current = path;
       }
-      await shareSlip({ imageUrl: fileUrl(path), username: tip.username, odds: tip.odds });
+      await shareSlip({ imageUrl: fileUrl(path), username: tip.username, odds: tip.odds,
+        text: `${t("share.slip")}${tip.odds ? ` · ${t("share.totalOdds")} ${tip.odds}` : ""}${tip.username ? ` · @${tip.username}` : ""}` });
     } catch (e) {
       toast.error(t("wall.shareErr"));
     } finally {
@@ -1029,7 +1064,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               )}
               {tip.is_gift && (
                 <span data-testid="gift-badge" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 bg-amber-400/20 text-amber-300">
-                  🎁 Δώρο
+                  🎁 {t("wall.gift")}
                 </span>
               )}
             </div>
@@ -1117,7 +1152,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               value: ["VALUE", "bg-volt/15 text-volt"],
               risk: ["RISK", "bg-orange-500/15 text-orange-400"],
               banger: ["BANGER", "bg-orange-500/15 text-orange-400"],
-              gift: ["🎁 ΔΩΡΟ", "bg-amber-400/20 text-amber-300"],
+              gift: [`🎁 ${t("wall.gift")}`, "bg-amber-400/20 text-amber-300"],
             }[cat] || ["VALUE", "bg-volt/15 text-volt"];
             return (
               <div className="flex items-center gap-2 mt-1.5" data-testid={`pick-type-${cat}`}>
@@ -1126,7 +1161,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                 </span>
                 {tip.is_gift && cat !== "gift" && (
                   <span data-testid="gift-badge" className="text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 bg-amber-400/20 text-amber-300 flex items-center gap-1">
-                    🎁 Δώρο
+                    🎁 {t("wall.gift")}
                   </span>
                 )}
               </div>
@@ -1143,32 +1178,6 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             </div>
           )}
         </>
-      )}
-
-      {["pending", "live"].includes(tip.status) && (
-        <button
-          data-testid={`play-slip-${tip.id}`}
-          onClick={() => {
-            const legs = (tip.legs && tip.legs.length)
-              ? tip.legs.map((l) => ({
-                  match: toLatin(l.match) || `${displayTeam(tip.home_team, tip.home_team_latin)} vs ${displayTeam(tip.away_team, tip.away_team_latin)}`,
-                  market: (l.selections || []).map((s, si) => `${formatSelection(s, t)}${(l.sel_odds || [])[si] ? ` @${(l.sel_odds)[si]}` : ""}`).join(" + "),
-                  kickoff: l.kickoff,
-                  league: l.league || "",
-                  banker: !!l.banker,
-                }))
-              : [{
-                  match: `${displayTeam(tip.home_team, tip.home_team_latin) || ""} vs ${displayTeam(tip.away_team, tip.away_team_latin) || ""}`.trim(),
-                  market: formatSelection(tip.market, t),
-                  odds: tip.odds,
-                  kickoff: tip.match_time,
-                }];
-            onPlay && onPlay({ legs, meta: { totalOdds: tip.odds, stake: tip.stake, winnings: tip.potential_return, title: tip.is_parlay ? t("wall.parlay") : "" } });
-          }}
-          className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl bg-volt text-void font-bold text-sm py-2.5 hover:brightness-110 active:scale-[0.99] transition-all"
-        >
-          <Ticket size={16} /> {t("play.btn")}
-        </button>
       )}
 
       {tip.ai_analysis && (

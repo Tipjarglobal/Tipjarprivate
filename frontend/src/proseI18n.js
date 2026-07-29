@@ -6,11 +6,16 @@ import api from "./api";
 // the reader's language via the backend (/api/i18n/translate) and cache the result
 // in memory + localStorage so a given string is only ever translated once per lang.
 const _mem = {};
+// Only real translations are persisted. Failed / missing translations are NOT cached as
+// the source text (that used to permanently "stick" German when a batch failed) — instead
+// they stay absent so a later render / reload retries them. Bumping this key wipes any
+// poisoned caches from older builds.
+const _CACHE_V = "tj_tr2_";
 
 function _cache(lang) {
   if (_mem[lang]) return _mem[lang];
   try {
-    _mem[lang] = JSON.parse(localStorage.getItem("tj_tr_" + lang) || "{}");
+    _mem[lang] = JSON.parse(localStorage.getItem(_CACHE_V + lang) || "{}");
   } catch {
     _mem[lang] = {};
   }
@@ -19,7 +24,7 @@ function _cache(lang) {
 
 function _save(lang) {
   try {
-    localStorage.setItem("tj_tr_" + lang, JSON.stringify(_mem[lang]));
+    localStorage.setItem(_CACHE_V + lang, JSON.stringify(_mem[lang]));
   } catch { /* quota — ignore */ }
 }
 
@@ -38,11 +43,13 @@ export function useProseTranslations(texts, lang) {
       try {
         const { data } = await api.post("/i18n/translate", { lang, texts: need });
         if (cancelled) return;
-        Object.assign(cache, (data && data.map) || {});
-        need.forEach((x) => { if (!(x in cache)) cache[x] = x; });
+        const map = (data && data.map) || {};
+        // Persist ONLY entries the server actually returned. Anything missing stays absent
+        // so it retries next time (never poison the cache with untranslated German).
+        Object.assign(cache, map);
         _save(lang);
         force((v) => v + 1);
-      } catch { /* keep source text on failure */ }
+      } catch { /* keep source text on failure — will retry */ }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

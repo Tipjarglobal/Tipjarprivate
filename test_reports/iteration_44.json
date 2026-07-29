@@ -1,0 +1,37 @@
+{
+  "summary": "Iter44 critical-flow testing: Backend 12/13 pass (92%). Russia keyword scan clean across /api/tips?source=ai|members|live|systems and status=live. Hall of Fame is empty (0 entries) as expected pre-2026-08-01, structural rules pass vacuously. Push /subscribe and /preferences both accept min_stars=9 and return {ok:true} (no 422). i18n /translate returns non-source translations for en/el/fr (Greek contains Greek chars). Master easy/medium DISJOINT check FAILED — pending 'einfach' and 'mittel' packs share 2 matches: 'FK Kauno Zalgiris – Klaksvik' and 'Kairat Almaty – Omonia Nicosia' (each pack has 1 tip, both cover both matches). Frontend all 4 checks pass: member-guide banner sits above area-button row (mgTop=120 < btnTop=192, master-manual absent on home); no play-slip-*/play-system-* buttons in AI/Community/Live/Master; tip-controls + sort-newest + sort-stars + filter-top all present in all 4 areas; Gift button localizes correctly per language — EN '🎁 Gift', DE '🎁 Geschenk', EL '🎁 Δώρα'.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/tips?source=master&status=pending", "issue": "master_build_packs disjoint enforcement broken: 'einfach' and 'mittel' packs share matches 'FK Kauno Zalgiris – Klaksvik' and 'Kairat Almaty – Omonia Nicosia'. User explicitly required disjoint match sets between easy and medium master packs.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter44_critical.py",
+    "/app/test_reports/pytest/iter44.xml",
+    "/app/test_reports/iter44_home.png",
+    "/app/test_reports/iter44_ai_area.png"
+  ],
+  "action_items": [
+    "Fix master_build_packs (~backend/server.py:7900) so pending 'einfach' and 'mittel' packs never share any leg.match. Current live example: both packs use Kairat Almaty vs Omonia Nicosia and FK Kauno Zalgiris vs Klaksvik simultaneously. Likely both fallback plausibility-derived packs pull from same 2-fixture candidate pool without cross-pack exclusion."
+  ],
+  "critical_code_review_comments": [
+    "Master pack builder should track already-used matches per generation cycle and exclude them when picking the second-category pack, OR shuffle-and-partition available fixtures before category assignment.",
+    "notify_all_push (background_tasks.py) min_stars filter code path could not be exercised without triggering a real push; consider a unit test that patches the send function and asserts skip behavior when min_stars > tip.stars."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter44_critical.py"
+  ],
+  "success_rate": {"backend": "92% (12/13)", "frontend": "100% (4/4)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (not required for these flows)",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Only failing check is master easy/medium disjoint matches. After fix, re-run: pytest backend/tests/test_iter44_critical.py::TestMasterDisjoint -v. All other iter44 items are green. HoF is intentionally empty until server date >= 2026-08-01 — do not treat empty HoF as a bug before that date. Gift button localization verified via localStorage tj_lang=en/de/el then reload; language selector in header shows current-lang flag emoji.",
+  "rca of the issue": "Master pack builder appears to build the 'einfach' and 'mittel' pending packs independently from the same available-fixtures pool (API-Football quota exhausted → plausibility fallback), so when the pool has only 2 fixtures both categories can pick both. Fix: after building the first category's pack, exclude those match keys from the candidate pool before building the second category's pack (or partition the fixture pool up-front). Reproduction: GET /api/tips?source=master&status=pending — normalize leg.match strings and intersect between einfach and mittel arrays; expect empty set, observed {'fk kauno zalgiris – klaksvik','kairat almaty – omonia nicosia'}."
+}

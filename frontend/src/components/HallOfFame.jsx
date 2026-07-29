@@ -28,8 +28,8 @@ export default function HallOfFame({ refreshKey, onEarn, onUserClick }) {
         { type: blob.type || "image/webp" });
       const odds = w.total_odds ? `${w.total_odds.toFixed(2)}` : "";
       const text = odds
-        ? `🏆 ${odds} gewonnen auf TipJar Global! Post it. Rate it. Cash it. → tipjarglobal.com`
-        : `🏆 Gewonnen auf TipJar Global! → tipjarglobal.com`;
+        ? `🏆 ${t("share.hof.won").replace("{odds}", odds)}`
+        : `🏆 ${t("share.hof.wonNoOdds")}`;
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ title: "TipJar Global", text, files: [file] });
       } else if (navigator.share) {

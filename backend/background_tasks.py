@@ -60,11 +60,18 @@ async def notify_all_push(payload: dict):
     if not VAPID_PRIVATE_KEY:
         return 0
     area = payload.get("area")
+    stars = payload.get("stars") or 0
+    is_live_area = (area or "").startswith("live")
     subs = await db.push_subscriptions.find({}, {"_id": 0}).to_list(20000)
     sent = 0
     for s in subs:
         prefs = s.get("areas") or {}
         if area and prefs.get(area) is False:
+            continue
+        # Owner rule: the star threshold (per device) governs which picks push through.
+        # Live picks are time-critical and always bypass it (mirrors the in-app behaviour).
+        min_stars = s.get("min_stars")
+        if min_stars and stars and not is_live_area and stars < min_stars:
             continue
         try:
             await asyncio.to_thread(_send_web_push, s, payload)
@@ -164,7 +171,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
             l_title = f"{l_title} · @{uname}"
         return {"title": l_title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area=live",
                 "kind": "live", "sound": l_sound, "pick_id": pid, "area": area,
-                "vibrate": l_vibrate,
+                "vibrate": l_vibrate, "stars": stars,
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
@@ -173,7 +180,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
         title = "👑 Master Doppelpack" if tip.get("master_doublepack") else "👑 Master-Pick"
         return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}",
                 "kind": "tip", "sound": "coin", "pick_id": pid, "area": area,
-                "vibrate": [120, 60, 120, 60, 200],
+                "vibrate": [120, 60, 120, 60, 200], "stars": stars,
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": "/push-master.png", "badge": "/push-master.png", "tag": "tipjar-master"}
     if tip.get("is_expert"):
@@ -199,7 +206,7 @@ def _push_payload_for_tip(tip: dict) -> dict:
     tag = "tipjar-expert" if tip.get("is_expert") else ("tipjar-community" if community else "tipjar-pick")
     icon = "/push-expert.png" if tip.get("is_expert") else "/icon-192.png"
     return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}", "kind": "tip",
-            "sound": sound, "pick_id": pid, "area": area,
+            "sound": sound, "pick_id": pid, "area": area, "stars": stars,
             "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
             "icon": icon, "badge": "/icon-192.png", "tag": tag}
 
@@ -214,11 +221,13 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
         return f"{h} vs {a}" if a else (t.get("market") or h or "Pick")
     names = [_short(t) for t in tips[:3]]
     body = " · ".join(names) + (f" +{n - 3} mehr" if n > 3 else "")
+    max_stars = max((_push_stars(t) for t in tips), default=0)
     is_expert = area == "experts"
     title = (f"🔮 {n} neue Experten-Tipps" if is_expert
              else f"⚡ {n} neue Picks" + (f" ({live_n}× 🔵 LIVE)" if live_n else ""))
     return {"title": title, "body": body, "url": f"/?area={area}" if area else "/",
             "kind": "digest", "sound": "expert" if is_expert else "coin", "area": area,
+            "stars": max_stars,
             "actions": [{"action": "open", "title": "Ansehen →"}],
             "icon": "/push-expert.png" if is_expert else "/icon-192.png",
             "badge": "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}

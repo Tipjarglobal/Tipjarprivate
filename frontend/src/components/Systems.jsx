@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange, Clock, Trophy, Ticket } from "lucide-react";
+import { ShieldCheck, TrendingUp, Flame, Dices, Layers, Timer, CalendarDays, CalendarRange, Clock, Trophy } from "lucide-react";
 import { OddsValue } from "./OddsValue";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, formatKickoff, kickoffInfo, isKickoffLive } from "../i18n";
 import api from "../api";
-import { PlaySlipOverlay } from "./PlaySlipOverlay";
 
 const LegMeta = ({ matchTime, league }) => {
   const { t } = useI18n();
@@ -54,7 +53,6 @@ const RISK = {
 
 const SystemCard = ({ system }) => {
   const { t, lang } = useI18n();
-  const [playData, setPlayData] = useState(null);
   const cfg = RISK[system.risk] || RISK.safe;
   const { Icon } = cfg;
   const titleKey = `sys.title.${system.key}`;
@@ -143,27 +141,6 @@ const SystemCard = ({ system }) => {
           </div>
         ))}
       </div>
-
-      <button
-        data-testid={`play-system-${system.key}`}
-        onClick={() => {
-          const legs = [...system.selections]
-            .sort((a, b) => (kickoffInfo(a.match_time).ts ?? Infinity) - (kickoffInfo(b.match_time).ts ?? Infinity))
-            .map((s) => ({
-              match: `${toLatin(s.home_team)} vs ${toLatin(s.away_team)}`,
-              market: s.combo_markets
-                ? s.combo_markets.map((m) => formatSelection(m, t)).join(" + ")
-                : formatSelection(s.market, t),
-              odds: s.odds,
-              kickoff: s.match_time,
-            }));
-          setPlayData({ legs, meta: { totalOdds: system.total_odds, title } });
-        }}
-        className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-volt text-void font-bold text-sm py-2.5 hover:brightness-110 active:scale-[0.99] transition-all"
-      >
-        <Ticket size={16} /> {t("play.btn")}
-      </button>
-      <PlaySlipOverlay data={playData} onClose={() => setPlayData(null)} />
     </motion.div>
   );
 };

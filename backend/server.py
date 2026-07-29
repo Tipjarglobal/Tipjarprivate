@@ -2782,6 +2782,24 @@ def _is_house_single(username: str, is_parlay=None, legs_count=None) -> bool:
     return (legs_count or 1) <= 1
 
 
+# Owner 2026-07-26: the Hall of Fame officially opens 1 Aug 2026 — nothing before that date
+# is ever shown. It holds SYSTEMS ONLY (≥ 2 legs) with a minimum total quote; TipJarHQ's own
+# systems must clear a much higher bar (20.00) than community/expert/Master systems (3.00).
+HOF_START = datetime(2026, 8, 1, tzinfo=timezone.utc)
+HOF_MIN_ODDS_HOUSE = 20.0
+HOF_MIN_ODDS_DEFAULT = 3.0
+
+
+def _hof_min_odds(username: str) -> float:
+    u = (username or "")
+    return HOF_MIN_ODDS_HOUSE if (u.startswith("TipJarHQ") or u == "TipJarMaster") else HOF_MIN_ODDS_DEFAULT
+
+
+def _hof_after_start(iso: str) -> bool:
+    d = _parse_kickoff(iso or "")
+    return bool(d and d >= HOF_START)
+
+
 def _money_to_usd(s):
     """Reformat any money string to a $ amount (keeps the number, swaps the symbol)."""
     n = _parse_num(s)
@@ -2794,25 +2812,29 @@ def _money_to_usd(s):
 async def hall_of_fame():
     raw = await db.win_claims.find(
         {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
-    ).sort("total_odds", -1).limit(96).to_list(96)
-    # Owner rule 2026-07-26: Hall of Fame = SYSTEMS ONLY (≥ 2 legs) with a total quote
-    # of at least 3.00. Single picks are never shown, regardless of author.
+    ).sort("total_odds", -1).limit(200).to_list(200)
+    # Owner rule 2026-07-26: HoF opens 1 Aug 2026. SYSTEMS ONLY (≥ 2 legs). Minimum total
+    # quote is 3.00 — EXCEPT TipJarHQ's own systems, which must clear 20.00.
     docs = [d for d in raw
-            if (d.get("legs_count") or 1) >= 2 and _to_float(d.get("total_odds")) >= 3.0][:24]
+            if (d.get("legs_count") or 1) >= 2
+            and _to_float(d.get("total_odds")) >= _hof_min_odds(d.get("username"))
+            and _hof_after_start(d.get("created_at"))][:24]
     for d in docs:  # trophies always show $ too (owner rule)
         if d.get("stake"):
             d["stake"] = _money_to_usd(d.get("stake"))
         if d.get("winnings"):
             d["winnings"] = _money_to_usd(d.get("winnings"))
-    # Cashed-out slips are trophies too — but the SAME rule applies: systems + quote ≥ 3.00.
+    # Cashed-out slips are trophies too — SAME rule: systems + quote ≥ bar + on/after 1 Aug.
     cashed = await db.tips.find(
         {"status": "cashed_out"}, {"_id": 0}
     ).sort("settled_at", -1).limit(24).to_list(24)
     for tp in cashed:
         if not tp.get("is_parlay"):
             continue  # no single picks in the Hall of Fame
-        if _to_float(tp.get("odds")) < 3.0:
-            continue  # quote must be ≥ 3.00
+        if _to_float(tp.get("odds")) < _hof_min_odds(tp.get("username")):
+            continue
+        if not _hof_after_start(tp.get("settled_at") or tp.get("created_at")):
+            continue
         docs.append({
             "id": tp["id"], "type": "cashed", "username": tp.get("username", "anon"),
             "total_odds": _to_float(tp.get("odds")),
@@ -3063,6 +3085,8 @@ async def push_subscribe(sub: PushSubIn, request: Request):
               "user_id": (user or {}).get("id"), "updated_at": now}
     if sub.areas is not None:
         fields["areas"] = sub.areas
+    if sub.min_stars is not None:
+        fields["min_stars"] = sub.min_stars
     await db.push_subscriptions.update_one(
         {"endpoint": sub.endpoint},
         {"$set": fields, "$setOnInsert": {"created_at": now}},
@@ -3072,10 +3096,13 @@ async def push_subscribe(sub: PushSubIn, request: Request):
 
 @api_router.post("/push/preferences")
 async def push_preferences(prefs: PushPrefsIn):
-    """Store per-device notification-area preferences (e.g. AI tips on/off) so the
-    server-side Web Push respects them, not just the in-app popups."""
+    """Store per-device notification-area preferences (e.g. AI tips on/off) + the star
+    threshold so the server-side Web Push respects them, not just the in-app popups."""
+    upd = {"areas": prefs.areas}
+    if prefs.min_stars is not None:
+        upd["min_stars"] = prefs.min_stars
     await db.push_subscriptions.update_one(
-        {"endpoint": prefs.endpoint}, {"$set": {"areas": prefs.areas}})
+        {"endpoint": prefs.endpoint}, {"$set": upd})
     return {"ok": True}
 
 
@@ -4018,7 +4045,15 @@ TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          # owner-flagged 2026-07-24 (obscure/untrustworthy fixtures)
                          "abaseya", "reyadi", "asiagoal", "buxtu", "pakhator",
                          "oshmu", "aldier", "qiziriq", "olimpik-mobiuz", "mobiuz",
-                         "goulburn", "springvale", "ozgon", "ilbirs", "maldonado")
+                         "goulburn", "springvale", "ozgon", "ilbirs", "maldonado",
+                         # owner 2026-07-26: Germany boycotts ALL Russian football —
+                         # block every Russian league & top-flight club by keyword too
+                         # (country/code block is the primary lever; these catch untagged data).
+                         "russia", "russian", "zenit", "cska moscow", "spartak moscow",
+                         "lokomotiv moscow", "dynamo moscow", "dinamo moscow", "krasnodar",
+                         "fc rostov", "baltika", "akhmat", "rubin kazan", "krylia sovetov",
+                         "orenburg", "fakel", "pari nn", "nizhny novgorod", "khimki",
+                         "fc ural", "fc sochi", "akron togliatti", "fc dynamo makhachkala")
 
 # Owner MATCH blacklist: block ONE specific fixture only (BOTH team keywords must match).
 # Used when the teams themselves are legit clubs we must NOT ban globally (e.g. CSKA Moscow,
@@ -4043,8 +4078,15 @@ def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
 # competitions at once. Kyrgyzstan stays fully blocked. Uzbekistan is NOT here anymore:
 # the owner confirmed the top flight (Uzbekistan Super League) is bettable & scores goals —
 # only the 2nd tier ("Pro League A") + the specific flagged clubs stay blocked (below).
-COUNTRY_BLACKLIST = ("kyrgyzstan",)
-COUNTRY_CODE_BLACKLIST = ("kg",)
+COUNTRY_BLACKLIST = ("kyrgyzstan", "russia", "russian")
+# Germany boycotts ALL Russian football (owner 2026-07-26). Used to purge any Russian
+# fixture that slipped into the feed before the scrapers were locked down.
+RUSSIA_KEYWORDS = ("russia", "russian", "zenit", "cska moscow", "spartak moscow",
+                   "lokomotiv moscow", "dynamo moscow", "dinamo moscow", "krasnodar",
+                   "fc rostov", "baltika", "akhmat", "rubin kazan", "krylia sovetov",
+                   "orenburg", "fakel", "pari nn", "nizhny novgorod", "khimki",
+                   "fc ural", "fc sochi", "akron togliatti", "makhachkala")
+COUNTRY_CODE_BLACKLIST = ("kg", "ru")
 
 
 def _country_blocked(country: str = "", code: str = "") -> bool:
@@ -4071,7 +4113,7 @@ FOREBET_SLIP_CODES = {
     "en1", "en2", "ge1", "ge2", "sp1", "sp2", "it1", "it2", "fr1", "fr2",
     # Other major European top flights
     "ne1", "po1", "be1", "tu1", "sc1", "gr1", "au1", "sw1", "da1", "no1",
-    "se1", "sv1", "fi1", "ru1", "ua1", "pl1", "cz1", "cr1", "sr1", "hr1", "ro1",
+    "se1", "sv1", "fi1", "ua1", "pl1", "cz1", "cr1", "sr1", "hr1", "ro1",
     # Americas
     "br1", "br2", "ar1", "us1", "ml1", "mls", "mx1", "co1", "cl1", "ec1",
     "pe1", "ur1",
@@ -7897,6 +7939,21 @@ async def master_build_packs() -> dict:
     now = datetime.now(timezone.utc)
     day = now.date().isoformat()
     posted, bot = {}, None
+    # Owner rule 2026-07-26: Easy & Medium must NEVER share a match. If a shared game loses,
+    # BOTH parlays die — so the daily "win at least one" goal is impossible. We track every
+    # fixture already used (by today's open Easy/Medium packs AND within this run) and exclude
+    # it from the other pack.
+    used_fixkeys = set()
+    existing_packs = await db.tips.find(
+        {"source": "hq-master", "master_category": {"$in": ["einfach", "mittel"]},
+         "status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "legs": 1}).to_list(50)
+    for ep in existing_packs:
+        for lg in (ep.get("legs") or []):
+            m = (lg.get("match") or "")
+            parts = re.split(r"\s[–-]\s", m, maxsplit=1)
+            if len(parts) == 2:
+                used_fixkeys.add("|".join(sorted([_norm(parts[0]), _norm(parts[1])])))
     specs = [
         ("einfach", 3.0, 2, 4, 1.25, 1.80),
         ("mittel", 7.0, 3, 5, 1.40, 2.40),
@@ -7911,10 +7968,15 @@ async def master_build_packs() -> dict:
         if openx:
             continue  # never stack — one open pack of each category at a time
         cands = await _master_leg_candidates(now, lo, hi)
+        # Exclude any fixture already used by the OTHER pack (no shared matches, ever).
+        cands = [c for c in cands if c.get("fixkey") not in used_fixkeys]
         cands = sorted(cands, key=lambda c: c["odds"])  # build up gradually → hit target tightly
         chosen, prod = _assemble_parlay(cands, target, minl, maxl)
         if not chosen:
             continue
+        for c in chosen:  # reserve these fixtures so the next pack can't reuse them
+            if c.get("fixkey"):
+                used_fixkeys.add(c["fixkey"])
         chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
         if bot is None:
             bot = await _get_master_bot()
@@ -8407,6 +8469,8 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
     """Keep the Hall of Fame fresh: turn the best recent WON tips into branded trophy slips
     (auto-approved win_claims). Runs daily. Dedup by source tip id, so each win is added once."""
     now = datetime.now(timezone.utc)
+    if now < HOF_START:
+        return 0  # Hall of Fame officially opens 1 Aug 2026 — nothing before that
     since = (now - timedelta(days=7)).isoformat()
     won = await db.tips.find(
         {"status": "won", "created_at": {"$gte": since}, "hidden": {"$ne": True}}, {"_id": 0}).to_list(500)
@@ -8416,14 +8480,13 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
     for tp in won:
         if added >= max_new:
             break
-        # Owner rule 2026-07-26: the Hall of Fame holds SYSTEMS ONLY (parlays) with a
-        # total quote of AT LEAST 3.00. Single picks are forbidden — from ANY author,
-        # TipJarHQ / TipJarMaster included. No exceptions.
+        # Owner rule 2026-07-26: SYSTEMS ONLY (parlays). TipJarHQ systems need quote ≥ 20.00,
+        # everyone else ≥ 3.00. Single picks are forbidden — from ANY author.
         if not tp.get("is_parlay"):
             continue
         odds = _to_float(tp.get("odds"))
-        if odds < 3.0:
-            continue  # only real system wins (quote ≥ 3.00) belong in the Hall of Fame
+        if odds < _hof_min_odds(tp.get("username")):
+            continue
         if await db.win_claims.find_one({"source_tip_id": tp["id"]}, {"_id": 1}):
             continue
         try:
@@ -8931,11 +8994,26 @@ async def _startup_seed():
         await seed_showcase()
         await _migrate_stars_and_categories()
         await _cleanup_smart_junk()
-        # Owner rule 2026-07-26: Hall of Fame = SYSTEMS ONLY (≥ 2 legs) with total quote
-        # ≥ 3.00. Purge every single-pick or low-odds trophy so none can ever surface
-        # (runs on every environment, incl. production, after deploy).
+        # Owner rule 2026-07-26: Hall of Fame opens 1 Aug 2026 and holds SYSTEMS ONLY.
+        # Purge every single-pick and every trophy created before the official start, plus
+        # any system below its author's quote bar (TipJarHQ ≥ 20.00, others ≥ 3.00).
         await db.win_claims.delete_many(
-            {"$or": [{"legs_count": {"$lt": 2}}, {"total_odds": {"$lt": 3.0}}]})
+            {"$or": [{"legs_count": {"$lt": 2}},
+                     {"total_odds": {"$lt": HOF_MIN_ODDS_DEFAULT}},
+                     {"created_at": {"$lt": HOF_START.isoformat()}}]})
+        async for c in db.win_claims.find(
+                {"total_odds": {"$lt": HOF_MIN_ODDS_HOUSE}},
+                {"_id": 1, "username": 1, "total_odds": 1}):
+            if _to_float(c.get("total_odds")) < _hof_min_odds(c.get("username")):
+                await db.win_claims.delete_one({"_id": c["_id"]})
+        # Germany boycotts ALL Russian football — hide any open Russian fixture that slipped
+        # into the feed before the scraper lock-down (runs on prod too after deploy).
+        rus_re = re.compile("|".join(re.escape(k) for k in RUSSIA_KEYWORDS), re.I)
+        await db.tips.update_many(
+            {"status": {"$in": ["pending", "live"]}, "hidden": {"$ne": True},
+             "$or": [{"home_team": rus_re}, {"away_team": rus_re}, {"league": rus_re},
+                     {"legs.match": rus_re}, {"legs.league": rus_re}]},
+            {"$set": {"hidden": True, "hidden_reason": "russia_boycott"}})
     except Exception as e:
         logger.error(f"Startup seed failed: {e}")
 

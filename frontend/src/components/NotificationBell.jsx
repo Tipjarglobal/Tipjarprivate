@@ -62,7 +62,7 @@ function isStandalonePwa() {
 function isIos() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
-async function enableWebPush(areas) {
+async function enableWebPush(areas, minStars) {
   if (!supportsWebPush()) return { ok: false, reason: "unsupported" };
   if (isIos() && !isStandalonePwa()) return { ok: false, reason: "ios-install" };
   const reg = await navigator.serviceWorker.ready;
@@ -74,7 +74,9 @@ async function enableWebPush(areas) {
     applicationServerKey: urlBase64ToUint8Array(data.publicKey),
   });
   const json = sub.toJSON();
-  await api.post("/push/subscribe", { endpoint: json.endpoint, keys: json.keys, areas });
+  const body = { endpoint: json.endpoint, keys: json.keys, areas };
+  if (minStars != null) body.min_stars = minStars;
+  await api.post("/push/subscribe", body);
   return { ok: true };
 }
 async function disableWebPush() {
@@ -195,16 +197,17 @@ export default function NotificationBell() {
   useEffect(() => {
     localStorage.setItem("tj_bell_areas", JSON.stringify(areas));
     // Sync choices to the server so the REAL Web Push (app closed / screen off)
-    // respects them too — not just the in-app popups.
+    // respects them too — not just the in-app popups. Includes the star threshold so a
+    // "9★+" device only gets pushed 9-10★ picks server-side as well.
     (async () => {
       try {
         if (!supportsWebPush()) return;
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
-        if (sub) await api.post("/push/preferences", { endpoint: sub.endpoint, areas });
+        if (sub) await api.post("/push/preferences", { endpoint: sub.endpoint, areas, min_stars: min });
       } catch { /* ignore */ }
     })();
-  }, [areas]);
+  }, [areas, min]);
 
   useEffect(() => {
     // Self-heal: if the browser already has push permission, make sure the SERVER
@@ -216,7 +219,7 @@ export default function NotificationBell() {
       try {
         if (!supportsWebPush()) return;
         if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-        const res = await enableWebPush(areasRef.current);
+        const res = await enableWebPush(areasRef.current, minRef.current);
         if (res && res.ok) setOn(true);
       } catch { /* ignore */ }
     })();
@@ -398,7 +401,7 @@ export default function NotificationBell() {
       }
       // Real Web Push (works when app closed / screen off)
       try {
-        const res = await enableWebPush(areasRef.current);
+        const res = await enableWebPush(areasRef.current, minRef.current);
         if (res.ok) toast.success(t("bell.push_on"));
         else if (res.reason === "ios-install") toast.info(t("bell.ios_hint"), { duration: 9000 });
       } catch { /* ignore */ }

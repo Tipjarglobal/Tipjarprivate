@@ -100,11 +100,13 @@ class PushSubIn(BaseModel):
     endpoint: str
     keys: dict
     areas: Optional[dict] = None
+    min_stars: Optional[int] = None
 
 
 class PushPrefsIn(BaseModel):
     endpoint: str
     areas: dict
+    min_stars: Optional[int] = None
 
 
 class ClarifyInput(BaseModel):
