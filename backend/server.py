@@ -60,6 +60,7 @@ from core import (
     RESEND_API_KEY, SENDER_EMAIL,
     logger,
     _API_QUOTA, _api_quota_exhausted, _reset_api_quota_flag, _apifootball, _apifootball_async,
+    _api_reserve_locked,
 )
 
 app = FastAPI(title="TipJar API")
@@ -1303,6 +1304,108 @@ async def analyze(file: Optional[UploadFile] = File(default=None),
     detected["image_path"] = image_paths[0] if image_paths else None
     detected["image_paths"] = image_paths
     return detected
+
+
+# --- AI-pick correction (owner 2026-07-29) ------------------------------------------
+# ANY logged-in user can correct a KI pick by uploading an image of the REAL, existing
+# selection + odds (e.g. the model wrote "Kopenhagen +1.5" which doesn't exist → send an
+# image with "1X"). Vision reads ONLY the selection + odds; the STAKE is never touched.
+_CORRECTABLE_SOURCES = ("hq-auto", "hq-live", "hq-system", "smart", "hq-master")
+
+
+def _odds_product(vals) -> float:
+    p = 1.0
+    for v in vals:
+        try:
+            p *= float(str(v).replace(",", "."))
+        except (ValueError, TypeError):
+            pass
+    return round(p, 2)
+
+
+@api_router.post("/tips/{tip_id}/correct")
+async def correct_tip(tip_id: str,
+                      file: Optional[UploadFile] = File(default=None),
+                      files: List[UploadFile] = File(default=[]),
+                      text: str = Form(default=""),
+                      user: dict = Depends(get_current_user)):
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    if tip.get("source") not in _CORRECTABLE_SOURCES:
+        raise HTTPException(status_code=422, detail="Only AI tips can be corrected.")
+    if tip.get("status") not in ("pending", "live"):
+        raise HTTPException(status_code=422, detail="Only open tips can be corrected.")
+    uploads = [f for f in ([file] + list(files or []))
+               if f is not None and getattr(f, "filename", None)][:4]
+    if not uploads:
+        raise HTTPException(status_code=422, detail="Please attach an image of the correct selection/odds.")
+    images_b64 = [base64.b64encode(await f.read()).decode("utf-8") for f in uploads]
+    detected = await analyze_tip(images_b64, text)
+    if not detected.get("safe", True):
+        raise HTTPException(status_code=422, detail=detected.get("flag_reason") or "Image rejected.")
+    ext_legs = detected.get("legs") or []
+    upd, changed = {}, []
+    if tip.get("is_parlay") and tip.get("legs"):
+        legs = [dict(l) for l in tip["legs"]]
+        used = set()
+        for el in ext_legs:
+            esel = [str(s) for s in (el.get("selections") or []) if s][:10]
+            if not esel:
+                continue
+            eodds = [str(o) for o in (el.get("sel_odds") or []) if o][:10]
+            em = _norm(el.get("match", ""))
+            etok = set(em.split())
+            target, ti = None, None
+            for idx, lg in enumerate(legs):
+                if idx in used:
+                    continue
+                lm = _norm(lg.get("match", ""))
+                if lm and em and (lm in em or em in lm or len(set(lm.split()) & etok) >= 1):
+                    target, ti = lg, idx
+                    break
+            if target is None and len(legs) == 1 and 0 not in used:
+                target, ti = legs[0], 0
+            if target is not None:
+                target["selections"] = esel
+                if eodds:
+                    target["sel_odds"] = eodds
+                used.add(ti)
+                changed.append(f"{target.get('match', '')}: {', '.join(esel)}")
+        if not changed:
+            raise HTTPException(status_code=422, detail="Could not match any leg from the image to this slip.")
+        all_odds = [o for lg in legs for o in (lg.get("sel_odds") or [])]
+        total = _odds_product(all_odds)
+        upd["legs"] = legs
+        if total > 1.0:
+            upd["odds"] = str(total)
+    else:
+        new_market = detected.get("market") or (
+            ext_legs[0]["selections"][0] if ext_legs and ext_legs[0].get("selections") else "")
+        new_odds = detected.get("odds") or (
+            ext_legs[0]["sel_odds"][0] if ext_legs and ext_legs[0].get("sel_odds") else "")
+        if not new_market:
+            raise HTTPException(status_code=422, detail="Could not read a valid selection from the image.")
+        upd["market"] = new_market
+        changed.append(new_market)
+        if new_odds:
+            upd["odds"] = str(new_odds)
+    # STAKE stays untouched — only recompute the potential return with the NEW odds.
+    if upd.get("odds"):
+        upd["potential_return"] = compute_return(tip.get("stake") or "", upd["odds"], "")
+    upd["corrected"] = True
+    upd["corrected_by"] = user.get("username") or user.get("id")
+    upd["corrected_at"] = datetime.now(timezone.utc).isoformat()
+    upd["settle_attempts"] = 0  # re-grade the corrected pick cleanly
+    sel_txt = " · ".join(changed)
+    _new_odds = upd.get("odds")
+    upd["ai_analysis"] = (f"Manuell korrigiert auf: {sel_txt}"
+                          + (f" (Gesamtquote {_new_odds})" if _new_odds else "")
+                          + ". Einsatz unverändert.")
+    await db.tips.update_one({"id": tip_id}, {"$set": upd})
+    doc = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    return {"ok": True, "corrected": changed, "tip": doc}
+
 
 
 def _parse_num(s):

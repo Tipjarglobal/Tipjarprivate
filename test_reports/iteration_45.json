@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 45 — validated the new batch (2 golden expert push, 3 API budget reserve, 4 AI-tip correction, 5 ISO-with-TZ kickoff fix). Backend: 7/7 pytest passed against public REACT_APP_BACKEND_URL. Correction endpoint requires auth (401 without token), rejects non-AI tips with 422 'Only AI tips can be corrected', preserves stake and sets corrected flags on AI tips. Regression: /api/tips works, HoF is empty pre-Aug-1, no Russian keywords. Frontend: KI Single-Game-Picks area renders the blue 'Korrigieren' button (data-testid correct-tip-*) + hidden file input on every AI card (20 buttons + 20 inputs, all mapped to AI sources); Community area has zero correct-tip buttons. ISO-with-TZ kickoff bug is fixed — 2 verified tips (17:00+01:00 shown as 18:00 CEST, 20:15+01:00 shown as 21:15 CEST). One card is visibly 'KORRIGIERT' with 'Manuell korrigiert auf: Double Chance 1X (Gesamtquote 2.10). Einsatz unverändert.' — end-to-end correction actually landed in prod. Expert push branch + digest use /push-expert.png icon+badge, sound 'expert', tag 'tipjar-expert', 🔮 title (verified in code). /app/frontend/public/push-expert.png present. API reserve: _api_note_headers records rate-limit headers, _api_reserve_locked returns False when unknown / evening (UTC>=15), True daytime <=50% remaining; live_loop and member_live_loop both call it before polling.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter45_correction.py",
+    "/app/test_reports/pytest/iter45.xml",
+    "/app/test_reports/iter45_ai_open.png",
+    "/app/test_reports/iter45_community.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 9130 lines — beyond the 700-line guideline. Should be split (auth, tips, admin, live, insights modules). Not blocking but overdue.",
+    "correct_tip endpoint returns full tip via find_one with {_id:0} projection — good, no ObjectId leak.",
+    "_api_reserve_locked correctly reserves 50% budget before 15:00 UTC and lets evening run freely; verified live_loop + member_live_loop both honour it (2 call sites)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (all invariants verified)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For future iterations: pytest needs `-o addopts=''` to override the -n xdist default in /app/backend/pytest.ini when running a single file. REACT_APP_BACKEND_URL must be exported before pytest. AI area is opened via header pill text 'KI Single-Ga' (German UI when tj_lang='de'). The button label for correction is 'Korrigieren'. ISO-with-TZ kickoff conversion works via i18n.js kickoffInfo → _tzParts(KICKOFF_BASE_TZ, realMs)."
+}

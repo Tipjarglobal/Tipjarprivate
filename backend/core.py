@@ -107,6 +107,11 @@ logger = logging.getLogger("tipjar")
 # PAUSE instead of silently treating every empty response as "match not found" — which
 # would wrongly burn each tip's `settle_attempts` budget and give the admin no feedback.
 _API_QUOTA = {"exhausted": False, "at": None, "msg": ""}
+# Daily budget tracking (from API-Football response headers) so we can RESERVE energy for
+# the evening (prime kickoff + settlement window) instead of burning it all during the day.
+_API_DAY = {"remaining": None, "limit": None, "day": None}
+API_EVENING_UTC_HOUR = 15  # ≈ 17:00 CEST — from here the daily budget is used freely
+API_DAY_RESERVE_FRAC = 0.5  # before evening, protect this fraction of the daily budget
 
 
 def _api_quota_exhausted() -> bool:
@@ -117,6 +122,32 @@ def _reset_api_quota_flag():
     _API_QUOTA.update({"exhausted": False, "at": None, "msg": ""})
 
 
+def _api_note_headers(headers):
+    today = datetime.now(timezone.utc).date().isoformat()
+    if _API_DAY["day"] != today:
+        _API_DAY.update({"day": today, "remaining": None, "limit": None})
+    for key, hdr in (("remaining", "x-ratelimit-requests-remaining"),
+                     ("limit", "x-ratelimit-requests-limit")):
+        val = headers.get(hdr)
+        if val is not None:
+            try:
+                _API_DAY[key] = int(val)
+            except (ValueError, TypeError):
+                pass
+
+
+def _api_reserve_locked() -> bool:
+    """True when a NON-CRITICAL API-Football call should be deferred to protect the evening
+    budget. Daytime (before evening) keeps a reserve of the daily quota; settlement of due
+    matches never calls this — it always gets budget."""
+    rem, lim = _API_DAY.get("remaining"), _API_DAY.get("limit")
+    if not rem or not lim:
+        return False
+    if datetime.now(timezone.utc).hour >= API_EVENING_UTC_HOUR:
+        return False  # evening — use the budget freely
+    return rem <= int(lim * API_DAY_RESERVE_FRAC)
+
+
 def _apifootball(path: str, params: dict):
     if not API_FOOTBALL_KEY:
         return None
@@ -124,6 +155,7 @@ def _apifootball(path: str, params: dict):
         r = requests.get(f"{API_FOOTBALL_BASE}{path}", params=params,
                          headers={"x-apisports-key": API_FOOTBALL_KEY}, timeout=20)
         r.raise_for_status()
+        _api_note_headers(r.headers)
         j = r.json()
         errs = j.get("errors")
         if isinstance(errs, dict) and (errs.get("requests") or errs.get("rateLimit")):

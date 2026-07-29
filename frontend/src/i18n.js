@@ -112,6 +112,16 @@ export function kickoffInfo(mt) {
   if (!s || /multibet/i.test(s)) return empty;
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (m) {
+    // ISO. If it carries an explicit offset/Z it's an ABSOLUTE instant (API-Football stores
+    // UTC) → normalise to the Europe/Berlin wall-clock convention the rest of the pipeline
+    // (and _toViewer) expects. Without this, a UTC 15:00 kickoff was wrongly treated as
+    // 15:00 Berlin and shown 1–2h too early — the source of "enorm viele" kickoff errors.
+    const hasTz = /(?:Z|[+-]\d{2}:?\d{2})$/.test(s);
+    const realMs = Date.parse(s);
+    if (hasTz && !isNaN(realMs)) {
+      const b = _tzParts(KICKOFF_BASE_TZ, realMs);
+      return { ts: Date.UTC(b.y, b.mo - 1, b.da, +b.hh, +b.mm), y: b.y, mo: b.mo, da: b.da, time: `${b.hh}:${b.mm}` };
+    }
     const [, y, mo, da, hh, mm] = m;
     return { ts: Date.UTC(+y, +mo - 1, +da, +hh, +mm), y: +y, mo: +mo, da: +da, time: `${hh}:${mm}` };
   }
@@ -471,6 +481,12 @@ const T = {
     "bell.enable": "Get Tip Alerts",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Want to make money from betting?",
+    "tip.correct": "Correct",
+    "tip.correcting": "Reading…",
+    "tip.corrected": "Corrected",
+    "tip.correct.hint": "Send an image of the REAL selection/odds — only the pick & odds change, your stake stays.",
+    "tip.correct.ok": "Tip corrected",
+    "tip.correct.err": "Correction failed",
     "cat.gifts": "Gift",
     "wall.gift": "Gift",
     "sort.newest": "Newest",
@@ -937,6 +953,12 @@ const T = {
     "master.slips": "Doblete",
     "bell.area.master": "Master 👑",
     "master.manual.title": "¿Quieres ganar dinero con las apuestas?",
+    "tip.correct": "Corregir",
+    "tip.correcting": "Leyendo…",
+    "tip.corrected": "Corregido",
+    "tip.correct.hint": "Envía una imagen de la selección/cuota REAL — solo cambian selección y cuota, tu apuesta se mantiene.",
+    "tip.correct.ok": "Tip corregido",
+    "tip.correct.err": "Corrección fallida",
     "cat.gifts": "Regalo",
     "wall.gift": "Regalo",
     "sort.newest": "Más nuevos",
@@ -1331,6 +1353,12 @@ const T = {
     "master.slips": "Doppelpack",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Willst du von Wetten Geld verdienen?",
+    "tip.correct": "Korrigieren",
+    "tip.correcting": "Lese…",
+    "tip.corrected": "Korrigiert",
+    "tip.correct.hint": "Schick ein Bild der ECHTEN Auswahl/Quote — nur Auswahl & Quote ändern sich, dein Einsatz bleibt.",
+    "tip.correct.ok": "Tipp korrigiert",
+    "tip.correct.err": "Korrektur fehlgeschlagen",
     "cat.gifts": "Geschenk",
     "wall.gift": "Geschenk",
     "sort.newest": "Neueste",
@@ -1791,6 +1819,12 @@ const T = {
     "bell.enable": "Ειδοποιήσεις",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Θέλεις να βγάζεις χρήματα από το στοίχημα;",
+    "tip.correct": "Διόρθωση",
+    "tip.correcting": "Ανάγνωση…",
+    "tip.corrected": "Διορθώθηκε",
+    "tip.correct.hint": "Στείλε εικόνα της ΠΡΑΓΜΑΤΙΚΗΣ επιλογής/απόδοσης — αλλάζουν μόνο επιλογή & απόδοση, το ποντάρισμά σου μένει.",
+    "tip.correct.ok": "Το tip διορθώθηκε",
+    "tip.correct.err": "Η διόρθωση απέτυχε",
     "cat.gifts": "Δώρα",
     "wall.gift": "Δώρο",
     "sort.newest": "Νεότερα",
@@ -2199,6 +2233,12 @@ const T = {
     "master.slips": "Le Doublé",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Tu veux gagner de l'argent avec les paris ?",
+    "tip.correct": "Corriger",
+    "tip.correcting": "Lecture…",
+    "tip.corrected": "Corrigé",
+    "tip.correct.hint": "Envoie une image de la sélection/cote RÉELLE — seuls la sélection et la cote changent, ta mise reste.",
+    "tip.correct.ok": "Pronostic corrigé",
+    "tip.correct.err": "Échec de la correction",
     "cat.gifts": "Cadeau",
     "wall.gift": "Cadeau",
     "sort.newest": "Plus récents",
@@ -2556,6 +2596,12 @@ const T = {
     "master.slips": "La Doppietta",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Vuoi guadagnare con le scommesse?",
+    "tip.correct": "Correggi",
+    "tip.correcting": "Lettura…",
+    "tip.corrected": "Corretto",
+    "tip.correct.hint": "Invia un'immagine della selezione/quota REALE — cambiano solo selezione e quota, la tua puntata resta.",
+    "tip.correct.ok": "Tip corretto",
+    "tip.correct.err": "Correzione fallita",
     "cat.gifts": "Regalo",
     "wall.gift": "Regalo",
     "sort.newest": "Più recenti",
@@ -2912,6 +2958,12 @@ const T = {
     "master.slips": "الثنائية",
     "bell.area.master": "ماستر 👑",
     "master.manual.title": "هل تريد كسب المال من الرهان؟",
+    "tip.correct": "تصحيح",
+    "tip.correcting": "جارٍ القراءة…",
+    "tip.corrected": "مُصحّح",
+    "tip.correct.hint": "أرسل صورة للاختيار/الاحتمالات الحقيقية — يتغيّر الاختيار والاحتمالات فقط، ويبقى رهانك كما هو.",
+    "tip.correct.ok": "تم تصحيح التوقّع",
+    "tip.correct.err": "فشل التصحيح",
     "cat.gifts": "هدية",
     "wall.gift": "هدية",
     "sort.newest": "الأحدث",
@@ -3268,6 +3320,12 @@ const T = {
     "master.slips": "Çifte",
     "bell.area.master": "Master 👑",
     "master.manual.title": "Bahisten para kazanmak ister misin?",
+    "tip.correct": "Düzelt",
+    "tip.correcting": "Okunuyor…",
+    "tip.corrected": "Düzeltildi",
+    "tip.correct.hint": "GERÇEK seçim/oranın görselini gönder — sadece seçim ve oran değişir, bahsin aynı kalır.",
+    "tip.correct.ok": "Tahmin düzeltildi",
+    "tip.correct.err": "Düzeltme başarısız",
     "cat.gifts": "Hediye",
     "wall.gift": "Hediye",
     "sort.newest": "En yeni",

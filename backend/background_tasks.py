@@ -18,6 +18,7 @@ from server import (
     LIVE_POLL_SECONDS,
     MEMBER_LIVE_POLL_SECONDS,
     _api_quota_exhausted,
+    _api_reserve_locked,
     VAPID_PRIVATE_KEY,
     VAPID_SUBJECT,
     _INSTANCE_ID,
@@ -184,9 +185,15 @@ def _push_payload_for_tip(tip: dict) -> dict:
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": "/push-master.png", "badge": "/push-master.png", "tag": "tipjar-master"}
     if tip.get("is_expert"):
+        # Experts get their OWN look: a GOLDEN crystal ball logo (owner request), distinct
+        # from the Master's red crown and the KI/community picks.
         title = f"🔮 Experten-Tipp · {uname}" if uname else "🔮 Neuer Experten-Tipp"
-        sound = "expert"
-    elif src == "hq-auto":
+        return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}",
+                "kind": "tip", "sound": "expert", "pick_id": pid, "area": area,
+                "vibrate": [90, 50, 90, 50, 160], "stars": stars,
+                "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
+                "icon": "/push-expert.png", "badge": "/push-expert.png", "tag": "tipjar-expert"}
+    if src == "hq-auto":
         if cat == "banker" and stars >= 10:
             title = "💥 10-Sterne-Banker!"
         elif cat == "banker" and stars == 9:
@@ -230,7 +237,7 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
             "stars": max_stars,
             "actions": [{"action": "open", "title": "Ansehen →"}],
             "icon": "/push-expert.png" if is_expert else "/icon-192.png",
-            "badge": "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}
+            "badge": "/push-expert.png" if is_expert else "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}
 
 
 async def push_watch_loop():
@@ -362,6 +369,11 @@ async def live_loop():
         if _api_quota_exhausted():
             await asyncio.sleep(LIVE_POLL_SECONDS * 4)
             continue
+        # Daytime budget reserve: defer live polling until the evening so settlement + expert
+        # odds keep their energy for the prime kickoff window (owner request).
+        if _api_reserve_locked():
+            await asyncio.sleep(LIVE_POLL_SECONDS * 4)
+            continue
         try:
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop D (Live): {await live_autopost()}")
@@ -376,6 +388,9 @@ async def member_live_loop():
             await asyncio.sleep(45)
             continue
         if _api_quota_exhausted():
+            await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS * 4)
+            continue
+        if _api_reserve_locked():
             await asyncio.sleep(MEMBER_LIVE_POLL_SECONDS * 4)
             continue
         try:

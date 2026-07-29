@@ -442,7 +442,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {wonTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.won")}</p>
                 : wonTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onRefresh={() => load(true)} />
                   ))}
             </div>
           )}
@@ -452,7 +452,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {lostTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">{t("settled.empty.lost")}</p>
                 : lostTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onRefresh={() => load(true)} />
                   ))}
             </div>
           )}
@@ -470,7 +470,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {(bestwonTips.length + cashedTips.length) === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Noch nichts hier — sobald ein Smart/Risk/Community/System-Pick gewinnt (oder ein Schein ausgezahlt wird), erscheint er hier.</p>
                 : [...bestwonTips, ...cashedTips].map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onRefresh={() => load(true)} />
                   ))}
             </div>
           )}
@@ -485,7 +485,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
               {voidTips.length === 0
                 ? <p className="text-zinc-600 text-sm py-8 text-center rounded-xl border border-dashed border-elevated">Nichts annulliert — alle abgeschlossenen Picks konnten bewertet werden. 👍</p>
                 : voidTips.map((tip, i) => (
-                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                    <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onRefresh={() => load(true)} />
                   ))}
             </div>
           )}
@@ -634,7 +634,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {list.map((tip, i) => (
-                  <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} />
+                  <TipCard key={tip.id} tip={tip} i={i} t={t} onRate={rate} myStars={myRatings[tip.id]} isAdmin={user?.role === "admin"} onSettle={settle} onDelete={del} canDelete={user?.role === "admin" || tip.user_id === user?.id} onUserClick={onUserClick} onRefresh={() => load(true)} />
                 ))}
               </div>
             )}
@@ -901,11 +901,32 @@ function MemberSearch({ onUserClick, t }) {
   );
 }
 
-function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick }) {
+function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onRefresh }) {
   const { lang } = useI18n();
   const trProse = useProseTranslations(tip.ai_analysis, lang);
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const correctInputRef = useRef(null);
+  const isAiPick = ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"].includes(tip.source)
+    && ["pending", "live"].includes(tip.status);
+  const doCorrect = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || correcting) return;
+    setCorrecting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post(`/tips/${tip.id}/correct`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(`${t("tip.correct.ok")}${data?.corrected?.length ? ` — ${data.corrected.join(" · ")}` : ""}`, { duration: 6000 });
+      onRefresh?.();
+    } catch (err) {
+      toast.error(apiErr(err) || t("tip.correct.err"));
+    } finally {
+      setCorrecting(false);
+    }
+  };
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
   const warmedPath = useRef(null);
   const warming = useRef(false);
@@ -987,6 +1008,25 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             <span data-testid="expert-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40">
               <Star size={10} /> Experte
             </span>
+          )}
+          {tip.corrected && (
+            <span data-testid={`corrected-badge-${tip.id}`} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40">
+              ✏️ {t("tip.corrected")}
+            </span>
+          )}
+          {isAiPick && (
+            <>
+              <input ref={correctInputRef} type="file" accept="image/*" onChange={doCorrect} className="hidden" data-testid={`correct-input-${tip.id}`} />
+              <button
+                onClick={() => correctInputRef.current?.click()}
+                disabled={correcting}
+                data-testid={`correct-tip-${tip.id}`}
+                title={t("tip.correct.hint")}
+                className="flex items-center gap-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 disabled:opacity-50 transition-colors"
+              >
+                <ImagePlus size={13} /> {correcting ? t("tip.correcting") : t("tip.correct")}
+              </button>
+            </>
           )}
           {isShareable && (
             <button
