@@ -6093,6 +6093,9 @@ async def qualifier_autopost() -> dict:
         tip_id = f"qual-{mkey}"
         if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
             continue
+        # One smart pick per fixture: skip if a Favoriten-Kombi already covers this match.
+        if await db.tips.find_one({"id": f"smartfav-{mkey}", "status": {"$in": ["pending", "live"]}}, {"_id": 1}):
+            continue
         id_h = await resolve_team_id(home)
         id_a = await resolve_team_id(away)
         if not (id_h and id_a):
@@ -6542,6 +6545,10 @@ async def favourite_smart_autopost() -> dict:
         mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
         tip_id = f"smartfav-{mkey}"
         if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        # One smart pick per fixture: if a Qualifikations-Pick already covers this match,
+        # don't also post a Favoriten-Kombi (owner 2026-07-29: no duplicate smart tips).
+        if await db.tips.find_one({"id": f"qual-{mkey}", "status": {"$in": ["pending", "live"]}}, {"_id": 1}):
             continue
         very_dominant = fav_prob >= 66 and fg >= 3
         if very_dominant:
@@ -9117,6 +9124,25 @@ async def _startup_seed():
              "$or": [{"home_team": rus_re}, {"away_team": rus_re}, {"league": rus_re},
                      {"legs.match": rus_re}, {"legs.league": rus_re}]},
             {"$set": {"hidden": True, "hidden_reason": "russia_boycott"}})
+        # De-duplicate the Smart feed: one pick per fixture (owner 2026-07-29 saw the same tip
+        # multiple times). Prefer the Qualifikations-Pick (qual-) over the Favoriten-Kombi.
+        smart_open = await db.tips.find(
+            {"source": "smart", "status": {"$in": ["pending", "live"]}, "hidden": {"$ne": True}},
+            {"_id": 0, "id": 1, "home_team": 1, "away_team": 1}).to_list(1000)
+        seen_fix, dup_ids = {}, []
+        for tp in sorted(smart_open, key=lambda x: 0 if str(x.get("id", "")).startswith("qual-") else 1):
+            fk = _norm(f"{tp.get('home_team', '')} {tp.get('away_team', '')}")
+            if not fk:
+                continue
+            if fk in seen_fix:
+                dup_ids.append(tp["id"])
+            else:
+                seen_fix[fk] = tp["id"]
+        if dup_ids:
+            await db.tips.update_many(
+                {"id": {"$in": dup_ids}},
+                {"$set": {"hidden": True, "hidden_reason": "smart_dup"}})
+            logger.info(f"Smart de-dup: hid {len(dup_ids)} duplicate smart picks")
     except Exception as e:
         logger.error(f"Startup seed failed: {e}")
 

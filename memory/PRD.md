@@ -433,3 +433,20 @@ NOTE: recent user communication is in GERMAN (respond in German).
 
 ## Credentials
 Admin: admin@tipjar.com | TipJarAdmin2026!
+
+## Changelog — 2026-07-29 (batch 2, tested: BE 7/7, FE all green — iteration_45)
+1. Expert push = GOLDEN crystal-ball logo (public/push-expert.png), dedicated 🔮 branch in
+   _push_payload_for_tip + expert digest badge. (background_tasks.py ~186)
+2. API-Football daily budget RESERVE: core.py _api_note_headers captures rate-limit headers;
+   _api_reserve_locked() protects 50% of daily budget before 15:00 UTC (evening = free).
+   live_loop + member_live_loop back off when locked → keeps evening energy for settlement/experts.
+3. AI-tip CORRECTION (#4): POST /api/tips/{id}/correct (multipart image). ANY logged-in user.
+   Vision reads ONLY selection+odds → updates market/legs + recomputes total odds & potential_return;
+   STAKE never changes. Parlays: matches legs by team names, replaces only recognised legs.
+   Sets corrected/corrected_by/corrected_at, re-grades cleanly. Frontend: blue "Korrigieren" button
+   + hidden file input on every open AI card (data-testid correct-tip-*/correct-input-*), "KORRIGIERT"
+   badge. Only house AI sources (hq-auto/hq-live/hq-system/smart/hq-master) are correctable.
+4. KICKOFF fix (#5): i18n.js kickoffInfo now normalises ISO-with-timezone (API-Football UTC) to the
+   Europe/Berlin wall-clock convention → fixes tips shown 1-2h too early. Naive scraped times unchanged.
+5. i18n keys tip.correct/correcting/corrected/correct.hint/correct.ok/correct.err in all 8 languages.
+NOTE: "credits" (Emergent LLM) ≠ API-Football quota. Experts come via web-scrapers (no API-Football needed).
