@@ -6645,6 +6645,103 @@ async def favourite_smart_autopost() -> dict:
     return {"posted": posted, "candidates": len(cand)}
 
 
+GIFT_MAX_PER_RUN = 3  # owner: 2-3 "Geschenke" (Asian Über 1.0) per day
+
+
+async def gift_of_the_day() -> dict:
+    """Owner 2026-07-29: auto-post SAFE 'Geschenke' — an Asian 'Über 1.0' team total on a
+    clear favourite that has a REAL chance of 2+ goals (push at exactly 1 → no loss). Only
+    fires when the favourite's own WIN odds sit ~1.50-1.85 (so the Asian Über 1.0 lands near
+    the sweet ~1.34 gift price — a heavier favourite would price it too low to be worth it).
+    Posts as a KI single (hq-auto, is_gift=True) → shows in the 🎁 Geschenke tab, auto-settled."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    made = await db.tips.count_documents(
+        {"source": "hq-auto", "is_gift": True, "gift_kind": "asian_o1", "gift_day": day})
+    if made >= GIFT_MAX_PER_RUN:
+        return {"posted": 0, "reason": "daily cap reached"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    cand, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
+            continue
+        fav = _fav_team(p)
+        fav_prob = p.get("fav_prob") or 0
+        fg = (p.get("ph") or 0) if p.get("fav") == "home" else (p.get("pa") or 0)
+        if not fav or fav_prob < 60 or fg < 2:
+            continue  # clear favourite AND predicted to score 2+
+        if not _zero_zero_assessment(p)["over_safe"]:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        cand.append((fav_prob, fg, ko, p, fav))
+    cand.sort(key=lambda x: (-x[0], -x[1]))
+    posted = 0
+    for fav_prob, fg, ko, p, fav in cand:
+        if made + posted >= GIFT_MAX_PER_RUN:
+            break
+        home, away = p.get("home"), p.get("away")
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"gift-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        # Owner rule: the favourite's WIN odds must be ~1.50-1.85 so the Asian Über 1.0 gift
+        # prices around 1.34 (a heavier favourite would make it too cheap to bother).
+        try:
+            odds = await ensure_match_odds(home, away, p.get("kickoff") or "")
+        except Exception:
+            odds = {}
+        win_od = odds.get("win_home") if p.get("fav") == "home" else odds.get("win_away")
+        try:
+            win_od = float(win_od)
+        except (TypeError, ValueError):
+            continue  # need a real win price to qualify the gift
+        if not (1.50 <= win_od <= 1.85):
+            continue
+        # Estimate the Asian Über 1.0 team-total price from the win odds (~1.30 at 1.50 win,
+        # ~1.42 at 1.85 win). Kept as a plausible estimate — the micro-line isn't in the feed.
+        gift_od = round(min(1.42, max(1.28, 1.30 + (win_od - 1.50) / 0.35 * 0.12)), 2)
+        market = f"{fav} Asian Über 1.0 Tore"
+        analysis = (
+            f"🎁 Geschenk des Tages: {fav} ist klarer Favorit (Sieg-Wahrscheinlichkeit {fav_prob}%, "
+            f"Sieg-Quote {win_od:.2f}) und laut Prognose mit {fg} Toren eingeplant. "
+            f"Asiatisch Über 1.0 — {fav} trifft 2+ = gewonnen, GENAU 1 Tor = Einsatz zurück (Push), "
+            f"0 = verloren. Sichere Absicherung bei genau 1 Tor. Quote geschätzt."
+        )
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Geschenk",
+            "league_code": p.get("league_code") or "",
+            "market": market, "odds": f"{gift_od:.2f}",
+            "ai_rating": 9.0, "win_prob": round(fav_prob / 100.0, 2),
+            "ai_analysis": analysis,
+            "is_gift": True, "gift_kind": "asian_o1", "gift_day": day,
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "category": "value",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-auto", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
+        logger.info(f"Gift of the day: {fav} Asian Über 1.0 @ {gift_od} (win {win_od}, {fg} goals pred)")
+    return {"posted": posted, "candidates": len(cand)}
+
+
+
 async def mental_autopost() -> dict:
     """Owner-Wunsch (2026-07-22): 'Mental'-Kategorie im Single-Pick-Bereich — verrückte
     Long-Shot-Bet-Builder auf EIN Spiel mit riesiger Gesamtquote (Über 4.5 Tore, beide

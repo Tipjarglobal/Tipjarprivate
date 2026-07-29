@@ -517,3 +517,16 @@ Owner: "Individuel/Ομαδικό Asian over 1" (Team-Total asiatisch Über 1.0)
 5. Also (batch 5 follow-up): AI slip rating tightened — an all-near-locks slip (every leg ≤~1.40)
    now scores the FULL 10 (verified live: the reported 1.435 slip → 10.0).
 
+## Changelog — 2026-07-29 (batch 7) — Auto "Geschenk des Tages" (Asian Über 1.0)
+Owner: post such gifts ONLY when the team has a real chance of 2+ goals; to land ~1.34 the team's
+WIN odds must be ~1.50-1.65 (a heavier favourite prices it too low). Market on bookies = "Home/Away
+Team Total Goals 3-Way · Over 1.0".
+- New `gift_of_the_day()` (`server.py`, wired into `smart_loop`): picks a clear favourite
+  (fav_prob ≥ 60) that is PREDICTED to score 2+ (ph/pa ≥ 2), 0:0 excluded, kickoff 2-120h out, and
+  whose REAL win odds sit in 1.50-1.85. Posts a single hq-auto pick "{Team} Asian Über 1.0 Tore"
+  (is_gift=True, gift_kind=asian_o1, category value, rating 9). Odds estimated from the win price
+  (~1.30 at 1.50 win → ~1.42 at 1.85 win; 1.60 win → ~1.33). Max 3/day, dedup per match (id gift-*).
+  Auto-settled via the new Asian-Über-1.0 judge (2+ win, exactly 1 push, 0 lose) and shows in the
+  cross-source 🎁 Geschenke tab. Pipeline verified (20 core-eligible candidates found; selective by
+  design — only fires within the time+win-odds band). Runs clean, no errors.
+
