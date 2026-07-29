@@ -245,6 +245,36 @@ def _grade_goal_leg(kind, market, team, fx):
         if ht_total == 1:
             return GRADE_VOID
         return False
+    # ── Asian FULL-TIME "Über 1.0" (team OR match total): 2+ goals WIN, exactly 1 goal
+    #    REFUNDS the stake (push/void), 0 loses. Owner rule 2026-07-29 ("Individuel/Ομαδικό
+    #    Asian over 1" = a near-lock gift). Team side resolved from the named team, an explicit
+    #    Heim/Gast · Team 1/2 indicator, or (fallback) the whole-match total. ──
+    _asian_o1 = (
+        ("asian" in m or "asiat" in m)
+        and re.search(r"(über|over)\s*1(\.0)?(?![.\d])", m)
+        and "1.5" not in m and "halbzeit" not in m and " hz" not in m and "1. halb" not in m)
+    if _asian_o1:
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        side = None
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            side = "home"
+        elif an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            side = "away"
+        elif team and _teams_match(hn, team):
+            side = "home"
+        elif team and _teams_match(an, team):
+            side = "away"
+        if side is None:
+            if re.search(r"(individuel|ομαδικ|gesamtzahl|total)[^0-9]*\b1\b", m) or "heim" in m or " home" in m:
+                side = "home"
+            elif re.search(r"(individuel|ομαδικ|gesamtzahl|total)[^0-9]*\b2\b", m) or "gast" in m or "auswärts" in m or "auswarts" in m or " away" in m:
+                side = "away"
+        g = hg if side == "home" else (ag if side == "away" else total)
+        if g >= 2:
+            return True
+        if g == 1:
+            return GRADE_VOID
+        return False
     # Corner (Ecken) Over/Under — settled from fixture statistics (fx['corners']).
     if k in ("corner_o", "corner_u") or "ecken" in m:
         ctot = fx.get("corners")

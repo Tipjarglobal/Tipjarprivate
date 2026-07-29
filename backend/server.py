@@ -919,7 +919,11 @@ AI_SYSTEM = (
     "harassment or profanity directed at people, or content that is clearly NOT a football bet slip/tip "
     "(spam, random selfies, unrelated pictures). Otherwise safe=true and flag_reason=''. "
     "Copy each selection line EXACTLY as it appears on the slip. If a field is unknown use an empty "
-    "string. Never invent scores or results."
+    "string. Never invent scores or results. "
+    "For an INDIVIDUAL / TEAM total (labels like 'Individual Total Team 1/2', 'Individuel Asian over 1', "
+    "'Ομαδικό Asian over 1', 'Team Total'): PREFIX the selection with the EXACT team name it refers to — "
+    "Team/Total 1 = the HOME team, Team/Total 2 = the AWAY team — e.g. 'FC Kopenhagen Asian Over 1.0'. "
+    "ALWAYS keep the word 'Asian' in the selection whenever the line is an Asian total/handicap."
 )
 
 
@@ -1468,6 +1472,26 @@ def _parse_units(s):
         return None
 
 
+def _asian_over1_in_text(txt: str) -> bool:
+    """True when a selection line is an Asian 'Über/Over 1.0' total (team or match) — a
+    near-lock 'gift' (push at exactly 1 goal). Never matches Über 1.5."""
+    m = (txt or "").lower()
+    return bool(("asian" in m or "asiat" in m)
+                and re.search(r"(über|over)\s*1(\.0)?(?![.\d])", m)
+                and "1.5" not in m)
+
+
+def _tip_has_asian_over1(tip: dict) -> bool:
+    if _asian_over1_in_text(tip.get("market")):
+        return True
+    for lg in (tip.get("legs") or []):
+        for sel in (lg.get("selections") or []):
+            if _asian_over1_in_text(sel):
+                return True
+    return False
+
+
+
 def _disguise_stakes(tip: dict) -> dict:
     """Owner rule (2026-07): mask that expert picks are cloned, and ALWAYS show $.
     - Expert bots: display 12x LESS than the source's real stake; unit-based stakes ('1u')
@@ -1638,6 +1662,10 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "avg_rating": float(inp.self_rating),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Owner rule 2026-07-29: an Asian "Über 1.0" leg (push at exactly 1 goal) is a valuable
+    # near-lock → surface it in the "Geschenke" (Gifts) tab.
+    if _tip_has_asian_over1(tip):
+        tip["is_gift"] = True
     # Ask the member a friendly follow-up (never reject) when the AI struggled to
     # resolve teams/league/kickoff — so players don't give up.
     clarify = await _slip_needs_clarification(tip)
@@ -2325,7 +2353,10 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         # Flagged on the pick itself (singles & bet-builder combos), any base category.
         q["is_gift"] = True
     if source == "ai":
-        q["source"] = "hq-auto"
+        # Gifts are cross-cutting (KI singles/combos AND owner-posted near-lock slips like
+        # Asian Über 1.0). Don't restrict the Gifts tab to hq-auto so those safe gifts show up.
+        if category != "gifts":
+            q["source"] = "hq-auto"
         if category not in ("mental", "banker", "risk", "banger", "value", "gifts"):
             q["category"] = {"$ne": "mental"}   # mental only in its own tab
     elif source == "smart":
@@ -6856,6 +6887,12 @@ def _live_bet_landed(market: str, hg, ag, home: str, away: str):
         if total == 2:
             return None
         return False
+    # Asian Über 1.0 (team or match): win as soon as the relevant goals reach 2 (exactly-1
+    # push and 0-loss are resolved at full-time; live only settles WINS early).
+    if "asian" in m and re.search(r"(über|over)\s*1(\.0)?(?![.\d])", m) and "1.5" not in m:
+        side = _market_team_side(market, home, away)
+        g = hg if side == "home" else (ag if side == "away" else total)
+        return True if g >= 2 else False
     if any(k in m for k in ("draw no bet", "doppelte chance", "genaues ergebnis", "unentschieden")):
         return None
     if "über 2.5" in m and ("beide" in m or "btts" in m):

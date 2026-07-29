@@ -499,3 +499,21 @@ NOTE: "credits" (Emergent LLM) ≠ API-Football quota. Experts come via web-scra
    preview DB) so it keeps its old 4★ until re-rated; the fix applies to newly uploaded/rated slips
    after deploy.
 
+## Changelog — 2026-07-29 (batch 6) — Asiatisch Über 1.0 verstehen + Geschenke-Tab
+Owner: "Individuel/Ομαδικό Asian over 1" (Team-Total asiatisch Über 1.0) ist ein wertvolles Geschenk (@1.34).
+1. **Settlement** (`settlement.py _grade_goal_leg`): new branch for Asian FULL-TIME "Über 1.0"
+   (team OR match total) — 2+ goals WIN, exactly 1 goal PUSH/refund (GRADE_VOID), 0 LOSE. Team side
+   resolved via named team, Heim/Gast · Team 1/2 indicator, else whole-match total. Never matches
+   Über 1.5. Unit-tested (2-0 win, 1-3 push, 0-4 lose, match 2/1/0, 1.5 not caught).
+2. **Live early-settle** (`server.py _live_bet_landed`): Asian Über 1.0 wins early once the relevant
+   side reaches 2 goals (push/loss resolved at FT).
+3. **Vision prompt** (`AI_SYSTEM`): individual/team totals (e.g. "Individuel/Ομαδικό Asian over 1")
+   are now PREFIXED with the exact team name (Total 1=home, 2=away) and always keep the word "Asian"
+   → reliable settlement side-detection.
+4. **Geschenke (Gifts) tab**: Asian-Über-1 picks are flagged `is_gift=True` on member submit
+   (`_tip_has_asian_over1`/`_asian_over1_in_text`), and the Gifts tab (`category=gifts`) is now
+   CROSS-SOURCE (no longer restricted to hq-auto) so owner-posted near-lock gifts (TipJarLogic) show
+   there too. E2E verified via curl (TipJarLogic Asian-Over-1 pick appears under source=ai&category=gifts).
+5. Also (batch 5 follow-up): AI slip rating tightened — an all-near-locks slip (every leg ≤~1.40)
+   now scores the FULL 10 (verified live: the reported 1.435 slip → 10.0).
+
