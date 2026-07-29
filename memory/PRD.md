@@ -407,5 +407,29 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Telegram outbound notifications.
 - P2: Stripe payments & PayPal payouts.
 
+## Changelog — 2026-07-29 (9-point batch, all tested: BE 13/13, FE 4/4)
+NOTE: recent user communication is in GERMAN (respond in German).
+1. Russia boycott: all Russian football blocked (COUNTRY_BLACKLIST/CODE_BLACKLIST + RUSSIA_KEYWORDS
+   in TEAM_LEAGUE_BLACKLIST; removed `ru1` from FOREBET_SLIP_CODES). Startup cleanup hides any open
+   Russian fixture (runs on prod after deploy). server.py ~4081.
+2. Share caption localized to selected UI language (shareSlip.js `text` param; i18n share.* keys; RateWall
+   doShare + HallOfFame use t()).
+3. "Δώρα" gift label i18n → cat.gifts / wall.gift per language (Greek Δώρα, DE Geschenk, EN Gift, …).
+4. Hall of Fame rules: opens 2026-08-01 (HOF_START), SYSTEMS ONLY (≥2 legs), quote ≥3.00, EXCEPT
+   TipJarHQ systems need ≥20.00 (_hof_min_odds). Endpoint + daily_hof_autofill + startup cleanup enforce;
+   all pre-Aug/single/low-odds win_claims purged. Currently empty until Aug 1 (by design).
+5. AI analysis now translates per selected language — fixed proseI18n cache poisoning (bumped key to
+   `tj_tr2_`, no longer persists untranslated German). Uses existing /api/i18n/translate cache.
+6. Master Easy/Medium packs now use DISJOINT matches (master_build_packs tracks used_fixkeys across the
+   run + existing open packs) so one result can't sink both. Verified disjoint via API.
+7. Removed "Auf Buchmacher spielen" (Play on bookmaker): deleted PlaySlipOverlay.jsx + playSlip.js,
+   removed buttons/state/imports from RateWall.jsx & Systems.jsx.
+8. Sort + quick filter in ALL pick areas: "Neueste"/"Meiste Sterne" toggle + "Top 9–10★" chip
+   (RateWall.jsx client-side, data-testid sort-newest/sort-stars/filter-top/tip-controls).
+9. Push threshold enforced server-side: PushSubIn/PushPrefsIn carry min_stars; notify_all_push skips
+   devices whose min_stars > tip stars (non-live areas; live always passes). Payloads carry `stars`.
+- Also: member-guide banner moved from inside Single Picks area to the MAIN page above the area-button
+  row (Header.jsx, data-testid member-guide).
+
 ## Credentials
 Admin: admin@tipjar.com | TipJarAdmin2026!
