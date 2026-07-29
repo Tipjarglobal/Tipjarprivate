@@ -487,3 +487,15 @@ NOTE: "credits" (Emergent LLM) ≠ API-Football quota. Experts come via web-scra
    tip + post a bookmaker slip photo. i18n `ai.correct.guide.title/body` in all 8 languages.
    Screenshot-verified on the homepage.
 
+## Changelog — 2026-07-29 (batch 5) — KI-Bewertung: Sicherheit statt Value
+1. **AI slip rating philosophy flipped to SAFETY-first** (`server.py` `AI_SYSTEM` prompt): the vision
+   model used to rate "quality/value", so ultra-safe low-odds accumulators (legs @1.04/1.03) scored
+   only ~4/10 with "little value" wording — contradicting TipJar's safe-playable-tips philosophy.
+   New rule: rating = how SAFE / likely-to-win the slip is (NOT payout value). Slips of near-certain
+   legs (Over 0.5, low Unders, clear favourites, DC/DNB) MUST score 9-10 even at tiny total odds;
+   mid 5-7 for mixed; low 1-4 ONLY for genuinely risky/illogical slips. Analysis must not call low
+   odds "poor value". Verified via live LLM call: the reported 3-leg 1.435 slip now rates 9.0
+   ("extremely safe … strong play"). NOTE: the specific reported slip lives on PRODUCTION (not in the
+   preview DB) so it keeps its old 4★ until re-rated; the fix applies to newly uploaded/rated slips
+   after deploy.
+
