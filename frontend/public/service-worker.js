@@ -1,4 +1,4 @@
-const CACHE = "tipjar-shell-v3";
+const CACHE = "tipjar-shell-v4";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -47,7 +47,13 @@ self.addEventListener("push", (event) => {
     badge: data.badge || "/icon-192.png",
     tag: data.tag || "tipjar",
     renotify: true,
-    vibrate: data.vibrate || (data.kind === "live" ? [80, 40, 80, 40, 120] : [60, 30, 60]),
+    // LOUD + persistent (owner request): play the OS notification sound (not silent), keep the
+    // banner on screen until the user acts, and vibrate strongly — works with the app closed.
+    silent: false,
+    requireInteraction: true,
+    vibrate: data.vibrate || (data.kind === "live"
+      ? [300, 120, 300, 120, 300, 120, 500]
+      : [200, 100, 200, 100, 400]),
     data: { url: data.url || "/", kind: data.kind || "tip" },
     actions: (data.actions && data.actions.length)
       ? data.actions

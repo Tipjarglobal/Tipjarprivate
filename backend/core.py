@@ -138,11 +138,14 @@ def _api_note_headers(headers):
 
 def _api_reserve_locked() -> bool:
     """True when a NON-CRITICAL API-Football call should be deferred to protect the evening
-    budget. Daytime (before evening) keeps a reserve of the daily quota; settlement of due
-    matches never calls this — it always gets budget."""
+    budget. Only matters on SMALL plans (free/basic) — on large plans (Ultra/Mega, thousands
+    of requests/day) there's plenty of budget, so we never throttle. Settlement of due matches
+    never calls this and always gets budget."""
     rem, lim = _API_DAY.get("remaining"), _API_DAY.get("limit")
     if not rem or not lim:
         return False
+    if lim >= 1000:
+        return False  # large plan (e.g. Ultra 75k/day) — no need to ration
     if datetime.now(timezone.utc).hour >= API_EVENING_UTC_HOUR:
         return False  # evening — use the budget freely
     return rem <= int(lim * API_DAY_RESERVE_FRAC)
