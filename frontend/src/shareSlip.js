@@ -2,19 +2,22 @@
 // no slogan/CTA in the visible text so it doesn't read like spam in third-party groups.
 const TIPJAR_URL = "https://tipjarglobal.com";
 
-export async function shareSlip({ imageUrl, username, odds, text }) {
+export async function shareSlip({ file, imageUrl, username, odds, text }) {
   const caption = text != null
     ? text
     : `Kombi-Schein${odds ? ` · Gesamtquote ${odds}` : ""}${username ? ` · @${username}` : ""}`;
   try {
-    if (imageUrl && typeof navigator !== "undefined" && navigator.canShare) {
+    // Prefer a pre-fetched File (passed from the warmed cache) so navigator.share() runs
+    // synchronously inside the tap's user-activation — no fetch await that would block it.
+    let f = file || null;
+    if (!f && imageUrl && typeof navigator !== "undefined" && navigator.canShare) {
       const resp = await fetch(imageUrl);
       const blob = await resp.blob();
-      const file = new File([blob], "tipjar-slip.webp", { type: blob.type || "image/webp" });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: caption, title: "TipJar" });
-        return true;
-      }
+      f = new File([blob], "tipjar-slip.webp", { type: blob.type || "image/webp" });
+    }
+    if (f && typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [f] })) {
+      await navigator.share({ files: [f], text: caption, title: "TipJar" });
+      return true;
     }
     if (typeof navigator !== "undefined" && navigator.share) {
       await navigator.share({ text: caption, url: TIPJAR_URL });

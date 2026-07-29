@@ -472,3 +472,18 @@ NOTE: "credits" (Emergent LLM) ≠ API-Football quota. Experts come via web-scra
 4. **Bug fix**: `push_watch_loop` crashed every run — `_earliest_kickoff` was undefined (missing
    helper from a prior fork). Added `_earliest_kickoff` in background_tasks.py → pushes work again.
 
+## Changelog — 2026-07-29 (batch 4) — Teilen-Fix + KI-Korrektur-Hinweis
+1. **Teilen-Bug (Samsung/Android "es passiert nichts")**: root cause = the share-image POST ran
+   INSIDE the tap handler, so the long upload expired the user-activation → `navigator.share()`
+   silently never opened. Fix (`RateWall.jsx` + `shareSlip.js`): the slip image is now pre-warmed
+   into an in-memory `File` on viewport-enter (`warmedFile` ref), and `doShare` calls
+   `navigator.share({files:[file]})` with ZERO network await inside the gesture. If the file isn't
+   warmed yet, it shares the link immediately (sheet always opens) and warms for next time.
+   `shareSlip` accepts an optional pre-fetched `file`. Backend share pipeline verified working
+   (share-image 200, file fetchable w/ CORS).
+2. **Homepage KI-Korrektur-Hinweis**: new light-blue box directly BELOW the red member-guide box
+   (`Header.jsx`, data-testid ai-correction-guide, Info icon, sky styling). Explains the AI can be
+   wrong (times/odds/unavailable lines, e.g. no "Über 0.5") → use the blue Correct button on each
+   tip + post a bookmaker slip photo. i18n `ai.correct.guide.title/body` in all 8 languages.
+   Screenshot-verified on the homepage.
+

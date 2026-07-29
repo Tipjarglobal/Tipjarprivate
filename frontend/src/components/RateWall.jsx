@@ -929,31 +929,40 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   };
   const isShareable = ["pending", "live"].includes(tip.status) && !["hq-auto", "smart"].includes(tip.source);
   const warmedPath = useRef(null);
+  const warmedFile = useRef(null);
   const warming = useRef(false);
-  // Pre-generate the share image as soon as the slip is on screen, so the tap→share is
-  // instant (cached). Big 15-leg slips take up to ~20s to render+upload — without this the
-  // tap's user-activation expires and navigator.share() is blocked ("wird nicht geteilt").
+  const shareCaption = () => `${t("share.slip")}${tip.odds ? ` · ${t("share.totalOdds")} ${tip.odds}` : ""}${tip.username ? ` · @${tip.username}` : ""}`;
+  // Pre-generate the share image AND fetch it into an in-memory File as soon as the slip is
+  // on screen, so the tap→share fires with ZERO network await. Any await between the tap and
+  // navigator.share() expires the user-activation on Android/Samsung → the share sheet silently
+  // never opens ("nothing happens"). Warming ahead of time avoids that entirely.
   const warmShare = useCallback(async () => {
-    if (!isShareable || warmedPath.current || warming.current) return;
+    if (!isShareable || warmedFile.current || warming.current) return;
     warming.current = true;
     try {
       const { data } = await api.post(`/tips/${tip.id}/share-image`);
       warmedPath.current = data.path;
-    } catch { /* keep sharing possible via the slow path on tap */ }
+      try {
+        const resp = await fetch(fileUrl(data.path));
+        const blob = await resp.blob();
+        warmedFile.current = new File([blob], "tipjar-slip.webp", { type: blob.type || "image/webp" });
+      } catch { /* file fetch failed → tap will share the link instead */ }
+    } catch { /* keep sharing possible via the link fallback on tap */ }
     finally { warming.current = false; }
   }, [isShareable, tip.id]);
   const doShare = async () => {
     if (sharing) return;
     setSharing(true);
     try {
-      let path = warmedPath.current;
-      if (!path) {
-        const { data } = await api.post(`/tips/${tip.id}/share-image`);
-        path = data.path;
-        warmedPath.current = path;
+      // Use the pre-warmed File so navigator.share() runs inside the tap's user-activation
+      // window (no blocking POST). If it isn't ready yet, share the link immediately (still
+      // opens the sheet) and warm the image in the background for next time.
+      if (warmedFile.current) {
+        await shareSlip({ file: warmedFile.current, username: tip.username, odds: tip.odds, text: shareCaption() });
+      } else {
+        await shareSlip({ username: tip.username, odds: tip.odds, text: shareCaption() });
+        warmShare();
       }
-      await shareSlip({ imageUrl: fileUrl(path), username: tip.username, odds: tip.odds,
-        text: `${t("share.slip")}${tip.odds ? ` · ${t("share.totalOdds")} ${tip.odds}` : ""}${tip.username ? ` · @${tip.username}` : ""}` });
     } catch (e) {
       toast.error(t("wall.shareErr"));
     } finally {
