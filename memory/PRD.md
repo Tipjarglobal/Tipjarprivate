@@ -450,3 +450,25 @@ Admin: admin@tipjar.com | TipJarAdmin2026!
    Europe/Berlin wall-clock convention → fixes tips shown 1-2h too early. Naive scraped times unchanged.
 5. i18n keys tip.correct/correcting/corrected/correct.hint/correct.ok/correct.err in all 8 languages.
 NOTE: "credits" (Emergent LLM) ≠ API-Football quota. Experts come via web-scrapers (no API-Football needed).
+
+## Changelog — 2026-07-29 (batch 3) — 23:00 API-Burner + 00:30 Master Safe Bets
+1. **23:00 API-Burner** (`background_tasks.py` `api_burner_loop`, registered in startup): once per
+   Berlin day at hour 23, if the API-Football daily budget still has a real surplus
+   (remaining > max(500, 25% of limit)), aggressively fetch predictions for the next 48h
+   (`apifootball_predictions_autopost(day_offsets=(0,1,2), max_per_run=300)`) to prepopulate the DB
+   before the midnight quota reset. State in `db.api_burner_state` (id="burner", day guard).
+   `apifootball_predictions_autopost` now takes optional `day_offsets`/`max_per_run`. `_API_DAY`
+   exported from core via server.
+2. **00:30 Master "Safe Bets"** (`server.py` `master_safe_bets_build`, called from `master_loop`
+   when Berlin time is 00:30–00:59, one slip/day guard via master_category="safe"+master_day):
+   builds an 8-leg (min 6) parlay from near-certain legs — Win favourites (real 1X2, fav ≤1.65),
+   Team über 0.5 Tore (real team-total odds), and Player props >0.5 Fouls/Schüsse/Paraden
+   (estimated quasi-safe odds ~1.05–1.30 via existing `_team_best_props`/`_odds_from_prob`; feed has
+   no micro-prop prices — owner-approved estimate, choice A). Helper `_fav_side`.
+   `/api/tips?source=master&mcat=safe` filter added. Verified e2e: built a real 6-leg slip
+   (odds 3.34) from the current thin pool; reaches 8 legs when the pool is fuller.
+3. Frontend `RateWall.jsx`: new **"Safe Bets"** master sub-tab (data-testid master-tab-safe) +
+   counts + card badge; i18n `master.cat.safe` (en/el "Safe Bets"). Screenshot-verified.
+4. **Bug fix**: `push_watch_loop` crashed every run — `_earliest_kickoff` was undefined (missing
+   helper from a prior fork). Added `_earliest_kickoff` in background_tasks.py → pushes work again.
+

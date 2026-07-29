@@ -997,25 +997,27 @@ def _parse_apifootball_prediction(entry: dict):
     over25 = ("over 2.5" in advice) or ("+2.5" in str(pred.get("under_over") or "")) or total >= 3
     return ph, pa, fav, fav_prob, btts, over25
 
-async def apifootball_predictions_autopost() -> dict:
+async def apifootball_predictions_autopost(day_offsets=(0, 1, 2), max_per_run=None) -> dict:
     """Fetch API-Football's own predictions for upcoming top-league fixtures the
     scrapers missed, and store them (source=apifootball) so Scorer-Radar / Tor-Prognose
-    gain coverage. Quota-bounded and 24h-cached."""
+    gain coverage. Quota-bounded and 24h-cached. `day_offsets`/`max_per_run` let the
+    23:00 quota-burner widen the window + cap when there's surplus daily budget."""
     if not API_FOOTBALL_KEY:
         return {"posted": 0, "reason": "no API key"}
+    cap = max_per_run or APIFOOTBALL_PRED_MAX_PER_RUN
     now = datetime.now(timezone.utc)
     # already-covered matches (any source) — we only FILL GAPS, never duplicate work
     existing = await db.match_predictions.find(
         {"status": "pending"}, {"_id": 0, "home": 1, "away": 1}).to_list(3000)
     covered = {_match_key(x.get("home"), x.get("away")) for x in existing}
-    dates = [(now + timedelta(days=d)).date().isoformat() for d in (0, 1, 2)]
+    dates = [(now + timedelta(days=d)).date().isoformat() for d in day_offsets]
     posted, scanned, calls = 0, 0, 0
     for d in dates:
-        if posted >= APIFOOTBALL_PRED_MAX_PER_RUN or _api_quota_exhausted():
+        if posted >= cap or _api_quota_exhausted():
             break
         fixtures = await _apifootball_async("/fixtures", {"date": d}) or []
         for fx in fixtures:
-            if posted >= APIFOOTBALL_PRED_MAX_PER_RUN or _api_quota_exhausted():
+            if posted >= cap or _api_quota_exhausted():
                 break
             status = ((fx.get("fixture") or {}).get("status") or {}).get("short")
             if status != "NS":

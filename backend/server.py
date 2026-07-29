@@ -60,7 +60,7 @@ from core import (
     RESEND_API_KEY, SENDER_EMAIL,
     logger,
     _API_QUOTA, _api_quota_exhausted, _reset_api_quota_flag, _apifootball, _apifootball_async,
-    _api_reserve_locked,
+    _api_reserve_locked, _API_DAY,
 )
 
 app = FastAPI(title="TipJar API")
@@ -2326,6 +2326,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         # master_category; "slips" = the consensus + live-alternative picks (no category).
         if mcat in ("einfach", "mittel", "challenge"):
             q["master_category"] = mcat
+        elif mcat == "safe":
+            q["master_category"] = "safe"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -8202,6 +8204,154 @@ async def master_challenge() -> dict:
     return {"action": "opened", "step": st["step"], "odds": prod}
 
 
+def _fav_side(c: dict, odds: dict):
+    """Return (fav_team, fav_odd) — the favourite side of a fixture from real 1X2 odds."""
+    wh, wa = odds.get("win_home"), odds.get("win_away")
+    try:
+        wh = float(wh) if wh is not None else None
+    except (TypeError, ValueError):
+        wh = None
+    try:
+        wa = float(wa) if wa is not None else None
+    except (TypeError, ValueError):
+        wa = None
+    if wh is not None and (wa is None or wh <= wa):
+        return c["home"], wh
+    if wa is not None:
+        return c["away"], wa
+    return None, None
+
+
+async def master_safe_bets_build() -> dict:
+    """Owner 00:30 slip: an 8-leg "Safe Bets" parlay built ONLY from near-certain
+    selections — win favourites (real 1X2), Team über 0.5 Tore (real team-total odds),
+    and player props (>0.5 Fouls/Schüsse/Paraden). The micro-prop prices aren't in the
+    odds feed, so those legs carry a plausible quasi-safe ESTIMATE (owner-approved).
+    One slip per Berlin day; needs at least 6 solid legs to post."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "safe",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "safe", "master_day": day}):
+        return {"skipped": "done-today"}
+    cands = await _master_leg_candidates(now, 1.01, 999)
+    fixtures, seen_fx = [], set()
+    for c in cands:
+        if c["fixkey"] in seen_fx:
+            continue
+        seen_fx.add(c["fixkey"])
+        fixtures.append(c)
+        if len(fixtures) >= 24:
+            break
+    legs, used_fx = [], set()
+    odds_by_fx = {}
+
+    async def _odds_for(c):
+        if c["fixkey"] not in odds_by_fx:
+            try:
+                odds_by_fx[c["fixkey"]] = await ensure_match_odds(
+                    c.get("home", ""), c.get("away", ""), c.get("match_time", "")) or {}
+            except Exception:
+                odds_by_fx[c["fixkey"]] = {}
+        return odds_by_fx[c["fixkey"]]
+
+    def _add(c, market, odd, kind, prob=None):
+        legs.append({"match": c["match"], "league": c["league"], "kickoff": c["match_time"],
+                     "match_time": c["match_time"], "kickoff_dt": c["kickoff"],
+                     "market": market, "odds": round(float(odd), 2), "kind": kind,
+                     "prob": prob})
+        used_fx.add(c["fixkey"])
+
+    # 1) Win favourites — up to 3, real 1X2 odds, clear favourite (≤ ~1.65)
+    for c in fixtures:
+        if len([l for l in legs if l["kind"] == "win"]) >= 3:
+            break
+        odds = await _odds_for(c)
+        fav, fav_od = _fav_side(c, odds)
+        if fav and fav_od and 1.10 <= fav_od <= 1.65:
+            _add(c, f"{fav} Sieg", fav_od, "win")
+
+    # 2) Team über 0.5 Tore — up to 3, real team-total odds for the favourite team
+    for c in fixtures:
+        if c["fixkey"] in used_fx:
+            continue
+        if len([l for l in legs if l["kind"] == "team_o05"]) >= 3:
+            break
+        odds = await _odds_for(c)
+        fav, _ = _fav_side(c, odds)
+        if not fav:
+            continue
+        market = f"{fav} über 0.5 Tore"
+        real = _real_odd_for(market, odds, c["home"], c["away"])
+        if real and 1.03 <= float(real) <= 1.45:
+            _add(c, market, real, "team_o05")
+
+    # 3) Player props (>0.5 Fouls/Schüsse/Paraden) — estimated quasi-safe odds
+    SAFE_KINDS = ("fouls_c", "fouls_d", "sot", "shots", "saves")
+    for c in fixtures:
+        if len(legs) >= 8:
+            break
+        if c["fixkey"] in used_fx:
+            continue
+        odds = await _odds_for(c)
+        fav, _ = _fav_side(c, odds)
+        team = fav or c["home"]
+        try:
+            props = await _team_best_props(team, _smart_seasons(c.get("match_time")))
+        except Exception:
+            props = []
+        pick = None
+        for p in props:
+            if p.get("kind") not in SAFE_KINDS:
+                continue
+            if (p.get("prob") or 0) < 0.72:
+                continue
+            try:
+                od = float(str(p.get("odds") or "0"))
+            except (ValueError, TypeError):
+                continue
+            if 1.05 <= od <= 1.30:
+                pick = (p, od)
+                break
+        if pick:
+            p, od = pick
+            _add(c, p["market"], od, "prop", p.get("prob"))
+
+    if len(legs) < 6:
+        return {"skipped": "not-enough", "legs": len(legs)}
+    legs = legs[:8]
+    prod = 1.0
+    for l in legs:
+        prod *= l["odds"]
+    prod = round(prod, 2)
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min(l["kickoff_dt"] for l in legs)
+    packed = [{"match": l["match"], "league": l["league"], "kickoff": l["match_time"],
+               "status": "pending", "selections": [l["market"]],
+               "sel_odds": [f"{l['odds']:.2f}"]} for l in legs]
+    tip = {
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"Safe Bets — {len(legs)}-fach", "odds": f"{prod:.2f}",
+        "category": "value", "master_category": "safe", "master_day": day,
+        "ai_rating": 9.0,
+        "ai_analysis": (f"👑 TipJarMaster Safe Bets: {len(legs)} quasi-sichere Beine "
+                        f"(Sieg-Favoriten, Team über 0.5 Tore, Spieler-Props), "
+                        f"Gesamtquote {prod:.2f}. Spieler-Prop-Quoten sind plausible "
+                        f"Schätzungen. Immer mit kontrolliertem Einsatz."),
+        "legs": packed, "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    return {"posted": 1, "odds": prod, "legs": len(legs)}
+
+
 async def master_loop():
     await asyncio.sleep(240)  # let experts + live states populate first
     while True:
@@ -8215,9 +8365,15 @@ async def master_loop():
                 dp = await master_doublepack()
                 packs = await master_build_packs()
                 chal = await master_challenge()
+                # Owner: the 8-leg "Safe Bets" slip fires at 00:30 Europe/Berlin.
+                safe = {}
+                b = _berlin_now()
+                if b.hour == 0 and b.minute >= 30:
+                    safe = await master_safe_bets_build()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
+                        or safe.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)
@@ -8510,7 +8666,7 @@ from scrapers_autopost import (
 # does `from server import ...` (resolves the intentional circular import). ---
 from background_tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
-    smart_loop, live_loop, member_live_loop, hide_unplayable_loop,
+    smart_loop, live_loop, member_live_loop, hide_unplayable_loop, api_burner_loop,
 )
 
 
@@ -8766,6 +8922,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(expert_vote_loop()))
     _BG_TASKS.append(asyncio.create_task(master_loop()))
     _BG_TASKS.append(asyncio.create_task(hide_unplayable_loop()))
+    _BG_TASKS.append(asyncio.create_task(api_burner_loop()))
     if API_FOOTBALL_KEY:
         logger.info("Auto-settlement engine enabled (API-Football)")
     else:

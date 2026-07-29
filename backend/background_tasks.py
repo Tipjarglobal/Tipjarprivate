@@ -19,6 +19,8 @@ from server import (
     MEMBER_LIVE_POLL_SECONDS,
     _api_quota_exhausted,
     _api_reserve_locked,
+    _API_DAY,
+    apifootball_predictions_autopost,
     VAPID_PRIVATE_KEY,
     VAPID_SUBJECT,
     _INSTANCE_ID,
@@ -239,6 +241,28 @@ def _digest_payload_for_tips(tips: list, area: str = None) -> dict:
             "icon": "/push-expert.png" if is_expert else "/icon-192.png",
             "badge": "/push-expert.png" if is_expert else "/icon-192.png", "tag": "tipjar-expert" if is_expert else "tipjar-pick"}
 
+def _earliest_kickoff(tip: dict):
+    """Earliest parsed (UTC) kickoff across a tip's own time + all legs, or None when
+    no clock-timed kickoff is present. Used to skip pushing pre-match picks whose game
+    already started."""
+    times = [tip.get("match_time")]
+    for lg in (tip.get("legs") or []):
+        times.append(lg.get("kickoff"))
+    for lg in (tip.get("combo_legs") or []):
+        times.append(lg.get("kickoff") or lg.get("match_time"))
+    kos = []
+    for tt in times:
+        if not (tt or "").strip():
+            continue
+        if _kickoff_is_date_only(tt):
+            continue  # date-only slips stay playable all day → don't gate the push
+        ko = _parse_kickoff(tt)
+        if ko:
+            kos.append(ko)
+    return min(kos) if kos else None
+
+
+
 
 async def push_watch_loop():
     """Watch for freshly-created tips (any source) and fire a Web Push with the
@@ -457,3 +481,38 @@ async def hide_unplayable_loop():
         except Exception as e:
             logger.error(f"hide_unplayable_loop error: {e}")
         await asyncio.sleep(10 * 60)
+
+
+async def api_burner_loop():
+    """Owner: around 23:00 Europe/Berlin, if the API-Football daily budget still has
+    plenty left (Ultra plan), aggressively fetch predictions for the next 48h to
+    prepopulate the DB before the daily quota resets at midnight. Runs at most once per
+    Berlin day (leader only); never touches the reserve if the budget is already tight."""
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if _is_leader() and API_FOOTBALL_KEY:
+                b = _berlin_now()
+                day = b.date().isoformat()
+                if b.hour == 23:
+                    state = await db.api_burner_state.find_one({"id": "burner"})
+                    if (state or {}).get("day") != day:
+                        rem = _API_DAY.get("remaining")
+                        lim = _API_DAY.get("limit")
+                        # Only burn when there's a real surplus so tomorrow never starts starved.
+                        surplus = bool(rem and lim and rem > max(500, int(lim * 0.25)))
+                        res = {}
+                        if surplus and not _api_quota_exhausted():
+                            res = await apifootball_predictions_autopost(
+                                day_offsets=(0, 1, 2), max_per_run=300)
+                        await db.api_burner_state.update_one(
+                            {"id": "burner"},
+                            {"$set": {"id": "burner", "day": day, "surplus": surplus,
+                                      "remaining": rem, "limit": lim, "result": res,
+                                      "ran_at": datetime.now(timezone.utc).isoformat()}},
+                            upsert=True)
+                        logger.info(f"23:00 API burner (day {day}, surplus={surplus}, "
+                                    f"rem={rem}/{lim}): {res}")
+        except Exception as e:
+            logger.error(f"api_burner_loop error: {e}")
+        await asyncio.sleep(300)
