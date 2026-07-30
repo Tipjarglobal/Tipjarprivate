@@ -825,3 +825,11 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - BETRIEBS-HINWEIS: Emergent LLM-Key-Budget ist ÜBERSCHRITTEN (79.80/79.77) → Team-Namen-Übersetzung
   & KI-Analyse fallen zurück/schlagen fehl, bis der Owner Guthaben auflädt (Profile → Manage plan →
   Universal Key → Add Balance).
+
+## Changelog — 2026-07-30 (Master: mehr Scheine an vollen Spieltagen)
+- `master_build_packs` (server.py): Einfach/Mittel-Limit erhöht von „2/Tag, 1 offen" auf
+  PACK_DAILY_CAP=4 pro Tag und PACK_MAX_OPEN=3 gleichzeitig offen; baut pro Lauf mehrere Packs
+  (while-Schleife), solange der Pool sauber Kombis hergibt. used_fixkeys verhindert weiterhin
+  gemeinsame Spiele. Verifiziert in Preview: 2 Einfach + 1 Mittel offen.
+- HINWEIS: Produktion (tipjarglobal.com) läuft auf ALTEM Deploy-Stand → dort weniger Master-Scheine,
+  bis der Owner „Save to GitHub → Deploy" macht (bringt neue Quellen + höheres Pack-Limit live).

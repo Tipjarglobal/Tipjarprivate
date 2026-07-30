@@ -8617,46 +8617,49 @@ async def master_build_packs() -> dict:
         ("einfach", 3.0, 2, 4, 1.25, 1.80),
         ("mittel", 7.0, 3, 5, 1.40, 2.40),
     ]
+    # Owner 2026-07-30: on busy match days the Master should fill MORE slips. Allow up to
+    # PACK_DAILY_CAP per category per day and PACK_MAX_OPEN open at once (still never sharing a
+    # match, enforced via used_fixkeys). Build as many as the pool cleanly supports per run.
+    PACK_DAILY_CAP, PACK_MAX_OPEN = 4, 3
     for cat, target, minl, maxl, lo, hi in specs:
         made = await db.tips.count_documents(
             {"source": "hq-master", "master_category": cat, "master_day": day})
-        if made >= 2:
-            continue
         openx = await db.tips.count_documents(
             {"source": "hq-master", "master_category": cat, "status": {"$in": ["pending", "live"]}})
-        if openx:
-            continue  # never stack — one open pack of each category at a time
-        cands = await _master_leg_candidates(now, lo, hi)
-        # Exclude any fixture already used by the OTHER pack (no shared matches, ever).
-        cands = [c for c in cands if c.get("fixkey") not in used_fixkeys]
-        cands = sorted(cands, key=lambda c: c["odds"])  # build up gradually → hit target tightly
-        chosen, prod = _assemble_parlay(cands, target, minl, maxl)
-        if not chosen:
-            continue
-        for c in chosen:  # reserve these fixtures so the next pack can't reuse them
-            if c.get("fixkey"):
-                used_fixkeys.add(c["fixkey"])
-        chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
-        if bot is None:
-            bot = await _get_master_bot()
-        tid = f"master-{uuid.uuid4().hex[:10]}"
-        first_ko = min(c["kickoff"] for c in chosen)
-        label = "Einfach" if cat == "einfach" else "Mittel"
-        tip = {
-            "id": tid, "user_id": bot["id"], "username": bot["username"],
-            "is_master": True, "is_expert": False,
-            "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-            "market": f"{len(chosen)}-fach Kombi", "odds": f"{prod:.2f}",
-            "category": "banker" if cat == "einfach" else "value",
-            "master_category": cat, "master_day": day, "ai_rating": 8.5,
-            "ai_analysis": (f"👑 TipJarMaster {label}: {len(chosen)} Spiele, "
-                            f"Gesamtquote {prod:.2f}."),
-            "legs": _pack_legs(chosen), "is_parlay": True,
-            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-            "source": "hq-master", "created_at": now.isoformat(),
-        }
-        await db.tips.insert_one(tip)
-        posted[cat] = len(chosen)
+        while made < PACK_DAILY_CAP and openx < PACK_MAX_OPEN:
+            cands = await _master_leg_candidates(now, lo, hi)
+            # Exclude any fixture already used by another open pack / earlier this run.
+            cands = [c for c in cands if c.get("fixkey") not in used_fixkeys]
+            cands = sorted(cands, key=lambda c: c["odds"])  # build up gradually → hit target tightly
+            chosen, prod = _assemble_parlay(cands, target, minl, maxl)
+            if not chosen:
+                break  # pool exhausted → stop for this category
+            for c in chosen:  # reserve these fixtures so the next pack can't reuse them
+                if c.get("fixkey"):
+                    used_fixkeys.add(c["fixkey"])
+            chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
+            if bot is None:
+                bot = await _get_master_bot()
+            tid = f"master-{uuid.uuid4().hex[:10]}"
+            first_ko = min(c["kickoff"] for c in chosen)
+            label = "Einfach" if cat == "einfach" else "Mittel"
+            tip = {
+                "id": tid, "user_id": bot["id"], "username": bot["username"],
+                "is_master": True, "is_expert": False,
+                "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+                "market": f"{len(chosen)}-fach Kombi", "odds": f"{prod:.2f}",
+                "category": "banker" if cat == "einfach" else "value",
+                "master_category": cat, "master_day": day, "ai_rating": 8.5,
+                "ai_analysis": (f"👑 TipJarMaster {label}: {len(chosen)} Spiele, "
+                                f"Gesamtquote {prod:.2f}."),
+                "legs": _pack_legs(chosen), "is_parlay": True,
+                "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-master", "created_at": now.isoformat(),
+            }
+            await db.tips.insert_one(tip)
+            posted[cat] = posted.get(cat, 0) + 1
+            made += 1
+            openx += 1
     return {"posted": posted}
 
 
