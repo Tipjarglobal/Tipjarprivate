@@ -655,3 +655,36 @@ Apotelesma") — die Karten-Überschriften waren korrekt, aber die BEIN-BOXEN ni
 - HINWEIS: Bestehende Scheine auf tipjarglobal.com werden nach "Save to GitHub → Deploy" von der
   enrich-Schleife automatisch bereinigt (die Übersetzungen werden gecacht → einmalig 1 LLM-Call/Text).
 
+## Changelog — 2026-06 (Tasmania-Blacklist, Halbzeit-Märkte raus, "Zum Pick gehen"-Deep-Link)
+Owner (Live, Screenshot des Master-Special + eigener Wettschein): (1) Halbzeit-Märkte gibt es bei
+diesen Spielen nicht → nur realistisch spielbare Märkte übernehmen; (2) das tasmanische Spiel
+(Somerset–Burnie Utd, Tasmania Northern Championship) ist nicht verfügbar → ganze Liga blacklisten +
+Spiel aus dem Schein entfernen; (3) Benachrichtigungen sollen einen funktionierenden
+"Zum Pick gehen"-Knopf bekommen.
+- **Tasmania-Blacklist** (`server.py TEAM_LEAGUE_BLACKLIST`): 'tasmania','tasmanian','burnie' ergänzt
+  (die "championship"-Whitelist matchte fälschlich "Tasmania Northern Championship"; Blacklist hat
+  Vorrang in `_pred_whitelisted`).
+- **Halbzeit-Märkte entfernt** (`_special_legs_for`): Builder nutzt jetzt AUSSCHLIESSLICH Vollzeit-
+  Märkte (Sieg, Doppelte Chance, Beide treffen, Über 1.5/2.5), die jeder Buchmacher anbietet —
+  KEINE "1. Halbzeit"-Wetten mehr (betrifft Special UND Doppelpack). Muster bleiben korreliert +
+  nicht-redundant.
+- **Auto-Bereinigung offener Master-Scheine** (`master_dedupe_open_slips`, läuft in jedem master_loop):
+  entfernt (a) Beine auf blacklisteten Ligen/Teams, (b) alle "Halbzeit"-Selektionen (Bein wird
+  gedroppt, wenn nur HZ), (c) logisch implizierte Beine; rechnet Quote neu und hält Markt-Label
+  ("N Spiele") + ai_analysis synchron. → säubert die Live-Scheine automatisch nach dem Deploy.
+- **"Zum Pick gehen"-Deep-Link funktioniert jetzt auch für Master-Sub-Tabs**:
+  - `background_tasks.py _push_payload_for_tip`: Master-Push-URL trägt jetzt den Sub-Tab
+    '/?pick={id}&area=master&sub={master_category|slips}'.
+  - `App.js`: `jumpToPick(area, pick, sub)` + Deep-Link-Effekt lesen `sub`; `initialSub` an RateWall.
+  - `RateWall.jsx`: neuer Effekt setzt bei `initialSub` den korrekten `masterTab`/`cat`/`liveCat` →
+    die Pick-Liste lädt, Karte `pick-{id}` wird gefunden, gescrollt und hervorgehoben.
+  - `NotificationBell.jsx`: In-App-Toast + Push-URL tragen ebenfalls den Sub-Tab.
+  Root-Cause war: Master-Deep-Link öffnete nur `view=master` mit Default-Tab "slips" → Special-Pick
+  war nie geladen → Scroll fand die Karte nie.
+- **Getestet (Testing-Agent, iteration_46.json, 100% BE+FE)**: Deep-Link-URL + `tj-open-pick`-Event
+  öffnen korrekt Master→Special, laden & highlighten die Karte; Special-Slip ist sauber (kein
+  Tasmania, kein Halbzeit, Quote 5.67, 3 Beine); Backend-Check bestätigt keine blacklisteten
+  Ligen/HZ-Selektionen. Kosmetischer Punkt (veraltete ai_analysis/Markt-Zählung) ebenfalls behoben.
+- HINWEIS: Auf tipjarglobal.com greift alles erst nach "Save to GitHub → Deploy"; danach bereinigt
+  der master_loop die bestehenden Live-Scheine automatisch.
+

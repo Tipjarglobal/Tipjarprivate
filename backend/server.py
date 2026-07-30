@@ -4912,8 +4912,20 @@ async def master_dedupe_open_slips() -> dict:
         prod = _dedupe_multigame_legs(legs)
         after = [((l.get("match") or ""), (l.get("selections") or [])) for l in legs]
         if before != after:
-            await db.tips.update_one({"id": s["id"]}, {"$set": {"legs": legs, "odds": f"{prod:.2f}"},
-                                                       "$unset": {"share_image_path": ""}})
+            n = len(legs)
+            setd = {"legs": legs, "odds": f"{prod:.2f}"}
+            # keep the '... N Spiele Bet-Builder' label + the analysis narrative in sync
+            mk = s.get("market") or ""
+            m2 = re.sub(r"\d+\s+Spiele", f"{n} Spiele", mk)
+            if m2 != mk:
+                setd["market"] = m2
+            games = ", ".join((l.get("match") or "") for l in legs)
+            kind = "Doppelpack" if "Doppelpack" in mk else ("Special" if "Special" in mk else "Kombi")
+            setd["ai_analysis"] = (
+                f"👑 TipJarMaster {kind}: {n} gut gelesene Spiele ({games}) mit korrelierten "
+                f"Wetten. Gesamtquote {prod:.2f}. Immer mit kontrolliertem Einsatz.")
+            await db.tips.update_one({"id": s["id"]},
+                                     {"$set": setd, "$unset": {"share_image_path": ""}})
             fixed += 1
     return {"fixed": fixed}
 
