@@ -1995,3 +1995,163 @@ async def socialgamblers_loop():
         except Exception as e:
             logger.error(f"socialgamblers loop error: {e}")
         await asyncio.sleep(45 * 60)  # every 45 minutes
+
+
+# --- bethome.gr — JS-rendered daily tip listings (Chromium) -------------------------------
+# Owner 2026-07-30: added via headless Chromium. bethome ships its picks in JS-rendered
+# `.betting-tips-listing__row` rows across category pages (Δυνατό Σημείο / Goal-Goal /
+# Over-Under). Each row = "TEAM - TEAM DD/MM HH:MM  PICK  ODDS  STAKE [SCORE ±result]".
+# We keep only PENDING rows (no settled score yet) and feed goal/1X2 signals to the Master
+# pool (source='bethome'). Hidden source — no public expert/badge. (kingbet.net could NOT be
+# added: its featured-match odds/pick load from a separate JS widget with no stable per-match
+# key, so odds can't be reliably matched to a fixture.)
+BETHOME_PAGES = [
+    "https://www.bethome.gr/prognostika-to-simeio-tis-imeras/",
+    "https://www.bethome.gr/prognostika-goal-goal/",
+    "https://www.bethome.gr/prognostika-over-under/",
+]
+BETHOME_MAX_PER_RUN = 25
+_BETHOME_ROW_JS = r"""() => {
+    return Array.from(document.querySelectorAll('.betting-tips-listing__row'))
+        .map(e => (e.innerText || '').replace(/\s+/g, ' ').trim())
+        .filter(t => t.length > 8);
+}"""
+
+
+async def _bethome_accept(pg):
+    for txt in ("ΣΥΜΦΩΝΩ", "Αποδοχή", "Αποδέχομαι", "Το κατάλαβα", "ΑΠΟΔΟΧΗ", "ΟΧΙ ΕΥΧΑΡΙΣΤΩ"):
+        try:
+            el = pg.get_by_text(txt, exact=False)
+            if await el.count() > 0:
+                await el.first.click(timeout=1000)
+        except Exception:
+            pass
+
+
+async def _bethome_scrape() -> list[str]:
+    from playwright.async_api import async_playwright
+    rows: list[str] = []
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        try:
+            ctx = await browser.new_context(user_agent=_HP_UA, locale="el-GR")
+            page = await ctx.new_page()
+            for url in BETHOME_PAGES:
+                try:
+                    await page.goto(url, wait_until="networkidle", timeout=45000)
+                    await _bethome_accept(page)
+                    await page.wait_for_timeout(3000)
+                    rows.extend(await page.evaluate(_BETHOME_ROW_JS))
+                except Exception as e:
+                    logger.warning(f"bethome page failed ({url}): {e}")
+        finally:
+            await browser.close()
+    return rows
+
+
+def _bethome_parse_row(txt: str):
+    """'TEAM - TEAM DD/MM HH:MM PICK ODDS STAKE [SCORE ±res]' → dict or None.
+    Skips settled rows (a digit-dash-digit score after the odds) and non-goal/1X2 picks."""
+    m = re.match(r"^(.+?)\s+(\d{2})/(\d{2})\s+(\d{1,2}):(\d{2})\s+(.+?)\s+(\d[.,]\d{2})\b(.*)$", txt)
+    if not m:
+        return None
+    match, dd, mm, hh, mi, pick, _odds, tail = m.groups()
+    if re.search(r"\b\d+\s*-\s*\d+\b", tail) or "VOID" in tail.upper():
+        return None  # already settled (has a final score) → not a pre-match tip
+    if " - " not in match:
+        return None
+    home_gr, away_gr = [t.strip() for t in match.split(" - ", 1)]
+    p = pick.lower()
+    if any(w in p for w in ("σουτ", "κόρνερ", "κορνερ", "κάρτ", "καρτ", "σκόρερ", "scorer")):
+        return None
+    btts = ("goal/goal" in p) or ("g/g" in p) or ("γκολ" in p)
+    over25 = bool(re.search(r"over\s*([2-9])([.,]5)?", p)) and not re.search(r"over\s*[01]([.,]5)?", p)
+    if re.search(r"under", p):
+        over25 = False
+    fav = None
+    ps = p.strip()
+    if ps.startswith("1x") or re.match(r"^1(\s|&|$)", ps):
+        fav = "home"
+    elif ps.startswith("x2") or re.match(r"^2(\s|&|$)", ps):
+        fav = "away"
+    if not (btts or over25 or fav):
+        return None
+    now = datetime.now(timezone.utc)
+    year = now.year
+    try:
+        cand = datetime(year, int(mm), int(dd), tzinfo=timezone.utc).date()
+    except Exception:
+        return None
+    if (cand - now.date()).days < -60:  # year rollover (Dec listing viewed in Jan)
+        year += 1
+    kickoff = _greek_local_to_utc_iso(year, int(mm), int(dd), int(hh), int(mi))
+    return {"home_gr": home_gr, "away_gr": away_gr, "kickoff": kickoff,
+            "fav": fav, "btts": btts, "over25": over25}
+
+
+async def bethome_autopost() -> dict:
+    """Scrape bethome.gr JS listings → feed match_predictions (source='bethome')."""
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    rows = await _bethome_scrape()
+    if not rows:
+        return {"stored": 0, "reason": "no rows"}
+    now = datetime.now(timezone.utc)
+    stored, scanned, seen = 0, 0, set()
+    for txt in rows:
+        if stored >= BETHOME_MAX_PER_RUN:
+            break
+        r = _bethome_parse_row(txt)
+        if not r:
+            continue
+        key = (r["home_gr"], r["away_gr"])
+        if key in seen:
+            continue
+        seen.add(key)
+        scanned += 1
+        ko = _parse_kickoff(r["kickoff"])
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < -6 or h > 120:
+            continue
+        home = await _canonical_team_name(r["home_gr"]) or r["home_gr"]
+        away = await _canonical_team_name(r["away_gr"]) or r["away_gr"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, ""):
+            continue
+        fav, over25, btts = r["fav"], r["over25"], r["btts"]
+        other = 1 if (over25 or btts) else 0
+        if fav == "home":
+            ph, pa = (2, other)
+        elif fav == "away":
+            ph, pa = (other, 2)
+        else:
+            ph, pa = (2, 1) if over25 else (1, 1)
+        await store_match_prediction(
+            "bethome", f"{r['home_gr']}-{r['away_gr']}", home, away, r["kickoff"],
+            ph, pa, fav, None, btts, over25, 60, league="")
+        stored += 1
+        logger.info(f"bethome pred: {home} - {away} | fav={fav} gg={btts} o25={over25}")
+    return {"stored": stored, "scanned": scanned, "rows": len(rows)}
+
+
+async def bethome_loop():
+    await asyncio.sleep(300)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            if await ensure_chromium():
+                res = await bethome_autopost()
+                logger.info(f"bethome loop: {res}")
+            else:
+                logger.error("bethome loop skipped: chromium unavailable — retry in 20 min")
+                await asyncio.sleep(20 * 60)
+                continue
+        except Exception as e:
+            logger.error(f"bethome loop error: {e}")
+        await asyncio.sleep(45 * 60)  # every 45 minutes

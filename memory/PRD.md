@@ -737,3 +737,19 @@ Umgesetzt wie `betarades` (requests+bs4, leader-gated, alle 30–45 Min, Griechi
   → Beide bräuchten einen Headless-Browser (Chromium/Playwright); dem Owner gemeldet, offen für Entscheidung.
 
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
+
+## Changelog — 2026-07-30 (Nachtrag: bethome via Chromium; kingbet nicht umsetzbar)
+- **bethome.gr** GEBAUT (`bethome_autopost`/`bethome_loop` in `scrapers_autopost.py`, alle 45 Min,
+  `ensure_chromium`-gated wie statarea). Headless Chromium rendert 3 Kategorie-Seiten
+  (Δυνατό Σημείο / Goal-Goal / Over-Under); parst `.betting-tips-listing__row`
+  ("TEAM - TEAM DD/MM HH:MM PICK ODDS STAKE [SCORE ±res]"). Nur PENDING-Zeilen (ohne Endergebnis),
+  Signale: Goal/Goal→btts, Over 2.5/3→over25, 1/1X→Heim-Fav, 2/X2→Auswärts-Fav. Griechisch→Latein,
+  Athen-Zeit→UTC. Live getestet: 64 Zeilen gescraped, 2 offene Picks gespeichert (Midtjylland-Besiktas,
+  Ilves-Stjarnan) — Rest sind historische/ausgewertete Ergebnisse (korrekt übersprungen).
+- **kingbet.net** NICHT umsetzbar: Featured-Match-Quoten UND Pick laden aus einem separaten JS-Widget
+  ohne stabilen Pro-Match-Key; die slide-eigenen `o1-<mongo>`-Spans bleiben auch nach networkidle+Scroll
+  leer, und die Detailseiten (`/prognostika/...`) rendern den Pick ebenfalls per JS. Damit keine
+  zuverlässige Quote↔Spiel-Zuordnung möglich → bewusst weggelassen (garbage-in würde Master schaden).
+  Fixtures überschneiden sich ohnehin mit matchmoney (saubere Quoten).
+
+Stand: 4 von 5 neuen versteckten Quellen live (matchmoney, foxbet, socialgamblers, bethome). kingbet offen.
