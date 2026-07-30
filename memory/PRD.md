@@ -797,3 +797,14 @@ HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
 Hinweis: Voll-Live-Test der Auto-Abrechnung derzeit nicht möglich (API-Football 429/Rate-Limit);
 Schonfrist-Logik unit-getestet, Frontend-Rendering per Screenshot verifiziert.
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
+
+## Changelog — 2026-07-30 (Void-Tooltip + KI-Korrektur-Badge)
+1. **Void-Tooltip**: durchgestrichene (void) Legs zeigen beim Hovern „Nicht abrechenbar – als Push
+   gewertet (neutral)" (title-Attribut auf Leg-Container + VOIDED-Badge). i18n-Key `wall.voidPush` (en/de).
+2. **KI-Korrektur-Badge**: neues Flag `ai_corrected` wird in `enrich_member_picks` an allen 4 Update-
+   Stellen gesetzt, wenn Teamnamen/Zeit/Liga/Auswahlen nach dem Upload automatisch berichtigt wurden.
+   Frontend (`RateWall.jsx`): grünes Badge „KI-korrigiert" (CheckCircle2) neben EXPERTE. i18n-Key
+   `wall.aiCorrected` (en/de). Feed liefert Flag über `{_id:0}`-Projektion.
+Ende-zu-Ende per Screenshot verifiziert (Testdaten injiziert → Badge + grün/rot/durchgestrichen +
+VOIDED-Tooltip korrekt gerendert → Testdaten zurückgesetzt).
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".

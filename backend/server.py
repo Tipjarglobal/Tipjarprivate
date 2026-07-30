@@ -9078,6 +9078,7 @@ async def enrich_member_picks() -> dict:
         # immer richtig"). Runs every pass but is idempotent (cached, no-op when clean).
         disp = await _canonicalize_display(t)
         if disp:
+            disp["ai_corrected"] = True
             await db.tips.update_one({"id": t["id"]}, {"$set": disp, "$unset": {"share_image_path": ""}})
             for k, v in disp.items():
                 t[k] = v
@@ -9135,7 +9136,7 @@ async def enrich_member_picks() -> dict:
             if leg_changed:
                 await db.tips.update_one(
                     {"id": t["id"]},
-                    {"$set": {"legs": legs}, "$inc": {"enrich_tries": 1},
+                    {"$set": {"legs": legs, "ai_corrected": True}, "$inc": {"enrich_tries": 1},
                      "$unset": {"share_image_path": ""}})
                 enriched += 1
             else:
@@ -9165,6 +9166,7 @@ async def enrich_member_picks() -> dict:
             if _NON_LATIN_RE.search(away) and away_c and away_c != away:
                 partial["away_team_latin"] = away_c
             if partial:
+                partial["ai_corrected"] = True
                 await db.tips.update_one(
                     {"id": t["id"]},
                     {"$set": partial, "$inc": {"enrich_tries": 1},
@@ -9199,6 +9201,8 @@ async def enrich_member_picks() -> dict:
             if kickoff_val and not (legs[0].get("kickoff") or "").strip():
                 legs[0]["kickoff"] = kickoff_val
             upd["legs"] = legs
+        if hl != home or al != away or "match_time" in upd:
+            upd["ai_corrected"] = True
         await db.tips.update_one({"id": t["id"]}, {"$set": upd, "$inc": {"enrich_tries": 1}})
         enriched += 1
     return {"enriched": enriched}

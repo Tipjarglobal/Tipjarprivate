@@ -1032,6 +1032,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               ✏️ {t("tip.corrected")}
             </span>
           )}
+          {tip.ai_corrected && (
+            <span data-testid={`ai-corrected-badge-${tip.id}`} title={t("tip.correct.hint")} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+              <CheckCircle2 size={10} /> {t("wall.aiCorrected")}
+            </span>
+          )}
           {isAiPick && (
             <>
               <input ref={correctInputRef} type="file" accept="image/*" onChange={doCorrect} className="hidden" data-testid={`correct-input-${tip.id}`} />
@@ -1131,7 +1136,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             const ls = STATUS_META[leg.status];
             const settled = ls && leg.status !== "pending";
             return (
-            <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
+            <div key={li} title={leg.status === "void" ? t("wall.voidPush") : undefined} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"} ${leg.status === "void" ? "line-through opacity-70" : ""}`}>{toLatin(leg.match) || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
@@ -1146,7 +1151,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                     </span>
                   )}
                   {ls && (
-                    <span data-testid={`leg-status-${leg.status}`} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
+                    <span data-testid={`leg-status-${leg.status}`} title={leg.status === "void" ? t("wall.voidPush") : undefined} className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${ls.cls}`}>
                       <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
