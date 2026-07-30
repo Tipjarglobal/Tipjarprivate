@@ -530,3 +530,12 @@ Team Total Goals 3-Way · Over 1.0".
   cross-source 🎁 Geschenke tab. Pipeline verified (20 core-eligible candidates found; selective by
   design — only fires within the time+win-odds band). Runs clean, no errors.
 
+## Changelog — 2026-07-30 (batch 8) — iPhone "App herunterladen" fix
+- Problem: on iPhone the "Download App" button did "nothing" — iOS Safari can't trigger PWA install
+  programmatically (no beforeinstallprompt); the old code only showed an easy-to-miss toast.
+- Fix (`Header.jsx InstallAppButton`): when no install prompt is available, open a clear
+  step-by-step DIALOG (data-testid install-guide-overlay) instead of a toast. iOS path shows 3
+  steps with Share + Add-to-Home icons; other browsers show the menu hint. iPadOS (desktop UA +
+  touch) is now also detected as iOS. i18n keys `install.guide.title` + `install.ios.step1/2/3` in
+  all 8 languages. Screenshot-verified with a spoofed iPhone UA (dialog renders with steps + Close).
+

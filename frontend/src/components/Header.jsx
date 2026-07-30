@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown, Info } from "lucide-react";
+import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown, Info, Share2, PlusSquare } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import Mailbox from "./Mailbox";
@@ -11,6 +11,7 @@ function InstallAppButton() {
   const { t } = useI18n();
   const [deferred, setDeferred] = useState(null);
   const [hidden, setHidden] = useState(false);
+  const [guide, setGuide] = useState(null); // 'ios' | 'menu' | null
   useEffect(() => {
     const onPrompt = (e) => { e.preventDefault(); setDeferred(e); };
     const onInstalled = () => setHidden(true);
@@ -24,26 +25,71 @@ function InstallAppButton() {
     };
   }, []);
   if (hidden) return null;
+  // iOS Safari can't be triggered programmatically (no beforeinstallprompt), and iPadOS often
+  // reports a desktop UA → also treat touch-Macs as iOS. Show a clear step-by-step dialog.
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const click = async () => {
     if (deferred) {
       deferred.prompt();
       const res = await deferred.userChoice;
       if (res && res.outcome === "accepted") toast.success(t("install.installing"));
       setDeferred(null);
-    } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-      toast(t("install.ios"), { duration: 6000 });
     } else {
-      toast(t("install.menu"), { duration: 6000 });
+      setGuide(isIOS ? "ios" : "menu");
     }
   };
   return (
-    <button
-      data-testid="download-app-btn"
-      onClick={click}
-      className="flex items-center gap-1.5 rounded-full border border-volt/50 bg-volt/10 text-volt font-bold text-sm px-2 py-1.5 sm:px-3 sm:py-2 hover:bg-volt/20 active:scale-95 transition-all"
-    >
-      <Download size={15} className="sm:hidden" /><Download size={16} className="hidden sm:block" /> <span className="hidden sm:inline">{t("nav.download")}</span>
-    </button>
+    <>
+      <button
+        data-testid="download-app-btn"
+        onClick={click}
+        className="flex items-center gap-1.5 rounded-full border border-volt/50 bg-volt/10 text-volt font-bold text-sm px-2 py-1.5 sm:px-3 sm:py-2 hover:bg-volt/20 active:scale-95 transition-all"
+      >
+        <Download size={15} className="sm:hidden" /><Download size={16} className="hidden sm:block" /> <span className="hidden sm:inline">{t("nav.download")}</span>
+      </button>
+      <AnimatePresence>
+        {guide && (
+          <motion.div
+            data-testid="install-guide-overlay"
+            className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setGuide(null)}
+          >
+            <motion.div
+              className="w-full max-w-md rounded-2xl border border-volt/30 bg-[#0d0d0f] p-6 shadow-2xl"
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="grid place-items-center w-10 h-10 rounded-xl bg-volt/15 text-volt"><Download size={20} /></span>
+                <h3 className="font-heading font-black text-lg text-white leading-tight">{t("install.guide.title")}</h3>
+              </div>
+              {guide === "ios" ? (
+                <ol className="space-y-3 text-sm text-zinc-300">
+                  <li className="flex gap-3"><span className="shrink-0 grid place-items-center w-6 h-6 rounded-full bg-volt text-void font-black text-xs">1</span>
+                    <span>{t("install.ios.step1")} <Share2 size={15} className="inline-block align-text-bottom text-sky-300" /></span></li>
+                  <li className="flex gap-3"><span className="shrink-0 grid place-items-center w-6 h-6 rounded-full bg-volt text-void font-black text-xs">2</span>
+                    <span>{t("install.ios.step2")} <PlusSquare size={15} className="inline-block align-text-bottom text-sky-300" /></span></li>
+                  <li className="flex gap-3"><span className="shrink-0 grid place-items-center w-6 h-6 rounded-full bg-volt text-void font-black text-xs">3</span>
+                    <span>{t("install.ios.step3")}</span></li>
+                </ol>
+              ) : (
+                <p className="text-sm text-zinc-300 leading-relaxed">{t("install.menu")}</p>
+              )}
+              <button
+                data-testid="install-guide-close"
+                onClick={() => setGuide(null)}
+                className="mt-6 w-full rounded-full bg-volt text-void font-black py-2.5 hover:brightness-110 active:scale-95 transition-all"
+              >
+                {t("common.close")}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
