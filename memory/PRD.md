@@ -808,3 +808,8 @@ HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
 Ende-zu-Ende per Screenshot verifiziert (Testdaten injiziert → Badge + grün/rot/durchgestrichen +
 VOIDED-Tooltip korrekt gerendert → Testdaten zurückgesetzt).
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
+
+## User-Präferenz (2026-07-30) — WICHTIG
+Der Owner will KEINE Rückfragen und KEINE „Next Action Items"/Vorschlagslisten mehr.
+→ Aufgaben direkt umsetzen, nur kurzes Ergebnis melden. Keine ask_human-Klärungsfragen außer bei
+echten Blockern (fehlende Keys o.ä.). Keine Enhancement-/Vorschlagslisten am Ende.
