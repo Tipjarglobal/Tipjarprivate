@@ -1,0 +1,61 @@
+{
+  "summary": "Verified all 4 review items on preview URL. (1) Deep-link URL '/?pick=master-80fcaa04da&area=master&sub=special' correctly opens the tips overlay, auto-selects the SPECIAL sub-tab, and scrolls the pick card into view. (2) Master Special slip is clean — no Tasmania/Somerset/Burnie, no 'Halbzeit' selections; only full-match markets present. (3) window.dispatchEvent('tj-open-pick', {area,id,sub}) opens tips-window, activates master-tab-special, and the pick card 'pick-master-80fcaa04da' is visible with a yellow highlight ring. (4) Backend GET /api/tips?source=master&mcat=special returns cleaned legs only (3 legs, no blacklisted leagues/HT).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/tips?source=master&mcat=special", "issue": "AI analysis text (ai_analysis) for master-80fcaa04da is stale after leg cleanup: it still says '4-Spiele-Bet-Builder... Gesamtquote 26.20' but actual is 3 legs with odds 5.67. Cosmetic only — legs/odds themselves are correctly recomputed."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_details": {
+    "deeplink_url_test": {
+      "url": "/?pick=master-80fcaa04da&area=master&sub=special",
+      "splash_detached": true,
+      "tips_window_visible": true,
+      "master_tab_special_active": true,
+      "pick_card_id_present": "pick-master-80fcaa04da",
+      "pick_card_visible": true,
+      "pick_card_bbox": {"x": 24, "y": 282.8, "w": 397, "h": 733}
+    },
+    "special_slip_contents": {
+      "legs": [
+        {"match": "Isidro Metapán - FAS", "league": "Primera Division", "selection": "Über 2.5 Tore @1.80"},
+        {"match": "Thailand - Malaysia", "league": "ASEAN Championship", "selection": "Über 2.5 Tore @1.80"},
+        {"match": "FC Thun - BSC Young Boys", "league": "Super League", "selection": "Beide Teams treffen @1.75"}
+      ],
+      "total_odds": "5.67",
+      "forbidden_strings_check": {"Tasmania": false, "Somerset": false, "Burnie": false, "Halbzeit": false, "1. Halbzeit": false}
+    },
+    "tj_open_pick_event_test": {
+      "dispatched": "window.dispatchEvent(new CustomEvent('tj-open-pick', { detail: { area:'master', id:'master-80fcaa04da', sub:'special' }}))",
+      "tips_window_opened": true,
+      "special_tab_activated": true,
+      "correct_card_rendered_and_visible": true,
+      "highlight_ring_visible": true
+    },
+    "backend_blacklist_check": {
+      "endpoint": "/api/tips?source=master&mcat=special",
+      "n_tips": 1,
+      "n_legs": 3,
+      "any_blacklisted_league": false,
+      "any_halbzeit_selection": false
+    }
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL: Regenerate/refresh ai_analysis text for master-80fcaa04da to reflect the cleaned 3-leg / 5.67 odds state (currently still mentions '4 Spiele' and 'Gesamtquote 26.20'). Non-blocking cosmetic issue."
+  ],
+  "critical_code_review_comments": [
+    "master_dedupe_open_slips correctly recomputes odds and strips Halbzeit selections but does not refresh the stored ai_analysis text; consider clearing or regenerating it when legs are dropped so displayed narrative matches reality."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Current Master Special id is 'master-80fcaa04da' (3 legs, odds 5.67). Use `curl {REACT_APP_BACKEND_URL}/api/tips?source=master&mcat=special` to fetch the latest Special id before running deep-link tests. Always wait for [data-testid='splash-screen'] to detach (up to 15s) before asserting. The tj-open-pick event is the same code path used by the service-worker notificationclick."
+}

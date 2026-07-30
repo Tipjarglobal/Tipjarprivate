@@ -53,7 +53,7 @@ const STATUS = [
   { k: "", label: "wall.filter.pending", val: "pending" },
 ];
 
-export default function RateWall({ refreshKey, requireLogin, view = "ai", onUserClick }) {
+export default function RateWall({ refreshKey, requireLogin, view = "ai", initialSub, onUserClick }) {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
   const [tips, setTips] = useState([]);
@@ -85,6 +85,15 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", onUser
     setStatus(view === "live" ? "live" : "pending");
     setLiveCat(null);
   }, [view]);
+
+  // Deep-link from a push notification carries a sub-tab (e.g. master "special"): select it
+  // so the pick's list actually loads and jumpToPick can find & highlight the card.
+  useEffect(() => {
+    if (!initialSub) return;
+    if (view === "master") setMasterTab(initialSub);
+    else if (view === "ai" && ["banker", "value", "risk", "gifts"].includes(initialSub)) setCat(initialSub);
+    else if (view === "live") setLiveCat(initialSub);
+  }, [initialSub, view]);
 
   const load = useCallback(async (silent) => {
     if (view === "settled") return;

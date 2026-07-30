@@ -183,7 +183,9 @@ def _push_payload_for_tip(tip: dict) -> dict:
     if tip.get("is_master") or src == "hq-master":
         # The Master gets his OWN look: crown + a dedicated RED logo (owner request).
         title = "👑 Master Doppelpack" if tip.get("master_doublepack") else "👑 Master-Pick"
-        return {"title": title, "body": f"{star_txt}{detail}", "url": f"/?pick={pid}&area={area}",
+        sub = tip.get("master_category") or "slips"
+        return {"title": title, "body": f"{star_txt}{detail}",
+                "url": f"/?pick={pid}&area={area}&sub={sub}",
                 "kind": "tip", "sound": "coin", "pick_id": pid, "area": area,
                 "vibrate": [120, 60, 120, 60, 200], "stars": stars,
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],

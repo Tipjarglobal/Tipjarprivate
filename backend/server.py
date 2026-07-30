@@ -4282,6 +4282,10 @@ TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "abaseya", "reyadi", "asiagoal", "buxtu", "pakhator",
                          "oshmu", "aldier", "qiziriq", "olimpik-mobiuz", "mobiuz",
                          "goulburn", "springvale", "ozgon", "ilbirs", "maldonado",
+                         # owner 2026-06: Tasmanian regional leagues aren't offered by
+                         # bookmakers → block the whole competition (Somerset–Burnie Utd,
+                         # Tasmania Northern Championship, etc.).
+                         "tasmania", "tasmanian", "burnie",
                          # owner 2026-07-26: Germany boycotts ALL Russian football —
                          # block every Russian league & top-flight club by keyword too
                          # (country/code block is the primary lever; these catch untagged data).
@@ -4866,10 +4870,11 @@ def _dedupe_multigame_legs(legs) -> float:
 
 
 async def master_dedupe_open_slips() -> dict:
-    """Clean ALL open Master multi-match slips (Special/Doppelpack/Safe) of per-game
-    redundant selections and rewrite the displayed total odds. Runs each master cycle so
-    legacy slips created before the no-redundancy rule get fixed automatically (incl. on
-    production after a deploy)."""
+    """Clean ALL open Master multi-match slips (Special/Doppelpack/Safe): (1) drop any leg
+    whose game / league is now blacklisted (e.g. Tasmania) — owner: "das Spiel wird vom
+    Schein entfernt"; (2) strip per-game redundant selections (BTTS ⇒ Über 1.5). Rewrites
+    the displayed total odds + leg count. Runs each master cycle so slips get fixed
+    automatically (incl. on production after a deploy)."""
     fixed = 0
     slips = await db.tips.find(
         {"source": "hq-master", "is_parlay": True, "combo_legs": {"$exists": False},
@@ -4877,15 +4882,38 @@ async def master_dedupe_open_slips() -> dict:
         {"_id": 0, "id": 1, "legs": 1, "odds": 1, "market": 1}).to_list(200)
     for s in slips:
         legs = s.get("legs") or []
-        before = [(l.get("selections") or [])[:] for l in legs]
+        before = [((l.get("match") or ""), (l.get("selections") or [])[:]) for l in legs]
+        # 1) remove legs on a blacklisted game / league
+        kept_legs = []
+        for l in legs:
+            lh, la = _split_match_names(l.get("match") or "")
+            if _team_or_league_blocked(lh, la, l.get("league") or ""):
+                logger.info(f"Master slip {s['id']}: dropped blacklisted leg {l.get('match')!r}")
+                continue
+            # 2) strip half-time selections (owner 2026-06: HT markets aren't offered for the
+            #    lower leagues the Special draws from → keep only realistically-playable markets).
+            sels = l.get("selections") or []
+            odds = l.get("sel_odds") or []
+            new_sels, new_odds = [], []
+            for i, sel in enumerate(sels):
+                st = (sel if isinstance(sel, str) else "").lower()
+                if any(k in st for k in ("halbzeit", "1. hz", "erste hz", "1.halbzeit", "1. hälfte")):
+                    continue
+                new_sels.append(sel)
+                if i < len(odds):
+                    new_odds.append(odds[i])
+            if not new_sels:
+                logger.info(f"Master slip {s['id']}: dropped HT-only leg {l.get('match')!r}")
+                continue  # leg had only a half-time market → drop the whole game
+            l["selections"], l["sel_odds"] = new_sels, new_odds
+            kept_legs.append(l)
+        legs = kept_legs
+        # 3) strip per-game redundant selections + recompute odds
         prod = _dedupe_multigame_legs(legs)
-        after = [(l.get("selections") or []) for l in legs]
+        after = [((l.get("match") or ""), (l.get("selections") or [])) for l in legs]
         if before != after:
-            upd = {"legs": legs, "odds": f"{prod:.2f}"}
-            mk = s.get("market") or ""
-            if "—" in mk and "Bet-Builder" not in mk and "fach" not in mk:
-                pass
-            await db.tips.update_one({"id": s["id"]}, {"$set": upd})
+            await db.tips.update_one({"id": s["id"]}, {"$set": {"legs": legs, "odds": f"{prod:.2f}"},
+                                                       "$unset": {"share_image_path": ""}})
             fixed += 1
     return {"fixed": fixed}
 
@@ -8806,14 +8834,15 @@ async def master_safe_bets_build() -> dict:
 def _special_legs_for(p, idx=0):
     """Build a SMART, non-redundant same-game bet-builder (1-2 legs) that 'photographs' the
     likely result with goal fluctuation — favourite wins + both score, Double Chance (won't lose)
-    + goals, 1st-half goal + goals, etc. Never combines logically implied legs (BTTS/Über 2.5
-    already force Über 1.5). All markets are settlement-verified."""
+    + goals, etc. Uses ONLY FULL-MATCH markets that every bookmaker offers (owner 2026-06:
+    half-time markets often don't exist for the lower leagues the Special draws from → keep it
+    realistically playable). Never combines logically implied legs (BTTS/Über 2.5 force Über 1.5).
+    All markets are settlement-verified."""
     total = p.get("total") or 0
     btts = bool(p.get("btts"))
     over25 = bool(p.get("over25")) or total >= 2.6
     fav = _fav_team(p)
     fav_prob = p.get("fav_prob") or 0
-    ht = ("1. Halbzeit Über 0.5 Tore", 1.30)
     o25 = ("Über 2.5 Tore", 1.80)
     o15 = ("Über 1.5 Tore", 1.25)
     bt = ("Beide Teams treffen", 1.75)
@@ -8821,21 +8850,22 @@ def _special_legs_for(p, idx=0):
     dc = None
     if fav and fav_prob >= 55:
         dc = (f"{fav} Doppelte Chance {'1X' if p.get('fav') == 'home' else 'X2'}", 1.25)
-    pats = []  # each pattern is non-redundant by construction
+    pats = []  # each pattern is non-redundant + universally available (no half-time markets)
     if win and btts:
         pats.append([win, bt])            # Favorit gewinnt + beide treffen (aggressiv)
     if dc and over25:
         pats.append([dc, o25])            # verliert nicht + über 2.5
-    if btts:
-        pats.append([bt, ht])             # beide treffen + HZ-Tor
+    if win and over25:
+        pats.append([win, o15])           # Favorit gewinnt + über 1.5 (Sieg impliziert keine Tore)
+    if dc and btts:
+        pats.append([dc, bt])             # verliert nicht + beide treffen
     if over25:
-        pats.append([ht, o25])            # HZ-Tor + über 2.5
-    if dc:
-        pats.append([dc, o15 if not over25 else o25])
+        pats.append([o25])
+    if btts:
+        pats.append([bt])
     if win:
         pats.append([win])                # Einzel-Bein zur Abwechslung
     pats.append([o15])
-    pats.append([ht])
     chosen = pats[idx % len(pats)]
     return [c[0] for c in chosen], [f"{c[1]:.2f}" for c in chosen]
 

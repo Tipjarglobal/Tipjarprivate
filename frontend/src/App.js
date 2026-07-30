@@ -57,6 +57,7 @@ function Home() {
   const [legal, setLegal] = useState({ open: false, tab: "impressum" });
   const [tipsOpen, setTipsOpen] = useState(false);
   const [tipsView, setTipsView] = useState("ai");
+  const [tipsSub, setTipsSub] = useState(null);
   const [giftTarget, setGiftTarget] = useState("");
   const [profileUser, setProfileUser] = useState("");
   const [counts, setCounts] = useState({});
@@ -186,11 +187,12 @@ function Home() {
     return () => window.removeEventListener("tj-open-view", h);
   }, []);
 
-  // Deep-link from a push notification: /?pick=<id>&area=<area> → open that area and
-  // scroll straight to the pick (tapping an alert ports directly onto the pick).
-  const jumpToPick = useCallback((area, pick) => {
+  // Deep-link from a push notification: /?pick=<id>&area=<area>&sub=<subtab> → open that
+  // area (and its sub-tab, e.g. master "special") and scroll straight to the pick.
+  const jumpToPick = useCallback((area, pick, sub) => {
     if (!pick) return;
     openTipsView(area || "ai");
+    if (sub) setTipsSub(sub);   // e.g. master sub-tab so the pick's list actually loads
     let tries = 0;
     const tick = () => {
       const el = document.getElementById(`pick-${pick}`);
@@ -199,25 +201,27 @@ function Home() {
         el.style.transition = "box-shadow 0.3s ease";
         el.style.boxShadow = "0 0 0 3px rgba(198,255,0,0.85)";
         setTimeout(() => { el.style.boxShadow = ""; }, 3200);
-      } else if (tries++ < 40) {
+      } else if (tries++ < 60) {
         setTimeout(tick, 150);
       }
     };
-    setTimeout(tick, 450);
+    setTimeout(tick, 500);
   }, []);
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const pick = sp.get("pick");
     const area = sp.get("area");
+    const sub = sp.get("sub");
     if (pick) {
-      jumpToPick(area || "ai", pick);
+      jumpToPick(area || "ai", pick, sub);
       window.history.replaceState({}, "", window.location.pathname);
     } else if (area) {
       openTipsView(area === "live_ai" ? "live" : area);
+      if (sub) setTipsSub(sub);
       window.history.replaceState({}, "", window.location.pathname);
     }
-    const h = (e) => jumpToPick(e.detail?.area, e.detail?.id);
+    const h = (e) => jumpToPick(e.detail?.area, e.detail?.id, e.detail?.sub);
     window.addEventListener("tj-open-pick", h);
     return () => window.removeEventListener("tj-open-pick", h);
   }, [jumpToPick]);
@@ -400,7 +404,7 @@ function Home() {
           {tipsView === "scorers" ? (
             <StatisticsView />
           ) : (
-            <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} onUserClick={openProfile} />
+            <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} initialSub={tipsSub} onUserClick={openProfile} />
           )}
         </div>
       )}

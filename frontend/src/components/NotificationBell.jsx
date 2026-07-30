@@ -253,7 +253,13 @@ export default function NotificationBell() {
     const vibrate = area === "live_banger" ? [200, 80, 200, 80, 300] : undefined;
     const icon = area === "experts" ? "/push-expert.png" : undefined;
     if (area === "experts") { try { playCoin("expert"); } catch { /* ignore */ } }
-    pushNotify(title, body, tp.id ? `/?pick=${tp.id}&area=${navArea}` : "/", vibrate, icon);
+    // Master picks live under a sub-tab (special/safe/…) — carry it so the deep-link opens
+    // the right tab and the pick actually loads.
+    const sub = (tp.is_master || tp.source === "hq-master")
+      ? (tp.master_category || "slips") : null;
+    const pickUrl = tp.id
+      ? `/?pick=${tp.id}&area=${navArea}${sub ? `&sub=${sub}` : ""}` : "/";
+    pushNotify(title, body, pickUrl, vibrate, icon);
     pushHistory({
       key: `${tp.id || area}-${Date.now()}`, title, body, area, navArea,
       pickId: tp.id || null, ts: Date.now(),
@@ -267,7 +273,7 @@ export default function NotificationBell() {
         label: tp.id ? t("bell.view_pick") : t(`nav.${VIEW_KEY[area] || "viewtips"}`),
         onClick: () => window.dispatchEvent(
           tp.id
-            ? new CustomEvent("tj-open-pick", { detail: { area: navArea, id: tp.id } })
+            ? new CustomEvent("tj-open-pick", { detail: { area: navArea, id: tp.id, sub } })
             : new CustomEvent("tj-open-view", { detail: navArea })
         ),
       },
