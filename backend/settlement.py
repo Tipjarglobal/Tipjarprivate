@@ -891,12 +891,17 @@ async def settle_multimatch_parlays() -> dict:
             continue
         changed = any_lost = False
         all_won = all_resolved = True
+        won_cnt = void_cnt = 0
         for leg in legs:
             st = leg.get("status")
             if st == "won":
+                won_cnt += 1
                 continue
             if st == "lost":
                 any_lost, all_won = True, False
+                continue
+            if st == "void":
+                void_cnt += 1
                 continue
             home, away = _split_match(leg.get("match") or "")
             # Correct (canonical) names for reliable fixture matching (Greek → English).
@@ -926,7 +931,16 @@ async def settle_multimatch_parlays() -> dict:
                 # detection): scan all fixtures on the date and match both team names.
                 fx = _datescan_fixture(home, away, dates, scan_cache)
             if not fx:
-                all_resolved, all_won = False, False
+                # match is clearly over but the fixture can't be resolved (obscure league,
+                # missing data) → VOID just this leg (push) so it strikes through and the rest
+                # of the slip still settles, instead of freezing the whole parlay forever.
+                if ko and ko < now - timedelta(hours=14):
+                    leg["status"] = "void"
+                    leg.pop("final", None)
+                    void_cnt += 1
+                    changed = True
+                else:
+                    all_resolved, all_won = False, False
                 continue
             hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
             leg_res = "won"
@@ -956,7 +970,17 @@ async def settle_multimatch_parlays() -> dict:
             changed = True
             if leg["status"] == "lost":
                 any_lost, all_won = True, False
-        new_status = "lost" if any_lost else ("won" if (all_won and all_resolved) else None)
+            else:
+                won_cnt += 1
+        # Void legs (un-settleable/annulled) count as a PUSH: neutral for win/loss. The slip
+        # wins when every remaining leg won, loses on any lost leg, and is fully void only when
+        # no leg won. Legs still awaiting a result keep the slip pending (all_resolved=False).
+        if any_lost:
+            new_status = "lost"
+        elif all_resolved:
+            new_status = "won" if won_cnt > 0 else ("void" if void_cnt else None)
+        else:
+            new_status = None
         upd = {}
         if changed:
             upd["legs"] = legs
@@ -1025,6 +1049,19 @@ async def expire_stale_pending() -> dict:
             {"id": {"$in": member_ids}},
             {"$set": {"status": "void", "settled_by": "expired",
                       "settled_at": now.isoformat()}})
+        # strike through any leg that never settled on a now-voided member slip
+        mset = set(member_ids)
+        for d in docs:
+            if d["id"] not in mset:
+                continue
+            legs = d.get("legs") or []
+            ch = False
+            for lg in legs:
+                if lg.get("status") not in ("won", "lost", "void"):
+                    lg["status"] = "void"
+                    ch = True
+            if ch:
+                await db.tips.update_one({"id": d["id"]}, {"$set": {"legs": legs}})
     # Only write a cleanup-log entry when something was ACTUALLY cleaned — no empty/zero noise.
     if ai_ids or member_ids:
         logger.info(f"Expired stale picks: deleted {len(ai_ids)} AI, voided {len(member_ids)} member")

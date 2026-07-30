@@ -777,3 +777,23 @@ Dry-Run gegen Live-Daten bestätigt: Doppelpack top = Panathinaikos-Paksi (3 ein
 Midtjylland-Besiktas (7 Quellen, Tor-Konsens 10).
 
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
+
+## Changelog — 2026-07-30 (Community-Pick sofort übernehmen + Leg-Status grün/rot/durchgestrichen)
+1. **Schonfrist / sofort übernehmen** (`background_tasks.py::_is_unplayable`): ein Pick wird in den
+   ersten 20 Min nach dem Posten NIE automatisch versteckt – auch wenn die KI Datum/Zeit falsch las.
+   Danach greift der normale strenge „not_playable"-Filter. Unit-getestet (fresh past-KO → nicht
+   versteckt; 40 Min alt → versteckt; Zukunft → nicht versteckt). Abrechnung unberührt (per id).
+2. **Auto-Korrektur** (bestehend, `enrich_member_picks` + `_canonicalize_display`, läuft im
+   member_live_loop): Teamnamen, Liga, Datum/Uhrzeit, Auswahlen (Griechisch→Englisch) werden nach dem
+   Upload automatisch korrigiert. Mitglieder-Quoten werden NICHT überschrieben (bleiben wie gepostet).
+3. **Leg-Status sichtbar** (`settlement.py` + `RateWall.jsx`):
+   - `settle_multimatch_parlays`: schreibt pro Leg won/lost (grün/rot). NEU: ein Leg, dessen Spiel
+     >14h vorbei ist aber nicht auflösbar (obskure Liga/fehlende Daten), wird als `void` markiert
+     (Push, neutral) → Rest des Scheins wird trotzdem abgerechnet, statt ewig „pending" zu bleiben.
+     Slip gewinnt wenn alle Nicht-Void-Legs gewonnen, verliert bei jedem verlorenen Leg, ist nur ganz
+     void wenn kein Leg gewann.
+   - `expire_stale_pending`: annullierte Mitglieder-Scheine → offene Legs werden auf `void` gesetzt.
+   - Frontend: Leg gewonnen=grün, verloren=rot, void=durchgestrichen/grau (Spielname + Auswahl-Chips).
+Hinweis: Voll-Live-Test der Auto-Abrechnung derzeit nicht möglich (API-Football 429/Rate-Limit);
+Schonfrist-Logik unit-getestet, Frontend-Rendering per Screenshot verifiziert.
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".

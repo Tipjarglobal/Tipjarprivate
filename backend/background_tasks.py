@@ -443,6 +443,13 @@ def _is_unplayable(tip: dict, now) -> bool:
     - a date-only slip whose day is already over (yesterday's games), OR
     - no usable time at all AND it was posted > 24h ago (stale).
     Parlays use the EARLIEST leg (once any leg starts the slip isn't placeable)."""
+    # Owner 2026-07-30: ALWAYS take a fresh community pick immediately. For the first 20
+    # minutes after posting we never auto-hide it — even if the AI mis-read the kickoff time
+    # (wrong date/timezone) — so the member sees their slip landed and can still correct it.
+    # Settlement is unaffected (it works by id, never filters `hidden`).
+    ca0 = _parse_kickoff(tip.get("created_at") or "")
+    if ca0 and ca0 > now - timedelta(minutes=20):
+        return False
     times = [tip.get("match_time")]
     for lg in (tip.get("legs") or []):
         times.append(lg.get("kickoff"))

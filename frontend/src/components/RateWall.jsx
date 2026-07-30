@@ -1133,7 +1133,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             return (
             <div key={li} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"}`}>{toLatin(leg.match) || "—"}</span>
+                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"} ${leg.status === "void" ? "line-through opacity-70" : ""}`}>{toLatin(leg.match) || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {leg.banker && (
                     <span data-testid={`leg-banker-${li}`} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300">
@@ -1163,14 +1163,21 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {(leg.selections || []).map((s, si) => {
-                  const od = (leg.sel_odds || [])[si];
-                  return (
-                  <span key={si} className="text-[11px] text-zinc-100 bg-elevated rounded px-2 py-1 leading-tight">
-                    {formatSelection(s, t)}{od ? <span className="ml-1 font-mono font-bold text-volt">@{od}</span> : null}
-                  </span>
-                  );
-                })}
+                {(() => {
+                  const chip = leg.status === "won" ? "bg-won/15 text-won"
+                    : leg.status === "lost" ? "bg-lost/15 text-lost"
+                    : leg.status === "void" ? "bg-zinc-500/10 text-zinc-400 line-through opacity-70"
+                    : "text-zinc-100 bg-elevated";
+                  const odCls = leg.status === "void" ? "text-zinc-500" : "text-volt";
+                  return (leg.selections || []).map((s, si) => {
+                    const od = (leg.sel_odds || [])[si];
+                    return (
+                    <span key={si} data-testid={`leg-sel-${li}-${si}`} className={`text-[11px] rounded px-2 py-1 leading-tight ${chip}`}>
+                      {formatSelection(s, t)}{od ? <span className={`ml-1 font-mono font-bold ${odCls}`}>@{od}</span> : null}
+                    </span>
+                    );
+                  });
+                })()}
               </div>
             </div>
           );})}
