@@ -993,10 +993,10 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         "league": "", "market": text.strip()[:60], "odds": "",
         "rating": 5.0, "analysis": "Auto-rating unavailable, rated neutral.",
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
-        "safe": True, "flag_reason": "",
+        "safe": True, "flag_reason": "", "ai_error": False,
     }
     if not EMERGENT_LLM_KEY:
-        return fallback
+        return {**fallback, "ai_error": True}
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
@@ -1026,7 +1026,7 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         if start != -1 and end != -1:
             data = json.loads(raw[start:end + 1])
         else:
-            return fallback
+            return {**fallback, "ai_error": True}
         rating = float(data.get("rating", 5) or 5)
         rating = max(1.0, min(10.0, rating))
         return {
@@ -1045,10 +1045,11 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
             "analysis": str(data.get("analysis", "") or "")[:200],
             "safe": bool(data.get("safe", True)),
             "flag_reason": str(data.get("flag_reason", "") or "")[:160],
+            "ai_error": False,
         }
     except Exception as e:
         logger.error(f"AI analyze failed: {e}")
-        return fallback
+        return {**fallback, "ai_error": True}
 
 
 _ANALYST_SYSTEM = (

@@ -843,3 +843,9 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - Master baut mit erhöhtem Pack-Limit mehrere Picks (Preview: 4 offen). Auf Live erst nach Deploy
   + nachdem der master_loop einmal durchgelaufen ist.
 - ALLE Fixes sind in PREVIEW → tipjarglobal.com braucht erneuten "Save to GitHub → Deploy".
+
+## 2026-07-30 — Slip-Upload "Teams nicht erkannt" (Bug-Fix)
+- ROOT CAUSE (reproduziert): analyze_tip (Gemini 3.1 Pro Vision via Emergent Universal Key) schlug fehl mit `OpenAIException - Daily spend limit reached`. Bei KI-Fehler gab analyze_tip den leeren Fallback zurück → Frontend zeigte fälschlich "Teams nicht erkannt".
+- FIX: analyze_tip liefert jetzt `ai_error: true` bei KI-Ausfall/kein Key/kein JSON. Frontend (SubmitTipModal) zeigt dann `submit.aiUnavailable` ("KI gerade nicht verfügbar…") statt der irreführenden "Teams nicht erkannt"-Meldung. i18n-Keys en+de ergänzt (Rest fällt auf en zurück).
+- USER-AKTION nötig: Universal Key Tageslimit/Guthaben erhöhen (Profil → Manage plan → Universal Key → Add Balance / Auto-Top-up).
+- Nur PREVIEW — Deploy via Save to GitHub → Deploy nötig für Live.

@@ -292,7 +292,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
               {(!((detected.home_team || "").trim()) && !((detected.away_team || "").trim()) && !((detected.legs || []).some((l) => ((l.match || "").trim()) && !/^(unknown|n\/?a|tbd|\?|-)$/i.test((l.match || "").trim())))) && (
                 <div data-testid="teams-missing-warning" className="flex items-start gap-2 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-300">
                   <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                  <span>{t("submit.teamsMissing")}</span>
+                  <span>{detected.ai_error ? t("submit.aiUnavailable") : t("submit.teamsMissing")}</span>
                 </div>
               )}
               <div className="rounded-xl border border-elevated bg-void p-4 space-y-3">
