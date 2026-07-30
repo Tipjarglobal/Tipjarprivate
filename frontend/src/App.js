@@ -298,16 +298,15 @@ function Home() {
         </div>
       </section>
 
-      {/* INTRO VIDEO — right under the logo / Tipjarglobal.com */}
+      {/* INTRO SHOWREEL — static hero image (new video coming). Old auto-video removed
+          (owner 2026-07-30: disliked the auto zoom-in landing on lost bets). */}
       <section className="relative max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-10" data-testid="intro-video-section">
         <div className="rounded-3xl overflow-hidden border border-volt/25 bg-black shadow-[0_0_40px_rgba(225,255,0,0.12)]">
-          <video
-            data-testid="intro-video"
-            src="/tipjar-intro.mp4"
-            poster="/tipjar-crest.png"
-            controls
-            playsInline
-            preload="metadata"
+          <img
+            data-testid="intro-hero-image"
+            src="/tipjar-hero.jpg"
+            alt="TipJar"
+            loading="lazy"
             className="w-full h-auto block"
           />
         </div>
