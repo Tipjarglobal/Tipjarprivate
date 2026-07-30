@@ -61,3 +61,14 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Avatar-Sprechblase + Karten sind vollständig lokalisiert (Sprechblasen-Text via prose-Cache,
   Idle-Zeile + Tab-Label via i18n-Keys master.avatar.idle / master.cat.avatar in allen 8 Sprachen).
 
+## 8. 10★ NUR für echte Banks — Live-"noch ein Tor" ist NIE 10★ (2026-07-30)
+- Fehler (Owner): "10 Sterne Austria Über 4.5 Tore verloren — rote Karte, Spiel vorbei, sie wollten
+  nicht mehr." Live-Banger in `live_autopost` vergaben pauschal `rating=10.0` für die nächste
+  Over-Linie (oft "Über (total+1).5" = ZWEI Tore mehr nötig!).
+- REGEL: Ein Live-Bet, der noch ein/zwei Tore BRAUCHT, ist keine Bank. Owner-Regel "live nie
+  unschlagbar, Cap 7★" galt bisher nur für die Push-Anzeige, nicht für die gespeicherte Bewertung.
+- Fix (`live_autopost`, server.py): Bewertung jetzt EHRLICH aus der Live-Quote abgeleitet
+  (rating ≈ min(7, 1/odd·10)), gedeckelt bei 7★. "Über 4.5" (2 Tore nötig) → ~3★ statt 10★.
+  Bestehende Live-Banger-Tips >7★ einmalig auf 7★ geklemmt. Analyse-Text warnt jetzt ehrlich
+  (rote Karte / Zeitspiel kann kippen).
+

@@ -7918,16 +7918,22 @@ async def live_autopost() -> dict:
             if not best:
                 continue
             market, odd = best
-            rating, wp = 10.0, 0.92
-            note = (f"Tor-Festival! Schon {total} Tore gefallen — das Spiel ist offen und schnell, "
-                    f"da kommt fast sicher noch was.")
+            # Owner 2026-07-30: a live "needs another goal" bet is NEVER a 10★ lock — a red
+            # card or time-wasting kills it (e.g. Austria Über 4.5 died at 0:4→game shut down).
+            # Rating is now HONEST: derived from the live odds (implied prob) and capped at 7★.
+            wp = min(0.90, 1.0 / odd)
+            rating = min(7.0, max(3.0, round(wp * 10, 1)))
+            note = (f"Tor-Festival! Schon {total} Tore gefallen — das Spiel ist offen und schnell. "
+                    f"ABER: live nie eine Bank — eine rote Karte oder Zeitspiel kann es kippen.")
         else:
             # OPEN game (0 or 1 goal) → Asian Über 2.0 (money back at exactly 2 goals).
             market = "Asian Über 2.0 Tore"
             odd = _live_odd(market, minute, total)
             if odd < 1.40 or odd > 2.60:
                 continue
-            rating, wp = 9.0, 0.9
+            # money-back-at-2 insurance → a touch safer than the raw prob, still capped at 7★.
+            wp = min(0.90, 1.0 / odd + 0.05)
+            rating = min(7.0, max(3.0, round(wp * 10, 1)))
             if total == 1:
                 trailing = away if gh > ag else home
                 note = (f"{trailing} liegt zurück und drückt auf den Ausgleich — bei GENAU 2 Toren "

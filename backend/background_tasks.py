@@ -180,6 +180,17 @@ def _push_payload_for_tip(tip: dict) -> dict:
                 "actions": [{"action": "open", "title": "Zum Pick ansehen →"}],
                 "icon": l_icon, "badge": "/push-live.png", "tag": "tipjar-live"}
     cat = (tip.get("category") or "").lower()
+    if tip.get("avatar_call"):
+        # Owner 2026-07-30: the Master AVATAR's confident minute-goal call gets its OWN push —
+        # crystal-ball crown + the concrete minute.
+        minute = tip.get("avatar_minute") or 90
+        return {"title": f"🔮 Sicherer Master-Call · bis {minute}.'",
+                "body": f"{detail}",
+                "url": f"/?pick={pid}&area={area}&sub=avatar",
+                "kind": "tip", "sound": "fire", "pick_id": pid, "area": area,
+                "vibrate": [140, 60, 140, 60, 240], "stars": stars,
+                "actions": [{"action": "open", "title": "Zum Call ansehen →"}],
+                "icon": "/push-master.png", "badge": "/push-master.png", "tag": "tipjar-master"}
     if tip.get("is_master") or src == "hq-master":
         # The Master gets his OWN look: crown + a dedicated RED logo (owner request).
         title = "👑 Master Doppelpack" if tip.get("master_doublepack") else "👑 Master-Pick"
