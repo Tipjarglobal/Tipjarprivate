@@ -632,3 +632,26 @@ liegen bleibt und nicht durch einen neuen ersetzt wird.
   "Beide Teams treffen"+"Über 1.5" → Über 1.5 entfernt, Quote 3.94→3.15). Backend gesund (special 200).
 - HINWEIS: Auf tipjarglobal.com verschwindet die Redundanz erst nach "Save to GitHub → Deploy".
 
+## Changelog — 2026-06 (Experten/Mitglieder-Scheine: Selektionen super sauber übersetzen)
+Owner (Screenshot, Live): ein Altair-Experten-Schein zeigte griechisch-phonetische Bein-Texte
+("Kroys Asoyl - Teliko Apotelesma", "Nai (GG) - Na skoraroyn kai oi 2 omades", "Mpaia - Teliko
+Apotelesma") — die Karten-Überschriften waren korrekt, aber die BEIN-BOXEN nicht. Owner-Wahl B:
+"alle Scheine annehmen, aber super sauber korrigieren".
+- **Ursache**: Die Selektionen sind auf GRIECHISCH gespeichert; das Frontend `toLatin` TRANSLITERIERT
+  sie nur phonetisch (Griechisch→Greeklish) statt zu übersetzen. `_canonicalize_display` fasste bisher
+  nur `lg["match"]`/`league`/`country` an, NICHT `lg["selections"]` und nicht das Top-Level-`market`.
+- **Fix** (`server.py`):
+  1. Neuer LLM-Helper `_canonical_selection(sel)` (Cache `db.sel_alias`): übersetzt eine griechische
+     Wett-Selektion in ein STANDARD-DEUTSCHES, abrechnungs-kompatibles Markt-Label mit kanonischen
+     Teamnamen (z.B. 'Κρουζ Αζουλ - Τελικό Αποτέλεσμα' → 'Cruz Azul Sieg'; 'Ναι (GG) - Να σκοράρουν…'
+     → 'Beide Teams treffen'; 'Άνω 1.5 - 1ο Ημίχρονο' → '1. Halbzeit Über 1.5 Tore').
+  2. `_canonicalize_display` kanonisiert jetzt zusätzlich jede `lg["selections"]` (Greek→DE) UND das
+     Top-Level-`market` ('Πολλαπλό στοίχημα' → 'Kombiwette').
+  3. `enrich_member_picks`-Query um `{"legs.selections": /[Α-Ωα-ω]/}` und `{"market": /[Α-Ωα-ω]/}`
+     erweitert → Scheine mit bereits kanonischer Überschrift, aber griechischen Selektionen, werden
+     erneut verarbeitet. Läuft in `member_live_loop` (idempotent, gecacht).
+- Getestet (E2E): kompletter Greek-Experten-Schein → alle Bein-Selektionen + Markt + Header sauber
+  ins Deutsche/kanonische Englisch übersetzt; die deutschen Labels sind settlement-kompatibel.
+- HINWEIS: Bestehende Scheine auf tipjarglobal.com werden nach "Save to GitHub → Deploy" von der
+  enrich-Schleife automatisch bereinigt (die Übersetzungen werden gecacht → einmalig 1 LLM-Call/Text).
+

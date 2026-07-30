@@ -3718,6 +3718,22 @@ async def _canonicalize_display(t: dict) -> dict:
             if newm != (lg.get("match") or ""):
                 lg["match"] = newm
                 legs_changed = True
+        # Canonicalize each selection's market text (Greek → standard German label with
+        # canonical team names) so the leg boxes read cleanly and settle reliably.
+        sels = lg.get("selections") or []
+        new_sels = []
+        sels_changed = False
+        for s in sels:
+            if isinstance(s, str) and _NON_LATIN_RE.search(s):
+                cs = await _canonical_selection(s)
+                if cs and cs != s:
+                    new_sels.append(cs)
+                    sels_changed = True
+                    continue
+            new_sels.append(s)
+        if sels_changed:
+            lg["selections"] = new_sels
+            legs_changed = True
         lgl = lg.get("league") or ""
         if _NON_LATIN_RE.search(lgl):
             lc = await _canonical_league_name(lgl)
@@ -3737,6 +3753,12 @@ async def _canonicalize_display(t: dict) -> dict:
             cv = await _canonical_team_name(raw)
             if cv:
                 upd[fld] = cv
+    # Top-level market summary (shown on the card header) → clean German label.
+    mk = t.get("market") or ""
+    if _NON_LATIN_RE.search(mk):
+        cm = await _canonical_selection(mk)
+        if cm and cm != mk:
+            upd["market"] = cm
     return upd
 
 
@@ -3779,6 +3801,62 @@ async def _canonical_team_name(name: str):
         await db.team_alias.update_one(
             {"key": key}, {"$set": {"key": key, "alias": alias, "src": name}}, upsert=True)
     return alias
+
+async def _canonical_selection(sel: str):
+    """A Greek (or other non-Latin) betting SELECTION from a foreign tipster slip →
+    a clean, standard GERMAN market label that our settlement engine understands, with
+    canonical team names. E.g. 'Κρουζ Αζουλ - Τελικό Αποτέλεσμα' → 'Cruz Azul Sieg';
+    'Ναι (GG) - Να σκοράρουν και οι 2 ομάδες' → 'Beide Teams treffen';
+    'Άνω 1.5 - 1ο Ημίχρονο' → '1. Halbzeit Über 1.5 Tore'. Cached in sel_alias.
+    Returns None for already-Latin selections or when unavailable."""
+    sel = (sel or "").strip()
+    if not sel or not _NON_LATIN_RE.search(sel):
+        return None
+    key = _norm(sel)
+    cached = await db.sel_alias.find_one({"key": key})
+    if cached:
+        return cached.get("alias") or None
+    if not EMERGENT_LLM_KEY:
+        return None
+    alias = None
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"sel-{uuid.uuid4()}",
+            system_message=(
+                "You convert a football betting SELECTION (often written in Greek) into a "
+                "clean, STANDARD GERMAN market label. Use canonical English/international team "
+                "names (as bookmakers spell them). Use EXACTLY these German market terms:\n"
+                "- Team to win / final result for one team → '<Team> Sieg'\n"
+                "- Double chance → '<Team> Doppelte Chance 1X' or 'X2'\n"
+                "- Both teams to score (Να σκοράρουν και οι 2 ομάδες / GG / Nai) → 'Beide Teams treffen'\n"
+                "- No BTTS → 'Beide Teams treffen Nein'\n"
+                "- Over/Under total goals → 'Über X.5 Tore' / 'Unter X.5 Tore'\n"
+                "- First-half markets (1ο Ημίχρονο) → prefix '1. Halbzeit '\n"
+                "- Team total goals → '<Team> Über X.5 Tore'\n"
+                "- Draw (Ισοπαλία / Χ) → 'Unentschieden'\n"
+                "Reply with ONLY the German label — no odds, no quotes, no notes."),
+        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(text=(
+            f"Selection: '{sel}'.\n"
+            "Examples: 'Κρουζ Αζουλ - Τελικό Αποτέλεσμα' -> Cruz Azul Sieg; "
+            "'Ντεπορτές Τολίμα - Τελικό Αποτέλεσμα' -> Deportes Tolima Sieg; "
+            "'Ναι (GG) - Να σκοράρουν και οι 2 ομάδες' -> Beide Teams treffen; "
+            "'Άνω 2.5 - Γκολ' -> Über 2.5 Tore; "
+            "'Άνω 1.5 - 1ο Ημίχρονο - Γκολ' -> 1. Halbzeit Über 1.5 Tore.\n"
+            "Give the German market label only.")))
+        alias = (resp if isinstance(resp, str) else str(resp)).strip().strip('".\n ')
+        if not alias or len(alias) > 80 or _NON_LATIN_RE.search(alias):
+            alias = None
+    except Exception as e:
+        logger.warning(f"selection alias LLM failed for {sel!r}: {e}")
+        alias = None
+    if alias:
+        await db.sel_alias.update_one(
+            {"key": key}, {"$set": {"key": key, "alias": alias, "src": sel}}, upsert=True)
+    return alias
+
+
 
 
 async def resolve_team_id(name: str):
@@ -8879,6 +8957,8 @@ async def enrich_member_picks() -> dict:
                  {"league": {"$regex": "[Α-Ωα-ω]"}},
                  {"country": {"$regex": "[Α-Ωα-ω]"}},
                  {"legs.match": {"$regex": "[Α-Ωα-ω]"}},
+                 {"legs.selections": {"$regex": "[Α-Ωα-ω]"}},
+                 {"market": {"$regex": "[Α-Ωα-ω]"}},
                  {"match_time": {"$in": [None, "", "Multibet"]}}]},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "country": 1,
          "home_team_latin": 1, "away_team_latin": 1,
