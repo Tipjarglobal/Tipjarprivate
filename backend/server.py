@@ -4740,6 +4740,78 @@ def _dedupe_builder_legs(combo_legs, home, away):
 
 
 
+def _split_match_names(match: str):
+    """Split a leg 'match' label ('Home – Away' / 'Home - Away') into (home, away)."""
+    for sep in (" – ", " - ", " vs ", " v ", "–", " gegen "):
+        if sep in (match or ""):
+            parts = match.split(sep, 1)
+            return parts[0].strip(), parts[1].strip()
+    return (match or "").strip(), ""
+
+
+def _dedupe_multigame_legs(legs) -> float:
+    """Per-GAME redundancy strip for multi-match parlays whose legs carry
+    `selections`/`sel_odds` (Master Special / Doppelpack / Safe Bets). Removes any
+    selection that is logically ENTAILED by the other selections OF THE SAME GAME
+    (e.g. 'Über 1.5 Tore' when that game already has 'Beide Teams treffen' or
+    'Über 2.5 Tore'). Never touches selections across different games. Recomputes and
+    returns the new combined odds product. Mutates each leg in place."""
+    prod = 1.0
+    for leg in legs:
+        sels = leg.get("selections") or []
+        odds = leg.get("sel_odds") or []
+        if len(sels) <= 1:
+            for o in odds:
+                try:
+                    prod *= float(str(o).replace(",", "."))
+                except (ValueError, TypeError):
+                    pass
+            continue
+        home, away = _split_match_names(leg.get("match") or "")
+        rows = [{"market": s, "_odd": odds[i] if i < len(odds) else None}
+                for i, s in enumerate(sels)]
+        try:
+            kept, dropped = dedupe_implied_legs(rows, home, away)
+        except Exception:
+            kept, dropped = rows, []
+        if dropped:
+            logger.info(f"Master dedupe {leg.get('match')}: dropped "
+                        f"{[d.get('market') for d in dropped]}")
+        leg["selections"] = [r["market"] for r in kept]
+        leg["sel_odds"] = [r["_odd"] for r in kept if r.get("_odd") is not None]
+        for o in leg["sel_odds"]:
+            try:
+                prod *= float(str(o).replace(",", "."))
+            except (ValueError, TypeError):
+                pass
+    return round(prod, 2)
+
+
+async def master_dedupe_open_slips() -> dict:
+    """Clean ALL open Master multi-match slips (Special/Doppelpack/Safe) of per-game
+    redundant selections and rewrite the displayed total odds. Runs each master cycle so
+    legacy slips created before the no-redundancy rule get fixed automatically (incl. on
+    production after a deploy)."""
+    fixed = 0
+    slips = await db.tips.find(
+        {"source": "hq-master", "is_parlay": True, "combo_legs": {"$exists": False},
+         "status": {"$in": ["pending", "live"]}, "legs.0": {"$exists": True}},
+        {"_id": 0, "id": 1, "legs": 1, "odds": 1, "market": 1}).to_list(200)
+    for s in slips:
+        legs = s.get("legs") or []
+        before = [(l.get("selections") or [])[:] for l in legs]
+        prod = _dedupe_multigame_legs(legs)
+        after = [(l.get("selections") or []) for l in legs]
+        if before != after:
+            upd = {"legs": legs, "odds": f"{prod:.2f}"}
+            mk = s.get("market") or ""
+            if "—" in mk and "Bet-Builder" not in mk and "fach" not in mk:
+                pass
+            await db.tips.update_one({"id": s["id"]}, {"$set": upd})
+            fixed += 1
+    return {"fixed": fixed}
+
+
 def _finalize_system(sels, bankers, key, title, subtitle, risk):
     total = 1.0
     for i, s in enumerate(sels):
@@ -8321,6 +8393,7 @@ async def master_doublepack() -> dict:
     first_ko = min(l["_ko"] for l in legs)
     for l in legs:
         l.pop("_ko", None)
+    combo = _dedupe_multigame_legs(legs)  # defensive: strip per-game implied legs
     home_names = [pk[1].get("home") for pk in picks]
     away_names = [pk[1].get("away") for pk in picks]
     bot = await _get_master_bot()
@@ -8738,6 +8811,7 @@ async def master_special_build() -> dict:
     first_ko = min(l["_ko"] for l in legs)
     for l in legs:
         l.pop("_ko", None)
+    combo = _dedupe_multigame_legs(legs)  # strip per-game implied legs (BTTS ⇒ Über 1.5, …)
     bot = await _get_master_bot()
     tid = f"master-{uuid.uuid4().hex[:10]}"
     tip = {
@@ -8779,6 +8853,8 @@ async def master_loop():
                     safe = await master_safe_bets_build()
                 # Owner "Special": ALWAYS a fresh 4-game bet-builder combo each day.
                 special = await master_special_build()
+                # Clean legacy slips of per-game redundant legs (BTTS ⇒ Über 1.5 etc.).
+                await master_dedupe_open_slips()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or safe.get("posted") or special.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):

@@ -613,3 +613,22 @@ Code zielte aber weiterhin auf ~6.0 (Band 4.0-9.0) mit 2 reinen Sieg-Wetten, ohn
 - HINWEIS an Owner: Änderung ist in der PREVIEW-Umgebung → "Save to GitHub → Deploy" nötig, damit
   sie live auf der Domain erscheint.
 
+## Changelog — 2026-06 (Special/Doppelpack: redundante Beine automatisch entfernen)
+Owner (nach Deploy): "Ich sehe im Special immer noch beide treffen UND über 1.5" (redundant:
+beide-treffen erzwingt bereits Über 1.5). Ursache: der aktuelle Code erzeugt das NICHT mehr
+(`_special_legs_for` ist nicht-redundant, Preview-DB sauber) — der gemeldete Schein war ein
+ALTER Special auf PRODUCTION (vor dem Deploy erstellt), der wegen der "1 Special/Tag"-Regel offen
+liegen bleibt und nicht durch einen neuen ersetzt wird.
+- **Permanenter Schutz** (`server.py`): neue `_dedupe_multigame_legs(legs)` + `master_dedupe_open_slips()`.
+  Nutzt das bestehende `dedupe_implied_legs` (betting_logic.py) PRO SPIEL auf die `selections`/
+  `sel_odds` der Multi-Match-Master-Scheine (Special/Doppelpack/Safe): entfernt jede Selektion, die
+  von den anderen Selektionen DESSELBEN Spiels logisch impliziert wird (Beide treffen ⇒ Über 1.5,
+  Über 2.5 ⇒ Über 1.5) und rechnet die Gesamtquote neu. Selektionen ÜBER verschiedene Spiele hinweg
+  bleiben unangetastet (nicht redundant).
+- Verdrahtet: bei Generierung in `master_special_build` UND `master_doublepack` (defensiv), sowie als
+  Bereinigungslauf `master_dedupe_open_slips()` in jedem `master_loop`-Zyklus → säubert Legacy-Scheine
+  automatisch, auch auf PRODUCTION nach dem nächsten Deploy.
+- Getestet: Unit (BTTS impliziert Über 1.5 bei realen Teamnamen) + E2E (Legacy-Special mit
+  "Beide Teams treffen"+"Über 1.5" → Über 1.5 entfernt, Quote 3.94→3.15). Backend gesund (special 200).
+- HINWEIS: Auf tipjarglobal.com verschwindet die Redundanz erst nach "Save to GitHub → Deploy".
+
