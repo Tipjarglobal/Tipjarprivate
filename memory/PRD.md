@@ -833,3 +833,13 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
   gemeinsame Spiele. Verifiziert in Preview: 2 Einfach + 1 Mittel offen.
 - HINWEIS: Produktion (tipjarglobal.com) läuft auf ALTEM Deploy-Stand → dort weniger Master-Scheine,
   bis der Owner „Save to GitHub → Deploy" macht (bringt neue Quellen + höheres Pack-Limit live).
+
+## Changelog — 2026-07-30 (Fix: stale Live-Push + Deep-Link ins Leere)
+- `background_tasks.py::push_watch_loop`: Live-Picks werden NICHT mehr gepusht, wenn ihr Anstoß
+  >3h in der Vergangenheit liegt (Spiel längst vorbei). Vorher: Live-Picks umgingen jede
+  Anstoß-Prüfung → Push für z.B. "Mallorca – Al-Ittihad" 3h nach Spielende.
+- `App.js::jumpToPick`: wenn der angetippte Pick nicht (mehr) existiert (auto-hidden/beendet),
+  erscheint jetzt ein Toast `push.pickGone` statt stillem Nichts. i18n en+de ergänzt.
+- Master baut mit erhöhtem Pack-Limit mehrere Picks (Preview: 4 offen). Auf Live erst nach Deploy
+  + nachdem der master_loop einmal durchgelaufen ist.
+- ALLE Fixes sind in PREVIEW → tipjarglobal.com braucht erneuten "Save to GitHub → Deploy".

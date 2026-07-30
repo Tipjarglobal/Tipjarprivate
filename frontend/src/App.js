@@ -203,6 +203,10 @@ function Home() {
         setTimeout(() => { el.style.boxShadow = ""; }, 3200);
       } else if (tries++ < 60) {
         setTimeout(tick, 150);
+      } else {
+        // Pick no longer available (game started/finished → auto-hidden). Give feedback
+        // instead of silently landing on nothing.
+        toast.info(t("push.pickGone") || "Dieser Pick ist nicht mehr verfügbar – das Spiel hat bereits begonnen oder ist beendet.");
       }
     };
     setTimeout(tick, 500);

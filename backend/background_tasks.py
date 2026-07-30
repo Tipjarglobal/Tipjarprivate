@@ -290,12 +290,19 @@ async def push_watch_loop():
                 # and can be filtered per-device. One detailed push per single pick,
                 # one bundled digest per area with multiple.
                 by_area = {}
-                grace = datetime.now(timezone.utc) - timedelta(minutes=15)
+                now_dt = datetime.now(timezone.utc)
+                grace = now_dt - timedelta(minutes=15)
                 for tp in fresh:
-                    # Owner rule: notify ONLY about tips you can still play. A pre-match pick
-                    # whose kickoff already passed is skipped (live in-play picks always pass).
-                    if tp.get("status") != "live":
-                        ko = _earliest_kickoff(tp)
+                    ko = _earliest_kickoff(tp)
+                    if tp.get("status") == "live":
+                        # A genuine in-play pick's kickoff is recent. If it is more than 3h in
+                        # the past the match is long over → never fire a "live" push for a
+                        # finished game (fixes stale pushes that deep-link to nothing).
+                        if ko is not None and ko < (now_dt - timedelta(hours=3)):
+                            continue
+                    else:
+                        # Owner rule: notify ONLY about tips you can still play. A pre-match pick
+                        # whose kickoff already passed is skipped.
                         if ko is not None and ko < grace:
                             continue
                     by_area.setdefault(_tip_push_area(tp), []).append(tp)
