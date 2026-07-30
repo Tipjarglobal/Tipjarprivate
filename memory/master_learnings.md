@@ -72,3 +72,11 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
   Bestehende Live-Banger-Tips >7★ einmalig auf 7★ geklemmt. Analyse-Text warnt jetzt ehrlich
   (rote Karte / Zeitspiel kann kippen).
 
+## 9. Stürmer in Galaform als Signal (2026-07-30)
+- Owner: "Pavlidis hat für Benfica 4 Tore gemacht." → Ein Stürmer, der gerade einen 4-Packer
+  (oder Doppelpack) gemacht hat, ist ein starkes Signal: sein Team trifft/gewinnt, und er selbst
+  ist ein Top-"Anytime-Scorer"-Kandidat im nächsten Spiel.
+- IDEE (noch NICHT umgesetzt — braucht Spieler-Daten aus API-Football /players): "In-Form-Scorer"-
+  Boost für Avatar/Master: wenn ein Schlüsselstürmer zuletzt 2+ Tore machte, dessen Team-Über-0.5 /
+  Team-Sieg höher bewerten und ggf. einen "Spieler trifft"-Call ausgeben. Owner fragen, bevor gebaut.
+
