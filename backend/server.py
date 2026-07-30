@@ -8270,9 +8270,9 @@ def _win_team_name(market: str, home: str, away: str) -> str:
 
 
 async def master_doublepack() -> dict:
-    """Owner headline slip: the Master actively backs 2 teams to SIMPLY WIN, one ticket,
-    landing ~6.0. Lives in the (renamed) 'Doppelpack' tab. Only one open at a time.
-    Uses REAL 1X2 odds from the feed — picks the pair whose product sits closest to 6."""
+    """Owner headline slip: the Master backs 2 CLEAR favourites to simply WIN, one ticket,
+    landing ~3.0-3.6 so that hitting roughly EVERY THIRD slip is already PROFITABLE (break-even
+    at 3.0). Lives in the 'Doppelpack' tab. Only one open at a time. Uses REAL 1X2 odds."""
     now = datetime.now(timezone.utc)
     if await db.tips.count_documents(
             {"source": "hq-master", "master_doublepack": True,
@@ -8654,27 +8654,39 @@ async def master_safe_bets_build() -> dict:
 
 
 def _special_legs_for(p, idx=0):
-    """Build a NON-REDUNDANT same-game bet-builder (1 or 2 legs) for ONE match.
-    Rule (owner 2026-07-30): never combine logically implied legs — 'Beide Teams treffen'
-    already forces Über 1.5, and Über 2.5 already forces Über 1.5. So a total/BTTS 'primary'
-    leg is only ever paired with the INDEPENDENT '1. Halbzeit Über 0.5' leg, and some games
-    stay single-leg for variety."""
+    """Build a SMART, non-redundant same-game bet-builder (1-2 legs) that 'photographs' the
+    likely result with goal fluctuation — favourite wins + both score, Double Chance (won't lose)
+    + goals, 1st-half goal + goals, etc. Never combines logically implied legs (BTTS/Über 2.5
+    already force Über 1.5). All markets are settlement-verified."""
     total = p.get("total") or 0
     btts = bool(p.get("btts"))
     over25 = bool(p.get("over25")) or total >= 2.6
+    fav = _fav_team(p)
+    fav_prob = p.get("fav_prob") or 0
+    ht = ("1. Halbzeit Über 0.5 Tore", 1.30)
+    o25 = ("Über 2.5 Tore", 1.80)
+    o15 = ("Über 1.5 Tore", 1.25)
+    bt = ("Beide Teams treffen", 1.75)
+    win = (f"{fav} Sieg", 1.70) if fav and fav_prob >= 62 else None
+    dc = None
+    if fav and fav_prob >= 55:
+        dc = (f"{fav} Doppelte Chance {'1X' if p.get('fav') == 'home' else 'X2'}", 1.25)
+    pats = []  # each pattern is non-redundant by construction
+    if win and btts:
+        pats.append([win, bt])            # Favorit gewinnt + beide treffen (aggressiv)
+    if dc and over25:
+        pats.append([dc, o25])            # verliert nicht + über 2.5
     if btts:
-        primary = ("Beide Teams treffen", 1.75)
-    elif over25:
-        primary = ("Über 2.5 Tore", 1.80)
-    else:
-        primary = ("Über 1.5 Tore", 1.25)
-    secondary = ("1. Halbzeit Über 0.5 Tore", 1.30)  # independent of every total/BTTS market
-    if idx % 3 == 2:
-        chosen = [primary]                              # single-leg game for variety
-    elif idx % 2 == 0:
-        chosen = [secondary, primary]
-    else:
-        chosen = [primary, secondary]
+        pats.append([bt, ht])             # beide treffen + HZ-Tor
+    if over25:
+        pats.append([ht, o25])            # HZ-Tor + über 2.5
+    if dc:
+        pats.append([dc, o15 if not over25 else o25])
+    if win:
+        pats.append([win])                # Einzel-Bein zur Abwechslung
+    pats.append([o15])
+    pats.append([ht])
+    chosen = pats[idx % len(pats)]
     return [c[0] for c in chosen], [f"{c[1]:.2f}" for c in chosen]
 
 

@@ -2188,7 +2188,7 @@ const T = {
     "kickoff.live": "Ζωντανά",
     "wall.liveDanger": "Σε κίνδυνο",
     "nav.viewmaster": "Master",
-    "master.slips": "Ντιπλό",
+    "master.slips": "Διπλό Ταμπλό",
     "master.cat.einfach": "Εύκολα",
     "master.cat.mittel": "Μέτρια",
     "master.cat.challenge": "Πρόκληση",
