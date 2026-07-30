@@ -687,7 +687,8 @@ async def settle_hq_combos() -> dict:
         return {"ok": False, "settled": 0}
     now = datetime.now(timezone.utc)
     combos = await db.tips.find(
-        {"source": {"$in": ["hq-auto", "smart"]}, "status": "pending", "is_parlay": True},
+        {"source": {"$in": ["hq-auto", "smart", "hq-master"]}, "status": "pending", "is_parlay": True,
+         "combo_legs": {"$exists": True}},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled = 0
     for tip in combos:

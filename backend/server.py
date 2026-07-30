@@ -2369,6 +2369,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["master_category"] = mcat
         elif mcat == "safe":
             q["master_category"] = "safe"
+        elif mcat == "special":
+            q["master_category"] = "special"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -8640,6 +8642,98 @@ async def master_safe_bets_build() -> dict:
     return {"posted": 1, "odds": prod, "legs": len(legs)}
 
 
+
+def _special_legs_for(p, idx=0):
+    """Build a 2-selection same-game bet-builder (Special style) for ONE match from
+    goal-based markets the parlay settler grades deterministically (HT Über 0.5, Über 1.5/2.5,
+    Beide Teams treffen). `idx` rotates the market mix across games for variety."""
+    total = p.get("total") or 0
+    btts = bool(p.get("btts"))
+    over25 = bool(p.get("over25")) or total >= 2.6
+    opts = [("1. Halbzeit Über 0.5 Tore", 1.30), ("Über 1.5 Tore", 1.25)]
+    if over25:
+        opts.append(("Über 2.5 Tore", 1.80))
+    if btts:
+        opts.append(("Beide Teams treffen", 1.75))
+    if len(opts) < 2:
+        opts.append(("Über 1.5 Tore", 1.25))
+    a = opts[idx % len(opts)]
+    b = opts[(idx + 2) % len(opts)]
+    if a[0] == b[0]:
+        b = opts[(idx + 1) % len(opts)]
+    return [a[0], b[0]], [f"{a[1]:.2f}", f"{b[1]:.2f}"]
+
+
+async def master_special_build() -> dict:
+    """Owner 2026-07-30: the Master 'Special' — ALWAYS a 4-game bet-builder combo (learned from
+    the owner's winning Betano/Stoiximan bet-builder slips). Each of the 4 games contributes a
+    2-selection same-game builder from goal markets (HT Über 0.5, Über 1.5/2.5, Beide treffen), so
+    the whole thing auto-settles leg-by-leg. One Special per Berlin day."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "special",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "special", "master_day": day}):
+        return {"skipped": "done-today"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    cands, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
+            continue
+        if not _zero_zero_assessment(p)["over_safe"]:
+            continue  # only goal-friendly games for a goals bet-builder
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        cands.append((ko, p))
+    if len(cands) < 4:
+        return {"skipped": "not-enough", "have": len(cands)}
+    cands.sort(key=lambda x: ((x[1].get("total") or 0), (x[1].get("fav_prob") or 0)), reverse=True)
+    picks = cands[:4]
+    legs, combo = [], 1.0
+    for i, (ko, p) in enumerate(picks):
+        sels, sodds = _special_legs_for(p, i)
+        for o in sodds:
+            combo *= float(o)
+        legs.append({"match": f"{p.get('home')} - {p.get('away')}",
+                     "league": p.get("league") or "", "kickoff": p.get("kickoff") or "",
+                     "status": "pending", "selections": sels, "sel_odds": sodds,
+                     "_ko": ko})
+    combo = round(combo, 2)
+    first_ko = min(l["_ko"] for l in legs)
+    for l in legs:
+        l.pop("_ko", None)
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    tip = {
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": "Special — 4 Spiele Bet-Builder", "odds": f"{combo:.2f}",
+        "category": "value", "master_category": "special", "master_day": day,
+        "ai_rating": 8.0,
+        "ai_analysis": (f"🎯 Master Special: 4-Spiele-Bet-Builder mit je 2 korrelierten Toren-Wetten "
+                        f"(1. HZ Über 0.5, Über 1.5/2.5, beide treffen). Gesamtquote {combo:.2f}. "
+                        f"Aggressiv nach Vorbild echter Gewinn-Scheine — mit kontrolliertem Einsatz."),
+        "legs": legs, "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    logger.info(f"Master Special: 4-game bet-builder @ {combo}")
+    return {"posted": 1, "odds": combo, "games": len(legs)}
+
+
 async def master_loop():
     await asyncio.sleep(240)  # let experts + live states populate first
     while True:
@@ -8658,10 +8752,12 @@ async def master_loop():
                 b = _berlin_now()
                 if b.hour == 0 and b.minute >= 30:
                     safe = await master_safe_bets_build()
+                # Owner "Special": ALWAYS a fresh 4-game bet-builder combo each day.
+                special = await master_special_build()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
-                        or safe.get("posted") \
+                        or safe.get("posted") or special.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)

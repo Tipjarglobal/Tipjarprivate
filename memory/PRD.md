@@ -555,3 +555,20 @@ AGGRESSIVE tips into the RISK section.
 - Verified end-to-end on the live pool: 4 real return legs detected (Maccabi 5:0→Sieg+Ü3.5 @3.28,
   Beşiktaş, Hradec, Varazdin 3:2→+BTTS @14.71) and rendered in the Risk tab (screenshot).
 
+## Changelog — 2026-07-30 (batch 10) — Master "Special" (4-game bet-builder) + Settled i18n
+Owner: learned from 15 winning bet-builder slips. The Master must ALWAYS post a "Special" = a
+4-game bet-builder combo. "Special" label stays UNIVERSAL (untranslated); "Settled" must translate.
+- New `master_special_build()` + `_special_legs_for()` (`server.py`, wired into `master_loop`,
+  one per Berlin day): picks the 4 most goal-friendly upcoming favourites and builds a 4-game combo
+  where each game is a 2-selection same-game bet-builder from goal markets (1. HZ Über 0.5, Über
+  1.5/2.5, Beide treffen), rotated for variety. source hq-master, master_category="special", no
+  combo_legs → auto-settled leg-by-leg by `settle_multimatch_parlays` (HT via _grade_ht_selection,
+  rest via judge_market — all unit-verified: GG/Über/HT grade correctly). `/api/tips?mcat=special`
+  filter added. Built live: 4-game combo @26.2 with varied markets.
+- `settle_hq_combos` now also accepts source "hq-master" (for any future same-game master builder
+  with combo_legs); harmless for current master tips (they have no combo_legs).
+- Frontend `RateWall.jsx`: new "Special" master sub-tab (UNIVERSAL hardcoded label, count + badge).
+  Screenshot-verified (SPECIAL tab shows count 1).
+- i18n: `nav.viewsettled` ("Settled") now translated in all 8 languages (was English-only fallback):
+  de Abgerechnet, es Resueltas, el Διευθετημένα, fr Réglés, it Conclusi, ar المسوّاة, tr Sonuçlanan.
+
