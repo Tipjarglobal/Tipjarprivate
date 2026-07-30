@@ -1606,11 +1606,12 @@ def _hp_get(url: str):
 
 
 def _greek_local_to_utc_iso(y, mo, d, hh, mm) -> str:
-    """Greek portals display Europe/Athens local time (UTC+3 in summer). Store
-    kickoffs in UTC so the app's future-window / settlement logic stays correct."""
+    """Greek portals display Europe/Athens local time (UTC+2 winter / +3 summer). Convert to
+    UTC via a real tz (DST-aware) so the app's future-window / settlement logic stays correct."""
+    from zoneinfo import ZoneInfo
     try:
-        dt = datetime(int(y), int(mo), int(d), int(hh), int(mm), tzinfo=timezone.utc) - timedelta(hours=3)
-        return dt.isoformat()
+        dt = datetime(int(y), int(mo), int(d), int(hh), int(mm), tzinfo=ZoneInfo("Europe/Athens"))
+        return dt.astimezone(timezone.utc).isoformat()
     except Exception:
         return ""
 

@@ -860,6 +860,19 @@ def _grade_ht_selection(selection, ht_h, ht_a):
     return "won" if total > line else "lost"
 
 
+def _leg_combined_odd(leg: dict) -> float:
+    """Product of a leg's selection odds (its effective decimal price). 1.0 if unknown."""
+    tot = 1.0
+    for od in (leg.get("sel_odds") or []):
+        try:
+            v = float(str(od).replace(",", "."))
+            if v > 1.0:
+                tot *= v
+        except (TypeError, ValueError):
+            pass
+    return tot
+
+
 async def settle_multimatch_parlays() -> dict:
     """Settle multi-match parlays (member + AI system tips) leg-by-leg from the final
     scores. A parlay is LOST the moment any leg loses, and WON only when every leg is
@@ -892,6 +905,7 @@ async def settle_multimatch_parlays() -> dict:
         changed = any_lost = False
         all_won = all_resolved = True
         won_cnt = void_cnt = 0
+        void_factor = 1.0
         for leg in legs:
             st = leg.get("status")
             if st == "won":
@@ -902,6 +916,7 @@ async def settle_multimatch_parlays() -> dict:
                 continue
             if st == "void":
                 void_cnt += 1
+                void_factor *= _leg_combined_odd(leg)
                 continue
             home, away = _split_match(leg.get("match") or "")
             # Correct (canonical) names for reliable fixture matching (Greek → English).
@@ -938,6 +953,7 @@ async def settle_multimatch_parlays() -> dict:
                     leg["status"] = "void"
                     leg.pop("final", None)
                     void_cnt += 1
+                    void_factor *= _leg_combined_odd(leg)
                     changed = True
                 else:
                     all_resolved, all_won = False, False
@@ -984,6 +1000,18 @@ async def settle_multimatch_parlays() -> dict:
         upd = {}
         if changed:
             upd["legs"] = legs
+        # If some (not all) legs pushed on a WON parlay, divide the voided legs' odds out of
+        # the total so the payout reflects the refunded legs (mirrors settle_hq_combos).
+        if new_status == "won" and void_cnt and void_factor > 1.0 and not is_cashed:
+            try:
+                eff = round(float(str(tip.get("odds") or 0).replace(",", ".")) / void_factor, 2)
+                if eff >= 1.0:
+                    upd["odds"] = f"{eff:.2f}"
+                    stk = float(re.sub(r"[^0-9.]", "", str(tip.get("stake") or "").replace(",", ".")) or 0)
+                    if stk:
+                        upd["potential_return"] = f"{round(stk * eff, 2):.2f} €"
+            except Exception:
+                pass
         # never overwrite an "Ausgezahlt" slip — only its legs are auto-graded.
         if new_status and not is_cashed:
             upd.update({"status": new_status, "settled_by": "auto", "settled_at": now.isoformat()})

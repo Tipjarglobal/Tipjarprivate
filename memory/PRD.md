@@ -814,3 +814,14 @@ Vorschläge/„Next Action Items" sind OK. ABER diese 4 NIE wieder vorschlagen:
 1. Korrektur-Detail (was die KI geändert hat), 2. Push-Konsens (Void-Kombi Quote neu färben),
 3. Konsens-Badge („N Quellen einig" auf Master-Schein), 4. Telegram-Ausgabe/Bot.
 Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
+
+## Changelog — 2026-07-30 (Code-Review Fixes)
+- MEDIUM behoben (`settlement.py::settle_multimatch_parlays`): bei gewonnener Kombi mit Void-Leg wird
+  die Gesamtquote/Auszahlung um die Void-Legs bereinigt (void_factor, analog settle_hq_combos).
+  Helfer `_leg_combined_odd`. Unit-getestet (6.00/2.00→3.00).
+- LOW behoben (`scrapers_autopost.py::_greek_local_to_utc_iso`): echte DST-Zeitzone Europe/Athens via
+  zoneinfo statt fixem -3h (Winter jetzt UTC+2 korrekt). Verifiziert (Winter 18:45 / Sommer 17:45 UTC).
+- Review-Verdict war READY WITH FIXES; keine HIGH/CRITICAL.
+- BETRIEBS-HINWEIS: Emergent LLM-Key-Budget ist ÜBERSCHRITTEN (79.80/79.77) → Team-Namen-Übersetzung
+  & KI-Analyse fallen zurück/schlagen fehl, bis der Owner Guthaben auflädt (Profile → Manage plan →
+  Universal Key → Add Balance).
