@@ -37,6 +37,7 @@ from server import (
     enrich_member_picks,
     favourite_smart_autopost,
     gift_of_the_day,
+    knockout_tie_autopost,
     live_annotate_sync,
     live_autopost,
     logger,
@@ -376,6 +377,7 @@ async def smart_loop():
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
                 logger.info(f"HQ loop C (FavSmart): {await favourite_smart_autopost()}")
                 logger.info(f"HQ loop C (Gift): {await gift_of_the_day()}")
+                logger.info(f"HQ loop C (K.o.-Duell): {await knockout_tie_autopost()}")
                 logger.info(f"HQ loop C (Mental): {await mental_autopost()}")
                 logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
                 logger.info(f"HQ loop C (Briefing): {(await build_qualifier_briefing()).get('count')} ties")

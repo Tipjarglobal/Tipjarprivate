@@ -6741,6 +6741,150 @@ async def gift_of_the_day() -> dict:
     return {"posted": posted, "candidates": len(cand)}
 
 
+# European two-legged knockout ties: qualifiers + main-stage KO rounds.
+EURO_KO_KEYWORDS = (
+    "champions league", "europa league", "conference league", "uefa", "champions-league",
+    "europa-league", "conference-league", "champions", "super cup",
+)
+KO_MAX_PER_RUN = 4  # aggressive KO-tie specials per day
+
+
+async def _first_leg_result(home: str, away: str, kickoff_dt):
+    """For a suspected 2nd leg, fetch H2H and return the FIRST-leg score as
+    (fl_home_name, fl_home_goals, fl_away_name, fl_away_goals) — the most recent prior
+    meeting 3-30 days before kickoff with the venue reversed. None when not found."""
+    tid_h = await resolve_team_id(home)
+    tid_a = await resolve_team_id(away)
+    if not tid_h or not tid_a:
+        return None
+    resp = await _apifootball_async("/fixtures/headtohead", {"h2h": f"{tid_h}-{tid_a}", "last": 8}) or []
+    best = None
+    for fx in resp:
+        st = ((fx.get("fixture") or {}).get("status") or {}).get("short")
+        if st != "FT":
+            continue
+        dstr = (fx.get("fixture") or {}).get("date") or ""
+        try:
+            fdt = datetime.fromisoformat(dstr.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        days = (kickoff_dt - fdt).total_seconds() / 86400.0
+        if days < 3 or days > 30:
+            continue
+        teams = fx.get("teams") or {}
+        fh = (teams.get("home") or {}).get("name") or ""
+        fa = (teams.get("away") or {}).get("name") or ""
+        # venue must be reversed: the FIRST leg host is the SECOND leg's away side
+        if not (_teams_match(fh, away) and _teams_match(fa, home)):
+            continue
+        goals = fx.get("goals") or {}
+        gh, ga = goals.get("home"), goals.get("away")
+        if gh is None or ga is None:
+            continue
+        if best is None or fdt > best[0]:
+            best = (fdt, fh, int(gh), fa, int(ga))
+    return best[1:] if best else None
+
+
+async def knockout_tie_autopost() -> dict:
+    """Owner 2026-07-30: aggressive 'K.o.-Duell' specials for European two-legged ties.
+    Detects the RETURN leg (H2H shows a reversed meeting 3-30 days earlier), reads the first-leg
+    score and posts a bold same-game multi into the RISK category: the first-leg WINNER to win the
+    return leg + plenty of goals (the trailing side must attack). Big lead → Über 3.5, tight → Über
+    2.5 (+ BTTS if both scored first leg). One per tie, max a few per day, auto-settled."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    made = await db.tips.count_documents({"source": "hq-auto", "ko_tie": True, "gift_day": day})
+    if made >= KO_MAX_PER_RUN:
+        return {"posted": 0, "reason": "daily cap reached"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    posted, checked = 0, 0
+    for p in preds:
+        if made + posted >= KO_MAX_PER_RUN:
+            break
+        lg = (p.get("league") or "").lower()
+        if not any(k in lg for k in EURO_KO_KEYWORDS):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        home, away = p.get("home"), p.get("away")
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"ko-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        checked += 1
+        fl = await _first_leg_result(home, away, ko)
+        if not fl:
+            continue  # not a detectable return leg
+        fl_h, fl_hg, fl_a, fl_ag = fl  # first-leg host = current AWAY side
+        # first-leg winner (name) and margin
+        if fl_hg == fl_ag:
+            continue  # drawn first leg → no clear favourite angle
+        winner = fl_h if fl_hg > fl_ag else fl_a
+        margin = abs(fl_hg - fl_ag)
+        both_scored = fl_hg > 0 and fl_ag > 0
+        try:
+            odds = await ensure_match_odds(home, away, p.get("kickoff") or "")
+        except Exception:
+            odds = {}
+        win_od = odds.get("win_home") if _teams_match(winner, home) else odds.get("win_away")
+        try:
+            win_od = float(win_od)
+        except (TypeError, ValueError):
+            win_od = 1.90  # estimate when the feed has no price
+        over_line = "3.5" if margin >= 2 else "2.5"
+        over_od = 2.45 if over_line == "3.5" else 1.90
+        legs = [
+            {"sel": f"{winner} Sieg", "od": win_od, "team": winner, "kind": "win"},
+            {"sel": f"Über {over_line} Tore", "od": over_od, "team": "", "kind": ""},
+        ]
+        if both_scored:
+            legs.append({"sel": "Beide Teams treffen", "od": 1.72, "team": "", "kind": "btts"})
+        combo = 1.0
+        for l in legs:
+            combo *= l["od"]
+        combo = round(combo, 2)
+        packed = [{"match": f"{home} - {away}", "league": p.get("league") or "UEFA",
+                   "kickoff": p.get("kickoff") or "", "status": "pending",
+                   "selections": [l["sel"]], "sel_odds": [f"{l['od']:.2f}"]} for l in legs]
+        combo_legs = [{"home": home, "away": away, "market": l["sel"],
+                       "odds": l["od"], "kind": l["kind"], "team": l["team"]} for l in legs]
+        analysis = (
+            f"🔥 K.o.-Duell (Rückspiel): Hinspiel {fl_h} {fl_hg}:{fl_ag} {fl_a}. "
+            f"{winner} führt im Duell{' klar' if margin >= 2 else ''} — der Rückständige MUSS aufmachen. "
+            f"Aggressiv: {winner} gewinnt + Über {over_line} Tore"
+            f"{' + beide treffen' if both_scored else ''}. Gesamtquote {combo:.2f}. Hohes Risiko, hohe Quote."
+        )
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "UEFA K.o.-Duell",
+            "market": f"K.o.-Duell {len(legs)}-fach", "odds": f"{combo:.2f}",
+            "ai_rating": 6.5, "win_prob": 0.0,
+            "ai_analysis": analysis,
+            "ko_tie": True, "gift_day": day,
+            "legs": packed, "combo_legs": combo_legs, "is_parlay": True, "stake": "", "potential_return": "",
+            "category": "risk",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-auto", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
+        logger.info(f"K.o.-Duell: {winner} + Über {over_line} ({home} v {away}, "
+                    f"first leg {fl_hg}:{fl_ag}) @ {combo}")
+    return {"posted": posted, "checked": checked}
+
+
+
 
 async def mental_autopost() -> dict:
     """Owner-Wunsch (2026-07-22): 'Mental'-Kategorie im Single-Pick-Bereich — verrückte

@@ -539,3 +539,19 @@ Team Total Goals 3-Way · Over 1.0".
   touch) is now also detected as iOS. i18n keys `install.guide.title` + `install.ios.step1/2/3` in
   all 8 languages. Screenshot-verified with a spoofed iPhone UA (dialog renders with steps + Close).
 
+## Changelog — 2026-07-30 (batch 9) — K.o.-Duell-Intelligenz (European two-leg ties)
+Owner: "be smarter" about European two-legged ties (Kairat–Omonia 1:0/1:0, Lech–Aarhus 4:1) — post
+AGGRESSIVE tips into the RISK section.
+- New `knockout_tie_autopost()` (`server.py`, wired into `smart_loop`; helper `_first_leg_result`):
+  scans European KO competitions (Champions/Europa/Conference League incl. qualifiers), detects the
+  RETURN leg via H2H (a reversed meeting 3-30 days earlier), reads the first-leg score, and posts a
+  bold same-game multi into category "risk" (source hq-auto, ko_tie=True): first-leg WINNER to win
+  the return leg + Über 3.5 (big lead ≥2) or Über 2.5 (tight) + BTTS if both scored first leg.
+  Real win odds when available, estimated over/BTTS. Max 4/day, dedup per tie (id ko-*).
+- Settlement: `settle_hq_combos` couldn't grade a plain 1X2 "Sieg" leg → added a match-result branch
+  to `_grade_goal_leg` ("{team} Sieg"/"gewinnt" via home_winner/away_winner flag + goal fallback).
+  Tips carry settlement-ready `combo_legs` (market/odds/kind/team) + display `legs`, plus home_team/
+  away_team so the fixture resolves. Win + over + BTTS grading unit-tested.
+- Verified end-to-end on the live pool: 4 real return legs detected (Maccabi 5:0→Sieg+Ü3.5 @3.28,
+  Beşiktaş, Hradec, Varazdin 3:2→+BTTS @14.71) and rendered in the Risk tab (screenshot).
+

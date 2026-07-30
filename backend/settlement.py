@@ -231,6 +231,27 @@ def _grade_goal_leg(kind, market, team, fx):
     sh_total = total - ht_total          # second-half goals
     m = (market or "").lower()
     k = (kind or "").lower()
+    # ── 1X2 match result: "{team} Sieg" / "{team} gewinnt" — the named team must WIN the
+    #    match (winner flag covers extra time / penalties; goals as fallback). ──
+    if (("sieg" in m or "gewinnt" in m or "to win" in m)
+            and "über" not in m and "unter" not in m and "halbzeit" not in m
+            and "beide" not in m and "doppel" not in m):
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        hw, aw = fx.get("home_winner"), fx.get("away_winner")
+        side = None
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            side = "home"
+        elif an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            side = "away"
+        elif team and _teams_match(hn, team):
+            side = "home"
+        elif team and _teams_match(an, team):
+            side = "away"
+        if side == "home":
+            return hw if hw is not None else (hg > ag)
+        if side == "away":
+            return aw if aw is not None else (ag > hg)
+        return None
     # ── Asian "Über 1.0 Tore 1. Halbzeit" (Asiatisch): exactly 1 HT goal REFUNDS the
     #    stake (push/void), 2+ wins, 0 loses. Owner rule 2026-07-23. ──
     _asian_ht1 = k == "ht_asian_o1" or (
