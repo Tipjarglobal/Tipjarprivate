@@ -803,7 +803,8 @@ async def master_avatar():
          "$or": [{"master_day": day}, {"status": {"$in": ["pending", "live"]}}]},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "market": 1,
          "odds": 1, "match_time": 1, "avatar_minute": 1, "avatar_text": 1,
-         "avatar_confidence": 1, "drought": 1, "status": 1}
+         "avatar_confidence": 1, "drought": 1, "status": 1,
+         "avatar_player": 1, "avatar_scorer": 1}
     ).sort("created_at", -1).to_list(20)
     return {"count": len(docs), "calls": docs, "generated_at": day}
 
@@ -6419,6 +6420,36 @@ async def _team_best_props(team_name: str, seasons: list[int]) -> list[dict]:
     return out
 
 
+async def _hot_scorer_for_team(team_name: str, seasons: list[int]) -> dict | None:
+    """Owner 2026-07-30 (Pavlidis 4 Tore für Benfica): find a team's IN-FORM key striker —
+    the top season scorer who is a regular starter. Reuses the 24h-cached player stats
+    (get_team_players) so it costs NO extra API quota beyond the smart-props pipeline.
+    Returns {name, goals, gl (goals/start), prob (anytime-scorer prob), odds} or None."""
+    tid = await resolve_team_id(team_name)
+    if not tid:
+        return None
+    players = await get_team_players(tid, seasons)
+    best = None
+    for pstat in players or []:
+        player = pstat.get("player") or {}
+        name = player.get("name")
+        stats = (pstat.get("statistics") or [{}])[0] or {}
+        games = stats.get("games") or {}
+        lineups = games.get("lineups") or 0
+        pos = (games.get("position") or "").lower()
+        goals = (stats.get("goals") or {}).get("total") or 0
+        if not name or pos.startswith("goal"):
+            continue
+        if lineups < 6 or goals < 4:  # a prolific, regular starter only
+            continue
+        gl = goals / max(lineups, 1)
+        prob = _prob_over(0.5, gl)
+        if not best or goals > best["goals"]:
+            best = {"name": name, "goals": int(goals), "gl": round(gl, 2),
+                    "prob": round(prob, 3), "odds": _odds_from_prob(prob)}
+    return best
+
+
 QUAL_KEYWORDS = ("qualif", "champions", "europa", "conference", "uefa", "libertadores",
                  "sudamericana", "afc ", "caf ", "concacaf", "play-off", "playoff",
                  "preliminary", "wcq", "ecq")
@@ -7554,6 +7585,52 @@ def _live_stat_totals(stats):
     return sog, corners, shots
 
 
+def _live_red_cards(stats) -> int:
+    """Red cards currently on the pitch — read from the SAME live statistics payload
+    (no extra API call). Owner 2026-07-30: a red card can break the flow of goals."""
+    reds = 0
+    for team in (stats or []):
+        for s in (team.get("statistics") or []):
+            typ = (s.get("type") or "").lower()
+            if "red card" in typ:
+                val = s.get("value")
+                if isinstance(val, str):
+                    val = int(re.sub(r"[^0-9]", "", val) or 0)
+                reds += val or 0
+    return reds
+
+
+_KO_LIVE_KEYWORDS = QUAL_KEYWORDS + ("cup", "pokal", "coupe", "copa", "coppa", "beker",
+                                     "knockout", "k.o", "supercup", "super cup", "trophy")
+
+
+def _is_knockout_label(*vals) -> bool:
+    txt = " ".join(str(v or "") for v in vals).lower()
+    return any(k in txt for k in _KO_LIVE_KEYWORDS)
+
+
+def _live_overline_penalty(gh: int, ag: int, reds: int, league_label: str, country: str):
+    """Owner 2026-07-30: 'ein Aggregat 5:1 mit roter Karte kann das Spiel früher enden.'
+    A live OVER-line ('needs another goal') is riskier when the game is a decided blowout,
+    when it is a knockout tie (leading side protects the aggregate) or after a red card.
+    Returns (star_penalty, reasons[]). Balanced, open, non-KO games get NO penalty — some
+    Über-4.5 spots really are safe."""
+    penalty, reasons = 0.0, []
+    margin = abs((gh or 0) - (ag or 0))
+    if margin >= 3:
+        penalty += 2.0
+        reasons.append("klarer Vorsprung — die führende Mannschaft verwaltet oft")
+    elif margin == 2:
+        penalty += 0.8
+    if reds >= 1:
+        penalty += 1.0
+        reasons.append("eine rote Karte kann den Torfluss brechen")
+    if _is_knockout_label(league_label, country):
+        penalty += 1.5
+        reasons.append("K.o.-Duell — bei entschiedenem Aggregat wird das Spiel oft heruntergespielt")
+    return penalty, reasons
+
+
 def _live_pressure_ok(stats, minute: int) -> bool:
     """Owner's 'be careful' guard: only re-offer if the game is still live-dangerous."""
     if not stats:
@@ -7920,11 +7997,21 @@ async def live_autopost() -> dict:
             market, odd = best
             # Owner 2026-07-30: a live "needs another goal" bet is NEVER a 10★ lock — a red
             # card or time-wasting kills it (e.g. Austria Über 4.5 died at 0:4→game shut down).
-            # Rating is now HONEST: derived from the live odds (implied prob) and capped at 7★.
+            # Rating is HONEST (from the live odds) and capped at 7★, THEN context-penalised:
+            # a decided blowout / knockout tie / red card lowers it further (owner: "aggregate
+            # 5:1 mit roter Karte kann das Spiel früher enden"). Open, balanced games keep 7★.
             wp = min(0.90, 1.0 / odd)
             rating = min(7.0, max(3.0, round(wp * 10, 1)))
+            reds = _live_red_cards(stats)
+            pen, reasons = _live_overline_penalty(
+                gh, ag, reds, _fixture_league_label(fx), _fixture_country(fx))
+            if pen > 0:
+                rating = max(2.5, round(rating - pen, 1))
+            if rating < 3.0:
+                continue  # too many danger signals → don't offer this over-line at all
+            warn = (" Achtung: " + "; ".join(reasons) + ".") if reasons else ""
             note = (f"Tor-Festival! Schon {total} Tore gefallen — das Spiel ist offen und schnell. "
-                    f"ABER: live nie eine Bank — eine rote Karte oder Zeitspiel kann es kippen.")
+                    f"ABER: live nie eine Bank — eine rote Karte oder Zeitspiel kann es kippen.{warn}")
         else:
             # OPEN game (0 or 1 goal) → Asian Über 2.0 (money back at exactly 2 goals).
             market = "Asian Über 2.0 Tore"
@@ -9242,23 +9329,38 @@ async def master_avatar_calls() -> dict:
         drought = scored_last == 0
         minute = _avatar_goal_minute(fg, total, over25, btts, drought)
         at_home = p.get("fav") == "home"
-        if minute <= 45:
+        # In-form striker signal (owner Pavlidis-4-Tore learning). Cache-backed → cheap.
+        avatar_player, avatar_scorer = None, False
+        hs = await _hot_scorer_for_team(fav, _smart_seasons(real_ko))
+        if hs and hs["prob"] >= 0.52:
+            market = f"{hs['name']} — Torschütze (Anytime)"
+            odds = float(hs["odds"])
+            avatar_player, avatar_scorer = hs["name"], True
+            form = (f"hat zuletzt NICHT getroffen und ist deshalb erst recht heiß"
+                    if drought else f"ist in Galaform ({hs['goals']} Saisontore)")
+            call = (f"{hs['name']} {form} — der trifft auch in {home} – {away}. "
+                    f"Ich sehe sein Tor bis zur {minute}. Minute. {fav} setzt sich durch.")
+            conf = min(90, int(round(hs["prob"] * 100)) + (5 if fg >= 2 else 0)
+                       + (4 if drought else 0))
+        elif minute <= 45:
             market = "Über 0.5 Tore 1. Halbzeit"
             odds = 1.30
             call = (f"In {home} – {away} sehe ich früh ein Tor. {fav} ist "
                     f"{'zuhause' if at_home else 'auswärts'} brandgefährlich — die Bude fällt "
                     f"schon in der 1. Halbzeit, bis zur {minute}. Minute. Klare Sache.")
+            conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
+                       + (4 if btts else 0) + (4 if drought else 0))
         else:
             market = f"{fav} Über 0.5 Tore"
             odds = 1.22 if fg >= 2 else 1.32
             call = (f"{fav} trifft in {home} – {away} — da bin ich mir sicher. "
                     f"{'Zuhause' if at_home else 'Auswärts'} zu stark; das Tor fällt bis zur "
                     f"{minute}. Minute.")
-        if drought:
-            call = (f"{fav} hat zuletzt NICHT getroffen — und genau deshalb sitzt sie diesmal. "
-                    + call)
-        conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
-                   + (4 if btts else 0) + (4 if drought else 0))
+            if drought:
+                call = (f"{fav} hat zuletzt NICHT getroffen — und genau deshalb sitzt sie diesmal. "
+                        + call)
+            conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
+                       + (4 if btts else 0) + (4 if drought else 0))
         tid = f"master-av-{uuid.uuid4().hex[:8]}"
         await db.tips.insert_one({
             "id": tid, "user_id": bot["id"], "username": bot["username"],
@@ -9269,6 +9371,7 @@ async def master_avatar_calls() -> dict:
             "category": "banker", "master_category": "avatar", "master_day": day,
             "avatar_call": True, "avatar_minute": minute, "avatar_text": call,
             "avatar_confidence": conf, "drought": drought,
+            "avatar_player": avatar_player, "avatar_scorer": avatar_scorer,
             "ai_rating": round(min(9.6, 8.0 + conf / 100), 1),
             "ai_analysis": call,
             "legs": [], "is_parlay": False,

@@ -71,6 +71,12 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
   (rating ≈ min(7, 1/odd·10)), gedeckelt bei 7★. "Über 4.5" (2 Tore nötig) → ~3★ statt 10★.
   Bestehende Live-Banger-Tips >7★ einmalig auf 7★ geklemmt. Analyse-Text warnt jetzt ehrlich
   (rote Karte / Zeitspiel kann kippen).
+- NUANCE (Owner): "Manche Über 4.5 sind sicherer — aber ein Aggregat 5:1 mit roter Karte kann das
+  Spiel früher enden." → Nicht pauschal alle Über-Linien abwerten. Kontext-Strafen NUR bei
+  Gefahrensignalen (`_live_overline_penalty`): klarer Vorsprung/Blowout (|Tor-Differenz|≥3 → −2★),
+  rote Karte im Spiel (aus denselben Live-Stats, kein Extra-Call → −1★), K.o.-Duell/Pokal
+  (führende Seite verwaltet → −1.5★). Offene, ausgeglichene Nicht-K.o.-Spiele behalten bis 7★.
+  Bei zu vielen Signalen (Rating <3★) wird die Über-Linie gar nicht mehr angeboten.
 
 ## 9. Stürmer in Galaform als Signal (2026-07-30)
 - Owner: "Pavlidis hat für Benfica 4 Tore gemacht." → Ein Stürmer, der gerade einen 4-Packer

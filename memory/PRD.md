@@ -880,3 +880,21 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 4. **Statistik-Entdopplung (P1)**: `/ht-goal-forecast` dedupt jetzt per `_match_key` (reihenfolge-/
    akzent-unabhängig) → "PAOK–Dinamo" erscheint nur EINMAL (kein reversed-Fixture-Duplikat).
 - ALLE Änderungen sind in PREVIEW → tipjarglobal.com braucht "Save to GitHub → Deploy".
+
+
+## 2026-07-30 (Teil 2) — Push, In-Form-Stürmer, Live-Über-Bewertung, Test bestanden
+5. **Push für Avatar-Calls** (background_tasks.py `_push_payload_for_tip`): eigener Push
+   „🔮 Sicherer Master-Call · bis X.'" für neue avatar_call-Tips (fire-Sound, sub=avatar).
+6. **Live-Über-Bewertung ehrlich (Owner „10★ Über 4.5 verloren")**: `live_autopost` vergibt keine
+   pauschalen 10★ mehr; Rating = min(7, 1/odd·10). PLUS Kontext-Strafen `_live_overline_penalty`
+   (aus denselben Live-Stats, kein Extra-Call): Blowout |Diff|≥3 −2★, rote Karte −1★, K.o./Pokal
+   −1.5★. Offene ausgeglichene Spiele bleiben bis 7★; <3★ → gar nicht angeboten. `_live_red_cards`
+   + `_is_knockout_label` neu. Bestehende Banger >7★ einmalig geklemmt.
+7. **In-Form-Stürmer (Owner „Pavlidis 4 Tore")**: `_hot_scorer_for_team` (nutzt 24h-gecachte
+   get_team_players → keine Extra-Quota) findet den Top-Torjäger (reg. Starter, ≥4 Saisontore).
+   `master_avatar_calls` gibt bei prob≥0.52 einen „{Spieler} — Torschütze (Anytime)"-Call aus
+   (settlebar via scorer-grading), sonst HZ-Tor/Team-trifft. Endpoint liefert avatar_player/avatar_scorer.
+8. **Master-Avatar Voll-Test bestanden**: iteration_47.json — 100% Backend (7/7) + Frontend, keine
+   Bugs. Avatar-UI, Zyklus, Minuten-Chip, Lokalisierung (el/en), Anti-Underdog, kein Live->7★
+   Über-Linie, ht-goal-Dedup alle bestätigt. Seed-Testdaten wieder entfernt.
+- ALLE Änderungen in PREVIEW → „Save to GitHub → Deploy" für tipjarglobal.com nötig.
