@@ -594,3 +594,22 @@ NOTE: the reported slip lives on PRODUCTION; can't be retro-edited — fixes app
 parsed/generated slips after redeploy. Per-language market display still relies on the UI's static
 formatSelection map (English markets are readable everywhere; full per-language mapping is a TODO).
 
+## Changelog — 2026-06 (Doppelpack umgebaut auf 2-Spiele-Bet-Builder)
+Owner: "Zielquote egal (auch 100), Hauptsache du liest ZWEI Spiele gut" (Beispiel Lens–Arsenal
+1-1 HZ → 2-1 FT @40). Vorher war `master_doublepack()` inkonsistent: Docstring sagte ~3.0-3.6,
+Code zielte aber weiterhin auf ~6.0 (Band 4.0-9.0) mit 2 reinen Sieg-Wetten, ohne korrelierte Märkte.
+- **Umbau** (`server.py master_doublepack`): jetzt liest der Master die 2 Spiele mit dem STÄRKSTEN
+  Favoriten (fav_prob ≥ 58, torfreundlich via `_zero_zero_assessment.over_safe`) aus
+  `match_predictions` und baut PRO Spiel einen smarten korrelierten Same-Game-Builder via des
+  bestehenden `_special_legs_for` (Favorit-Sieg + beide treffen · Doppelte Chance + Über · HZ-Tor +
+  Über usw., nicht-redundant). Kein starres Quoten-Band mehr (Quote ist Ergebnis, nicht Ziel).
+  Muster-Index pro Spiel versetzt (0 / 2), damit die 2 Spiele nicht identische Builder bekommen.
+  Struktur: `legs[].selections/sel_odds`, is_parlay, KEIN combo_legs → wird Bein-für-Bein von
+  `settle_multimatch_parlays` abgerechnet (HZ via `_grade_ht_selection`, Rest via `judge_market`).
+  market="Doppelpack — 2 Spiele Bet-Builder". Eine offene Doppelpack gleichzeitig.
+- **Getestet** (manuelles Skript): 2 geseedete + reale Pool-Spiele → sauber generierter 2-Spiele-
+  Builder; ALLE Selektionen graden korrekt (won im 3:1/HZ 1:0-Szenario, lost im 0:0-Szenario).
+  Frontend unverändert nötig (Doppelpack-Tab rendert selections identisch zum Special-Tab).
+- HINWEIS an Owner: Änderung ist in der PREVIEW-Umgebung → "Save to GitHub → Deploy" nötig, damit
+  sie live auf der Domain erscheint.
+

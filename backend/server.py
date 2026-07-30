@@ -8270,79 +8270,78 @@ def _win_team_name(market: str, home: str, away: str) -> str:
 
 
 async def master_doublepack() -> dict:
-    """Owner headline slip: the Master backs 2 CLEAR favourites to simply WIN, one ticket,
-    landing ~3.0-3.6 so that hitting roughly EVERY THIRD slip is already PROFITABLE (break-even
-    at 3.0). Lives in the 'Doppelpack' tab. Only one open at a time. Uses REAL 1X2 odds."""
+    """Owner 2026-06: the headline 'Doppelpack' — the Master READS 2 games well and builds a
+    SMART correlated same-game builder for each (e.g. favourite wins + both score, Double Chance
+    + Over, 1st-half goal + Over — mirrors the owner's Lens–Arsenal 1-1→2-1 winner). The target
+    odds are irrelevant ("egal, Hauptsache du liest zwei Spiele gut"); what matters is the read.
+    Two games, correlated legs per game, auto-settled leg-by-leg. Only one open at a time."""
     now = datetime.now(timezone.utc)
     if await db.tips.count_documents(
             {"source": "hq-master", "master_doublepack": True,
              "status": {"$in": ["pending", "live"]}}):
         return {"skipped": "open"}
-    cands = await _master_leg_candidates(now, 1.01, 999)
-    seen_fx, fixtures = set(), []
-    for c in cands:
-        if c["fixkey"] in seen_fx:
+    # Pool: goal-friendly, high-confidence upcoming games with a CLEAR favourite (a strong
+    # read). Sort strongest-favourite first (that is the game we can "read well").
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    cands, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
             continue
-        seen_fx.add(c["fixkey"])
-        fixtures.append(c)
-        if len(fixtures) >= 14:
-            break
-    win_legs = []
-    for c in fixtures:
-        try:
-            odds = await ensure_match_odds(c.get("home", ""), c.get("away", ""), c.get("match_time", ""))
-        except Exception:
-            odds = {}
-        opts = []
-        for od, team in ((odds.get("win_home"), c["home"]), (odds.get("win_away"), c["away"])):
-            try:
-                v = float(od)
-            except (TypeError, ValueError):
-                continue
-            if 1.5 <= v <= 3.6:
-                opts.append((v, team))
-        if not opts:
+        if not _zero_zero_assessment(p)["over_safe"]:
             continue
-        v, team = min(opts)  # the favourite side within the band
-        win_legs.append({"match": c["match"], "home": c["home"], "away": c["away"],
-                         "market": f"{team} Sieg", "odds": round(v, 2), "team": team,
-                         "kickoff": c["kickoff"], "match_time": c["match_time"],
-                         "league": c["league"], "fixkey": c["fixkey"], "real": True})
-    if len(win_legs) < 2:
-        return {"skipped": "no-wins"}
-    # pick the pair whose product lands closest to ~6.0 (band 4.0–9.0)
-    best = None
-    for i in range(len(win_legs)):
-        for j in range(i + 1, len(win_legs)):
-            a, b = win_legs[i], win_legs[j]
-            if a["fixkey"] == b["fixkey"]:
-                continue
-            p = a["odds"] * b["odds"]
-            if 4.0 <= p <= 9.0:
-                score = abs(p - 6.0)
-                if best is None or score < best[0]:
-                    best = (score, [a, b], round(p, 2))
-    if not best:
-        return {"skipped": "no-pair"}
-    chosen, prod = best[1], best[2]
-    names = [c["team"] for c in chosen]
+        if (p.get("fav_prob") or 0) < 58:  # need a clear favourite to read the game well
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        cands.append((ko, p))
+    if len(cands) < 2:
+        return {"skipped": "not-enough", "have": len(cands)}
+    # strongest favourites first, then most goal-friendly
+    cands.sort(key=lambda x: ((x[1].get("fav_prob") or 0), (x[1].get("total") or 0)), reverse=True)
+    picks = cands[:2]
+    legs, combo = [], 1.0
+    for i, (ko, p) in enumerate(picks):
+        # offset the pattern index so the two games don't get identical builders
+        sels, sodds = _special_legs_for(p, i * 2)
+        for o in sodds:
+            combo *= float(o)
+        legs.append({"match": f"{p.get('home')} - {p.get('away')}",
+                     "league": p.get("league") or "", "kickoff": p.get("kickoff") or "",
+                     "status": "pending", "selections": sels, "sel_odds": sodds,
+                     "_ko": ko})
+    combo = round(combo, 2)
+    first_ko = min(l["_ko"] for l in legs)
+    for l in legs:
+        l.pop("_ko", None)
+    home_names = [pk[1].get("home") for pk in picks]
+    away_names = [pk[1].get("away") for pk in picks]
     bot = await _get_master_bot()
     tid = f"master-{uuid.uuid4().hex[:10]}"
-    first_ko = min(c["kickoff"] for c in chosen)
     tip = {
         "id": tid, "user_id": bot["id"], "username": bot["username"],
         "is_master": True, "is_expert": False, "master_doublepack": True,
         "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-        "market": "Doppelpack", "odds": f"{prod:.2f}", "category": "value",
-        "ai_rating": 9.0,
-        "ai_analysis": (f"👑 TipJarMaster Doppelpack: {names[0]} & {names[1]} gewinnen — "
-                        f"1 Schein, Gesamtquote {prod:.2f}. Immer mit kontrolliertem Einsatz."),
-        "legs": _pack_legs(chosen), "is_parlay": True,
+        "market": "Doppelpack — 2 Spiele Bet-Builder", "odds": f"{combo:.2f}",
+        "category": "value", "ai_rating": 9.0,
+        "ai_analysis": (f"👑 TipJarMaster Doppelpack: 2 gut gelesene Spiele "
+                        f"({home_names[0]} – {away_names[0]} · {home_names[1]} – {away_names[1]}) "
+                        f"mit je korrelierten Wetten (Favorit-Sieg/Doppelte Chance + Tore). "
+                        f"Gesamtquote {combo:.2f}. Immer mit kontrolliertem Einsatz."),
+        "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
     }
     await db.tips.insert_one(tip)
-    return {"posted": 1, "odds": prod, "teams": names}
+    logger.info(f"Master Doppelpack: 2-game bet-builder @ {combo}")
+    return {"posted": 1, "odds": combo, "games": len(legs)}
 
 
 async def master_build_packs() -> dict:
