@@ -143,7 +143,7 @@ def _grade_player_leg(leg, pmap, team_cards, fx):
     if kind == "fouls_d":
         return rec["fouls_d"] >= need
     if kind == "scorer":
-        return rec["goals"] >= 1
+        return rec["goals"] >= need
     if kind == "card":
         return rec["cards"] >= 1
     if kind == "saves":
@@ -970,6 +970,22 @@ async def settle_multimatch_parlays() -> dict:
                         leg_open = True
                         break
                     if ht == "lost":
+                        leg_res = "lost"
+                        break
+                    continue
+                # Player-scorer selection (hot-scorer combo, owner 2026-07-30) → grade from
+                # THIS leg's fixture player stats, not the score-only judge.
+                if _parse_player_market(sel_txt)[0] is not None:
+                    pm, tc = _player_stats_for_fixture(fx.get("fixture_id"))
+                    if not pm and not tc:
+                        leg_open = True
+                        break
+                    pres = _grade_player_leg(
+                        {"market": sel_txt, "home": home, "away": away}, pm or {}, tc or {}, fx)
+                    if pres is None:
+                        leg_open = True
+                        break
+                    if pres is False:
                         leg_res = "lost"
                         break
                     continue

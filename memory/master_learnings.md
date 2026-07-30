@@ -86,6 +86,19 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
   Boost für Avatar/Master: wenn ein Schlüsselstürmer zuletzt 2+ Tore machte, dessen Team-Über-0.5 /
   Team-Sieg höher bewerten und ggf. einen "Spieler trifft"-Call ausgeben. Owner fragen, bevor gebaut.
 
+## 11. Hot-Scorer-Kombi = Hall-of-Fame-Schein (2026-07-30)
+- Owner: "Hätten wir Konstantelias UND Pavlidis über 1.5 Tore gespielt, dann wäre der Schein in der
+  Hall of Fame." → mehrere In-Form-Stürmer in EINEN aggressiven Doppelpack-Schein kombinieren.
+- Umgesetzt: `master_hotscorer_combo()` (server.py, in master_loop, 1×/Berlin-Tag): findet 2–3
+  brace-fähige Galaform-Stürmer (gl≥0.6) in VERIFIZIERTEN Fixtures, baut ein Multi-Match-Parlay
+  "{Spieler} trifft 2+ (Doppelpack)" mit Gesamtquote → Hall-of-Fame-Kandidat. Eigener Tab
+  "🔥 Torjäger-Kombi" (master_category=hotscorer). Gift-Guard aktiv.
+- Zusätzlich: Avatar-Einzel-Call wird bei richtig heißen Stürmern (gl≥0.8) zu "{Spieler} — 2+ Tore
+  (Doppelpack)" statt nur Anytime.
+- SETTLEMENT: `_grade_player_leg` scorer respektiert jetzt `need` (line+1) → Doppelpack (2 Tore)
+  korrekt abgerechnet; `settle_multimatch_parlays` wertet Spieler-Torschützen-Legs pro Fixture
+  (holt player-stats). Anytime (need=1) unverändert. Unit-getestet: 2 Tore=WON, 1 Tor=LOST.
+
 ## 10. GESCHENKE haben Vorrang — keine andere KI darf widersprechen (2026-07-30)
 - Owner: "Wenn das Geschenk sagt Qarabag unter 2.5, dann darf in der Statistik NICHT 'Qarabag
   trifft' stehen, der Master darf NICHT 'Qarabag über 2.5' wählen und der Mental darf es NICHT

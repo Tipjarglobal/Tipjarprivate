@@ -2418,6 +2418,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["master_category"] = "special"
         elif mcat == "avatar":
             q["master_category"] = "avatar"
+        elif mcat == "hotscorer":
+            q["master_category"] = "hotscorer"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -9465,17 +9467,32 @@ async def master_avatar_calls() -> dict:
         at_home = p.get("fav") == "home"
         # In-form striker signal (owner Pavlidis-4-Tore learning). Cache-backed → cheap.
         avatar_player, avatar_scorer = None, False
+        player_kind, player_line = None, None
         hs = await _hot_scorer_for_team(fav, _smart_seasons(real_ko))
         if hs and hs["prob"] >= 0.52:
-            market = f"{hs['name']} — Torschütze (Anytime)"
-            odds = float(hs["odds"])
             avatar_player, avatar_scorer = hs["name"], True
-            form = (f"hat zuletzt NICHT getroffen und ist deshalb erst recht heiß"
-                    if drought else f"ist in Galaform ({hs['goals']} Saisontore)")
-            call = (f"{hs['name']} {form} — der trifft auch in {home} – {away}. "
-                    f"Ich sehe sein Tor bis zur {minute}. Minute. {fav} setzt sich durch.")
-            conf = min(90, int(round(hs["prob"] * 100)) + (5 if fg >= 2 else 0)
-                       + (4 if drought else 0))
+            player_kind = "scorer"
+            brace_prob = _prob_over(1.5, hs["gl"])
+            if hs["gl"] >= 0.8 and brace_prob >= 0.18:
+                # red-hot striker → aim for the Doppelpack (owner: 'Pavlidis über 1.5')
+                market = f"{hs['name']} — 2+ Tore (Doppelpack)"
+                odds = float(_odds_from_prob(brace_prob))
+                player_line = 1  # need = line+1 = 2 goals
+                form = (f"hat zuletzt getroffen und ist nicht zu stoppen"
+                        if not drought else f"ist heißhungrig")
+                call = (f"{hs['name']} {form} — ich traue ihm in {home} – {away} einen DOPPELPACK "
+                        f"zu ({hs['goals']} Saisontore). Bis zur {minute}. Minute liegt die erste Bude drin.")
+                conf = min(82, int(round(brace_prob * 100)) + 30)
+            else:
+                market = f"{hs['name']} — Torschütze (Anytime)"
+                odds = float(hs["odds"])
+                player_line = 0  # need = 1 goal (anytime)
+                form = (f"hat zuletzt NICHT getroffen und ist deshalb erst recht heiß"
+                        if drought else f"ist in Galaform ({hs['goals']} Saisontore)")
+                call = (f"{hs['name']} {form} — der trifft auch in {home} – {away}. "
+                        f"Ich sehe sein Tor bis zur {minute}. Minute. {fav} setzt sich durch.")
+                conf = min(90, int(round(hs["prob"] * 100)) + (5 if fg >= 2 else 0)
+                           + (4 if drought else 0))
         elif minute <= 45:
             market = "Über 0.5 Tore 1. Halbzeit"
             odds = 1.30
@@ -9506,6 +9523,7 @@ async def master_avatar_calls() -> dict:
             "avatar_call": True, "avatar_minute": minute, "avatar_text": call,
             "avatar_confidence": conf, "drought": drought,
             "avatar_player": avatar_player, "avatar_scorer": avatar_scorer,
+            "kind": player_kind, "line": player_line, "player": avatar_player,
             "ai_rating": round(min(9.6, 8.0 + conf / 100), 1),
             "ai_analysis": call,
             "legs": [], "is_parlay": False,
@@ -9515,6 +9533,103 @@ async def master_avatar_calls() -> dict:
         posted += 1
         logger.info(f"Master Avatar call: {fav} goal by {minute}' ({home} v {away}) — {market}")
     return {"posted": posted}
+
+
+async def master_hotscorer_combo() -> dict:
+    """Owner 2026-07-30 ('Konstantelias UND Pavlidis über 1.5 Tore → Hall of Fame'): once per
+    Berlin day, combine 2-3 IN-FORM strikers from different verified fixtures into ONE aggressive
+    'Doppelpack'-parlay ({Spieler} trifft 2+). High odds → a genuine Hall-of-Fame candidate."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "hotscorer",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "hotscorer", "master_day": day}):
+        return {"skipped": "done-today"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    gift_map = await _gift_stance_map()
+    picks, seen = [], set()
+    for p in preds:
+        if len(picks) >= 3:
+            break
+        if not _pred_whitelisted(p):
+            continue
+        fav = _fav_team(p)
+        try:
+            fp = int(float(p.get("fav_prob") or 0))
+        except (TypeError, ValueError):
+            fp = 0
+        if not fav or fp < 60:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        hs = await _hot_scorer_for_team(fav, _smart_seasons(p.get("kickoff")))
+        if not hs or hs["gl"] < 0.6:  # brace-capable, genuinely prolific striker only
+            continue
+        brace_prob = _prob_over(1.5, hs["gl"])
+        if brace_prob < 0.12:
+            continue
+        market = f"{hs['name']} trifft 2+ (Doppelpack)"
+        if _conflicts_with_gift(market, p.get("home"), p.get("away"), gift_map.get(key)):
+            continue
+        # verify the fixture is real (no phantom games)
+        home, away = p.get("home"), p.get("away")
+        real_ko = p.get("kickoff") or ko.isoformat()
+        if API_FOOTBALL_KEY:
+            tidh = await resolve_team_id(home)
+            fx = find_upcoming_fixture(tidh, away) if tidh else None
+            if not fx or not fx.get("date_iso"):
+                continue
+            try:
+                ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
+            except Exception:
+                continue
+            home = fx.get("home_name") or home
+            away = fx.get("away_name") or away
+            real_ko = ko_dt.strftime("%d/%m/%Y %H:%M")
+        seen.add(key)
+        picks.append({"match": f"{home} - {away}", "league": p.get("league") or "",
+                      "kickoff": real_ko, "status": "pending",
+                      "selections": [market], "sel_odds": [hs["odds"]],
+                      "player": hs["name"], "goals": hs["goals"], "_ko": ko})
+    if len(picks) < 2:
+        return {"skipped": "not-enough", "have": len(picks)}
+    combo = 1.0
+    for pk in picks:
+        combo *= float(pk["sel_odds"][0])
+    combo = round(combo, 2)
+    first_ko = min(pk["_ko"] for pk in picks)
+    names = ", ".join(pk["player"] for pk in picks)
+    for pk in picks:
+        pk.pop("_ko", None)
+    bot = await _get_master_bot()
+    tid = f"master-hs-{uuid.uuid4().hex[:10]}"
+    await db.tips.insert_one({
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"🔥 Torjäger-Kombi — {len(picks)} Stürmer im Doppelpack", "odds": f"{combo:.2f}",
+        "category": "value", "master_category": "hotscorer", "master_day": day,
+        "ai_rating": 8.4,
+        "ai_analysis": (f"🔥 Hall-of-Fame-Kandidat: {names} sind in Galaform und sollen JE einen "
+                        f"Doppelpack (2+ Tore) schnüren. Aggressive Kombi mit Gesamtquote {combo:.2f} — "
+                        f"kleiner Einsatz, großer Traum. Nur mit Köpfchen spielen."),
+        "legs": picks, "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    })
+    logger.info(f"Master Hot-Scorer combo: {names} @ {combo}")
+    return {"posted": 1, "odds": combo, "players": len(picks)}
+
 
 
 
@@ -9540,12 +9655,15 @@ async def master_loop():
                 special = await master_special_build()
                 # Owner "Avatar": up to 3 confident minute-goal calls per day (speech bubble).
                 avatar = await master_avatar_calls()
+                # Owner "Torjäger-Kombi": daily hot-scorer Doppelpack parlay (Hall-of-Fame shot).
+                hotc = await master_hotscorer_combo()
                 # Clean legacy slips of per-game redundant legs (BTTS ⇒ Über 1.5 etc.).
                 await master_dedupe_open_slips()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or safe.get("posted") or special.get("posted") or avatar.get("posted") \
+                        or hotc.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; avatar {avatar}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)
