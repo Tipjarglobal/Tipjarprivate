@@ -805,7 +805,8 @@ async def tips_counts():
         "status": "pending"})
     live = await db.tips.count_documents({"status": "live", "hidden": {"$ne": True},
                                           "source": {"$nin": list(SILENT_SOURCE_SLUGS)}})
-    master = await db.tips.count_documents({"source": "hq-master", "status": {"$in": ["pending", "live"]}})
+    master = await db.tips.count_documents({"source": "hq-master", "hidden": {"$ne": True},
+                                            "status": {"$in": ["pending", "live"]}})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}, "hidden": {"$ne": True}})
     won_n = await db.tips.count_documents({"status": "won", "hidden": {"$ne": True}})
