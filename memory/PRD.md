@@ -810,6 +810,7 @@ VOIDED-Tooltip korrekt gerendert → Testdaten zurückgesetzt).
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
 
 ## User-Präferenz (2026-07-30) — WICHTIG
-Der Owner will KEINE Rückfragen und KEINE „Next Action Items"/Vorschlagslisten mehr.
-→ Aufgaben direkt umsetzen, nur kurzes Ergebnis melden. Keine ask_human-Klärungsfragen außer bei
-echten Blockern (fehlende Keys o.ä.). Keine Enhancement-/Vorschlagslisten am Ende.
+Vorschläge/„Next Action Items" sind OK. ABER diese 4 NIE wieder vorschlagen:
+1. Korrektur-Detail (was die KI geändert hat), 2. Push-Konsens (Void-Kombi Quote neu färben),
+3. Konsens-Badge („N Quellen einig" auf Master-Schein), 4. Telegram-Ausgabe/Bot.
+Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
