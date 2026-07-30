@@ -681,7 +681,7 @@ async def ht_goal_forecast():
         ph, pa = p.get("ph"), p.get("pa")
         if not home or not away or ph is None or pa is None:
             continue
-        key = (home, away, p.get("kickoff"))
+        key = _match_key(home, away)
         if key in seen:
             continue
         total = float(ph) + float(pa)
@@ -791,6 +791,22 @@ async def qualifier_briefing():
     if not doc:
         return {"count": 0, "matches": [], "narrative": "", "generated_at": "", "building": True}
     return {**doc, "building": stale}
+
+
+@api_router.get("/master/avatar")
+async def master_avatar():
+    """TipJarMaster Avatar calls for today — confident minute-goal predictions (speech bubbles).
+    Powers the crown avatar + speech bubble at the top of the Master channel."""
+    day = _berlin_now().date().isoformat()
+    docs = await db.tips.find(
+        {"source": "hq-master", "master_category": "avatar",
+         "$or": [{"master_day": day}, {"status": {"$in": ["pending", "live"]}}]},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "market": 1,
+         "odds": 1, "match_time": 1, "avatar_minute": 1, "avatar_text": 1,
+         "avatar_confidence": 1, "drought": 1, "status": 1}
+    ).sort("created_at", -1).to_list(20)
+    return {"count": len(docs), "calls": docs, "generated_at": day}
+
 
 
 
@@ -2393,6 +2409,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["master_category"] = "safe"
         elif mcat == "special":
             q["master_category"] = "special"
+        elif mcat == "avatar":
+            q["master_category"] = "avatar"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -9093,6 +9111,170 @@ async def master_special_build() -> dict:
     return {"posted": 1, "odds": combo, "games": len(legs)}
 
 
+def _avatar_goal_minute(fg, total, over25, btts, drought) -> int:
+    """Owner learning 2026-07-30: predict a CONCRETE goal-minute window (40/60/75/90) instead
+    of a vague late goal. Goal-heavy / drought sides score EARLY."""
+    if fg >= 2 or total >= 4:
+        m = 40
+    elif fg >= 2 or over25 or total >= 3:
+        m = 60
+    elif fg >= 1 or btts:
+        m = 75
+    else:
+        m = 90
+    if drought and m > 40:  # a hungry side that failed to score last time attacks earlier
+        m = {60: 40, 75: 60, 90: 75}.get(m, m)
+    return m
+
+
+async def master_avatar_calls() -> dict:
+    """Owner 2026-07-30: the TipJarMaster AVATAR — a confident expert who, once per Berlin day,
+    calls up to 3 near-lock goal predictions with a CONCRETE minute window (40/60/75/90) and a
+    speech-bubble text. Backs ONLY the clear, STRONG favourite (never a weak underdog — Torshavn
+    learning); recognises goal 'droughts' (a fav that failed to score last game is hungry now →
+    earlier goal). Each call is a REAL, auto-settleable single pick (HT-goal for ≤45', else the
+    favourite Über 0.5 Tore) so it is playable AND settles cleanly."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "avatar",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "avatar", "master_day": day}):
+        return {"skipped": "done-today"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    cmap = _consensus_map(preds)
+    cands, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p) or _bad_for_overs(p):
+            continue
+        fav = _fav_team(p)
+        fp = p.get("fav_prob") or 0
+        try:
+            fp = int(float(fp))
+        except (TypeError, ValueError):
+            fp = 0
+        if not fav or fp < 62:  # STRONG side only (never a weak underdog)
+            continue
+        fg0 = (p.get("ph") or 0) if p.get("fav") == "home" else (p.get("pa") or 0)
+        try:
+            fg0 = int(round(float(fg0)))
+        except (TypeError, ValueError):
+            fg0 = 0
+        # the favourite must be expected to score (a "fav trifft" call), OR a 0:0 is
+        # practically excluded (a first-half-goal call). Never call on a game we don't trust.
+        if not (fg0 >= 1 or _zero_zero_assessment(p)["over_safe"]):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(p.get("home"), p.get("away"))
+        if key in seen:
+            continue
+        seen.add(key)
+        ci = _consensus_for(cmap, p.get("home"), p.get("away"), p.get("fav"))
+        p["_cons"] = ci.get("agree", 0) + ci.get("over_n", 0)
+        cands.append((ko, p))
+    if not cands:
+        return {"skipped": "no-candidates"}
+    cands.sort(key=lambda x: ((x[1].get("_cons") or 0), (x[1].get("fav_prob") or 0),
+                              (x[1].get("total") or 0)), reverse=True)
+    bot = await _get_master_bot()
+    posted = 0
+    for ko, p in cands:
+        if posted >= 3:
+            break
+        fav = _fav_team(p)
+        home, away = p.get("home"), p.get("away")
+        # VERIFY the fixture is a REAL, upcoming game (owner 2026-07-30: "Spiel existiert nicht").
+        # Only post an avatar call when API-Football confirms the exact fixture; use its real
+        # names / kickoff / league so no phantom pairing ever appears.
+        real_ko = p.get("kickoff") or ko.isoformat()
+        real_league, real_country = p.get("league") or "", p.get("country") or ""
+        if API_FOOTBALL_KEY:
+            tidh = await resolve_team_id(home)
+            fx = find_upcoming_fixture(tidh, away) if tidh else None
+            if not fx:
+                tida = await resolve_team_id(away)
+                fx2 = find_upcoming_fixture(tida, home) if tida else None
+                if fx2:
+                    fx = {"home_name": fx2.get("away_name"), "away_name": fx2.get("home_name"),
+                          "date_iso": fx2.get("date_iso"), "league": fx2.get("league"),
+                          "country": fx2.get("country")}
+            if not fx or not fx.get("date_iso"):
+                logger.info(f"Master Avatar: skip unverifiable fixture {home} v {away}")
+                continue
+            try:
+                ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
+                hrs = (ko_dt - now).total_seconds() / 3600
+                if not (0 <= hrs <= SMART_LOOKAHEAD_H):
+                    continue  # game already started or too far out
+                real_ko = ko_dt.strftime("%d/%m/%Y %H:%M")
+                home = fx.get("home_name") or home
+                away = fx.get("away_name") or away
+                if fav == p.get("home"):
+                    fav = home
+                elif fav == p.get("away"):
+                    fav = away
+                real_league = fx.get("league") or real_league
+                real_country = fx.get("country") or real_country
+            except Exception:
+                continue
+        fg = (p.get("ph") or 0) if p.get("fav") == "home" else (p.get("pa") or 0)
+        try:
+            fg = int(round(float(fg)))
+        except (TypeError, ValueError):
+            fg = 0
+        total = p.get("total") or 0
+        over25, btts = bool(p.get("over25")), bool(p.get("btts"))
+        # drought (cache-only, NO extra API quota)
+        scored_last, _, _ = await _team_last_scored(fav, allow_api=False)
+        drought = scored_last == 0
+        minute = _avatar_goal_minute(fg, total, over25, btts, drought)
+        at_home = p.get("fav") == "home"
+        if minute <= 45:
+            market = "Über 0.5 Tore 1. Halbzeit"
+            odds = 1.30
+            call = (f"In {home} – {away} sehe ich früh ein Tor. {fav} ist "
+                    f"{'zuhause' if at_home else 'auswärts'} brandgefährlich — die Bude fällt "
+                    f"schon in der 1. Halbzeit, bis zur {minute}. Minute. Klare Sache.")
+        else:
+            market = f"{fav} Über 0.5 Tore"
+            odds = 1.22 if fg >= 2 else 1.32
+            call = (f"{fav} trifft in {home} – {away} — da bin ich mir sicher. "
+                    f"{'Zuhause' if at_home else 'Auswärts'} zu stark; das Tor fällt bis zur "
+                    f"{minute}. Minute.")
+        if drought:
+            call = (f"{fav} hat zuletzt NICHT getroffen — und genau deshalb sitzt sie diesmal. "
+                    + call)
+        conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
+                   + (4 if btts else 0) + (4 if drought else 0))
+        tid = f"master-av-{uuid.uuid4().hex[:8]}"
+        await db.tips.insert_one({
+            "id": tid, "user_id": bot["id"], "username": bot["username"],
+            "is_master": True, "is_expert": False,
+            "home_team": home, "away_team": away, "match_time": real_ko,
+            "country": real_country, "league": real_league,
+            "market": market, "odds": f"{odds:.2f}",
+            "category": "banker", "master_category": "avatar", "master_day": day,
+            "avatar_call": True, "avatar_minute": minute, "avatar_text": call,
+            "avatar_confidence": conf, "drought": drought,
+            "ai_rating": round(min(9.6, 8.0 + conf / 100), 1),
+            "ai_analysis": call,
+            "legs": [], "is_parlay": False,
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-master", "created_at": now.isoformat(),
+        })
+        posted += 1
+        logger.info(f"Master Avatar call: {fav} goal by {minute}' ({home} v {away}) — {market}")
+    return {"posted": posted}
+
+
+
 async def master_loop():
     await asyncio.sleep(240)  # let experts + live states populate first
     while True:
@@ -9113,12 +9295,14 @@ async def master_loop():
                     safe = await master_safe_bets_build()
                 # Owner "Special": ALWAYS a fresh 4-game bet-builder combo each day.
                 special = await master_special_build()
+                # Owner "Avatar": up to 3 confident minute-goal calls per day (speech bubble).
+                avatar = await master_avatar_calls()
                 # Clean legacy slips of per-game redundant legs (BTTS ⇒ Über 1.5 etc.).
                 await master_dedupe_open_slips()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
-                        or safe.get("posted") or special.get("posted") \
+                        or safe.get("posted") or special.get("posted") or avatar.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; avatar {avatar}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)

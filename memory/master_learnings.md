@@ -52,3 +52,12 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
     ausgeschlossen, außer das Modell erwartet selbst 2+ Tore.
   - `knockout_tie_autopost` backt ohnehin bereits den Hinspiel-Sieger (korrekt).
 
+## 7. Avatar-Calls NUR auf verifizierte, reale Spiele (2026-07-30)
+- Fehler (Owner): "Spiel existiert nicht" — ein Avatar-Call (Arges Pitesti – Miercurea Ciuc) war
+  ein Phantom-Spiel aus match_predictions, das API-Football nicht bestätigte.
+- Fix: `master_avatar_calls` verifiziert JEDES Spiel vor dem Posten via `resolve_team_id` +
+  `find_upcoming_fixture` (auch reversed). Ohne bestätigtes Fixture (echter Anstoß im Fenster) →
+  Call wird übersprungen. Nutzt reale Namen/Anstoß/Liga aus dem Fixture. Kein Phantom-Spiel mehr.
+- Avatar-Sprechblase + Karten sind vollständig lokalisiert (Sprechblasen-Text via prose-Cache,
+  Idle-Zeile + Tab-Label via i18n-Keys master.avatar.idle / master.cat.avatar in allen 8 Sprachen).
+

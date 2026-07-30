@@ -6,6 +6,7 @@ import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
 import { QualifierBriefing } from "./QualifierBriefing";
+import { MasterAvatar } from "./MasterAvatar";
 import { OddsValue } from "./OddsValue";
 import api, { apiErr, fileUrl } from "../api";
 import { useProseTranslations } from "../proseI18n";
@@ -74,8 +75,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   const [voidTips, setVoidTips] = useState([]);
   const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0, void: 0 });
   const [settledTab, setSettledTab] = useState(null);
-  const [masterTab, setMasterTab] = useState("slips");
-  const [masterCounts, setMasterCounts] = useState({ slips: 0, einfach: 0, mittel: 0, challenge: 0, safe: 0, special: 0, live: 0 });
+  const [masterTab, setMasterTab] = useState("avatar");
+  const [masterCounts, setMasterCounts] = useState({ slips: 0, avatar: 0, einfach: 0, mittel: 0, challenge: 0, safe: 0, special: 0, live: 0 });
   // Owner 2026-07-26: sort (newest / most stars) + a quick "Top 9–10★" filter so the best
   // tips surface instantly without scrolling/searching.
   const [starSort, setStarSort] = useState(false);
@@ -107,7 +108,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
         params.source = "master";
         params.status = masterTab === "live" ? "live" : "pending";
         if (masterTab === "slips") params.mcat = "slips";
-        else if (["einfach", "mittel", "challenge", "safe", "special"].includes(masterTab)) params.mcat = masterTab;
+        else if (["einfach", "mittel", "challenge", "safe", "special", "avatar"].includes(masterTab)) params.mcat = masterTab;
       }
       else if (view === "live") { if (liveCat === "community") { params.source = "members"; } else if (liveCat) params.category = liveCat; }
       else if (view === "members") params.source = "members";
@@ -228,10 +229,10 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
         api.get("/tips", { params: { source: "master", status: "pending", limit: 300 } }),
         api.get("/tips", { params: { source: "master", status: "live", limit: 200 } }),
       ]);
-      const c = { slips: 0, einfach: 0, mittel: 0, challenge: 0, safe: 0, special: 0, live: live.data.length };
+      const c = { slips: 0, avatar: 0, einfach: 0, mittel: 0, challenge: 0, safe: 0, special: 0, live: live.data.length };
       pend.data.forEach((tp) => {
         const mc = tp.master_category;
-        if (mc === "einfach" || mc === "mittel" || mc === "challenge" || mc === "safe" || mc === "special") c[mc] += 1;
+        if (mc === "einfach" || mc === "mittel" || mc === "challenge" || mc === "safe" || mc === "special" || mc === "avatar") c[mc] += 1;
         else c.slips += 1;
       });
       setMasterCounts(c);
@@ -519,8 +520,9 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
               <span><span className="font-heading font-black text-[#E11D2A]">TipJarMaster</span> — {t("master.showcase.sub")}</span>
             </p>
           </div>
+          <MasterAvatar t={t} />
           <div className="flex flex-wrap gap-2 mb-6">
-            {[["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
+            {[["avatar", `🔮 ${t("master.cat.avatar")}`], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
               <button key={v} data-testid={`master-tab-${v}`}
                 onClick={() => setMasterTab(v)}
                 className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>
@@ -1019,7 +1021,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           )}
           {tip.master_category && (
             <span data-testid={`master-cat-${tip.master_category}`} className="inline-flex items-center text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-400/15 text-amber-300 border border-amber-400/40">
-              {tip.master_category === "einfach" ? t("master.cat.einfach") : tip.master_category === "mittel" ? t("master.cat.mittel") : tip.master_category === "safe" ? t("master.cat.safe") : tip.master_category === "special" ? "Special" : `${t("master.cat.challenge")}${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
+              {tip.master_category === "einfach" ? t("master.cat.einfach") : tip.master_category === "mittel" ? t("master.cat.mittel") : tip.master_category === "safe" ? t("master.cat.safe") : tip.master_category === "special" ? "Special" : tip.master_category === "avatar" ? `🔮 ${tip.avatar_minute || 90}'` : `${t("master.cat.challenge")}${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
             </span>
           )}
           {isExpert && !isMaster && (

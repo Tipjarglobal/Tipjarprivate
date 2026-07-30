@@ -849,3 +849,34 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - FIX: analyze_tip liefert jetzt `ai_error: true` bei KI-Ausfall/kein Key/kein JSON. Frontend (SubmitTipModal) zeigt dann `submit.aiUnavailable` ("KI gerade nicht verfügbar…") statt der irreführenden "Teams nicht erkannt"-Meldung. i18n-Keys en+de ergänzt (Rest fällt auf en zurück).
 - USER-AKTION nötig: Universal Key Tageslimit/Guthaben erhöhen (Profil → Manage plan → Universal Key → Add Balance / Auto-Top-up).
 - Nur PREVIEW — Deploy via Save to GitHub → Deploy nötig für Live.
+
+
+## 2026-07-30 — LLM-Kosten-Fix + Torshavn-Learning + Master-Avatar (batch)
+1. **Kosten-Optimierung (P0)**: `core.py` neuer `AI_TEXT_MODEL = "gemini-2.5-flash"`. Alle 7
+   Text-LLM-Aufrufe in server.py (llm_pick_analysis, moderate_text, _translate_batch,
+   _canonical_league_name, _canonical_team_name, _canonical_selection, qualifier-briefing)
+   laufen jetzt auf Flash statt `gemini-3.1-pro-preview`. Nur die 3 VISION-Aufrufe (analyze_tip,
+   extract_win_slip, generate_smart_from_idea = Slip-OCR) bleiben auf Pro. Verifiziert:
+   /api/i18n/translate DE→Griechisch funktioniert mit Flash. → drastisch weniger Budget-Verbrauch.
+2. **Torshavn-Learning (starke Seite backen)**: neue Helfer `_favourite_side_map` +
+   `_leg_backs_clear_underdog` (server.py). `_master_leg_candidates` droppt team-spezifische Beine
+   auf der klaren Underdog-Seite (fav_prob≥62); `goal_thirst` schließt klare Underdogs aus der
+   "trifft"-Liste aus (außer Modell erwartet selbst 2+ Tore). Unit-getestet mit den echten
+   Torshavn/Hajduk/Pafos-Fällen. KO-Autopost backt weiterhin korrekt den Hinspiel-Sieger.
+3. **Master-Avatar + konkrete Minuten-Calls (Owner-Wahl B/B)**: `master_avatar_calls()` (server.py,
+   in master_loop, 1×/Berlin-Tag, max 3 Calls) — backt NUR die starke Seite (fav_prob≥62), erkennt
+   Tor-"Durst" (Fav ohne Tor im letzten Spiel → früher), leitet ein Minuten-Fenster (40/60/75/90) ab
+   (`_avatar_goal_minute`). Reales, abrechenbares Bein: ≤45' → "Über 0.5 Tore 1. Halbzeit" (HZ-graden),
+   sonst "{Fav} Über 0.5 Tore" (Team trifft). Endpoint `GET /api/master/avatar`. Frontend:
+   `MasterAvatar.jsx` (Krone + Sprechblase, zyklisch) oben im Master-Kanal + neuer Default-Tab
+   "🔮 Sichere Calls" (mcat=avatar) + Karten-Badge "🔮 bis X.'". Screenshot-verifiziert.
+   HINWEIS: exakte Minuten-Märkte bieten die meisten Buchmacher nicht/nicht abrechenbar an → das
+   PLAYBARE Bein ist der nächstsichere Markt (HZ-Tor / Team trifft), die Minute steht in der
+   Avatar-Aussage. Owner darüber informiert.
+   FIX (Owner "Spiel existiert nicht"): `master_avatar_calls` verifiziert jedes Spiel via
+   resolve_team_id + find_upcoming_fixture (kein Phantom-Spiel mehr); Avatar-Bubble/Tab/Idle-Zeile
+   vollständig lokalisiert (i18n master.avatar.idle / master.cat.avatar in allen 8 Sprachen +
+   dynamischer prose-Cache für den Call-Text).
+4. **Statistik-Entdopplung (P1)**: `/ht-goal-forecast` dedupt jetzt per `_match_key` (reihenfolge-/
+   akzent-unabhängig) → "PAOK–Dinamo" erscheint nur EINMAL (kein reversed-Fixture-Duplikat).
+- ALLE Änderungen sind in PREVIEW → tipjarglobal.com braucht "Save to GitHub → Deploy".
