@@ -688,3 +688,26 @@ Spiel aus dem Schein entfernen; (3) Benachrichtigungen sollen einen funktioniere
 - HINWEIS: Auf tipjarglobal.com greift alles erst nach "Save to GitHub → Deploy"; danach bereinigt
   der master_loop die bestehenden Live-Scheine automatisch.
 
+## Changelog — 2026-06 (Neue Quelle: betarades.gr → nur für Master-Auswahl)
+Owner: "New expert (betarades.gr), aber nur damit der Master auswählt." (Der zuvor geschickte
+Telegram-Link war eine PRIVATE Gruppe "Kingbet chat" → technisch nicht scrapebar; nur öffentliche
+Kanäle gehen.) betarades.gr ist öffentlich → als 6. Predictor-Quelle in den Master-Auswahlpool
+`match_predictions` eingebunden, KEIN sichtbarer Experte/Badge.
+- **Neuer Scraper** (`scrapers_autopost.py betarades_autopost` + `betarades_loop`, alle 30 Min,
+  leader-gated, max 25 Spiele/Lauf, requests+bs4):
+  1. Liest die Tagesliste (`/prognostika/`) → Spiele + Anstoß + Liga-Sektionen (europäische
+     Comp-Slugs → englische Ligennamen für die Slip-Whitelist).
+  2. Pro Spiel: liest die JSON-LD `startDate` (exakter Anstoß), die 3 Schnell-1X2-Quoten und die
+     Tipster-Empfehlung ("Επιλογή …").
+  3. Leitet Favorit + margenbereinigte Favoriten-Wahrscheinlichkeit aus den 1X2-Quoten ab; Over/Under
+     2.5 + G/G aus dem Empfehlungstext; grobe ph/pa passend dazu.
+  4. **Griechische Teamnamen → kanonisches Latein** via `_canonical_team_name` (LLM, gecacht) →
+     matchen API-Football für echte Quoten + Auto-Abrechnung.
+  5. `store_match_prediction("betarades", …)` → der Master (Special/Doppelpack/Safe/…) wählt daraus.
+- Verdrahtet: Import + `betarades_loop`-Task in `server.py` (nach `footballinsight_loop`).
+- **Getestet (Live-Lauf)**: 62 Spiele gefunden, Namen perfekt kanonisiert (ΠΑΟΚ→PAOK,
+  ΝΤΙΝΑΜΟ ΚΙΕΒΟΥ→Dynamo Kyiv, ΚΑΡΑΜΠΑΚ→Qarabag, ΧΑΙΝΤΟΥΚ→Hajduk Split), Favorit/Quoten korrekt
+  abgeleitet, als `source='betarades'` gespeichert. Backend startet fehlerfrei.
+- Sichtbarkeit: erscheint NUR im Master-Auswahlpool, nicht als öffentlicher Schein.
+- HINWEIS: greift live erst nach "Save to GitHub → Deploy".
+

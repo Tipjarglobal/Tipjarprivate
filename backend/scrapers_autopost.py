@@ -62,6 +62,7 @@ from server import (
     logger,
     purge_expired_autotips,
     store_match_prediction,
+    _canonical_team_name,
 )
 
 
@@ -1393,3 +1394,189 @@ async def footballinsight_loop():
         except Exception as e:
             logger.error(f"HQ loop FI error: {e}")
         await asyncio.sleep(30 * 60)  # every 30 minutes — post tips close to real-time
+
+
+
+# --- betarades.gr Greek predictions → Master selection pool -----------------------------
+# Owner 2026-06: use betarades.gr as a SOURCE feeding the match_predictions pool the Master
+# picks from — NOT a public expert. We read the daily list + each match page (real 1X2 odds
+# table + the tipster's 'Επιλογή' recommendation), canonicalise the Greek team names to Latin
+# (so they match API-Football for real odds + auto-settlement) and store a prediction.
+BETARADES_BASE = "https://www.betarades.gr"
+BETARADES_LIST = f"{BETARADES_BASE}/prognostika/"
+BETARADES_MAX_PER_RUN = 25
+_BR_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+# European-competition category slugs → clean English league names (match the slip whitelist).
+_BR_LEAGUE_MAP = {
+    "champions-league": "Champions League", "europa-league": "Europa League",
+    "europa-conference-league": "Conference League",
+}
+
+
+def _br_get(url: str):
+    import requests
+    try:
+        r = requests.get(url, headers={"User-Agent": _BR_UA}, timeout=SCRAPE_TIMEOUT or 20)
+        if r.status_code == 200:
+            return r.text
+    except Exception as e:
+        logger.warning(f"betarades GET failed {url}: {e}")
+    return ""
+
+
+def _br_strip(x: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", x or "")).strip()
+
+
+def _br_league_from_slug(slug: str) -> str:
+    if slug in _BR_LEAGUE_MAP:
+        return _BR_LEAGUE_MAP[slug]
+    return slug.replace("-", " ").strip()
+
+
+def _br_parse_list(html: str):
+    """Walk the daily list in document order → [{home_el, away_el, time, slug, league}].
+    Category header anchors (flag icon from wbsearthcomps) set the current league; match
+    anchors (inner text 'HOME HH:MM AWAY') inherit it."""
+    out, cur_league = [], ""
+    for m in re.finditer(
+            r'href="https://www\.betarades\.gr/([a-z0-9-]+)/"[^>]*>(.*?)</a>',
+            html[:250000], re.S):
+        slug, inner = m.group(1), m.group(2)
+        if "wbsearthcomps" in inner:  # league category header
+            am = re.search(r'alt="([^"]+)"', inner)
+            cur_league = _br_league_from_slug(slug)
+            if am and ("Προγνωστικά" not in am.group(1)):
+                pass  # slug map preferred; alt is often Greek
+            continue
+        txt = _br_strip(inner)
+        tm = re.match(r"(.+?)\s+(\d{1,2}:\d{2})\s+(.+)$", txt)
+        if not tm or len(txt) < 7:
+            continue
+        out.append({"home_gr": tm.group(1).strip(), "away_gr": tm.group(3).strip(),
+                    "time": tm.group(2), "slug": slug, "league": cur_league})
+    # de-dupe by slug (list repeats matches in a sidebar)
+    seen, uniq = set(), []
+    for o in out:
+        if o["slug"] in seen:
+            continue
+        seen.add(o["slug"])
+        uniq.append(o)
+    return uniq
+
+
+def _br_parse_match(html: str):
+    """From a betarades match page → dict(kickoff_iso, o_home, o_draw, o_away, pick_text)."""
+    ld = re.search(r'"startDate"\s*:\s*"([^"]+)"', html)
+    kickoff = ld.group(1) if ld else ""
+    # three quick 1X2 odds sit between the stadium line and the tabs
+    a = html.find("Γήπεδο")
+    b = html.find("Ανάλυση", a if a > 0 else 0)
+    seg = html[a:b] if (a > 0 and b > a) else html[:8000]
+    nums = re.findall(r"(?<![\d.])(\d{1,2}\.\d{2})(?![\d])", seg)
+    o_home = o_draw = o_away = None
+    if len(nums) >= 3:
+        try:
+            o_home, o_draw, o_away = (float(nums[0]), float(nums[1]), float(nums[2]))
+        except ValueError:
+            pass
+    # the tipster's recommendation ("Επιλογή ο άσσος σε απόδοση 1.89")
+    pm = re.search(r"Επιλογ[ήη][^<]{0,20}(?:<[^>]+>){0,3}([^<]{2,90})", html)
+    pick_text = _br_strip(pm.group(1)) if pm else ""
+    return {"kickoff": kickoff, "o_home": o_home, "o_draw": o_draw,
+            "o_away": o_away, "pick_text": pick_text}
+
+
+def _br_signals(pk: dict):
+    """Derive (fav, fav_prob, over25, btts, ph, pa, conf) from odds + recommendation text."""
+    oh, od, oa = pk.get("o_home"), pk.get("o_draw"), pk.get("o_away")
+    fav, fav_prob = None, None
+    if oh and oa and od:
+        inv = 1 / oh + 1 / od + 1 / oa
+        if oh <= oa:
+            fav, fav_prob = "home", round((1 / oh) / inv * 100)
+        else:
+            fav, fav_prob = "away", round((1 / oa) / inv * 100)
+    t = (pk.get("pick_text") or "").lower()
+    # recommendation can override / add goal markets
+    if "διπλ" in t or " ασσος 2" in t:
+        fav = "away"
+    elif "ασσ" in t or "άσσ" in t:
+        fav = "home"
+    over25 = bool(re.search(r"(over|άνω|ανω)\s*2\.?5", t))
+    under = bool(re.search(r"(under|κάτω|κατω)\s*2\.?5", t))
+    btts = bool(re.search(r"\bg[/\- ]?g\b|γκολ.?γκολ|να σκορ|και οι δ", t))
+    no_g = bool(re.search(r"\bn[/\- ]?g\b|no ?goal", t))
+    if under:
+        over25 = False
+    if no_g:
+        btts = False
+    # rough predicted score consistent with the signals (Master uses fav/total/over/btts)
+    other = 1 if (over25 or btts) else 0
+    if fav == "home":
+        ph, pa = 2, other
+    elif fav == "away":
+        ph, pa = other, 2
+    else:
+        ph, pa = 1, 1
+    if over25 and (ph + pa) < 3:
+        ph, pa = (ph, pa + 1) if fav == "away" else (ph + 1, pa)
+    conf = min((fav_prob or 50) + 5, 82)
+    return fav, fav_prob, over25, btts, ph, pa, conf
+
+
+async def betarades_autopost() -> dict:
+    """Scrape betarades.gr → feed match_predictions (source='betarades') the Master selects
+    from. Football only; canonical Latin team names; no public expert/badge."""
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    html = await asyncio.to_thread(_br_get, BETARADES_LIST)
+    if not html:
+        return {"stored": 0, "reason": "list unavailable"}
+    matches = _br_parse_list(html)
+    now = datetime.now(timezone.utc)
+    stored, scanned = 0, 0
+    for mt in matches:
+        if stored >= BETARADES_MAX_PER_RUN:
+            break
+        scanned += 1
+        mhtml = await asyncio.to_thread(_br_get, f"{BETARADES_BASE}/{mt['slug']}/")
+        if not mhtml:
+            continue
+        pk = _br_parse_match(mhtml)
+        ko = _parse_kickoff(pk.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 1 or h > 120:  # only the next ~5 days
+            continue
+        # Greek → canonical Latin (cached) so names match API-Football for odds + settlement
+        home = await _canonical_team_name(mt["home_gr"]) or mt["home_gr"]
+        away = await _canonical_team_name(mt["away_gr"]) or mt["away_gr"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, mt["league"]):
+            continue
+        fav, fav_prob, over25, btts, ph, pa, conf = _br_signals(pk)
+        await store_match_prediction(
+            "betarades", mt["slug"], home, away, pk["kickoff"], ph, pa, fav,
+            fav_prob, btts, over25, conf, league=mt["league"])
+        stored += 1
+        logger.info(f"betarades pred: {home} - {away} | fav={fav} p={fav_prob} "
+                    f"o25={over25} gg={btts} ({mt['league']})")
+    return {"stored": stored, "scanned": scanned, "found": len(matches)}
+
+
+async def betarades_loop():
+    await asyncio.sleep(210)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await betarades_autopost()
+            logger.info(f"betarades loop: {res}")
+        except Exception as e:
+            logger.error(f"betarades loop error: {e}")
+        await asyncio.sleep(30 * 60)  # every 30 minutes
