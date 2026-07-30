@@ -37,3 +37,18 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 ## Kosten (separat, vom Owner genehmigt)
 - B) Text-LLM (Analyse/Moderation/Übersetzung) auf günstiges Modell (Gemini Flash), Vision-OCR bleibt Pro.
 - C) Scraper: nur Picks mit guten Sternen posten.
+
+## 6. K.o.-Duelle: NUR die starke / aggregat-führende Seite backen (2026-07-30)
+- Fehler (Owner-Screenshots, Wazamba): "So viele gute Spiele und wir backen Torshavn."
+  - HB Torshavn: Hinspiel 0:2 hinten, auswärts Underdog → Rückspiel 0:3 → Handicap +0.75 VERLOREN.
+  - Hajduk Split: 0:2 hinten, auswärts → "Über 0.5 Tore" → Pafos 4:0, Hajduk 0 Tore → VERLOREN.
+  - Gewinner-Seiten waren die STARKEN: Pafos (0:2 vorn → 4:0), Nordsjaelland (→ 6:0), Derry Under 3.
+- REGEL: In Zwei-Bein-Duellen (und generell bei klarem Favoriten) NIE die schwache/zurückliegende
+  Auswärts-Seite backen (kein Sieg/Handicap/"trifft"/Über 0.5 auf den Underdog). IMMER die
+  aggregat-führende / starke Seite. Umgesetzt:
+  - `_favourite_side_map` + `_leg_backs_clear_underdog` (server.py): Master-Bein-Pool
+    (`_master_leg_candidates`) droppt team-spezifische Beine auf der klaren Underdog-Seite (fav_prob≥62).
+  - `goal_thirst`: klare Underdogs (fav_prob≥62, Gegenseite Favorit) werden aus "trifft"-Liste
+    ausgeschlossen, außer das Modell erwartet selbst 2+ Tore.
+  - `knockout_tie_autopost` backt ohnehin bereits den Hinspiel-Sieger (korrekt).
+

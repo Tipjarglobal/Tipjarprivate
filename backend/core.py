@@ -31,6 +31,10 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY')
 AI_MODEL_PROVIDER = "gemini"
 AI_MODEL = "gemini-3.1-pro-preview"
+# Cheap text-only model — used for translation, moderation, name/label/selection
+# canonicalisation, analysis prose and the qualifier briefing. Vision OCR (slip reading)
+# stays on the expensive AI_MODEL for accuracy. Cost-optimisation (owner 2026-07-30).
+AI_TEXT_MODEL = "gemini-2.5-flash"
 API_FOOTBALL_KEY = os.environ.get('API_FOOTBALL_KEY')
 API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
 SETTLE_INTERVAL_SECONDS = 15 * 60

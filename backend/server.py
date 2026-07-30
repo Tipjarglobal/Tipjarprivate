@@ -49,7 +49,7 @@ from pywebpush import webpush, WebPushException
 from core import (
     mongo_url, client, db,
     JWT_SECRET, JWT_ALGORITHM, EMERGENT_LLM_KEY, STRIPE_API_KEY,
-    AI_MODEL_PROVIDER, AI_MODEL, API_FOOTBALL_KEY, API_FOOTBALL_BASE, SETTLE_INTERVAL_SECONDS,
+    AI_MODEL_PROVIDER, AI_MODEL, AI_TEXT_MODEL, API_FOOTBALL_KEY, API_FOOTBALL_BASE, SETTLE_INTERVAL_SECONDS,
     VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT,
     SETTLE_BATCH_CAP, SETTLE_MAX_ATTEMPTS, FINISHED_STATUSES,
     SUBSCRIBER_DISPLAY_BOOST, SUBSCRIBER_BOOST_UNTIL, MEMBER_DISPLAY_BOOST, MEMBER_BOOST_UNTIL,
@@ -608,6 +608,11 @@ async def goal_thirst():
             continue
         league = p.get("league") or ""
         btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+        fav = p.get("fav")
+        try:
+            fp = int(float(p.get("fav_prob") or 0))
+        except (TypeError, ValueError):
+            fp = 0
         try:
             conf_val = int(float(str(p.get("conf"))))
         except Exception:
@@ -617,6 +622,12 @@ async def goal_thirst():
                 continue
             if not (pg >= 1 or btts):
                 continue  # only teams our model expects to score → credible "will score"
+            # owner learning 2026-07-30: don't back a CLEAR underdog to score (e.g. Hajduk
+            # 0:2 down away). Skip the weak side of a strong favourite unless our model still
+            # expects it to score 2+ on its own.
+            is_underdog = fp >= 62 and ((fav == "home" and team == away) or (fav == "away" and team == home))
+            if is_underdog and pg < 2:
+                continue
             seen.add(team)
             c = 84 if pg >= 2 else (76 if pg >= 1 else 58)
             if btts:
@@ -1080,7 +1091,7 @@ async def llm_pick_analysis(context: str, stats_line: str = "") -> str:
             api_key=EMERGENT_LLM_KEY,
             session_id=f"anal-{uuid.uuid4()}",
             system_message=_ANALYST_SYSTEM,
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         extra = (f"\n\nECHTE Statistiken (zitiere passende Zahlen hieraus, erfinde KEINE weiteren):\n{stats_line}"
                  if stats_line else "")
         resp = await chat.send_message(UserMessage(text=f"Spiel-Daten:\n{context}{extra}\n\nSchreibe die Analyse."))
@@ -1110,7 +1121,7 @@ async def moderate_text(text: str) -> tuple[bool, str]:
                 "sexual/pornographic content, or spam/links unrelated to a football tip. "
                 "Normal football/betting talk is safe."
             ),
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(text=f"Moderate this text:\n{text[:1500]}"))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
@@ -2306,7 +2317,7 @@ async def _translate_batch(texts, lang: str) -> dict:
                     f"natural. Preserve emojis and line breaks. If an item is already in {target}, return "
                     f"it unchanged. Reply with ONLY a JSON object mapping each index as a string to its "
                     f"translation, e.g. {{\"0\":\"…\",\"1\":\"…\"}}. No commentary."),
-            ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+            ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
             resp = await chat.send_message(UserMessage(text=numbered))
             data = _extract_json_obj(resp if isinstance(resp, str) else str(resp))
         except Exception as e:
@@ -3685,7 +3696,7 @@ async def _canonical_league_name(name: str):
             session_id=f"lbl-{uuid.uuid4()}",
             system_message=("You convert football league/competition or country names into their "
                             "common English name as used by bookmakers. Reply with ONLY the name."),
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(text=(
             f"Label (may be Greek): '{name}'.\n"
             "Examples: 'Ευρώπη - Φιλικά' -> Friendlies; 'Φινλανδία' -> Finland; "
@@ -3785,7 +3796,7 @@ async def _canonical_team_name(name: str):
             system_message=("You convert football (soccer) club or national-team names into "
                             "their common English/international name exactly as API-Football and "
                             "bookmakers spell it. Reply with ONLY the name — no quotes, no notes."),
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(text=(
             f"Team name (may be Greek): '{name}'.\n"
             "Examples: 'Λουκέρνη' -> Luzern; 'Τουν' -> Thun; 'Χιρόνα' -> Girona; "
@@ -3837,7 +3848,7 @@ async def _canonical_selection(sel: str):
                 "- Team total goals → '<Team> Über X.5 Tore'\n"
                 "- Draw (Ισοπαλία / Χ) → 'Unentschieden'\n"
                 "Reply with ONLY the German label — no odds, no quotes, no notes."),
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(text=(
             f"Selection: '{sel}'.\n"
             "Examples: 'Κρουζ Αζουλ - Τελικό Αποτέλεσμα' -> Cruz Azul Sieg; "
@@ -4557,6 +4568,59 @@ def _consensus_for(cmap: dict, home: str, away: str, fav: str = None) -> dict:
     agree = info["fav_src"].get(fav, 0) if fav else info.get("fav_n", 0)
     return {"n": info.get("n", 0), "agree": agree, "fav": info.get("fav"),
             "over_n": info.get("over_n", 0), "btts_n": info.get("btts_n", 0)}
+
+
+def _favourite_side_map(preds: list, min_prob: int = 60) -> dict:
+    """Per fixture, the CLEAR favourite side ('home'/'away') when the model is confident
+    (fav_prob >= min_prob). Lets the Master back the STRONG side and drop legs that back a
+    clear underdog (owner learning 2026-07-30: never back a trailing away underdog like
+    HB Torshavn 0:2 down, Hajduk 0:2 down — always the aggregate-leading / strong side)."""
+    best = {}
+    for p in preds:
+        h, a = p.get("home"), p.get("away")
+        fav, fp = p.get("fav"), p.get("fav_prob") or 0
+        if not (h and a) or fav not in ("home", "away"):
+            continue
+        try:
+            fp = int(float(fp))
+        except (TypeError, ValueError):
+            fp = 0
+        if fp < min_prob:
+            continue
+        k = _match_key(h, a)
+        if k not in best or fp > best[k][1]:
+            best[k] = (fav, fp)
+    return best
+
+
+# team-specific markets whose success depends on ONE named side performing well
+_TEAM_SIDE_MKT_RE = re.compile(
+    r'(sieg|gewinnt|\bwin\b|handicap|\+\s*\d|\-\s*\d|trifft|über\s*0\.5|uber\s*0\.5|'
+    r'over\s*0\.5|über\s*1\.5|uber\s*1\.5|team\s*total|asian)', re.I)
+
+
+def _leg_backs_clear_underdog(market: str, home: str, away: str, fav_side: str) -> bool:
+    """True when `market` is a TEAM-SPECIFIC bet on the CLEAR UNDERDOG side (win/handicap/
+    team-scores). Neutral markets (match total Über X.5, both-teams-to-score, draw) are never
+    flagged. fav_side is 'home' or 'away'."""
+    m = market or ""
+    if not fav_side or not _TEAM_SIDE_MKT_RE.search(m):
+        return False
+    ml = m.lower()
+    underdog = away if fav_side == "home" else home
+    favourite = home if fav_side == "home" else away
+    under_core = _team_core(underdog)
+    fav_core = _team_core(favourite)
+    mcore = _norm(m).replace(" ", "")
+    # explicit home/away keywords
+    home_kw = any(k in ml for k in ("heimsieg", "heim sieg", "home win"))
+    away_kw = any(k in ml for k in ("auswärtssieg", "auswartssieg", "gastsieg", "away win"))
+    backs_under = (
+        (fav_side == "home" and away_kw) or (fav_side == "away" and home_kw)
+        or (under_core and under_core in mcore and not (fav_core and fav_core in mcore))
+    )
+    return bool(backs_under)
+
 
 
 
@@ -6682,7 +6746,7 @@ async def _build_qualifier_briefing_inner() -> dict:
     if EMERGENT_LLM_KEY and matches:
         try:
             chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"brief-{uuid.uuid4()}",
-                           system_message=_BRIEFING_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+                           system_message=_BRIEFING_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
             resp = await chat.send_message(UserMessage(
                 text=f"Daten der Qualifikationswoche:\n\n{data_block}\n\nSchreibe das Briefing."))
             narrative = (resp if isinstance(resp, str) else str(resp)).strip()[:900]
@@ -8427,6 +8491,9 @@ async def _master_leg_candidates(now, min_odds, max_odds):
          "away_team_latin": 1, "market": 1, "odds": 1, "match_time": 1,
          "league": 1, "is_expert": 1, "username": 1}).to_list(3000)
     hit = await _expert_hitrates()
+    preds = await db.match_predictions.find(
+        {}, {"_id": 0, "home": 1, "away": 1, "fav": 1, "fav_prob": 1}).to_list(2000)
+    fav_map = _favourite_side_map(preds, min_prob=62)
     seen = {}
     for t in tips:
         ko = _parse_kickoff(t.get("match_time"))
@@ -8445,6 +8512,11 @@ async def _master_leg_candidates(now, min_odds, max_odds):
             continue
         home = t.get("home_team_latin") or t.get("home_team")
         away = t.get("away_team_latin") or t.get("away_team")
+        # owner learning 2026-07-30: NEVER back the clear underdog side (e.g. a trailing
+        # away team like HB Torshavn/Hajduk). Skip team-specific legs on the weak side.
+        fav = fav_map.get(_match_key(home, away))
+        if fav and _leg_backs_clear_underdog(market, home, away, fav[0]):
+            continue
         fixkey = "|".join(sorted([_norm(home), _norm(away)]))
         weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
         cand = {"match": f"{home} – {away}", "home": home, "away": away, "market": market,
