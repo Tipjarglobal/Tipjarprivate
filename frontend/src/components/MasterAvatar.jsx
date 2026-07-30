@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Crown, Zap } from "lucide-react";
+import { Crown, Zap, Shirt } from "lucide-react";
 import api from "../api";
 import { useI18n, formatSelection } from "../i18n";
 import { useProseTranslations } from "../proseI18n";
@@ -49,12 +49,18 @@ export function MasterAvatar({ t }) {
       <div className="relative flex-1 min-w-0">
         <div className="absolute -left-2 top-4 w-3 h-3 rotate-45 bg-surface border-l border-b border-[#E11D2A]/40" />
         <div className="rounded-2xl bg-surface border border-[#E11D2A]/40 px-4 py-3 shadow-lg">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="font-heading font-black text-[#E11D2A] text-sm uppercase tracking-wide">TipJarMaster</span>
             {active && (
               <span data-testid="master-avatar-minute"
                 className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-[#2ECC57] bg-[#2ECC57]/10 border border-[#2ECC57]/30 rounded-full px-2 py-0.5">
                 <Zap size={11} /> {active.avatar_minute}'
+              </span>
+            )}
+            {active?.avatar_scorer && active?.avatar_player && (
+              <span data-testid="master-avatar-scorer"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-full px-2 py-0.5">
+                <Shirt size={11} /> {active.avatar_player} · 🔥 in Galaform
               </span>
             )}
           </div>
