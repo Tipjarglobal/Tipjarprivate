@@ -86,3 +86,19 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
   Boost für Avatar/Master: wenn ein Schlüsselstürmer zuletzt 2+ Tore machte, dessen Team-Über-0.5 /
   Team-Sieg höher bewerten und ggf. einen "Spieler trifft"-Call ausgeben. Owner fragen, bevor gebaut.
 
+## 10. GESCHENKE haben Vorrang — keine andere KI darf widersprechen (2026-07-30)
+- Owner: "Wenn das Geschenk sagt Qarabag unter 2.5, dann darf in der Statistik NICHT 'Qarabag
+  trifft' stehen, der Master darf NICHT 'Qarabag über 2.5' wählen und der Mental darf es NICHT
+  'über 4.5' geben. Was die Geschenke sagen, hat Vorrang — keine weitere KI kann dagegen tippen.
+  Der Master soll meistens aus Geschenken, Smart-Picks und Statistiken auswählen."
+- Umgesetzt (server.py): `_gift_stance_map()` liest alle offenen Geschenk-Tips (is_gift) und leitet
+  je Spiel eine Haltung ab (team_over/team_under, match_over/match_under). `_conflicts_with_gift()`
+  + `_gift_under_lean()` erkennen Widersprüche. Eingebaut in:
+  - `goal_thirst` (Statistik "trifft") — widersprechende Teams raus.
+  - `mental_autopost` — Geschenk-"unter"-Spiele bekommen keinen Über-4.5-Mental.
+  - `_master_leg_candidates` — kein widersprechendes Master-Bein.
+  - `master_doublepack`, `master_special_build` — Geschenk-"unter"-Spiele übersprungen.
+  - `master_avatar_calls` — kein Avatar-"Fav trifft" gegen ein Geschenk.
+- Regel-Nuance: Geschenk auf EIN Team ("Qarabag unter") sperrt nur dieses Team (Gegner darf
+  weiter "trifft"); ein Match-"unter" sperrt jedes "über"/"trifft" im ganzen Spiel.
+

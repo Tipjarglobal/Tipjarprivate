@@ -596,6 +596,7 @@ async def goal_thirst():
     _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
     preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
     cands, seen = [], set()
+    gift_map = await _gift_stance_map()
     for p in preds:
         if not _pred_whitelisted(p):
             continue
@@ -627,6 +628,11 @@ async def goal_thirst():
             # expects it to score 2+ on its own.
             is_underdog = fp >= 62 and ((fav == "home" and team == away) or (fav == "away" and team == home))
             if is_underdog and pg < 2:
+                continue
+            # owner 2026-07-30: a GIFT is the source of truth — never show "{team} trifft" if a
+            # gift called that team/match low-scoring.
+            if _conflicts_with_gift(f"{team} trifft", home, away,
+                                    gift_map.get(_match_key(home, away))):
                 continue
             seen.add(team)
             c = 84 if pg >= 2 else (76 if pg >= 1 else 58)
@@ -7266,10 +7272,15 @@ async def mental_autopost() -> dict:
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
     cand, seen = [], set()
+    gift_map = await _gift_stance_map()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
             continue
         if (p.get("total") or 0) < 4 or not _zero_zero_assessment(p)["over_safe"]:
+            continue
+        # owner 2026-07-30: a GIFT is the source of truth — if a gift called this match/team
+        # low-scoring, the Mental goal-fest (Über 4.5 etc.) must NOT be offered here.
+        if _gift_under_lean(gift_map.get(_match_key(p.get("home"), p.get("away")))):
             continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
@@ -7480,6 +7491,89 @@ def _market_team_side(market: str, home: str, away: str):
     if h_only and not a_only:
         return "home"
     return None
+
+
+def _parse_over_under(market: str):
+    """(direction 'over'|'under', line) for a goals over/under market, else None."""
+    m = (market or "").lower()
+    gm = re.search(r"(über|ueber|over|unter|under)\s*(\d+(?:[.,]\d)?)", m)
+    if not gm:
+        return None
+    direction = "over" if gm.group(1) in ("über", "ueber", "over") else "under"
+    try:
+        line = float(gm.group(2).replace(",", "."))
+    except ValueError:
+        return None
+    return direction, line
+
+
+async def _gift_stance_map() -> dict:
+    """Owner 2026-07-30: GIFT tips are the source of truth — NO other AI (Master, statistics,
+    mental) may contradict them for the same match. Returns match_key → stance with the sets
+    team_over/team_under (_team_core of teams the gift says will/won't produce goals) and the
+    lists match_over/match_under (match total lines the gift called over/under)."""
+    gifts = await db.tips.find(
+        {"is_gift": True, "status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "home_team": 1, "away_team": 1, "market": 1}).to_list(300)
+    out = {}
+    for g in gifts:
+        home, away = g.get("home_team") or "", g.get("away_team") or ""
+        if not home or not away:
+            continue
+        pu = _parse_over_under(g.get("market", ""))
+        if not pu:
+            continue
+        direction, line = pu
+        key = _match_key(home, away)
+        st = out.setdefault(key, {"team_over": set(), "team_under": set(),
+                                  "match_over": [], "match_under": []})
+        side = _market_team_side(g.get("market", ""), home, away)
+        team = home if side == "home" else away if side == "away" else None
+        if team:
+            (st["team_over"] if direction == "over" else st["team_under"]).add(_team_core(team))
+        else:
+            (st["match_over"] if direction == "over" else st["match_under"]).append(line)
+    return out
+
+
+def _gift_under_lean(st: dict) -> bool:
+    """The gift leans LOW-SCORING for this match (a match-under or any team-under)."""
+    return bool(st) and (bool(st["match_under"]) or bool(st["team_under"]))
+
+
+def _conflicts_with_gift(market: str, home: str, away: str, st: dict) -> bool:
+    """True if `market` CONTRADICTS the gift stance `st` for this match (owner rule):
+    e.g. gift 'Qarabag unter 2.5' ⇒ block 'Qarabag trifft', 'Qarabag über 2.5', match 'über 4.5'."""
+    if not st:
+        return False
+    ml = (market or "").lower()
+    pu = _parse_over_under(market)
+    side = _market_team_side(market, home, away)
+    team = _team_core(home) if side == "home" else _team_core(away) if side == "away" else None
+    scores = any(k in ml for k in ("trifft", "torschütze", "torschutze", "scores", "anytime")) \
+        or (pu and pu[0] == "over" and "0.5" in ml)
+    noscore = any(k in ml for k in ("trifft nicht", "kein tor", "zu null", "clean sheet", "keine tore")) \
+        or (pu and pu[0] == "under" and "0.5" in ml)
+    # 1) gift: this team stays LOW → block hyping it to score / any over on it
+    if team and team in st["team_under"] and (scores or (pu and pu[0] == "over")):
+        return True
+    # a team-under also implies a low-scoring lean → block a big MATCH over (e.g. mental Über 4.5)
+    if st["team_under"] and team is None and pu and pu[0] == "over" and pu[1] >= 3.5:
+        return True
+    # 2) gift: this team SCORES → block predicting it won't score
+    if team and team in st["team_over"] and noscore:
+        return True
+    # 3) gift: MATCH under L → block a match over reaching it, and any 'team trifft' hype
+    for L in st["match_under"]:
+        if pu and pu[0] == "over" and pu[1] >= L - 1:
+            return True
+        if scores:
+            return True
+    # 4) gift: MATCH over L → block a match under
+    for L in st["match_over"]:
+        if pu and pu[0] == "under" and pu[1] <= L + 1:
+            return True
+    return False
 
 
 def _live_bet_landed(market: str, hg, ag, home: str, away: str):
@@ -8605,6 +8699,7 @@ async def _master_leg_candidates(now, min_odds, max_odds):
     preds = await db.match_predictions.find(
         {}, {"_id": 0, "home": 1, "away": 1, "fav": 1, "fav_prob": 1}).to_list(2000)
     fav_map = _favourite_side_map(preds, min_prob=62)
+    gift_map = await _gift_stance_map()
     seen = {}
     for t in tips:
         ko = _parse_kickoff(t.get("match_time"))
@@ -8627,6 +8722,10 @@ async def _master_leg_candidates(now, min_odds, max_odds):
         # away team like HB Torshavn/Hajduk). Skip team-specific legs on the weak side.
         fav = fav_map.get(_match_key(home, away))
         if fav and _leg_backs_clear_underdog(market, home, away, fav[0]):
+            continue
+        # owner 2026-07-30: GIFTS are the source of truth — no Master leg may contradict a gift
+        # (e.g. gift 'Qarabag unter 2.5' ⇒ never a 'Qarabag über 2.5' / 'Qarabag trifft' leg).
+        if _conflicts_with_gift(market, home, away, gift_map.get(_match_key(home, away))):
             continue
         fixkey = "|".join(sorted([_norm(home), _norm(away)]))
         weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
@@ -8710,12 +8809,17 @@ async def master_doublepack() -> dict:
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
     cmap = _consensus_map(preds)
     cands, seen = [], set()
+    gift_map = await _gift_stance_map()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
             continue
         if not _zero_zero_assessment(p)["over_safe"]:
             continue
         if (p.get("fav_prob") or 0) < 58:  # need a clear favourite to read the game well
+            continue
+        # owner 2026-07-30: gifts win — skip any match a gift called low-scoring (the Doppelpack
+        # builds goal/over legs which would contradict a gift 'unter').
+        if _gift_under_lean(gift_map.get(_match_key(p.get("home"), p.get("away")))):
             continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
@@ -9143,11 +9247,15 @@ async def master_special_build() -> dict:
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
     cmap = _consensus_map(preds)
     cands, seen = [], set()
+    gift_map = await _gift_stance_map()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
             continue
         if not _zero_zero_assessment(p)["over_safe"]:
             continue  # only goal-friendly games for a goals bet-builder
+        # owner 2026-07-30: gifts win — skip a match a gift called low-scoring.
+        if _gift_under_lean(gift_map.get(_match_key(p.get("home"), p.get("away")))):
+            continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
             continue
@@ -9239,6 +9347,7 @@ async def master_avatar_calls() -> dict:
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
     cmap = _consensus_map(preds)
     cands, seen = [], set()
+    gift_map = await _gift_stance_map()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
             continue
@@ -9249,6 +9358,11 @@ async def master_avatar_calls() -> dict:
         except (TypeError, ValueError):
             fp = 0
         if not fav or fp < 62:  # STRONG side only (never a weak underdog)
+            continue
+        # owner 2026-07-30: gifts win — the avatar backs the favourite to score, so skip any
+        # match a gift called low-scoring / that favourite low.
+        if _conflicts_with_gift(f"{fav} trifft", p.get("home"), p.get("away"),
+                                gift_map.get(_match_key(p.get("home"), p.get("away")))):
             continue
         fg0 = (p.get("ph") or 0) if p.get("fav") == "home" else (p.get("pa") or 0)
         try:
