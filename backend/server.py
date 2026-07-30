@@ -919,8 +919,17 @@ AI_SYSTEM = (
     "of: nudity or sexual/pornographic content, graphic violence or gore, hate speech, insults, "
     "harassment or profanity directed at people, or content that is clearly NOT a football bet slip/tip "
     "(spam, random selfies, unrelated pictures). Otherwise safe=true and flag_reason=''. "
-    "Copy each selection line EXACTLY as it appears on the slip. If a field is unknown use an empty "
-    "string. Never invent scores or results. "
+    "TEAM & PLAYER NAMES: always output the OFFICIAL, internationally-known LATIN (English) name of the "
+    "club/player — NEVER a phonetic transliteration of a foreign script. Translate names written in Greek, "
+    "Cyrillic or Arabic to their real Latin name (e.g. 'Κρουζ Αζουλ'→'Cruz Azul', 'Μπάχια'→'Bahia', "
+    "'Ερυθρός Αστέρας'/'Τσρβένα Ζβέζντα'→'Crvena Zvezda', 'Ολυμπιακός'→'Olympiacos'). Keep the HOME team "
+    "on the LEFT and the AWAY team on the RIGHT exactly as printed on the slip — do not swap them. "
+    "MARKET / SELECTION: normalize EVERY selection to STANDARD ENGLISH betting terminology — do NOT leave it "
+    "in Greek/Cyrillic/Arabic and do NOT transliterate phonetically. Map e.g. 'Τελικό αποτέλεσμα'→'Final "
+    "Result', 'Να σκοράρουν και οι δύο ομάδες'→'Both Teams to Score', 'Πάνω από X'→'Over X', 'Κάτω από "
+    "X'→'Under X', 'Διπλή ευκαιρία'→'Double Chance', 'Ημίχρονο'→'1st Half'. Keep any line/number exactly. "
+    "DATE & TIME: copy the kickoff DATE and TIME exactly as printed on the slip (format 'DD/MM/YYYY HH:MM'); "
+    "never guess, invent or shift the time. If a field is unknown use an empty string. Never invent scores. "
     "For an INDIVIDUAL / TEAM total (labels like 'Individual Total Team 1/2', 'Individuel Asian over 1', "
     "'Ομαδικό Asian over 1', 'Team Total'): PREFIX the selection with the EXACT team name it refers to — "
     "Team/Total 1 = the HOME team, Team/Total 2 = the AWAY team — e.g. 'FC Kopenhagen Asian Over 1.0'. "
@@ -8645,24 +8654,28 @@ async def master_safe_bets_build() -> dict:
 
 
 def _special_legs_for(p, idx=0):
-    """Build a 2-selection same-game bet-builder (Special style) for ONE match from
-    goal-based markets the parlay settler grades deterministically (HT Über 0.5, Über 1.5/2.5,
-    Beide Teams treffen). `idx` rotates the market mix across games for variety."""
+    """Build a NON-REDUNDANT same-game bet-builder (1 or 2 legs) for ONE match.
+    Rule (owner 2026-07-30): never combine logically implied legs — 'Beide Teams treffen'
+    already forces Über 1.5, and Über 2.5 already forces Über 1.5. So a total/BTTS 'primary'
+    leg is only ever paired with the INDEPENDENT '1. Halbzeit Über 0.5' leg, and some games
+    stay single-leg for variety."""
     total = p.get("total") or 0
     btts = bool(p.get("btts"))
     over25 = bool(p.get("over25")) or total >= 2.6
-    opts = [("1. Halbzeit Über 0.5 Tore", 1.30), ("Über 1.5 Tore", 1.25)]
-    if over25:
-        opts.append(("Über 2.5 Tore", 1.80))
     if btts:
-        opts.append(("Beide Teams treffen", 1.75))
-    if len(opts) < 2:
-        opts.append(("Über 1.5 Tore", 1.25))
-    a = opts[idx % len(opts)]
-    b = opts[(idx + 2) % len(opts)]
-    if a[0] == b[0]:
-        b = opts[(idx + 1) % len(opts)]
-    return [a[0], b[0]], [f"{a[1]:.2f}", f"{b[1]:.2f}"]
+        primary = ("Beide Teams treffen", 1.75)
+    elif over25:
+        primary = ("Über 2.5 Tore", 1.80)
+    else:
+        primary = ("Über 1.5 Tore", 1.25)
+    secondary = ("1. Halbzeit Über 0.5 Tore", 1.30)  # independent of every total/BTTS market
+    if idx % 3 == 2:
+        chosen = [primary]                              # single-leg game for variety
+    elif idx % 2 == 0:
+        chosen = [secondary, primary]
+    else:
+        chosen = [primary, secondary]
+    return [c[0] for c in chosen], [f"{c[1]:.2f}" for c in chosen]
 
 
 async def master_special_build() -> dict:

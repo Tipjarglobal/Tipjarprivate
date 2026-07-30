@@ -79,6 +79,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
 
     def font(name, sz):
         try:
+            if name == "FB":   # universal bold fallback (Greek/Cyrillic/Arabic)
+                return ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf", sz)
+            if name == "FBR":  # universal regular fallback
+                return ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeSans.ttf", sz)
             return ImageFont.truetype(os.path.join(FONT_DIR, name + ".ttf"), sz)
         except Exception:
             try:
@@ -95,6 +99,16 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     BODY_S = "Barlow-SemiBold"
     BODY_M = "Barlow-Medium"
     BODY = "Barlow-Regular"
+
+    def _fb(txt):
+        # any glyph beyond Latin Extended-B → bundled Latin fonts render tofu boxes
+        return any(ord(c) > 0x024F for c in (txt or ""))
+
+    def famfor(family, txt):
+        """Swap to the universal FreeSans fallback for non-Latin text (Greek/Cyrillic/Arabic)."""
+        if not _fb(txt):
+            return family
+        return "FBR" if family in (BODY, BODY_M, BODY_S) else "FB"
 
     _scratch = ImageDraw.Draw(Image.new("RGB", (4, 4)))
 
@@ -334,7 +348,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             title_max = chip_x1 - scw - 30 - ix - 18
         else:
             title_max = chip_x1 - ix
-        mf = fit(title, HEAD, 44, 30, title_max)
+        mf = fit(title, famfor(HEAD, title), 44, 30, title_max)
         d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
         ty += TITLE_H
         # ONE combined quote per GAME, shown right-aligned & vertically centred — a
@@ -349,8 +363,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         mkt_top = ty
         for l in g["mkts"]:
             check_badge(ix + 12, ty + 25, 14, STATUS)
-            mtxt = trunc(l.get("market", "") or "", f_market, cw - 130 - gow)
-            d.text((ix + 40, ty + 6), mtxt, font=f_market, fill=SOFT)
+            raw_mkt = l.get("market", "") or ""
+            mkfont = font(famfor(BODY_M, raw_mkt), 36)
+            mtxt = trunc(raw_mkt, mkfont, cw - 130 - gow)
+            d.text((ix + 40, ty + 6), mtxt, font=mkfont, fill=SOFT)
             ty += MKT_H
         if got:
             cym = (mkt_top + ty) // 2
@@ -363,7 +379,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             d.text((ix + 40 + 14, ty + 2), bt, font=f_meta, fill=(10, 14, 18))
             meta_x = ix + 40 + bw + 28 + 16
         if g["meta"]:
-            d.text((meta_x, ty), trunc(g["meta"], f_meta, cx1 - G_PAD - meta_x), font=f_meta, fill=FAINT)
+            metafont = font(famfor(BODY_M, g["meta"]), 26)
+            d.text((meta_x, ty), trunc(g["meta"], metafont, cx1 - G_PAD - meta_x), font=metafont, fill=FAINT)
         y += g["h"] + G_GAP
 
     # ---- perforation (tear-off) ------------------------------------------
@@ -392,7 +409,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     d.text((av_cx - tw(initial, fi) / 2, av_cy - 26), initial, font=fi, fill=VOLT)
     d.text((av_cx + av_r + 20, fy + 22), label, font=f_label, fill=VOLT)
     uname = "@" + (username or "TipJar").lstrip("@")
-    d.text((av_cx + av_r + 18, fy + 52), trunc(uname, f_user, cw - 380), font=f_user, fill=INK)
+    unfont = font(famfor(HEAD, uname), 46)
+    d.text((av_cx + av_r + 18, fy + 52), trunc(uname, unfont, cw - 380), font=unfont, fill=INK)
 
     # hero total odds (right, sits directly above the QR)
     ot = f"{float(total_odds):.2f}" if total_odds else "—"

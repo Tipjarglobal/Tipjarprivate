@@ -572,3 +572,25 @@ Owner: learned from 15 winning bet-builder slips. The Master must ALWAYS post a 
 - i18n: `nav.viewsettled` ("Settled") now translated in all 8 languages (was English-only fallback):
   de Abgerechnet, es Resueltas, el Διευθετημένα, fr Réglés, it Conclusi, ar المسوّاة, tr Sonuçlanan.
 
+## Changelog — 2026-07-30 (batch 11) — Slip render/parse fixes + Special no-redundancy
+Owner shared a Greek user slip (Altair) with tofu boxes, phonetic team names, Greek market text,
+wrong dates. Fixes:
+- **Share-image tofu FIXED** (`ticket_render.py`): added a universal FreeSans fallback font
+  (covers Greek/Cyrillic/Arabic) via `famfor()` for team titles, market lines, league meta and
+  username. Verified rendering Greek/Cyrillic ticket cleanly (no more □/?).
+- **Vision parsing** (`AI_SYSTEM`): team/player names now OFFICIAL Latin (Cruz Azul not "Kroys
+  Azoyl"; Crvena Zvezda; Olympiacos), home LEFT/away RIGHT as printed; markets NORMALIZED to
+  standard English (Final Result, Both Teams to Score, Over/Under X, Double Chance, 1st Half) — no
+  more foreign-script/phonetic markets; kickoff DATE+TIME copied exactly, never invented. Verified
+  live on a Greek test slip.
+- **Master count bug FIXED** (`/tips/counts`): the nav "Master (N)" badge was counting HIDDEN
+  (past-kickoff) slips → inflated vs what's visible. Added `hidden != True` filter → badge now
+  matches the visible sub-tabs (shows 3).
+- **Special no-redundancy** (`_special_legs_for`): never combine logically-implied legs — BTTS
+  already forces Über 1.5, Über 2.5 forces Über 1.5. A total/BTTS primary leg is now only paired
+  with the independent "1. HZ Über 0.5", and some games stay SINGLE-leg for variety. Cleaned the
+  current live Special in-place (removed the redundant Über 1.5 legs → odds 26.20→16.77).
+NOTE: the reported slip lives on PRODUCTION; can't be retro-edited — fixes apply to newly
+parsed/generated slips after redeploy. Per-language market display still relies on the UI's static
+formatSelection map (English markets are readable everywhere; full per-language mapping is a TODO).
+
