@@ -1024,6 +1024,12 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               {tip.master_category === "einfach" ? t("master.cat.einfach") : tip.master_category === "mittel" ? t("master.cat.mittel") : tip.master_category === "safe" ? t("master.cat.safe") : tip.master_category === "special" ? "Special" : tip.master_category === "avatar" ? `🔮 ${tip.avatar_minute || 90}'` : `${t("master.cat.challenge")}${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
             </span>
           )}
+          {tip.gift_covered && !tip.is_gift && (
+            <span data-testid={`gift-covered-${tip.id}`} title={t("wall.giftCoveredHint")}
+              className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-400/15 text-amber-300 border border-amber-400/40">
+              🎁 {t("wall.giftCovered")}
+            </span>
+          )}
           {isExpert && !isMaster && (
             <span data-testid="expert-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40">
               <Star size={10} /> Experte

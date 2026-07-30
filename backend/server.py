@@ -2470,6 +2470,16 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     for t in tips:
         if t.get("live_danger"):
             t["category"] = "risk"
+    # Owner 2026-07-30: mark every feed pick whose match has an open GIFT (🎁 "vom Master
+    # gedeckt") so the whole feed shows the gift's coverage at a glance.
+    gift_keys = await _gift_match_keys()
+    if gift_keys:
+        for t in tips:
+            if t.get("is_gift"):
+                continue
+            h, a = t.get("home_team"), t.get("away_team")
+            if h and a and _match_key(h, a) in gift_keys:
+                t["gift_covered"] = True
     return await _tag_expert(tips[:limit])
 
 
@@ -7491,6 +7501,16 @@ def _market_team_side(market: str, home: str, away: str):
     if h_only and not a_only:
         return "home"
     return None
+
+
+async def _gift_match_keys() -> set:
+    """Match-keys of all matches that currently have an open GIFT (owner: mark them in the feed
+    as 'vom Master gedeckt' 🎁)."""
+    gifts = await db.tips.find(
+        {"is_gift": True, "status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "home_team": 1, "away_team": 1}).to_list(300)
+    return {_match_key(g.get("home_team"), g.get("away_team"))
+            for g in gifts if g.get("home_team") and g.get("away_team")}
 
 
 def _parse_over_under(market: str):

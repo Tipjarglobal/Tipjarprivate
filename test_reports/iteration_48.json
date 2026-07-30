@@ -1,0 +1,76 @@
+{
+  "summary": "Iteration 48 — GIFT anti-contradiction guard testing. Verified (a) backend predicates _conflicts_with_gift + _gift_under_lean via pytest (15/15 unit assertions passing), (b) 7 gift-aware endpoints all return HTTP 200 with an active gift seeded, (c) frontend gift-covered badge renders on the non-gift feed pick for the same match as the gift, in the correct localized text (DE: 'Gedeckt', EL: 'Καλυμμένο'), (d) the GIFT card itself does NOT show the covered badge, (e) code-review confirmed every one of the 6 required guard wire-points is actually calling _conflicts_with_gift / _gift_under_lean in server.py.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "predicate_test_matrix": {
+    "gift=Qarabag Unter 2.5 Tore (team-under)": {
+      "Qarabag trifft": "blocked ✓",
+      "Qarabag Über 2.5 Tore": "blocked ✓",
+      "Über 4.5 Tore (match)": "blocked ✓",
+      "Ludogorets trifft": "allowed ✓",
+      "Über 2.5 Tore (match)": "allowed ✓"
+    },
+    "gift=Unter 2.5 Tore (match-under)": {
+      "Über 2.5 Tore": "blocked ✓",
+      "Über 4.5 Tore": "blocked ✓",
+      "Qarabag trifft": "blocked ✓",
+      "Unter 3.5 Tore": "allowed ✓"
+    },
+    "gift=Qarabag Asian Über 1.0 Tore (team-over)": {
+      "Qarabag trifft nicht": "blocked ✓",
+      "Qarabag Über 2.5 Tore": "allowed ✓"
+    },
+    "_gift_under_lean": {
+      "team-under stance": "True ✓",
+      "match-under stance": "True ✓",
+      "team-over stance": "False ✓",
+      "empty stance": "False ✓"
+    }
+  },
+  "endpoint_health_with_active_gift": {
+    "/api/goal-thirst": 200,
+    "/api/ht-goal-forecast": 200,
+    "/api/tips?category=mental": 200,
+    "/api/tips?source=master&mcat=slips": 200,
+    "/api/tips?source=master&mcat=avatar": 200,
+    "/api/master/avatar": 200,
+    "/api/tips?source=ai": 200
+  },
+  "code_wiring_review": {
+    "goal_thirst (~line 599, 634)": "OK — calls _conflicts_with_gift(f'{team} trifft', ...)",
+    "mental_autopost (~line 7285-7293)": "OK — calls _gift_under_lean",
+    "_master_leg_candidates (~line 8722-8748)": "OK — calls _conflicts_with_gift(market, ...)",
+    "master_doublepack (~line 8832-8842)": "OK — calls _gift_under_lean",
+    "master_special_build (~line 9270-9277)": "OK — calls _gift_under_lean",
+    "master_avatar_calls (~line 9370-9384)": "OK — calls _conflicts_with_gift(f'{fav} trifft', ...)",
+    "list_tips gift_covered tagging (~line 2475-2482)": "OK — sets tip.gift_covered=True on non-gift feed picks sharing match_key with any open gift"
+  },
+  "frontend_badge_verification": {
+    "gift-covered-gifttest-feed present": true,
+    "de_text": "🎁 Gedeckt",
+    "el_text": "🎁 Καλυμμένο",
+    "gift-covered-gifttest-gift absent (correct)": true
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter48_gift_guard.py",
+    "/app/test_reports/pytest/iter48.xml"
+  ],
+  "action_items": [
+    "None functional. Optional: the initial seed 'gifttest-gift' + 'gifttest-feed' for 'Galatasaray vs Kayserispor' was NOT present in MongoDB when testing began — the testing agent had to re-seed them via a small Motor upsert script (id/home/away/market/is_gift as specified) so the frontend badge could be verified. Main agent should confirm its seed helper actually ran (it may have been wiped by a scheduled cleanup) and can clean these two docs up post-review as planned."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~10.5k lines — well over the 700-line guideline. Recommend splitting: gift-guard helpers (_gift_match_keys/_parse_over_under/_gift_stance_map/_gift_under_lean/_conflicts_with_gift/_market_team_side) into a dedicated /app/backend/gift_guard.py module for testability + easier reuse.",
+    "Deprecation: @app.on_event('startup'/'shutdown') is deprecated in FastAPI — migrate to lifespan event handlers.",
+    "_conflicts_with_gift is sound; consider unit-testing it in CI (this iteration's test file is a good seed).",
+    "gift_covered tag is only set inside list_tips; verify /api/master/avatar and /api/goal-thirst responses either include gift_covered on returned picks OR omit any pick contradicting an active gift (currently the latter is enforced via _conflicts_with_gift skip logic — good)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter48_gift_guard.py (new)"
+  ],
+  "success_rate": {"backend": "100% (22/22 pytest)", "frontend": "100% (badge visible with correct DE + EL localization; gift card correctly excluded)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (from /app/memory/test_credentials.md) — not needed for this iteration (all endpoints under test are public GETs).",
+  "seed_data_creation": "Re-seeded gifttest-gift (Galatasaray vs Kayserispor, market 'Galatasaray Asian Über 1.0 Tore', is_gift=True, status pending) and gifttest-feed (same match, market 'Über 2.5 Tore', is_gift=False, status pending, source hq-auto) via Motor upsert into db.tips because the docs were missing when testing started.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Anti-contradiction guard is fully green: 15 predicate assertions pass, 7 gift-aware endpoints return 200, and the frontend gift-covered badge renders with proper DE/EL text on the same-match non-gift feed pick while being correctly suppressed on the gift card itself. Reusable pytest at /app/backend/tests/test_iter48_gift_guard.py — helpful for regression. If gifttest-gift/gifttest-feed disappear from the DB again, re-seed with the Motor snippet in seed_data_creation above."
+}
