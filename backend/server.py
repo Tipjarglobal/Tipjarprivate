@@ -9266,6 +9266,9 @@ from scrapers_autopost import (
     footballpredictions_autopost, footballpredictions_loop,
     footballinsight_autopost, footballinsight_loop,
     betarades_autopost, betarades_loop,
+    matchmoney_autopost, matchmoney_loop,
+    foxbet_autopost, foxbet_loop,
+    socialgamblers_autopost, socialgamblers_loop,
 )
 
 
@@ -9517,6 +9520,9 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(footballpredictions_loop()))
     _BG_TASKS.append(asyncio.create_task(footballinsight_loop()))
     _BG_TASKS.append(asyncio.create_task(betarades_loop()))
+    _BG_TASKS.append(asyncio.create_task(matchmoney_loop()))
+    _BG_TASKS.append(asyncio.create_task(foxbet_loop()))
+    _BG_TASKS.append(asyncio.create_task(socialgamblers_loop()))
     _BG_TASKS.append(asyncio.create_task(emptips_loop()))
     _BG_TASKS.append(asyncio.create_task(totissports_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))

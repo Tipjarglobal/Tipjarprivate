@@ -1580,3 +1580,418 @@ async def betarades_loop():
         except Exception as e:
             logger.error(f"betarades loop error: {e}")
         await asyncio.sleep(30 * 60)  # every 30 minutes
+
+
+
+# =========================================================================
+# HIDDEN predictor sources (owner 2026-08): matchmoney.com.gr, foxbet.gr,
+# socialgamblers.gr. These are NOT public experts / tipster profiles — they
+# only feed db.match_predictions (the Master selection pool), exactly like
+# betarades. Greek team names are canonicalised to Latin so they match
+# API-Football for real odds + auto-settlement. Kickoff times on these Greek
+# portals are LOCAL (Europe/Athens, UTC+3 in summer) → converted to UTC.
+# =========================================================================
+_HP_UA = _BR_UA  # reuse betarades desktop User-Agent
+
+
+def _hp_get(url: str):
+    import requests
+    try:
+        r = requests.get(url, headers={"User-Agent": _HP_UA}, timeout=SCRAPE_TIMEOUT or 20)
+        if r.status_code == 200:
+            return r.text
+    except Exception as e:
+        logger.warning(f"hidden-predictor GET failed {url}: {e}")
+    return ""
+
+
+def _greek_local_to_utc_iso(y, mo, d, hh, mm) -> str:
+    """Greek portals display Europe/Athens local time (UTC+3 in summer). Store
+    kickoffs in UTC so the app's future-window / settlement logic stays correct."""
+    try:
+        dt = datetime(int(y), int(mo), int(d), int(hh), int(mm), tzinfo=timezone.utc) - timedelta(hours=3)
+        return dt.isoformat()
+    except Exception:
+        return ""
+
+
+def _fav_from_1x2(oh, od, oa):
+    """(fav, fav_prob) from 1/X/2 decimal odds using vig-removed implied probs."""
+    try:
+        oh, od, oa = float(oh), float(od), float(oa)
+    except (TypeError, ValueError):
+        return None, None
+    if min(oh, od, oa) <= 1.0:
+        return None, None
+    inv = 1 / oh + 1 / od + 1 / oa
+    if oh <= oa:
+        return "home", round((1 / oh) / inv * 100)
+    return "away", round((1 / oa) / inv * 100)
+
+
+def _hp_signals_from_odds(oh, od, oa):
+    """fav/fav_prob/over25/btts/ph/pa/conf derived from 1X2 odds only. A short
+    draw price → tight, low-scoring game; a long draw price → open game."""
+    fav, fav_prob = _fav_from_1x2(oh, od, oa)
+    try:
+        od_f = float(od)
+    except (TypeError, ValueError):
+        od_f = 3.6
+    over25 = od_f >= 3.9
+    btts = od_f >= 4.2
+    other = 1 if over25 else 0
+    if fav == "home":
+        ph, pa = 2, other
+    elif fav == "away":
+        ph, pa = other, 2
+    else:
+        ph, pa = 1, 1
+    conf = min((fav_prob or 50) + 3, 80)
+    return fav, fav_prob, over25, btts, ph, pa, conf
+
+
+# --- matchmoney.com.gr — homepage slider (1X2 odds + exact kickoff) ----------------------
+MATCHMONEY_URL = "https://www.matchmoney.com.gr/"
+MATCHMONEY_MAX_PER_RUN = 20
+_MM_LEAGUE = {
+    "prognostika-europa-league": "Europa League",
+    "prognostika-konferens-ligk": "Conference League",
+    "prognostika-tsampions-ligk": "Champions League",
+    "prognostika-champions-league": "Champions League",
+    "filika-syllogon": "Club Friendlies",
+}
+
+
+def _mm_league_name(href: str, fallback: str) -> str:
+    m = re.search(r"/leagues/([a-z0-9-]+)/?", href or "")
+    if m and m.group(1) in _MM_LEAGUE:
+        return _MM_LEAGUE[m.group(1)]
+    return fallback
+
+
+def _mm_parse(html: str):
+    from bs4 import BeautifulSoup
+    s = BeautifulSoup(html, "html.parser")
+    out, seen = [], set()
+    for sl in s.select("li.swiper-slide"):
+        a = sl.select_one("a.fpslider__fixture-title")
+        if not a:
+            continue
+        title = a.get_text(" ", strip=True)
+        if " - " not in title:
+            continue
+        home_gr, away_gr = [t.strip() for t in title.split(" - ", 1)]
+        cd = sl.select_one(".slider_countdown")
+        if not cd:
+            continue
+        kickoff = _greek_local_to_utc_iso(
+            cd.get("data-year"), cd.get("data-month"), cd.get("data-day"),
+            cd.get("data-hour"), cd.get("data-minute"))
+        if not kickoff:
+            continue
+        lg = sl.select_one("a.bg-primary-600")
+        league = _mm_league_name(lg.get("href") if lg else "",
+                                 lg.get_text(strip=True) if lg else "")
+        odds = [o.get_text(strip=True) for o in sl.select(".fpslider__odd-container .text-primary-700")]
+        if len(odds) < 3:
+            continue
+        key = (home_gr, away_gr)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"home_gr": home_gr, "away_gr": away_gr, "kickoff": kickoff,
+                    "league": league, "o1": odds[0], "ox": odds[1], "o2": odds[2]})
+    return out
+
+
+async def matchmoney_autopost() -> dict:
+    """Scrape matchmoney.com.gr homepage slider → feed match_predictions
+    (source='matchmoney') for the Master pool. Hidden source, no public expert."""
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    html = await asyncio.to_thread(_hp_get, MATCHMONEY_URL)
+    if not html:
+        return {"stored": 0, "reason": "unavailable"}
+    matches = _mm_parse(html)
+    now = datetime.now(timezone.utc)
+    stored, scanned = 0, 0
+    for mt in matches:
+        if stored >= MATCHMONEY_MAX_PER_RUN:
+            break
+        scanned += 1
+        ko = _parse_kickoff(mt["kickoff"])
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 1 or h > 120:
+            continue
+        home = await _canonical_team_name(mt["home_gr"]) or mt["home_gr"]
+        away = await _canonical_team_name(mt["away_gr"]) or mt["away_gr"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, mt["league"]):
+            continue
+        fav, fav_prob, over25, btts, ph, pa, conf = _hp_signals_from_odds(mt["o1"], mt["ox"], mt["o2"])
+        await store_match_prediction(
+            "matchmoney", f"{mt['home_gr']}-{mt['away_gr']}", home, away, mt["kickoff"],
+            ph, pa, fav, fav_prob, btts, over25, conf, league=mt["league"])
+        stored += 1
+        logger.info(f"matchmoney pred: {home} - {away} | fav={fav} p={fav_prob} ({mt['league']})")
+    return {"stored": stored, "scanned": scanned, "found": len(matches)}
+
+
+async def matchmoney_loop():
+    await asyncio.sleep(230)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await matchmoney_autopost()
+            logger.info(f"matchmoney loop: {res}")
+        except Exception as e:
+            logger.error(f"matchmoney loop error: {e}")
+        await asyncio.sleep(30 * 60)  # every 30 minutes
+
+
+# --- foxbet.gr — homepage featured fixture (1X2 odds embedded as JSON) --------------------
+FOXBET_URL = "https://www.foxbet.gr/"
+
+
+def _fx_parse(html: str):
+    import json
+    m = re.search(r"window\.__frontpageSliderInitialState\s*=\s*(\{.*?\});", html, re.S)
+    if not m:
+        return []
+    try:
+        fx = (json.loads(m.group(1)) or {}).get("fixture") or {}
+    except Exception:
+        return []
+    home, away = fx.get("homeTeamName"), fx.get("awayTeamName")
+    if not home or not away:
+        return []
+    return [{"home_gr": home, "away_gr": away, "o1": fx.get("odd1"),
+             "ox": fx.get("oddX"), "o2": fx.get("odd2"),
+             "league": fx.get("leagueTitle") or "", "date": fx.get("date") or ""}]
+
+
+def _fx_kickoff(date_str: str) -> str:
+    m = re.search(r"(\d{1,2}):(\d{2})", date_str or "")
+    if not m:
+        return ""
+    now = datetime.now(timezone.utc)
+    d = now.date()
+    if "ύριο" in (date_str or ""):  # Αύριο = tomorrow
+        d = d + timedelta(days=1)
+    return _greek_local_to_utc_iso(d.year, d.month, d.day, m.group(1), m.group(2))
+
+
+async def foxbet_autopost() -> dict:
+    """Scrape foxbet.gr homepage featured fixture (1X2 odds in embedded JSON) →
+    feed match_predictions (source='foxbet'). Hidden source; one headline match
+    per run (foxbet only ships odds for the featured card in static HTML)."""
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    html = await asyncio.to_thread(_hp_get, FOXBET_URL)
+    if not html:
+        return {"stored": 0, "reason": "unavailable"}
+    matches = _fx_parse(html)
+    now = datetime.now(timezone.utc)
+    stored = 0
+    for mt in matches:
+        kickoff = _fx_kickoff(mt["date"])
+        ko = _parse_kickoff(kickoff)
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 1 or h > 120:
+            continue
+        home = await _canonical_team_name(mt["home_gr"]) or mt["home_gr"]
+        away = await _canonical_team_name(mt["away_gr"]) or mt["away_gr"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, mt["league"]):
+            continue
+        fav, fav_prob, over25, btts, ph, pa, conf = _hp_signals_from_odds(mt["o1"], mt["ox"], mt["o2"])
+        await store_match_prediction(
+            "foxbet", f"{mt['home_gr']}-{mt['away_gr']}", home, away, kickoff,
+            ph, pa, fav, fav_prob, btts, over25, conf, league=mt["league"])
+        stored += 1
+        logger.info(f"foxbet pred: {home} - {away} | fav={fav} p={fav_prob} ({mt['league']})")
+    return {"stored": stored, "found": len(matches)}
+
+
+async def foxbet_loop():
+    await asyncio.sleep(250)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await foxbet_autopost()
+            logger.info(f"foxbet loop: {res}")
+        except Exception as e:
+            logger.error(f"foxbet loop error: {e}")
+        await asyncio.sleep(30 * 60)  # every 30 minutes
+
+
+# --- socialgamblers.gr — Mike's daily article tip-tables ----------------------------------
+# Owner: Mike Moytafidis writes these articles; use them as a HIDDEN source feeding the
+# Master pool. Each football article ends in a table [match · pick · odds]. We only keep
+# settleable goal / 1X2 signals (GG, Over 2.5 goals, άσσος/διπλό) — player-prop rows
+# (σουτ / κόρνερ / κάρτες) are ignored.
+SOCIALGAMBLERS_BASE = "https://socialgamblers.gr"
+SOCIALGAMBLERS_FEED = f"{SOCIALGAMBLERS_BASE}/feed"
+SOCIALGAMBLERS_MAX_ARTICLES = 4
+SOCIALGAMBLERS_MAX_PER_RUN = 20
+_SG_MONTHS = {
+    "ιανουαρίου": 1, "φεβρουαρίου": 2, "μαρτίου": 3, "απριλίου": 4, "μαΐου": 5,
+    "μαίου": 5, "ιουνίου": 6, "ιουλίου": 7, "αυγούστου": 8, "σεπτεμβρίου": 9,
+    "οκτωβρίου": 10, "νοεμβρίου": 11, "δεκεμβρίου": 12,
+}
+
+
+def _sg_article_slugs(html: str):
+    slugs = []
+    for m in re.finditer(r"/article/(\d+-[a-z0-9-]+)", html):
+        if m.group(1) not in slugs:
+            slugs.append(m.group(1))
+    return slugs
+
+
+def _sg_parse_date(txt: str):
+    m = re.match(r"(\d{1,2})\s+([Α-Ωα-ωΆ-ώ]+)\s+(\d{4})", (txt or "").strip())
+    if not m:
+        return None
+    mon = _SG_MONTHS.get(m.group(2).lower())
+    if not mon:
+        return None
+    try:
+        return datetime(int(m.group(3)), mon, int(m.group(1)), tzinfo=timezone.utc).date()
+    except Exception:
+        return None
+
+
+def _sg_pick_signals(pick: str):
+    """Greek pick string → (btts, over25, fav) keeping only settleable goal/1X2 markets.
+    Returns None for player-prop / corner / card rows (not settleable in our engine)."""
+    p = (pick or "").lower()
+    if any(w in p for w in ("σουτ", "κόρνερ", "κορνερ", "κάρτ", "καρτ", "φάουλ",
+                            "οφσάιντ", "shot", "corner", "card")):
+        return None
+    btts = ("gg" in p) or ("γκολ-γκολ" in p) or ("γκολ γκολ" in p) or ("και οι δύο" in p)
+    over25 = bool(re.search(r"(over|άνω|ανω)\s*2[.,]?5", p))
+    fav = None
+    if "διπλ" in p or "άσσος 2" in p or "ασσος 2" in p:
+        fav = "away"
+    elif "άσσ" in p or "ασσ" in p:
+        fav = "home"
+    if not (btts or over25 or fav):
+        return None
+    return btts, over25, fav
+
+
+def _sg_parse_article(html: str):
+    """Return (category, date, [(match, pick), ...]) for a socialgamblers article."""
+    from bs4 import BeautifulSoup
+    s = BeautifulSoup(html, "html.parser")
+    cat_el = s.select_one("a[href*='/category/'] h5")
+    category = cat_el.get_text(strip=True) if cat_el else ""
+    date_el = s.select_one(".arth-bg span p")
+    date = _sg_parse_date(date_el.get_text(strip=True) if date_el else "")
+    rows = []
+    for t in s.select("table"):
+        for tr in t.select("tr"):
+            tds = [td.get_text(" ", strip=True) for td in tr.select("td")]
+            if len(tds) >= 2 and tds[0] and tds[1]:
+                rows.append((tds[0], tds[1]))
+    return category, date, rows
+
+
+async def socialgamblers_autopost() -> dict:
+    """Scrape Mike's latest football articles on socialgamblers.gr and feed their
+    tip-table goal/1X2 signals into match_predictions (source='socialgamblers')."""
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    feed = await asyncio.to_thread(_hp_get, SOCIALGAMBLERS_FEED)
+    if not feed:
+        return {"stored": 0, "reason": "feed unavailable"}
+    slugs = _sg_article_slugs(feed)[:SOCIALGAMBLERS_MAX_ARTICLES]
+    now = datetime.now(timezone.utc)
+    stored, scanned = 0, 0
+    for slug in slugs:
+        html = await asyncio.to_thread(_hp_get, f"{SOCIALGAMBLERS_BASE}/article/{slug}")
+        if not html:
+            continue
+        category, date, rows = _sg_parse_article(html)
+        if "ποδόσφαιρο" not in (category or "").lower():
+            continue  # football articles only (skip basket/tennis)
+        if not date:
+            continue
+        # 21:00 Athens (kickoff time unknown in the table) → 18:00 UTC generic evening slot
+        kickoff = _greek_local_to_utc_iso(date.year, date.month, date.day, 21, 0)
+        ko = _parse_kickoff(kickoff)
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < -6 or h > 120:
+            continue  # only today→next 5 days (small negative grace for same-evening posts)
+        # aggregate all settleable rows per match
+        agg = {}
+        for match, pick in rows:
+            if " - " in match:
+                home_gr, away_gr = [t.strip() for t in match.split(" - ", 1)]
+            elif "-" in match:
+                home_gr, away_gr = [t.strip() for t in match.split("-", 1)]
+            else:
+                continue
+            sig = _sg_pick_signals(pick)
+            if not sig:
+                continue
+            btts, over25, fav = sig
+            key = (home_gr, away_gr)
+            cur = agg.get(key) or {"btts": False, "over25": False, "fav": None}
+            cur["btts"] = cur["btts"] or btts
+            cur["over25"] = cur["over25"] or over25
+            cur["fav"] = cur["fav"] or fav
+            agg[key] = cur
+        for (home_gr, away_gr), sig in agg.items():
+            if stored >= SOCIALGAMBLERS_MAX_PER_RUN:
+                break
+            scanned += 1
+            home = await _canonical_team_name(home_gr) or home_gr
+            away = await _canonical_team_name(away_gr) or away_gr
+            if _is_women_or_youth(home) or _is_women_or_youth(away):
+                continue
+            if _team_or_league_blocked(home, away, ""):
+                continue
+            fav = sig["fav"]
+            over25, btts = sig["over25"], sig["btts"]
+            other = 1 if (over25 or btts) else 0
+            if fav == "home":
+                ph, pa = (2, other)
+            elif fav == "away":
+                ph, pa = (other, 2)
+            else:
+                ph, pa = (1, 1) if not over25 else (2, 1)
+            await store_match_prediction(
+                "socialgamblers", f"{home_gr}-{away_gr}", home, away, kickoff,
+                ph, pa, fav, None, btts, over25, 60, league="")
+            stored += 1
+            logger.info(f"socialgamblers pred: {home} - {away} | fav={fav} "
+                        f"gg={btts} o25={over25}")
+    return {"stored": stored, "scanned": scanned, "articles": len(slugs)}
+
+
+async def socialgamblers_loop():
+    await asyncio.sleep(270)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await socialgamblers_autopost()
+            logger.info(f"socialgamblers loop: {res}")
+        except Exception as e:
+            logger.error(f"socialgamblers loop error: {e}")
+        await asyncio.sleep(45 * 60)  # every 45 minutes

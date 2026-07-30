@@ -711,3 +711,29 @@ Kanäle gehen.) betarades.gr ist öffentlich → als 6. Predictor-Quelle in den 
 - Sichtbarkeit: erscheint NUR im Master-Auswahlpool, nicht als öffentlicher Schein.
 - HINWEIS: greift live erst nach "Save to GitHub → Deploy".
 
+
+## Changelog — 2026-07-30 (5 neue versteckte Predictor-Quellen für Master-Pool)
+Owner: "New hidden non really existing expert for every site" → 5 Seiten geliefert. Alle NUR als
+versteckte Quellen für `db.match_predictions` (Master-Auswahlpool), KEINE öffentlichen Tipster-Profile.
+Umgesetzt wie `betarades` (requests+bs4, leader-gated, alle 30–45 Min, Griechisch→Latein via
+`_canonical_team_name`, Anstoßzeiten Athen-Lokal → UTC (−3h)).
+
+**3 von 5 gebaut & live getestet** (`scrapers_autopost.py`, verdrahtet in `server.py`):
+- **matchmoney.com.gr** (`matchmoney_autopost`/`_loop`): Homepage-Slider → 6 Top-Spiele mit
+  1X2-Quoten + exaktem Anstoß (`slider_countdown` data-attrs) + Liga. Favorit aus Quoten. BESTE Quelle.
+  Getestet: 6 Preds gespeichert (PAOK, Panathinaikos, Hajduk Split, Midtjylland, Besiktas, AEK Larnaca).
+- **foxbet.gr** (`foxbet_autopost`/`_loop`): Featured-Fixture aus eingebettetem JSON
+  (`__frontpageSliderInitialState`) mit 1X2-Quoten. Nur 1 Headline-Spiel/Lauf (nur dieses hat
+  Quoten im statischen HTML). Getestet: 1 Pred (PAOK - Dynamo Kyiv).
+- **socialgamblers.gr** (`socialgamblers_autopost`/`_loop`): Mike Moytafidis' Tages-Artikel; parst die
+  Tipp-Tabelle [Spiel · Tipp · Quote] der neuesten Fußball-Artikel (`/feed`). Nur settle-bare
+  Goal/1X2-Signale (GG, Over 2.5 Tore, άσσος/διπλό); Spieler-Props (σουτ/κόρνερ/κάρτες) werden
+  ignoriert. Anstoßzeit unbekannt → Artikeldatum 21:00 Athen (18:00 UTC). Getestet: GG-Signal
+  aus Mikes Tabelle gespeichert.
+
+**2 von 5 NICHT gebaut (technische Grenze — statisches HTML enthält keine Picks/Quoten):**
+- **kingbet.net**: 1X2-Quoten per JS nachgeladen (Spans im statischen HTML leer) → kein Favorit ableitbar.
+- **bethome.gr**: komplett JS-gerendert; requests liefert nur Offer-/Cookie-Banner, keine Spiele.
+  → Beide bräuchten einen Headless-Browser (Chromium/Playwright); dem Owner gemeldet, offen für Entscheidung.
+
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
