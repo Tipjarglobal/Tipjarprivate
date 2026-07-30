@@ -753,3 +753,27 @@ HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
   Fixtures überschneiden sich ohnehin mit matchmoney (saubere Quoten).
 
 Stand: 4 von 5 neuen versteckten Quellen live (matchmoney, foxbet, socialgamblers, bethome). kingbet offen.
+
+## Changelog — 2026-07-30 (kingbet via JSON-API + Konsens-Booster)
+### kingbet.net — jetzt LIVE (reine requests, kein Browser)
+Odds-JSON-Endpoint entdeckt: `https://apiv2.kingbet.net/matches/latest-odds?matches=<ids>&group_key=gr`
+liefert je Match-ID (aus statischem Homepage-HTML, `.analysis-slide[data-mongo]`) echte Buchmacher-
+Quoten (opap/novibet): match_result 1X2, total_goals 2.5, both_teams_to_score. `kingbet_autopost`/
+`kingbet_loop` (alle 30 Min) in `scrapers_autopost.py`, registriert in `server.py`. Fav aus 1X2,
+Over/BTTS aus echten Märkten. Live getestet: 6 Prognosen gespeichert. → ALLE 5 neuen Quellen live
+(matchmoney, foxbet, socialgamblers, bethome, kingbet).
+
+### Konsens-Booster — der Master bevorzugt Spiele mit Quellen-Übereinstimmung
+Neue Helfer `_consensus_map(preds)` / `_consensus_for(cmap, home, away, fav)` in `server.py`:
+zählen pro Fixture (via `_match_key`), wie viele DISTINKTE Prognose-Quellen denselben Favoriten /
+Over 2.5 / BTTS nennen. Verdrahtet in:
+- `favourite_smart_autopost`: Sortierung jetzt (Konsens, fav_prob, fg); Rating-Bonus (+0.5 ab 3, +0.5
+  ab 5 Quellen); Analyse-Hinweis "🔗 Konsens: N Quellen sehen denselben Favoriten".
+- `master_doublepack`: wählt die 2 Spiele mit dem breitesten Favoriten-Konsens (dann fav_prob/total);
+  Analyse nennt den Konsens beider Spiele.
+- `master_special_build`: Tor-Konsens (over_n+btts_n) zuerst → wählt die 4 tor-einigsten Spiele;
+  Analyse nennt Ø Quellen-Übereinstimmung.
+Dry-Run gegen Live-Daten bestätigt: Doppelpack top = Panathinaikos-Paksi (3 einig); Special top =
+Midtjylland-Besiktas (7 Quellen, Tor-Konsens 10).
+
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".

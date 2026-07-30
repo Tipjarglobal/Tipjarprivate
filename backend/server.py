@@ -4515,6 +4515,50 @@ def _match_key(home: str, away: str) -> str:
     return f"{_team_core(home)}|{_team_core(away)}"
 
 
+def _consensus_map(preds: list) -> dict:
+    """Cross-source agreement per fixture: how many DISTINCT predictor sources (betarades,
+    matchmoney, foxbet, kingbet, bethome, socialgamblers, forebet, predictz, statarea, …) back
+    the same favourite / Over 2.5 / BTTS. Lets the Master PREFER games many sources agree on."""
+    from collections import defaultdict
+    by_fix = defaultdict(list)
+    for p in preds:
+        h, a = p.get("home"), p.get("away")
+        if h and a:
+            by_fix[_match_key(h, a)].append(p)
+    out = {}
+    for k, lst in by_fix.items():
+        fav_src, over_src, btts_src, all_src = defaultdict(set), set(), set(), set()
+        for p in lst:
+            src = p.get("source") or "?"
+            all_src.add(src)
+            if p.get("fav") in ("home", "away", "draw"):
+                fav_src[p["fav"]].add(src)
+            if p.get("over25"):
+                over_src.add(src)
+            if p.get("btts"):
+                btts_src.add(src)
+        maj_fav, maj_n = None, 0
+        for f, s in fav_src.items():
+            if len(s) > maj_n:
+                maj_fav, maj_n = f, len(s)
+        out[k] = {"fav": maj_fav, "fav_n": maj_n,
+                  "fav_src": {f: len(s) for f, s in fav_src.items()},
+                  "over_n": len(over_src), "btts_n": len(btts_src), "n": len(all_src)}
+    return out
+
+
+def _consensus_for(cmap: dict, home: str, away: str, fav: str = None) -> dict:
+    """Consensus info for one fixture. If `fav` is given, `agree` = distinct sources backing
+    THAT favourite; otherwise it reflects the majority favourite across all sources."""
+    info = cmap.get(_match_key(home, away))
+    if not info:
+        return {"n": 0, "agree": 0, "fav": None, "over_n": 0, "btts_n": 0}
+    agree = info["fav_src"].get(fav, 0) if fav else info.get("fav_n", 0)
+    return {"n": info.get("n", 0), "agree": agree, "fav": info.get("fav"),
+            "over_n": info.get("over_n", 0), "btts_n": info.get("btts_n", 0)}
+
+
+
 # ---------------------------------------------------------------------------
 # Expiry: auto-tips whose kickoff has passed must drop off the wall & counts
 # (no live results engine yet, so pending picks would otherwise pile up forever)
@@ -6760,6 +6804,7 @@ async def favourite_smart_autopost() -> dict:
         return {"posted": 0, "reason": "HQ account missing"}
     now = datetime.now(timezone.utc)
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1000)
+    cmap = _consensus_map(preds)
     cand, seen = [], set()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
@@ -6781,10 +6826,12 @@ async def favourite_smart_autopost() -> dict:
         if key in seen:
             continue
         seen.add(key)
-        cand.append((fav_prob, fg, ko, p, fav))
-    cand.sort(key=lambda x: (-x[0], -x[1]))
+        cons = _consensus_for(cmap, p.get("home"), p.get("away"), p.get("fav"))["agree"]
+        cand.append((cons, fav_prob, fg, ko, p, fav))
+    # owner 2026-07-30 Konsens-Booster: prefer fixtures more prediction sources agree on
+    cand.sort(key=lambda x: (-x[0], -x[1], -x[2]))
     posted = 0
-    for fav_prob, fg, ko, p, fav in cand[:SMART_MAX_MATCHES]:
+    for cons, fav_prob, fg, ko, p, fav in cand[:SMART_MAX_MATCHES]:
         home, away = p.get("home"), p.get("away")
         dc = "1X" if p.get("fav") == "home" else "X2"
         mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
@@ -6818,12 +6865,16 @@ async def favourite_smart_autopost() -> dict:
             "sel_odds": [lg["odds"] for lg in combo_legs], "status": "pending",
         }]
         rating = 7.0 + (1 if fav_prob >= 62 else 0) + (1 if fav_prob >= 70 else 0) \
-            + (0.5 if p.get("btts") else 0) + (0.5 if fg >= 3 else 0)
+            + (0.5 if p.get("btts") else 0) + (0.5 if fg >= 3 else 0) \
+            + (0.5 if cons >= 3 else 0) + (0.5 if cons >= 5 else 0)
         rating = round(min(10.0, rating), 1)
         stars = "⭐" * int(round(rating))
         analysis = (f"{stars} Favoriten-Smart-Pick: {why} Anstoß {p.get('kickoff')}. "
                     f"Genau das Muster erfolgreicher Tipper — auf den dominanten Favoriten setzen, "
                     f"der selbst für die Tore sorgt. Quoten sind Schätzungen.")
+        if cons >= 3:
+            analysis += (f" 🔗 Konsens: {cons} unabhängige Prognose-Quellen sehen denselben "
+                         f"Favoriten — starkes Übereinstimmungssignal.")
         stats_line = await _pick_stats_line(p)
         if stats_line:
             analysis += f"\n\n📊 {stats_line}"
@@ -8473,6 +8524,7 @@ async def master_doublepack() -> dict:
     # Pool: goal-friendly, high-confidence upcoming games with a CLEAR favourite (a strong
     # read). Sort strongest-favourite first (that is the game we can "read well").
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    cmap = _consensus_map(preds)
     cands, seen = [], set()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
@@ -8491,11 +8543,13 @@ async def master_doublepack() -> dict:
         if key in seen:
             continue
         seen.add(key)
+        p["_cons"] = _consensus_for(cmap, p.get("home"), p.get("away"), p.get("fav"))["agree"]
         cands.append((ko, p))
     if len(cands) < 2:
         return {"skipped": "not-enough", "have": len(cands)}
-    # strongest favourites first, then most goal-friendly
-    cands.sort(key=lambda x: ((x[1].get("fav_prob") or 0), (x[1].get("total") or 0)), reverse=True)
+    # owner 2026-07-30 Konsens-Booster: games most sources agree on first, then favourite strength
+    cands.sort(key=lambda x: ((x[1].get("_cons") or 0), (x[1].get("fav_prob") or 0),
+                              (x[1].get("total") or 0)), reverse=True)
     picks = cands[:2]
     legs, combo = [], 1.0
     for i, (ko, p) in enumerate(picks):
@@ -8512,6 +8566,9 @@ async def master_doublepack() -> dict:
     for l in legs:
         l.pop("_ko", None)
     combo = _dedupe_multigame_legs(legs)  # defensive: strip per-game implied legs
+    cons_pair = [pk[1].get("_cons") or 0 for pk in picks]
+    cons_line = (f" Beide Spiele mit breitem Quellen-Konsens ({cons_pair[0]} bzw. {cons_pair[1]} "
+                 f"Prognose-Quellen einig)." if min(cons_pair) >= 2 else "")
     home_names = [pk[1].get("home") for pk in picks]
     away_names = [pk[1].get("away") for pk in picks]
     bot = await _get_master_bot()
@@ -8525,7 +8582,7 @@ async def master_doublepack() -> dict:
         "ai_analysis": (f"👑 TipJarMaster Doppelpack: 2 gut gelesene Spiele "
                         f"({home_names[0]} – {away_names[0]} · {home_names[1]} – {away_names[1]}) "
                         f"mit je korrelierten Wetten (Favorit-Sieg/Doppelte Chance + Tore). "
-                        f"Gesamtquote {combo:.2f}. Immer mit kontrolliertem Einsatz."),
+                        f"Gesamtquote {combo:.2f}.{cons_line} Immer mit kontrolliertem Einsatz."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
@@ -8897,6 +8954,7 @@ async def master_special_build() -> dict:
             {"source": "hq-master", "master_category": "special", "master_day": day}):
         return {"skipped": "done-today"}
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    cmap = _consensus_map(preds)
     cands, seen = [], set()
     for p in preds:
         if not _pred_whitelisted(p) or _bad_for_overs(p):
@@ -8913,10 +8971,14 @@ async def master_special_build() -> dict:
         if key in seen:
             continue
         seen.add(key)
+        ci = _consensus_for(cmap, p.get("home"), p.get("away"), p.get("fav"))
+        p["_cons"] = ci["over_n"] + ci["btts_n"]
         cands.append((ko, p))
     if len(cands) < 4:
         return {"skipped": "not-enough", "have": len(cands)}
-    cands.sort(key=lambda x: ((x[1].get("total") or 0), (x[1].get("fav_prob") or 0)), reverse=True)
+    # owner 2026-07-30 Konsens-Booster: goals-consensus first (sources agreeing on Over/BTTS)
+    cands.sort(key=lambda x: ((x[1].get("_cons") or 0), (x[1].get("total") or 0),
+                              (x[1].get("fav_prob") or 0)), reverse=True)
     picks = cands[:4]
     legs, combo = [], 1.0
     for i, (ko, p) in enumerate(picks):
@@ -8932,6 +8994,8 @@ async def master_special_build() -> dict:
     for l in legs:
         l.pop("_ko", None)
     combo = _dedupe_multigame_legs(legs)  # strip per-game implied legs (BTTS ⇒ Über 1.5, …)
+    cons_avg = round(sum((pk[1].get("_cons") or 0) for pk in picks) / max(len(picks), 1), 1)
+    cons_line = (f" Ø {cons_avg} Quellen pro Spiel einig bei den Tor-Märkten." if cons_avg >= 2 else "")
     bot = await _get_master_bot()
     tid = f"master-{uuid.uuid4().hex[:10]}"
     tip = {
@@ -8942,7 +9006,7 @@ async def master_special_build() -> dict:
         "category": "value", "master_category": "special", "master_day": day,
         "ai_rating": 8.0,
         "ai_analysis": (f"🎯 Master Special: 4-Spiele-Bet-Builder mit je 2 korrelierten Toren-Wetten "
-                        f"(1. HZ Über 0.5, Über 1.5/2.5, beide treffen). Gesamtquote {combo:.2f}. "
+                        f"(1. HZ Über 0.5, Über 1.5/2.5, beide treffen). Gesamtquote {combo:.2f}.{cons_line} "
                         f"Aggressiv nach Vorbild echter Gewinn-Scheine — mit kontrolliertem Einsatz."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
@@ -9270,6 +9334,7 @@ from scrapers_autopost import (
     foxbet_autopost, foxbet_loop,
     socialgamblers_autopost, socialgamblers_loop,
     bethome_autopost, bethome_loop,
+    kingbet_autopost, kingbet_loop,
 )
 
 
@@ -9525,6 +9590,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(foxbet_loop()))
     _BG_TASKS.append(asyncio.create_task(socialgamblers_loop()))
     _BG_TASKS.append(asyncio.create_task(bethome_loop()))
+    _BG_TASKS.append(asyncio.create_task(kingbet_loop()))
     _BG_TASKS.append(asyncio.create_task(emptips_loop()))
     _BG_TASKS.append(asyncio.create_task(totissports_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))

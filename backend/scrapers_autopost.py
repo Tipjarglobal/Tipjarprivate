@@ -2155,3 +2155,141 @@ async def bethome_loop():
         except Exception as e:
             logger.error(f"bethome loop error: {e}")
         await asyncio.sleep(45 * 60)  # every 45 minutes
+
+
+# --- kingbet.net — JSON odds API (owner 2026-07-30) ---------------------------------------
+# kingbet renders odds via JS, but its widget calls a clean JSON endpoint keyed by the match
+# ids that ARE in the static homepage HTML — so no browser is needed. Flow: homepage → fixtures
+# (id + Greek teams + kickoff + league) → apiv2 latest-odds batch (1X2 / O-U 2.5 / BTTS from
+# real books opap & novibet) → derive fav/over/btts. Hidden source (source='kingbet').
+KINGBET_HOME = "https://www.kingbet.net/"
+KINGBET_ODDS_API = "https://apiv2.kingbet.net/matches/latest-odds"
+KINGBET_MAX_PER_RUN = 20
+
+
+def _kb_fixtures(html: str):
+    from bs4 import BeautifulSoup
+    s = BeautifulSoup(html, "html.parser")
+    out, seen = [], set()
+    for sl in s.select(".analysis-slide[data-mongo]"):
+        mongo = sl.get("data-mongo")
+        if not mongo or mongo in seen:
+            continue
+        a = sl.select_one(".main-slide__title a") or sl.select_one("a")
+        title = a.get_text(" ", strip=True) if a else ""
+        if " - " not in title:
+            continue
+        date = sl.get("data-date") or ""
+        tm = sl.select_one(".main-slide__time")
+        lg = sl.select_one(".analysis-slide__league")
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})", date)
+        tmatch = re.match(r"(\d{1,2}):(\d{2})", (tm.get_text(strip=True) if tm else ""))
+        if not m or not tmatch:
+            continue
+        kickoff = _greek_local_to_utc_iso(m.group(1), m.group(2), m.group(3),
+                                          tmatch.group(1), tmatch.group(2))
+        if not kickoff:
+            continue
+        home_gr, away_gr = [t.strip() for t in title.split(" - ", 1)]
+        seen.add(mongo)
+        out.append({"mongo": mongo, "home_gr": home_gr, "away_gr": away_gr,
+                    "kickoff": kickoff, "league": lg.get_text(strip=True) if lg else ""})
+    return out
+
+
+def _kb_signals(book: dict):
+    """fav/fav_prob/over25/btts from a kingbet bookmaker odds block."""
+    mr = book.get("match_result") or {}
+    fav, fav_prob = _fav_from_1x2(mr.get("1"), mr.get("X"), mr.get("2"))
+    over25 = False
+    tg = ((book.get("total_goals") or {}).get("2.5") or {})
+    try:
+        over25 = float(tg.get("over")) < float(tg.get("under"))
+    except (TypeError, ValueError):
+        pass
+    btts = False
+    gg = book.get("both_teams_to_score") or {}
+    try:
+        btts = float(gg.get("yes")) < float(gg.get("no"))
+    except (TypeError, ValueError):
+        pass
+    return fav, fav_prob, over25, btts
+
+
+async def kingbet_autopost() -> dict:
+    if AUTOPOST_PAUSED:
+        return {"stored": 0, "reason": "autopost paused"}
+    html = await asyncio.to_thread(_hp_get, KINGBET_HOME)
+    if not html:
+        return {"stored": 0, "reason": "unavailable"}
+    fixtures = _kb_fixtures(html)
+    if not fixtures:
+        return {"stored": 0, "reason": "no fixtures"}
+    ids = ",".join(f["mongo"] for f in fixtures)
+
+    def _fetch_odds():
+        import requests
+        try:
+            r = requests.get(KINGBET_ODDS_API, params={"matches": ids, "group_key": "gr"},
+                             headers={"User-Agent": _HP_UA}, timeout=SCRAPE_TIMEOUT or 20)
+            if r.status_code == 200:
+                return r.json()
+        except Exception as e:
+            logger.warning(f"kingbet odds API failed: {e}")
+        return {}
+
+    odds = await asyncio.to_thread(_fetch_odds)
+    now = datetime.now(timezone.utc)
+    stored, scanned = 0, 0
+    for mt in fixtures:
+        if stored >= KINGBET_MAX_PER_RUN:
+            break
+        books = odds.get(mt["mongo"]) or {}
+        book = books.get("novibet") or books.get("opap") or next(
+            (b for b in books.values() if isinstance(b, dict) and b.get("match_result")), None)
+        if not book:
+            continue
+        fav, fav_prob, over25, btts = _kb_signals(book)
+        if not fav:
+            continue
+        scanned += 1
+        ko = _parse_kickoff(mt["kickoff"])
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 1 or h > 120:
+            continue
+        home = await _canonical_team_name(mt["home_gr"]) or mt["home_gr"]
+        away = await _canonical_team_name(mt["away_gr"]) or mt["away_gr"]
+        if _is_women_or_youth(home) or _is_women_or_youth(away):
+            continue
+        if _team_or_league_blocked(home, away, mt["league"]):
+            continue
+        other = 1 if over25 else 0
+        if fav == "home":
+            ph, pa = 2, other
+        elif fav == "away":
+            ph, pa = other, 2
+        else:
+            ph, pa = 1, 1
+        conf = min((fav_prob or 50) + 3, 80)
+        await store_match_prediction(
+            "kingbet", mt["mongo"], home, away, mt["kickoff"], ph, pa, fav, fav_prob,
+            btts, over25, conf, league=mt["league"])
+        stored += 1
+        logger.info(f"kingbet pred: {home} - {away} | fav={fav} p={fav_prob} gg={btts} o25={over25}")
+    return {"stored": stored, "scanned": scanned, "found": len(fixtures)}
+
+
+async def kingbet_loop():
+    await asyncio.sleep(320)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            res = await kingbet_autopost()
+            logger.info(f"kingbet loop: {res}")
+        except Exception as e:
+            logger.error(f"kingbet loop error: {e}")
+        await asyncio.sleep(30 * 60)  # every 30 minutes
