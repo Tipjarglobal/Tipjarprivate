@@ -13,7 +13,7 @@ const L = {
     steps: [
       "Screenshot eines 'fertigen' Buchmacher-Scheins hochladen (Falle-Anbieter, nicht Bet365).",
       "Die KI liest jedes Spiel und dreht die Logik um: Was wollen sie, dass passiert? → Wir spielen dagegen.",
-      "Nur das SICHERE bleibt. Ist nichts klar → NO BET.",
+      "Nur das Logische bleibt. Ist nichts Logisches erkennbar → NO BET.",
     ],
     examplesTitle: "Beispiele (mit fiktiven Teams)",
     examples: [
@@ -44,7 +44,7 @@ const L = {
     steps: [
       "Ανεβάζεις screenshot ενός «έτοιμου» κουπονιού (εταιρία-παγίδα, όχι Bet365).",
       "Η ΚΙ διαβάζει κάθε αγώνα και αντιστρέφει τη λογική: τι θέλουν να γίνει; → παίζουμε το αντίθετο.",
-      "Κρατάμε ΜΟΝΟ το σίγουρο. Αν δεν φαίνεται κάτι βέβαιο → NO BET.",
+      "Κρατάμε ΜΟΝΟ αυτό που βγάζει νόημα. Αν δεν φαίνεται κάτι λογικό → NO BET.",
     ],
     examplesTitle: "Παραδείγματα (με υποθετικές ομάδες)",
     examples: [
@@ -75,7 +75,7 @@ const L = {
     steps: [
       "Upload a screenshot of a 'ready-made' bookie slip (trap bookie, not Bet365).",
       "The AI reads each game and flips the logic: what do they want to happen? → we play the opposite.",
-      "Only the CERTAIN thing stays. If nothing is clear → NO BET.",
+      "Only the LOGICAL thing stays. If nothing looks logical → NO BET.",
     ],
     examplesTitle: "Examples (with hypothetical teams)",
     examples: [
