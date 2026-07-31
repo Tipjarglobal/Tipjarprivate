@@ -1018,6 +1018,7 @@ def _sanitize_legs(legs) -> list:
                     "kickoff": str(lg.get("kickoff", "") or ""),
                     "selections": [str(s) for s in sels if s][:10],
                     "sel_odds": [str(o or "") for o in sodds][:10],
+                    "banker": bool(lg.get("banker", False)),
                 })
     return out[:12]
 
@@ -1043,6 +1044,9 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
             f"User's written tip: {text or '(none)'}\n\n"
             "Analyse the attached bet slip screenshot (if any) together with the written tip. "
             "Extract the teams, kickoff, country, league, market and odds, then rate the bet 1-10. "
+            "For a multi-leg slip, each leg is an object; if the user marks a game as 'Banker', "
+            "'Bank', 'sicher' or 'lock' (the safest anchor picks), set that leg's \"banker\": true, "
+            "otherwise \"banker\": false. "
             "IMPORTANT: for ANY field you cannot clearly read, return an EMPTY string \"\" — "
             "NEVER write 'Unknown', 'N/A', 'TBD', 'Team A', '?' or any placeholder. "
             "Respond with strict JSON only."
