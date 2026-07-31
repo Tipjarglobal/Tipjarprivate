@@ -7520,10 +7520,15 @@ def _parse_over_under(market: str):
     m = (market or "").lower()
     gm = re.search(r"(über|ueber|over|unter|under)\s*(\d+(?:[.,]\d)?)", m)
     if not gm:
-        return None
-    direction = "over" if gm.group(1) in ("über", "ueber", "over") else "under"
+        gm2 = re.search(r"(\d+(?:[.,]\d)?)\s*(über|ueber|over|unter|under)", m)
+        if not gm2:
+            return None
+        word, num = gm2.group(2), gm2.group(1)
+    else:
+        word, num = gm.group(1), gm.group(2)
+    direction = "over" if word in ("über", "ueber", "over") else "under"
     try:
-        line = float(gm.group(2).replace(",", "."))
+        line = float(num.replace(",", "."))
     except ValueError:
         return None
     return direction, line
@@ -7596,6 +7601,134 @@ def _conflicts_with_gift(market: str, home: str, away: str, st: dict) -> bool:
         if pu and pu[0] == "under" and pu[1] <= L + 1:
             return True
     return False
+
+
+# ── CODE READING (owner 2026-07-30) ────────────────────────────────────────────
+# Read SpinBetter's "accumulator of the day" legs and play AGAINST them or NO BET.
+def _code_side(market: str, home: str, away: str):
+    """Which side a SpinBetter leg refers to: handles 'Team 1/2', 'S1/S2', '1./2.' and names."""
+    m = (market or "").lower()
+    if re.search(r"team\s*1|(^|[^0-9x])s?1\b|\b1\.", m) and not re.search(r"team\s*2|s?2\b", m):
+        return "home"
+    if re.search(r"team\s*2|(^|[^0-9x])s?2\b|\b2\.", m):
+        return "away"
+    return _market_team_side(market, home, away)
+
+
+def _code_read_interpret(market: str, home: str, away: str) -> dict:
+    """Turn ONE SpinBetter accumulator leg into OUR counter-pick or a NO BET (owner rules)."""
+    m = (market or "").lower()
+    home = home or "Heim"
+    away = away or "Gast"
+    side = _code_side(market, home, away)
+    team = home if side == "home" else away if side == "away" else None
+
+    # (a) SpinBetter: a team WON'T score (win + 'Über 0.5 – Nein' / clean sheet) → we take that
+    #     team TO score / BTTS. "Nicht dass es 0:1 endet."
+    if ("0.5" in m) and any(k in m for k in ("nein", "no", "kein", "nicht", "under", "unter")):
+        tgt = team or away
+        return {"read": "counter", "our_market": f"{tgt} trifft (Über 0.5 Tore)",
+                "alt_market": "Beide Teams treffen",
+                "code": market,
+                "reason": f"Code sagt: {tgt} trifft NICHT. Wir gehen dagegen — {tgt} trifft (oder beide treffen). Nicht dass es 0:1 endet.",
+                "stars": 7}
+
+    # (b) SpinBetter: early draw / result at ~15. Minute → we expect a goal by then.
+    if re.search(r"\b(15|20|30)\b", m) and any(k in m for k in
+            ("unentschieden", "remis", "draw", "ergebnis", "result", "erstes tor", "1. tor", " x ")):
+        return {"read": "counter", "our_market": "Über 0.5 Tore 1. Halbzeit", "code": market,
+                "reason": "Code erwartet früh noch 0:0/Unentschieden — wir sagen, bis dahin fällt ein Tor: Über 0.5 Tore 1. Halbzeit.",
+                "stars": 10}
+
+    # (c) SpinBetter: team scores LATE (last goal 55–90 / 2nd half) → we say it scores BY ~60.
+    if any(k in m for k in ("55", "60", "letztes tor", "last goal", "2. halbzeit", "second half", "spät")) \
+            and (team or "trifft" in m or "tor" in m):
+        tgt = team or home
+        return {"read": "counter", "our_market": f"{tgt} trifft bis zur 60. Minute", "code": market,
+                "reason": f"Code sieht {tgt} SPÄT treffen — wir sagen: bis zur 55.–60. Minute ist die Bude drin. Ziemlich sicher.",
+                "stars": 8}
+
+    # (d) SpinBetter: match total Über 2.5+ → too loose for us → NO BET.
+    ou = _parse_over_under(market)
+    if ou and ou[0] == "over" and ou[1] >= 2.5 and team is None:
+        return {"read": "no_bet", "code": market,
+                "reason": "Code gibt Über 2.5+ Tore — zu unsicher für uns. No Bet."}
+
+    # (e) SpinBetter: straight win / double chance / handicap → NO BET ('nicht normal, 1X zu gehen').
+    if any(k in m for k in ("sieg", "gewinnt", " win", "1x", "x2", "doppelte", "double chance",
+                            "handicap", "1x2")) or re.match(r"^\s*s?[12]\b", m):
+        return {"read": "no_bet", "code": market,
+                "reason": "Code gibt einen glatten Sieg (1/2/1X). Es ist nicht normal, 1X zu gehen. No Bet."}
+
+    return {"read": "no_bet", "code": market, "reason": "Kein klarer Gegen-Wert. No Bet."}
+
+
+async def _code_read_scan_images(images_b64: List[str]) -> list:
+    """Vision-OCR a SpinBetter 'accumulator of the day' screenshot into structured legs."""
+    prompt = (
+        "This is a SpinBetter bookmaker 'Accumulator of the day' betslip (German/Greek/English). "
+        "Extract EVERY football (soccer) leg. For each leg return home, away, league, kickoff "
+        "(ISO if visible else ''), market (the EXACT selection text as shown, e.g. '1X2 S2', "
+        "'Team 2 Total Over 0.5 - No', 'Total 2.5 Over', 'Result X 15th minute', "
+        "'Team 1 scores its last goal between 55-90 min - Yes'), and odds (string). "
+        "Ignore non-football legs. Reply ONLY JSON: {\"legs\":[{\"home\":\"\",\"away\":\"\","
+        "\"league\":\"\",\"kickoff\":\"\",\"market\":\"\",\"odds\":\"\"}]}")
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"coderead-{uuid.uuid4()}",
+                   system_message="You extract betslip legs precisely as structured JSON."
+                   ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+    resp = await chat.send_message(UserMessage(
+        text=prompt, file_contents=[ImageContent(image_base64=b) for b in images_b64[:4]]))
+    try:
+        data = json.loads(re.sub(r"^```json|^```|```$", "", (resp or "").strip(), flags=re.M))
+        return data.get("legs", []) if isinstance(data, dict) else []
+    except Exception:
+        logger.warning(f"code-read scan parse failed: {(resp or '')[:200]}")
+        return []
+
+
+@api_router.get("/code-reading")
+async def code_reading():
+    """The Code-Reading channel: our counter-reads of SpinBetter's accumulator of the day."""
+    now = datetime.now(timezone.utc).isoformat()
+    reads = await db.code_reads.find(
+        {"expires_at": {"$gt": now}}, {"_id": 0}).sort("created_at", -1).to_list(60)
+    return {"count": len(reads), "reads": reads}
+
+
+@api_router.post("/admin/code-reading/scan")
+async def admin_code_reading_scan(payload: dict, admin: dict = Depends(require_admin)):
+    """Admin uploads a SpinBetter accumulator screenshot (base64 images) → OCR → interpret → store."""
+    images = payload.get("images") or []
+    if not images:
+        raise HTTPException(status_code=400, detail="no images")
+    legs = await _code_read_scan_images(images)
+    if not legs:
+        return {"scanned": 0, "reads": 0, "note": "Keine Fußball-Legs erkannt (oder LLM-Budget)."}
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    await db.code_reads.delete_many({"day": day})  # replace today's read
+    stored = []
+    for lg in legs:
+        home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
+        market = (lg.get("market") or "").strip()
+        if not (home and away and market):
+            continue
+        interp = _code_read_interpret(market, home, away)
+        doc = {
+            "id": f"cr-{uuid.uuid4().hex[:10]}", "day": day,
+            "home": home, "away": away, "league": lg.get("league") or "",
+            "kickoff": lg.get("kickoff") or "", "code_market": market,
+            "code_odds": lg.get("odds") or "",
+            "read": interp["read"], "our_market": interp.get("our_market"),
+            "alt_market": interp.get("alt_market"), "reason": interp["reason"],
+            "stars": interp.get("stars", 0),
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(hours=30)).isoformat(),
+        }
+        await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
+        stored.append(doc)
+    return {"scanned": len(legs), "reads": len(stored), "reads_data": stored}
+
 
 
 def _live_bet_landed(market: str, hg, ag, home: str, away: str):
