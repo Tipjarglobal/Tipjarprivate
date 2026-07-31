@@ -9347,10 +9347,11 @@ def _assemble_parlay(cands, target, min_legs, max_legs):
     return chosen, round(prod, 2)
 
 
-def _pack_legs(chosen):
+def _pack_legs(chosen, banker_matches=None):
+    bm = banker_matches or set()
     return [{"match": c["match"], "league": c["league"], "kickoff": c["match_time"],
              "status": "pending", "selections": [c["market"]],
-             "sel_odds": [f"{c['odds']:.2f}"]} for c in chosen]
+             "sel_odds": [f"{c['odds']:.2f}"], "banker": c["match"] in bm} for c in chosen]
 
 
 _WIN_MKT_RE = re.compile(
@@ -9519,12 +9520,24 @@ async def master_build_packs() -> dict:
                     {"source": "hq-master", "master_category": cat, "master_day": day,
                      "bet_type": "system"})
                 make_system = sys_today == 0
+            banker_matches = set()
             if make_system:
                 sf = n - 1
+                nb = 2 if n >= 5 else 1
+                # Owner teaching 2026-06: MARK BANKERS on the slip. Bankers = the safest legs
+                # (lowest odds), but the Master LEARNS FROM MISTAKES — it avoids market-types
+                # with a poor banker record (a lost banker kills the whole system). State only
+                # which system was chosen; no long explanation.
+                def _brank(c):
+                    b = learn_bucket(c["market"])
+                    vb = learn_verdict("master", "banker_" + b, raw_bucket=True)[0]
+                    vm = learn_verdict("master", c["market"])[0]
+                    score = 2 if (vb == "veto" or vm == "veto") else (0 if (vb == "boost" or vm == "boost") else 1)
+                    return (score, c["odds"])
+                bankers = sorted(chosen, key=_brank)[:nb]
+                banker_matches = {c["match"] for c in bankers}
                 market = f"System {sf}/{n}"
-                analysis = (f"👑 TipJarMaster System {sf}/{n}: {n} sichere Spiele — es darf sogar "
-                            f"1 Tipp danebengehen und der Schein gewinnt trotzdem. "
-                            f"Maximalquote {prod:.2f}.")
+                analysis = f"👑 TipJarMaster System {sf}/{n} · {nb} Banker."
             else:
                 market = f"{n}-fach Kombi"
                 analysis = f"👑 TipJarMaster {label}: {n} Spiele, Gesamtquote {prod:.2f}."
@@ -9539,7 +9552,7 @@ async def master_build_packs() -> dict:
                 "bet_type": "system" if make_system else "",
                 "system_from": (n - 1) if make_system else 0,
                 "system_total": n if make_system else 0,
-                "legs": _pack_legs(chosen), "is_parlay": True,
+                "legs": _pack_legs(chosen, banker_matches), "is_parlay": True,
                 "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
                 "source": "hq-master", "created_at": now.isoformat(),
             }

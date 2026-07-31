@@ -84,11 +84,25 @@ async def refresh_learning() -> dict:
             {"status": {"$in": ["won", "lost"]},
              "source": {"$in": ["hq-master", "hq-system", "hq-auto", "smart", "hq-live"]}},
             {"_id": 0, "source": 1, "market": 1, "status": 1, "is_parlay": 1,
-             "master_category": 1, "category": 1})
+             "master_category": 1, "category": 1, "legs": 1})
         async for t in cursor:
             system = "master" if t.get("source") == "hq-master" else "hq"
             for b in _markets_of_tip(t):
                 _bump(fresh[system], b, t["status"])
+            # owner 2026-06: the Master must LEARN FROM ITS MISTAKES. Learn per-LEG from its
+            # own settled slips so the single-market veto/boost has real samples — and learn
+            # BANKER mistakes as their own bucket (a lost banker kills the whole system, so a
+            # market that keeps failing AS A BANKER must be avoided as a banker in future).
+            if system == "master" and t.get("is_parlay"):
+                for lg in (t.get("legs") or []):
+                    lst = lg.get("status")
+                    if lst not in ("won", "lost"):
+                        continue
+                    for sel in (lg.get("selections") or [lg.get("market", "")]):
+                        bk = learn_bucket(sel)
+                        _bump(fresh["master"], bk, lst)
+                        if lg.get("banker"):
+                            _bump(fresh["master"], "banker_" + bk, lst)
         async for r in db.code_reads.find(
                 {"outcome": {"$in": ["won", "lost"]}},
                 {"_id": 0, "pattern": 1, "outcome": 1}):

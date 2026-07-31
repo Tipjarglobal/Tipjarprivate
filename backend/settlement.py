@@ -1018,9 +1018,13 @@ async def settle_multimatch_parlays() -> dict:
         # legs drop out of the total (Y shrinks); the required hits never exceed what's left.
         is_system = (tip.get("bet_type") or "").lower() == "system" and int(tip.get("system_total") or 0) > 0
         if is_system:
+            # A lost BANKER kills the whole system (bankers are fixed in every column).
+            banker_lost = any(l.get("status") == "lost" and l.get("banker") for l in legs)
             eff_total = len(legs) - void_cnt
             need = min(int(tip.get("system_from") or 0), eff_total)
-            if need <= 0:
+            if banker_lost:
+                new_status = "lost"
+            elif need <= 0:
                 new_status = "void" if void_cnt else None
             elif won_cnt >= need:
                 new_status = "won"

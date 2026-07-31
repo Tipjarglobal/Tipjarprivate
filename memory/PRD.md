@@ -1000,3 +1000,20 @@ medium Bereich kann er frei posten." Umgesetzt & getestet (Logik-Assertions + lo
    verliert erst wenn `eff_total - lost_cnt < need` (unerreichbar), sonst pending. Void-Beine fallen
    aus dem Total (eff_total = legs - void). `lost_cnt` neu getrackt. 7 Branch-Assertions bestanden
    (3/4 mit 1 Niete → gewonnen; 2 Nieten → verloren; offen & erreichbar → pending; Void reduziert Y).
+
+## Update 2026-07-31 (8) — Master: bankers στα συστήματα + μάθηση από λάθη (ανά σκέλος/banker)
+Owner (ελληνικά, teaching): κανένας σταθερός κανόνας — «μαρκάρεις bankers στο δελτίο, αναφέρεις ποιο
+σύστημα, χωρίς πολλή επεξήγηση· ο Master μαθαίνει από τα λάθη του». Γνώση στο
+`/app/memory/master_system_strategy.md`.
+1. **Bankers στον Master (server.py `master_build_packs`):** το σύστημα μαρκάρει τα ασφαλέστερα σκέλη
+   ως bankers (nb=1 για 3-4, 2 για 5+), αποφεύγοντας market-types με κακό banker-record (learning).
+   `_pack_legs(chosen, banker_matches)` βάζει `banker:true`. Σύντομη ανάλυση «System X/Y · N Banker».
+   Ticket + κάρτα δείχνουν ήδη το banker badge (επιβεβαιώθηκε render ΣΤΑΝΤΑΡ σε EL).
+2. **Settlement (settlement.py):** χαμένος banker → όλο το σύστημα LOST· αλλιώς X-aus-Y. Unit-tests
+   πέρασαν (banker χάνει με 3 άλλα won → lost· banker κερδίζει, 3/4 → won· ζητούμενο ανοιχτό → pending).
+3. **Μάθηση ανά σκέλος (learning.py `refresh_learning`):** για master parlays μαθαίνει και ΑΝΑ ΣΚΕΛΟΣ
+   (learn_bucket ανά selection) + buckets `banker_<bucket>` για λάθος bankers. Ο master builder ήδη
+   κάνει `learn_verdict("master", market)` veto/boost. Επιβεβαιώθηκε: refresh τρέχει, master έχει τώρα
+   πλούσια per-leg buckets (team_over_0.5 12/7, over_goals 5/5, under_goals 4/0, …). `banker_*` γεμίζουν
+   καθώς κατεβαίνουν & αρχίζουν να αποδίδουν συστήματα με bankers.
+HINWEIS: preview → tipjarglobal.com μόνο μετά από "Save to GitHub → Deploy".
