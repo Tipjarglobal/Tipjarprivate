@@ -212,10 +212,10 @@ export function CodeReading() {
         <Ban size={16} className="text-amber-400 shrink-0 mt-0.5" />
         <p className="text-[12px] text-amber-200 leading-snug">
           {lang === "el"
-            ? "Ανέβασε προσφορές από εταιρίες-παγίδα (π.χ. «Παρολί της ημέρας», ενισχυμένες προσφορές). ΟΧΙ από Bet365 — οι αποδόσεις τους είναι δίκαιες και δεν προσφέρονται για αντίθετο παιχνίδι."
+            ? "Ανέβασε προσφορές από εταιρίες-παγίδα (π.χ. «Παρολί της ημέρας», ενισχυμένες). ΟΧΙ από Bet365 — η Bet365 συχνά βοηθάει τον παίκτη να κερδίσει, οπότε δεν κάνουμε mining στις δικές της. Το mining είναι πονηρό εργαλείο για να καταλάβουμε πώς σκέφτονται οι ΑΛΛΕΣ εταιρίες — δεν έχει να κάνει με τις αποδόσεις."
             : lang === "de"
-            ? "Lade Angebote von Falle-Anbietern hoch (z.B. 'Akku des Tages', Boosts). NICHT von Bet365 — deren Quoten sind fair und taugen nicht fürs Gegen-Spiel."
-            : "Upload offers from trap-bookies (e.g. 'Accumulator of the day', boosts). NOT Bet365 — their odds are fair and not suited for counter-play."}
+            ? "Lade Angebote von Fallen-Anbietern hoch (z.B. 'Akku des Tages', Boosts). NICHT von Bet365 — Bet365 hilft dem Spieler oft zu gewinnen, dort lohnt sich Mining nicht. Mining ist ein schlaues Werkzeug, um zu verstehen, wie die ANDEREN Anbieter denken — es geht nicht um die Quoten."
+            : "Upload offers from trap-bookies (e.g. 'Accumulator of the day', boosts). NOT Bet365 — Bet365 often helps the player win, so mining their offers makes no sense. Mining is a cunning tool to understand how the OTHER bookies think — it's not about the odds."}
         </p>
       </div>
 
