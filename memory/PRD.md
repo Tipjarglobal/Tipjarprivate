@@ -954,3 +954,7 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - Getestet: curl (codereading=7, community_live=4) + Screenshots (blauer Knopf, Zähler 7, Live-Score-Badge "0:0 37'"). Frontend kompiliert fehlerfrei.
 - Dateien: server.py (tips_counts codereading), CodeReading.jsx (i18n), RateWall.jsx (community-live-jump + clCount + liveScoreText im Badge).
 
+## Update 2026-07-31 (5) — Homepage Community-Knopf mit eingebautem Live-Button
+- Der "Community Picks"-QuickView-Knopf auf der Homepage (Header.jsx) ist jetzt ein geteilter Button: "Community Picks" links (→ members), separater kleiner blauer "LIVE"-Button rechts (→ livecommunity), einzeln klickbar. Testids: `view-members-btn-wrap`, `view-members-btn`, `view-members-btn-live`. Live-Zähler aus `counts.community_live`. Klick-Test bestätigt: blauer Teil öffnet Community-Live.
+- Dateien: App.js (onViewLiveCommunity Prop), Header.jsx (QuickView split-render via liveAction/liveCount).
+

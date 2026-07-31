@@ -93,7 +93,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, counts = {}, newCounts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLiveCommunity, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, counts = {}, newCounts = {} }) {
   const { t, lang, setLang, tz, setTz } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -250,7 +250,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
             <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
             <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
             <QuickView onClick={onViewMaster} icon={Crown} label={t("nav.viewmaster")} testId="view-master-btn" count={counts.master} newCount={newCounts.master} variant="master" />
-            <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" />
+            <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" liveAction={onViewLiveCommunity} liveCount={counts.community_live} />
             <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
             <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
             <QuickView onClick={onViewScorers} icon={Target} label={t("nav.viewscorers")} testId="view-scorers-btn" variant="pink" />
@@ -262,7 +262,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
   );
 }
 
-function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, live, variant = "green", spoiler }) {
+function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, live, variant = "green", spoiler, liveAction, liveCount }) {
   const variants = {
     green: "bg-[#2ECC57] text-black hover:bg-[#26b64c] shadow-[0_0_16px_rgba(46,204,87,0.3)]",
     master: "bg-[#E11D2A] text-white hover:bg-[#c4141f] shadow-[0_0_20px_rgba(225,29,42,0.55)]",
@@ -272,6 +272,37 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
     checkered: "bg-white text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(255,255,255,0.25)]",
     grey: "bg-zinc-300 text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(212,212,216,0.3)]",
   };
+  // Split button: main label (left) + an independently clickable small blue LIVE button (right).
+  if (liveAction) {
+    return (
+      <div data-testid={`${testId}-wrap`}
+        className={`relative flex items-center justify-between gap-1 w-full rounded-full font-heading font-black text-sm p-1 ${variants[variant] || variants.green}`}>
+        {newCount > 0 && (
+          <span data-testid={`${testId}-newbadge`}
+            className="absolute -top-1.5 -right-1.5 z-10 min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-black leading-none border-2 border-void shadow-[0_0_10px_rgba(220,38,38,0.7)] animate-pulse">
+            {newCount > 99 ? "99+" : newCount}
+          </span>
+        )}
+        <button type="button" onClick={onClick} data-testid={testId}
+          className="flex items-center gap-2 min-w-0 flex-1 justify-start pl-3 pr-1 py-1.5 rounded-full active:scale-[0.98] transition-transform">
+          <Icon size={16} strokeWidth={2.5} />
+          <span className="truncate">{label}</span>
+          {count != null && (
+            <span data-testid={`${testId}-count`} className="min-w-[20px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">
+              {count}
+            </span>
+          )}
+        </button>
+        <button type="button" onClick={liveAction} data-testid={`${testId}-live`}
+          className="flex items-center gap-1.5 shrink-0 rounded-full bg-[#2563eb] text-white px-2.5 py-1.5 text-[11px] uppercase tracking-wide hover:bg-[#1d4fd8] active:scale-95 shadow-[0_0_12px_rgba(37,99,235,0.6)] transition-all">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live
+          {liveCount > 0 && (
+            <span className="min-w-[16px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1">{liveCount}</span>
+          )}
+        </button>
+      </div>
+    );
+  }
   const btn = (
     <button
       type="button"

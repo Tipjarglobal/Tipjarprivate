@@ -254,6 +254,7 @@ function Home() {
         onViewMaster={() => openTipsView("master")}
         onViewSystems={() => openTipsView("systems")}
         onViewMembers={() => openTipsView("members")}
+        onViewLiveCommunity={() => openTipsView("livecommunity")}
         onViewLive={() => openTipsView("live")}
         onViewSmart={() => openTipsView("smart")}
         onViewScorers={() => openTipsView("scorers")}
