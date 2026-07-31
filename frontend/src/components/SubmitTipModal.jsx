@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import Modal, { Field, inputCls, btnPrimary } from "./Modal";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle, AlertTriangle } from "lucide-react";
+import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 import api, { apiErr } from "../api";
 import StarRating from "./StarRating";
 import { useI18n, formatSelection } from "../i18n";
@@ -110,8 +110,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     }
   };
 
-  const publish = async () => {
-    if (!user) { requireLogin(); return; }
+  const toggleBanker = (li) => setDetected((d) => {
+    if (!d || !Array.isArray(d.legs)) return d;
+    return { ...d, legs: d.legs.map((l, i) => (i === li ? { ...l, banker: !l.banker } : l)) };
+  });
+
+  const publish = async () => {    if (!user) { requireLogin(); return; }
     if (!selfStars) { toast.error(t("submit.needStars")); return; }
     if (scanning) { toast.message(t("submit.analyzing")); return; }
     setPublishing(true);
@@ -321,10 +325,25 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                 {detected.legs && detected.legs.length > 0 && (
                   <div className="space-y-2">
                     {detected.legs.map((leg, li) => (
-                      <div key={li} className="rounded-lg bg-surface px-3 py-2">
-                        <div className="flex items-center justify-between">
+                      <div key={li} className={`rounded-lg px-3 py-2 ${leg.banker ? "bg-cyan-500/10 ring-1 ring-cyan-400/50" : "bg-surface"}`}>
+                        <div className="flex items-center justify-between gap-2">
                           <span className="text-white font-semibold text-sm">{leg.match}</span>
-                          {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {leg.kickoff && <span className="text-[10px] text-zinc-500 font-mono">{leg.kickoff}</span>}
+                            <button
+                              type="button"
+                              onClick={() => toggleBanker(li)}
+                              data-testid={`banker-toggle-${li}`}
+                              title="Banker"
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide transition-colors ${
+                                leg.banker
+                                  ? "bg-cyan-400 text-black"
+                                  : "border border-cyan-400/50 text-cyan-300 hover:bg-cyan-400/15"
+                              }`}
+                            >
+                              <ShieldCheck size={12} /> Banker
+                            </button>
+                          </div>
                         </div>
                         {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{leg.league}</span>}
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
