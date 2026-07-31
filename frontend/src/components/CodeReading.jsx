@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Brain, TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
+import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
 import { useI18n } from "../i18n";
@@ -94,23 +94,6 @@ const FL = {
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
 const INP = "bg-void border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-volt/60 outline-none w-full";
 
-function LearnRow({ r, t }) {
-  const pct = Math.round((r.rate || 0) * 100);
-  const color = r.verdict === "veto" ? "text-red-400" : r.verdict === "boost" ? "text-volt" : "text-zinc-300";
-  const Icon = r.verdict === "veto" ? TrendingDown : r.verdict === "boost" ? TrendingUp : null;
-  const vlabel = r.verdict === "veto" ? t.vVeto : r.verdict === "boost" ? t.vBoost : t.vOk;
-  return (
-    <div data-testid={`learn-row-${r.pattern}`} className="flex items-center justify-between gap-3 py-2 border-b border-zinc-800/60 last:border-0">
-      <span className="text-xs text-zinc-300 truncate flex-1">{patLabel(r.pattern)}</span>
-      <span className="text-[11px] text-zinc-500 shrink-0">{r.won}/{r.n} {t.games}</span>
-      <span className={`text-xs font-bold w-11 text-right shrink-0 ${color}`}>{pct}%</span>
-      <span className={`inline-flex items-center gap-1 text-[10px] font-bold shrink-0 w-24 justify-end ${color}`}>
-        {Icon && <Icon size={12} />}{vlabel}
-      </span>
-    </div>
-  );
-}
-
 export function CodeReading() {
   const { lang } = useI18n();
   const { user } = useAuth();
@@ -120,7 +103,6 @@ export function CodeReading() {
   const [reads, setReads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [stats, setStats] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -131,9 +113,8 @@ export function CodeReading() {
     .then(({ data }) => setReads(data.reads || []))
     .catch(() => {})
     .finally(() => setLoading(false));
-  const loadStats = () => api.get("/learning/stats").then(({ data }) => setStats(data)).catch(() => {});
 
-  useEffect(() => { load(); loadStats(); }, []);
+  useEffect(() => { load(); }, []);
 
   const submitManual = async () => {
     if (!form.home.trim() || !form.away.trim()) { toast.error(`${fl.home} & ${fl.away}`); return; }
@@ -175,9 +156,6 @@ export function CodeReading() {
       setScanning(false);
     }
   };
-
-  const groups = stats ? [["code", t.sysCode]] : [];
-  const anyLearn = stats && groups.some(([k]) => (stats[k] || []).length > 0);
 
   return (
     <div data-testid="code-reading-view">
@@ -306,31 +284,6 @@ export function CodeReading() {
           })}
         </div>
       )}
-
-      {/* Lern-Statistik — all 3 systems learn from real results */}
-      <div className="mt-8 pt-6 border-t border-zinc-800" data-testid="learning-stats-panel">
-        <p className="text-sm font-bold text-zinc-200 flex items-center gap-2">
-          <Brain size={16} className="text-volt" /> {t.learnTitle}
-        </p>
-        <p className="text-xs text-zinc-500 mb-4">{t.learnSub}</p>
-        {!anyLearn ? (
-          <p className="text-xs text-zinc-500 py-4">{t.noLearn}</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {groups.map(([key, label]) => {
-              const rows = stats[key] || [];
-              if (!rows.length) return null;
-              return (
-                <div key={key} data-testid={`learn-group-${key}`}
-                  className="rounded-xl border border-zinc-800 bg-void/40 p-4">
-                  <p className="text-xs font-black uppercase tracking-wide text-zinc-400 mb-2">{label}</p>
-                  {rows.map((r) => <LearnRow key={r.pattern} r={r} t={t} />)}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
