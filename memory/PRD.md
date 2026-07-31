@@ -932,5 +932,13 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - Getestet: curl (counts liefert community_live; kilive/members-live filtern korrekt) + mobile Screenshots.
 
 ## OFFEN / PENDING (User-Entscheidung ausstehend)
-- **swagger / leere Live-Scheine**: swagger lädt Live-Oddsscreens hoch → Vision-KI erkennt keine Auswahl ("No selection made") → leerer Schein. Vorgeschlagener Fix (Markt/Auswahl-Feld editierbar machen + Pflicht-Auswahl vor Veröffentlichung) wartet noch auf Bestätigung (a/b/c). Passiert auf PRODUKTION (tipjarglobal.com), nicht Preview.
+- (keine offenen Punkte aus dem Feed-Split)
+
+## Update 2026-07-31 (2) — Swagger-Fix, Community-Live-Badge, Admin-Slip-Editor
+- **Swagger-Fix (editierbare Auswahl):** Im Post-Fenster (SubmitTipModal.jsx) ist das Feld "Markt/Auswahl" jetzt ein Eingabefeld (`market-edit-input`). Erkennt die KI keine Auswahl (Live-Odds-Screenshot → leere Legs + leerer Markt), erscheint ein hervorgehobenes Pflichtfeld mit Hinweis (`selection-hint`) und die Veröffentlichung wird blockiert (Toast `submit.selectionRequired`). publish() nutzt `hadPanel ? marketEdit : (d.market||'')` damit ein bewusst geleertes Feld respektiert wird. Parlays mit Leg-Auswahlen bleiben gültig.
+- **Community-Live-Badge:** Jeder Community-Live-Schein zeigt ein prominentes rotes pulsierendes "Live"-Badge (`community-live-badge-<id>`) statt des generischen Status-Badges. Bedingung: `status==='live' && isMemberPick`.
+- **Admin-Slip-Editor:** Neue Komponente `AdminSlipEditor.jsx` + Button "Bearbeiten" (`admin-edit-<id>`, nur Admin) auf jeder Karte. Bearbeitbar: Anstoß/Zeit, Teams (inkl. Tausch), Liga/Land, Markt/Quote/Einsatz, sowie pro Bein: Match, Kickoff, Status (Offen/Live/Gewonnen/Verloren/Annulliert), Banker-Toggle, Auswahlen + Quoten hinzufügen/entfernen, Bein entfernen. Backend: `PATCH /api/admin/tips/{id}` (require_admin, `_admin_sanitize_legs`, recompute is_parlay/potential_return).
+- **"Spiel zuende" (manuelle KI-Abrechnung):** Roter Button (`admin-settle-now-<id>`) auf Community-Live-Scheinen → `POST /api/admin/tips/{id}/settle-now` (setzt settle_attempts=0, ruft settle_pending_tips/settle_multimatch_parlays, gibt `{settled, tip, reason}` zurück). Bei noch laufendem Spiel: Info-Toast statt Fehler.
+- Getestet: iteration_50 (Tasks 2&3 PASS, Task1 Bug gefunden) → Fix → iteration_51 (Fix + Regression PASS). Backend per curl verifiziert (Edit persistiert, Leg-Edit/Remove, settle-now).
+- Dateien: server.py (PATCH + settle-now Endpoints, `_admin_sanitize_legs`), SubmitTipModal.jsx, RateWall.jsx (Badge + Admin-Tools + doSettleNow), AdminSlipEditor.jsx (neu), i18n.js (submit.selectionRequired/Ph).
 
