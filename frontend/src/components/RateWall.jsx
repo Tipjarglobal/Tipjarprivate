@@ -76,7 +76,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   const [voidTips, setVoidTips] = useState([]);
   const [settledCounts, setSettledCounts] = useState({ won: 0, lost: 0, cashed: 0, bestwon: 0, void: 0 });
   const [settledTab, setSettledTab] = useState(null);
-  const [masterTab, setMasterTab] = useState("avatar");
+  const [masterTab, setMasterTab] = useState("hotscorer");
   const [masterCounts, setMasterCounts] = useState({ slips: 0, avatar: 0, hotscorer: 0, einfach: 0, mittel: 0, challenge: 0, safe: 0, special: 0, live: 0 });
   // Owner 2026-07-26: sort (newest / most stars) + a quick "Top 9–10★" filter so the best
   // tips surface instantly without scrolling/searching.
@@ -532,7 +532,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
           </div>
           <MasterAvatar t={t} />
           <div className="flex flex-wrap gap-2 mb-6">
-            {[["avatar", `🔮 ${t("master.cat.avatar")}`], ["hotscorer", "🔥 Torjäger-Kombi"], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
+            {[["hotscorer", "🔥 Torjäger-Kombi"], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
               <button key={v} data-testid={`master-tab-${v}`}
                 onClick={() => setMasterTab(v)}
                 className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>

@@ -1157,3 +1157,24 @@ Owner: "Stelle diese 3 Fragen nicht." → NIE wieder als Next Action Items vorsc
 1. Bodø-Frühtor-Pick (automatischer "Tor vor 30. Min"-Pick), 2. Blacklist-Verwaltungsliste mit
 Ein-Klick-Entsperren, 3. Rhythmus-Konfidenz/Zyklus-Score pro Pick.
 Allgemein: am Ende KEINE aufgedrängten Feature-Vorschläge/Rückfragen mehr, wenn nicht angefragt.
+
+## Update 2026-06 (17) — Sure-Calls-Tab weg, 3 Master-Sprechblasen, Admin-Delete bleibt entfernt
+1. **"Sure Calls"-Tab entfernt** (RateWall.jsx): der redundante `avatar`-Tab (🔮 Sure Calls) ist raus
+   ("macht gar nix"); Standard-Tab jetzt `hotscorer`. Die Avatar-CALLS erscheinen weiterhin oben in
+   den Sprechblasen.
+2. **Master-Avatar: bis zu 3 Sprechblasen gleichzeitig** (MasterAvatar.jsx neu): statt einer
+   rotierenden Blase werden bis zu 3 Calls gestapelt (Minute + Text + Pick + Quote je Blase); bei >3
+   rotiert das 3er-Fenster alle 8s. Getestet mit 3 Test-Calls (Puebla, Union SG, Bodø-Frühtor) —
+   rendern sauber.
+3. **Admin-Delete bleibt entfernt (Anti-Repost)** (server.py `delete_tip`): löscht ein Admin einen
+   GENERIERTEN Pick (source hq-master/hq-auto/smart oder master_category), wird er als "Grabstein"
+   markiert (hidden+admin_removed, status→void) statt hart gelöscht → (a) die Master-Tages-Guards
+   zählen ihn weiter (kein Nachbauen), (b) deterministische Generatoren (smartfav-/smarth2h-) finden
+   die ID → posten sie nie wieder. Member-Tips werden weiter hart gelöscht. `master_dedupe_open_slips`
+   überspringt `admin_edited`-Scheine (entfernte Legs bleiben entfernt). `/master/avatar` filtert
+   jetzt `hidden`. Getestet: Admin-Delete eines smarth2h-Picks → Grabstein, 2× Regen-Lauf postet ihn
+   NICHT neu (count bleibt 1, 0 sichtbar). Leg-Entfernen/ganzer-Schein-Delete via bestehendem
+   AdminSlipEditor + Delete-Button.
+Owner-Kontext: Beschwerde über "Easy = Challenge + 1 Lotto-Spiel" (Club Brugge BTTS) → Admin kann jetzt
+das Lotto-Leg ODER den ganzen Schein entfernen, und es bleibt weg. Bodø-Frühtor (vor 30. Min) als
+Risk-Banker-Kandidat notiert. HINWEIS: live erst nach "Save to GitHub → Deploy".

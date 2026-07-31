@@ -93,3 +93,6 @@ n>=5 αλλιώς 1, n-2). Ρίσκο-banker δομή = ελεύθερη επι�
   ("Code-Reading"/Smart Picks) entdeckt/bestätigt. → Bodø/Glimt-Heimspiele: "Tor vor 30. Min /
   frühes Tor" ist ein wertvolles wiederkehrendes Muster. Bei künftiger Live-/Frühtor-Logik oder
   Smart-Picks für Bodø/Glimt berücksichtigen.
+- 2026-06 (Ergänzung): Owner: "Bodø trifft bis zur 30. Minute" kann man als RISK-BANKER probieren.
+  → Kandidat für master_riskparade / Risk-Banker: Bodø/Glimt Heimspiel "Tor vor 30. Min" (@~1.30-1.5)
+  als risk-banker-Bein testen (nur wenn abrechenbar via API-Football HZ/Minute-Events).

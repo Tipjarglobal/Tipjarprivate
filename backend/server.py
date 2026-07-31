@@ -882,7 +882,7 @@ async def master_avatar():
     Powers the crown avatar + speech bubble at the top of the Master channel."""
     day = _berlin_now().date().isoformat()
     docs = await db.tips.find(
-        {"source": "hq-master", "master_category": "avatar",
+        {"source": "hq-master", "master_category": "avatar", "hidden": {"$ne": True},
          "$or": [{"master_day": day}, {"status": {"$in": ["pending", "live"]}}]},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "market": 1,
          "odds": 1, "match_time": 1, "avatar_minute": 1, "avatar_text": 1,
@@ -2641,6 +2641,20 @@ async def delete_tip(tip_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Tip not found")
     if user.get("role") != "admin" and tip.get("user_id") != user["id"]:
         raise HTTPException(status_code=403, detail="You can only delete your own tips.")
+    is_generated = tip.get("source") in ("hq-master", "hq-auto", "smart") or bool(tip.get("master_category"))
+    if user.get("role") == "admin" and is_generated:
+        # Owner: "wenn ich als Admin etwas entferne, bleibt es entfernt und wird nicht wieder
+        # reingepostet." → Tombstone instead of hard-delete: the daily master build-guards keep
+        # counting it AND the deterministic generators (smartfav-/smarth2h-…) still 'see' the id,
+        # so the removed pick can never be regenerated. It vanishes from the feed (hidden).
+        await db.tips.update_one({"id": tip_id}, {"$set": {
+            "hidden": True, "admin_removed": True,
+            "admin_removed_at": datetime.now(timezone.utc).isoformat(),
+            "status": "void" if tip.get("status") in ("pending", "live") else tip.get("status", "void"),
+        }})
+        await db.tip_ratings.delete_many({"tip_id": tip_id})
+        logger.info(f"Admin tombstoned generated tip {tip_id} ({tip.get('source')}/{tip.get('master_category')})")
+        return {"deleted": True, "tip_id": tip_id, "tombstoned": True}
     await db.tips.delete_one({"id": tip_id})
     await db.tip_ratings.delete_many({"tip_id": tip_id})
     return {"deleted": True, "tip_id": tip_id}
@@ -5296,7 +5310,8 @@ async def master_dedupe_open_slips() -> dict:
     fixed = 0
     slips = await db.tips.find(
         {"source": "hq-master", "is_parlay": True, "combo_legs": {"$exists": False},
-         "status": {"$in": ["pending", "live"]}, "legs.0": {"$exists": True}},
+         "status": {"$in": ["pending", "live"]}, "legs.0": {"$exists": True},
+         "admin_edited": {"$ne": True}},
         {"_id": 0, "id": 1, "legs": 1, "odds": 1, "market": 1}).to_list(200)
     for s in slips:
         legs = s.get("legs") or []
