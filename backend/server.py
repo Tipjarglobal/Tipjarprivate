@@ -7909,10 +7909,19 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
 @api_router.get("/code-reading")
 async def code_reading():
     """The Code-Reading channel: our counter-reads of SpinBetter's accumulator of the day."""
-    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
     reads = await db.code_reads.find(
         {"expires_at": {"$gt": now}}, {"_id": 0}).sort("created_at", -1).to_list(60)
-    return {"count": len(reads), "reads": reads}
+    # owner 2026-07-31: DROP reads whose match is already OVER (kickoff + 150 min). Finished
+    # games (e.g. yesterday's Europa-Conference fixtures) must NOT linger in the smart-picks
+    # channel — even if a stale/misdated accumulator re-scan re-creates them. Reads without a
+    # parseable kickoff are kept (can't judge them safely).
+    grace = timedelta(minutes=150)
+    fresh = [r for r in reads
+             if (_parse_kickoff(r.get("kickoff")) is None
+                 or _parse_kickoff(r.get("kickoff")) + grace > now_dt)]
+    return {"count": len(fresh), "reads": fresh}
 
 
 _CR_SCAN_JOBS: dict = {}  # job_id -> {status, scanned, reads, note/error}
@@ -7933,6 +7942,11 @@ async def _run_code_scan(job_id: str, images: list):
             home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
             market = (lg.get("code_market") or lg.get("market") or "").strip()
             if not (home and away):
+                continue
+            # owner 2026-07-31: never store a read for a match that is ALREADY OVER — a stale
+            # or mis-dated accumulator (AI date confusion) must not inject yesterday's games.
+            ko_dt = _parse_kickoff(lg.get("kickoff") or "")
+            if ko_dt is not None and ko_dt + timedelta(minutes=150) < now:
                 continue
             await db.code_reads.delete_many({"day": day, "home": home, "away": away, "outcome": {"$exists": False}})
             read = lg.get("read") if lg.get("read") in ("counter", "no_bet") else None

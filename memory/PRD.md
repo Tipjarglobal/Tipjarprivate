@@ -1035,3 +1035,17 @@ Owner (ελληνικά): ποτέ banker/ρίσκο-ζητούμενο για �
    1 ρίσκο high-odds banker (3.0-12.0, όχι veto) + 3-4 χαλαρά ασφαλή ζητούμενα (1.10-1.55), system
    (N-1)/N. Χαμένος banker → όλο χαμένο (settlement). Δοκιμάστηκε live: System 4/5 @12.99, banker
    Über 3.5 @5.00 + 4 ασφαλή, καθαρίστηκε. Δεν συγκρούεται με το ημερήσιο ασφαλές σύστημα (χωριστό style).
+
+## Update 2026-07-31 (11) — Code-Reading („smart picks") Müll-Bereinigung
+Owner: beendete Spiele (Do Conference League) hängen im smart-picks-Bereich, Analysen nicht löschbar,
+gevoidete Tipps kommen zurück; KI hat Datum verwechselt.
+Root-cause & Fix (server.py):
+1. `/code-reading` blendet jetzt Reads aus, deren Spiel VORBEI ist (kickoff + 150 min < now). Beendete
+   Spiele verschwinden automatisch — auch wenn ein alter/falsch datierter Scan sie neu anlegt.
+2. Der Code-Scan (`_run_code_scan`) legt KEINE Reads mehr für bereits beendete Spiele an (fängt die
+   KI-Datumsverwechslung ab).
+3. Einmalige Bereinigung ausgeführt: beendete code_reads gelöscht (0 in Preview — DB war sauber, nur
+   heutige Spiele), 4 eindeutig beendete KI-Tipps (kickoff+4h<now) gelöscht.
+BEFUND: Preview-DB enthielt KEINEN Donnerstag-Müll (nur aktuelle Freitag-Spiele) → der sichtbare Müll
+ist auf PRODUCTION. Nach Deploy blendet der Endpoint-Filter beendete Spiele automatisch aus (auch bei
+bestehenden Prod-Rows). Admin-Löschbutton (Trash2) pro Analyse existiert bereits (role==admin).
