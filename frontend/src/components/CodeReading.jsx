@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Brain, TrendingUp, TrendingDown } from "lucide-react";
+import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Brain, TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
 import { useI18n } from "../i18n";
+import { useAuth } from "../auth";
 
 const L = {
   de: {
@@ -84,6 +85,15 @@ const PAT_LABEL = {
 };
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
+const FL = {
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή" },
+};
+
+const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
+const INP = "bg-void border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-volt/60 outline-none w-full";
+
 function LearnRow({ r, t }) {
   const pct = Math.round((r.rate || 0) * 100);
   const color = r.verdict === "veto" ? "text-red-400" : r.verdict === "boost" ? "text-volt" : "text-zinc-300";
@@ -103,12 +113,19 @@ function LearnRow({ r, t }) {
 
 export function CodeReading() {
   const { lang } = useI18n();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const t = L[lang] || L.en;
+  const fl = FL[lang] || FL.en;
   const [reads, setReads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [stats, setStats] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const load = () => api.get("/code-reading")
     .then(({ data }) => setReads(data.reads || []))
@@ -117,6 +134,24 @@ export function CodeReading() {
   const loadStats = () => api.get("/learning/stats").then(({ data }) => setStats(data)).catch(() => {});
 
   useEffect(() => { load(); loadStats(); }, []);
+
+  const submitManual = async () => {
+    if (!form.home.trim() || !form.away.trim()) { toast.error(`${fl.home} & ${fl.away}`); return; }
+    setSaving(true);
+    try {
+      await api.post("/admin/code-reading/manual", form);
+      toast.success(fl.save + " ✓");
+      setForm(EMPTY_FORM);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.status === 403 ? t.adminOnly : "Fehlgeschlagen");
+    } finally { setSaving(false); }
+  };
+
+  const removeRead = async (id) => {
+    try { await api.delete(`/admin/code-reading/${id}`); toast.success(fl.del + " ✓"); load(); }
+    catch { toast.error("Fehlgeschlagen"); }
+  };
 
   const onFile = async (e) => {
     const file = e.target.files?.[0];
@@ -174,6 +209,41 @@ export function CodeReading() {
           data-testid="code-reading-file-input" />
       </div>
 
+      {isAdmin && (
+        <div className="mb-5 rounded-xl border border-zinc-700 bg-void/40 p-4" data-testid="code-reading-manual">
+          <button onClick={() => setShowForm((v) => !v)} data-testid="code-reading-manual-toggle"
+            className="flex items-center gap-2 text-xs font-bold text-zinc-200">
+            <Plus size={14} className="text-volt" /> {fl.add}
+          </button>
+          {showForm && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <input value={form.home} onChange={(e) => setF("home", e.target.value)} placeholder={fl.home} data-testid="cr-form-home" className={INP} />
+              <input value={form.away} onChange={(e) => setF("away", e.target.value)} placeholder={fl.away} data-testid="cr-form-away" className={INP} />
+              <input value={form.league} onChange={(e) => setF("league", e.target.value)} placeholder={fl.league} className={INP} />
+              <input value={form.kickoff} onChange={(e) => setF("kickoff", e.target.value)} placeholder={fl.kickoff} className={INP} />
+              <input value={form.code_market} onChange={(e) => setF("code_market", e.target.value)} placeholder={fl.code} className={`${INP} sm:col-span-2`} />
+              <div className="flex gap-2 sm:col-span-2">
+                <button onClick={() => setF("read", "counter")} data-testid="cr-form-read-counter"
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold border transition-colors ${form.read === "counter" ? "bg-volt text-void border-volt" : "border-zinc-700 text-zinc-300"}`}>{fl.counter}</button>
+                <button onClick={() => setF("read", "no_bet")} data-testid="cr-form-read-nobet"
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold border transition-colors ${form.read === "no_bet" ? "bg-zinc-300 text-black border-zinc-300" : "border-zinc-700 text-zinc-300"}`}>{fl.nobet}</button>
+              </div>
+              {form.read === "counter" && (
+                <>
+                  <input value={form.our_market} onChange={(e) => setF("our_market", e.target.value)} placeholder={fl.our} data-testid="cr-form-our" className={INP} />
+                  <input type="number" min="0" max="10" value={form.stars} onChange={(e) => setF("stars", e.target.value)} placeholder={fl.stars} className={INP} />
+                </>
+              )}
+              <textarea value={form.reason} onChange={(e) => setF("reason", e.target.value)} placeholder={fl.reason} rows={2} className={`${INP} sm:col-span-2`} />
+              <button onClick={submitManual} disabled={saving} data-testid="cr-form-save"
+                className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-full bg-volt text-void font-bold text-xs px-4 py-2.5 disabled:opacity-60 hover:opacity-90 transition">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {fl.save}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-volt" /></div>
       ) : reads.length === 0 ? (
@@ -188,15 +258,23 @@ export function CodeReading() {
                 className={`rounded-xl border p-4 ${noBet ? "border-zinc-700 bg-void/40" : "border-volt/40 bg-volt/5"}`}>
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="font-bold text-white text-sm truncate">{r.home} – {r.away}</span>
-                  {settled ? (
-                    <span data-testid={`code-read-outcome-${r.id}`}
-                      className={`inline-flex items-center gap-1 text-[10px] font-black shrink-0 rounded-full px-2 py-0.5 ${r.outcome === "won" ? "bg-volt/20 text-volt" : "bg-red-500/15 text-red-400"}`}>
-                      {r.outcome === "won" ? <Check size={11} /> : <X size={11} />}
-                      {r.outcome === "won" ? t.won : t.lost}{r.score ? ` ${r.score}` : ""}
-                    </span>
-                  ) : r.league ? (
-                    <span className="text-[10px] text-zinc-500 shrink-0">{r.league}</span>
-                  ) : null}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {settled ? (
+                      <span data-testid={`code-read-outcome-${r.id}`}
+                        className={`inline-flex items-center gap-1 text-[10px] font-black rounded-full px-2 py-0.5 ${r.outcome === "won" ? "bg-volt/20 text-volt" : "bg-red-500/15 text-red-400"}`}>
+                        {r.outcome === "won" ? <Check size={11} /> : <X size={11} />}
+                        {r.outcome === "won" ? t.won : t.lost}{r.score ? ` ${r.score}` : ""}
+                      </span>
+                    ) : r.league ? (
+                      <span className="text-[10px] text-zinc-500">{r.league}</span>
+                    ) : null}
+                    {isAdmin && (
+                      <button onClick={() => removeRead(r.id)} data-testid={`code-read-delete-${r.id}`}
+                        className="text-zinc-500 hover:text-red-400 transition-colors" title={fl.del}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-[11px] text-zinc-500 mb-2">
                   <span className="opacity-70">{t.code}:</span> <span className="line-through">{r.code_market}</span>

@@ -7910,6 +7910,43 @@ async def admin_learning_refresh(admin: dict = Depends(require_admin)):
     return {"ok": True, "code_reads": cr, "stats": _LEARN}
 
 
+@api_router.post("/admin/code-reading/manual")
+async def admin_code_reading_manual(payload: dict, admin: dict = Depends(require_admin)):
+    """Admin writes ONE code-read by hand (single selection, not a slip)."""
+    home = (payload.get("home") or "").strip()
+    away = (payload.get("away") or "").strip()
+    if not (home and away):
+        raise HTTPException(status_code=400, detail="home and away required")
+    read = payload.get("read") if payload.get("read") in ("counter", "no_bet") else "counter"
+    try:
+        stars = max(0, min(10, int(payload.get("stars") or 0)))
+    except (ValueError, TypeError):
+        stars = 0
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": f"cr-{uuid.uuid4().hex[:10]}", "day": _berlin_now().date().isoformat(),
+        "home": home, "away": away, "league": (payload.get("league") or "").strip(),
+        "kickoff": (payload.get("kickoff") or "").strip(),
+        "code_market": (payload.get("code_market") or "").strip(),
+        "code_odds": (payload.get("code_odds") or "").strip(),
+        "read": read,
+        "our_market": ((payload.get("our_market") or "").strip() or None) if read == "counter" else None,
+        "alt_market": (payload.get("alt_market") or "").strip() or None,
+        "reason": (payload.get("reason") or "").strip(),
+        "pattern": "manual", "stars": stars,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(hours=30)).isoformat(),
+    }
+    await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
+    return {"ok": True, "read": doc}
+
+
+@api_router.delete("/admin/code-reading/{read_id}")
+async def admin_code_reading_delete(read_id: str, admin: dict = Depends(require_admin)):
+    res = await db.code_reads.delete_one({"id": read_id})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
 
 def _live_bet_landed(market: str, hg, ag, home: str, away: str):
     """True=won, False=not yet/lost, None=not a goal-progress market (skip)."""
