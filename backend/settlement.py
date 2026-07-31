@@ -56,6 +56,80 @@ from server import (
 )
 
 
+def _special_gift_kind(market: str):
+    """Detect the owner's special GIFTS (2026-07-31) from the market text."""
+    m = (market or "").lower()
+    if "mindestens eine halbzeit" in m:
+        return "half_any"
+    if "nicht beide halbzeiten" in m:
+        return "not_both_halves"
+    if "ersten 2 tore" in m or "erste 2 tore" in m or "ersten zwei tore" in m:
+        return "first_two"
+    return None
+
+
+def _fav_side_in_fixture(market: str, home_c: str, away_c: str, fx: dict) -> str:
+    """Which fixture side (home/away) is the favourite named at the START of a special-gift
+    market string ('<Fav> gewinnt ...' / '<Fav> schießt ...')."""
+    fname = market.split(" gewinnt")[0].split(" schießt")[0].strip()
+    if _teams_match(fx.get("home_name", ""), fname):
+        return "home"
+    if _teams_match(fx.get("away_name", ""), fname):
+        return "away"
+    return "home" if _teams_match(fx.get("home_name", ""), home_c) else "away"
+
+
+def _grade_special_gift(kind: str, market: str, home_c: str, away_c: str, fx: dict):
+    """Grade the owner's special gifts from a FINISHED fixture. Returns True/False, or None if
+    it can't be judged yet (→ retry). half_any / not_both_halves use the half-time & full-time
+    scores; first_two uses the goal-event order."""
+    hg, ag = fx.get("home_goals"), fx.get("away_goals")
+    if hg is None or ag is None:
+        return None
+    side = _fav_side_in_fixture(market, home_c, away_c, fx)
+
+    def orient(h, a):
+        return (h, a) if side == "home" else (a, h)
+
+    if kind in ("half_any", "not_both_halves"):
+        hh, ha = fx.get("ht_home"), fx.get("ht_away")
+        if hh is None or ha is None:
+            return None
+        f1, o1 = orient(hh, ha)                       # 1st-half goals (fav, opp)
+        f2, o2 = orient(hg - hh, ag - ha)             # 2nd-half goals
+        win1, win2 = f1 > o1, f2 > o2
+        if kind == "half_any":
+            return bool(win1 or win2)
+        return not (win1 and win2)                    # NOT both halves won
+    if kind == "first_two":
+        try:
+            events = _apifootball("/fixtures/events", {"fixture": fx.get("fixture_id")}) or []
+        except Exception:
+            return None
+        goals = []
+        for e in events:
+            if (e.get("type") or "").lower() != "goal":
+                continue
+            detail = (e.get("detail") or "").lower()
+            if "missed" in detail:
+                continue                              # missed penalty is not a goal
+            tname = ((e.get("team") or {}).get("name")) or ""
+            scorer_home = _teams_match(fx.get("home_name", ""), tname)
+            if "own goal" in detail:
+                scorer_home = not scorer_home         # own goal counts for the opponent
+            tm = (e.get("time") or {})
+            minute = (tm.get("elapsed") or 0) + (tm.get("extra") or 0)
+            goals.append((minute, "home" if scorer_home else "away"))
+        if hg + ag >= 2 and len(goals) < 2:
+            return None                               # events not populated yet → retry
+        if len(goals) < 2:
+            return False                              # fewer than 2 goals → gift lost
+        goals.sort(key=lambda x: x[0])
+        return {goals[0][1], goals[1][1]} == {side}   # first two goals BOTH by the favourite
+    return None
+
+
+
 def _grade_player_leg(leg, pmap, team_cards, fx):
     """Grade a single player-prop / team-card / qualifier / handicap leg from a finished
     match. Returns True (won), False (lost) or None (cannot grade → do NOT settle)."""
@@ -638,6 +712,13 @@ async def settle_pending_tips() -> dict:
                    "player": tip.get("player") or "", "team": tip.get("team", ""),
                    "home": home_c, "away": away_c}
             res = _grade_player_leg(leg, pmap or {}, team_cards or {}, fx)
+            if res is None:
+                await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
+                continue
+            new_status = "won" if res else "lost"
+        elif _special_gift_kind(outcome_market):
+            _sgk = _special_gift_kind(outcome_market)
+            res = _grade_special_gift(_sgk, outcome_market, home_c, away_c, fx)
             if res is None:
                 await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
                 continue

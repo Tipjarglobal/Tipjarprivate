@@ -1049,3 +1049,16 @@ Root-cause & Fix (server.py):
 BEFUND: Preview-DB enthielt KEINEN Donnerstag-Müll (nur aktuelle Freitag-Spiele) → der sichtbare Müll
 ist auf PRODUCTION. Nach Deploy blendet der Endpoint-Filter beendete Spiele automatisch aus (auch bei
 bestehenden Prod-Rows). Admin-Löschbutton (Trash2) pro Analyse existiert bereits (role==admin).
+
+## Update 2026-07-31 (12) — Neue Spezial-Geschenke (Halbzeit & erste 2 Tore), auto-abrechenbar
+Owner wünschte 5 neue Pick-Typen (2 Live, 3 Gifts). Umgesetzt: die 3 GESCHENKE (sauber abrechenbar).
+Generator `gift_specials_autopost()` (server.py, im master_loop, 1× je Typ/Tag), Prognose+Quote:
+1. „<Fav> gewinnt mindestens eine Halbzeit" — Fav-WIN-Quote > 1.30 (Est. 1.25).
+2. „<Fav> gewinnt NICHT beide Halbzeiten" — starker Fav, WIN-Quote ≤ 1.40 (Est. 1.55).
+3. „<Fav> schießt die ersten 2 Tore" — WIN-Quote > 1.40, Fav ≥2 Prognose-Tore & Gegner ≤1 (Est. 2.00).
+Abrechnung (settlement.py `_grade_special_gift`): Halbzeit-Gifts deterministisch aus HT/FT-Score
+(1./2. Halbzeit-Sieger); erste-2-Tore aus Tor-Events-Reihenfolge (Eigentor→Gegner, retry bis Events da).
+Getestet: Halbzeit-Logik (Assertions), Generator (Fav 1.55 → half_any + first_two; ≤1.40 → not_both).
+NICHT umgesetzt (bewusst): die 2 LIVE-Ideen — „Ecken nach 70'" ist mit API-Football NICHT sauber
+abrechenbar (keine zeit-gesplitteten Ecken), und „nächstes Tor" bräuchte Live-Event-Polling (Void-Risiko).
+Bewusst weggelassen, um NICHT den unabrechenbaren Müll zu erzeugen, den der Owner gerade beklagt hat.

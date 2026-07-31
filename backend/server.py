@@ -7285,6 +7285,104 @@ EURO_KO_KEYWORDS = (
 KO_MAX_PER_RUN = 4  # aggressive KO-tie specials per day
 
 
+GIFT2_MAX_PER_KIND = 1  # one of each special gift per day
+
+
+async def gift_specials_autopost() -> dict:
+    """Owner 2026-07-31 special GIFTS on clear favourites — all AUTO-SETTLED (HT/FT scores &
+    goal order):
+      • '<Fav> gewinnt mindestens eine Halbzeit'  — moderate fav, WIN odds > 1.30
+      • '<Fav> gewinnt NICHT beide Halbzeiten'     — strong fav, WIN odds <= 1.40
+      • '<Fav> schießt die ersten 2 Tore'          — fav WIN odds > 1.40 & barely threatened
+    Posted as KI singles (hq-auto, is_gift) → 🎁 Geschenke."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "no API key"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ missing"}
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    counts = {}
+    for k in ("half_any", "not_both_halves", "first_two"):
+        counts[k] = await db.tips.count_documents(
+            {"source": "hq-auto", "is_gift": True, "gift_kind": k, "gift_day": day})
+    if all(counts[k] >= GIFT2_MAX_PER_KIND for k in counts):
+        return {"posted": 0, "reason": "daily cap"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(5000)
+    cand = []
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        fav = _fav_team(p)
+        fav_prob = int(float(p.get("fav_prob") or 0))
+        if not fav or p.get("fav") not in ("home", "away") or fav_prob < 60:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        cand.append((fav_prob, p, fav))
+    cand.sort(key=lambda x: -x[0])
+    posted = 0
+    for fav_prob, p, fav in cand:
+        if all(counts[k] >= GIFT2_MAX_PER_KIND for k in counts):
+            break
+        home, away = p.get("home"), p.get("away")
+        fav_home = p.get("fav") == "home"
+        fav_goals = (p.get("ph") or 0) if fav_home else (p.get("pa") or 0)
+        opp_goals = (p.get("pa") or 0) if fav_home else (p.get("ph") or 0)
+        try:
+            odds = await ensure_match_odds(home, away, p.get("kickoff") or "")
+        except Exception:
+            odds = {}
+        try:
+            win_od = float(odds.get("win_home") if fav_home else odds.get("win_away"))
+        except (TypeError, ValueError):
+            continue
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        base = {
+            "user_id": hq["id"], "username": "TipJarHQ", "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Geschenk",
+            "league_code": p.get("league_code") or "", "ai_rating": 9.0,
+            "win_prob": round(fav_prob / 100.0, 2), "is_gift": True, "gift_day": day,
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "category": "value", "status": "pending", "sum_stars": 0, "ratings_count": 0,
+            "avg_rating": 0, "source": "hq-auto", "created_at": now.isoformat(),
+        }
+
+        async def _post(kind, market, gift_od, analysis):
+            nonlocal posted
+            if counts[kind] >= GIFT2_MAX_PER_KIND:
+                return
+            tip_id = f"gift-{kind}-{mkey}"
+            if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+                return
+            await db.tips.insert_one({**base, "id": tip_id, "market": market,
+                                      "odds": f"{gift_od:.2f}", "ai_analysis": analysis,
+                                      "gift_kind": kind})
+            counts[kind] += 1
+            posted += 1
+
+        if counts["half_any"] < GIFT2_MAX_PER_KIND and win_od > 1.30:
+            await _post("half_any", f"{fav} gewinnt mindestens eine Halbzeit", 1.25,
+                        f"🎁 {fav} ist klarer Favorit (Quote {win_od:.2f}) und gewinnt sehr "
+                        f"wahrscheinlich mindestens EINE der beiden Halbzeiten. Quote geschätzt.")
+        if counts["not_both_halves"] < GIFT2_MAX_PER_KIND and 1.0 < win_od <= 1.40:
+            await _post("not_both_halves", f"{fav} gewinnt NICHT beide Halbzeiten", 1.55,
+                        f"🎁 Selbst der starke Favorit {fav} (Quote {win_od:.2f}) gewinnt selten "
+                        f"BEIDE Halbzeiten — Value gegen beide-Halbzeiten. Quote geschätzt.")
+        if (counts["first_two"] < GIFT2_MAX_PER_KIND and win_od > 1.40
+                and fav_goals >= 2 and opp_goals <= 1):
+            await _post("first_two", f"{fav} schießt die ersten 2 Tore", 2.00,
+                        f"🎁 {fav} trifft laut Prognose {fav_goals}×, Gegner kaum gefährlich "
+                        f"({opp_goals}). Die ersten 2 Tore des Spiels von {fav}. Quote geschätzt.")
+    return {"posted": posted, "candidates": len(cand)}
+
+
+
 async def _first_leg_result(home: str, away: str, kickoff_dt):
     """For a suspected 2nd leg, fetch H2H and return the FIRST-leg score as
     (fl_home_name, fl_home_goals, fl_away_name, fl_away_goals) — the most recent prior
@@ -10349,13 +10447,15 @@ async def master_loop():
                 avatar = await master_avatar_calls()
                 # Owner "Torjäger-Kombi": daily hot-scorer Doppelpack parlay (Hall-of-Fame shot).
                 hotc = await master_hotscorer_combo()
+                # Owner special GIFTS: half-time & first-2-goals gifts on clear favourites.
+                gifts2 = await gift_specials_autopost()
                 # Clean legacy slips of per-game redundant legs (BTTS ⇒ Über 1.5 etc.).
                 await master_dedupe_open_slips()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or safe.get("posted") or special.get("posted") or avatar.get("posted") \
-                        or hotc.get("posted") or risk.get("posted") \
+                        or hotc.get("posted") or risk.get("posted") or gifts2.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; gifts2 {gifts2}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)
