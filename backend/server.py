@@ -9589,20 +9589,28 @@ async def master_riskparade_build() -> dict:
             {"source": "hq-master", "master_category": "mittel", "system_style": "risk",
              "status": {"$in": ["pending", "live"]}}):
         return {"skipped": "open"}
-    # The risky hook: highest-confidence pick in a high-odds band (avoid market-types the
-    # Master keeps losing). Safe ζητούμενα: chill low-odds legs (e.g. a big fav Über line).
-    risky = await _master_leg_candidates(now, 3.0, 12.0)
+    # The risky hook: the Master is FREE to tie whatever it wants as the risk-banker (owner:
+    # "να δένει ότι θέλει· όλα επιτρεπτά") — one high-odds pick OR a risky PAIR of two games
+    # (his ~10 "δυάδα") both marked banker. It just avoids market-types it keeps losing.
+    risky = await _master_leg_candidates(now, 2.2, 12.0)
     risky = [c for c in risky if learn_verdict("master", c["market"])[0] != "veto"]
     if not risky:
         return {"skipped": "no-risky"}
-    banker = risky[0]  # already sorted by confidence (-weight, odds)
+    bankers = [risky[0]]
+    # tie a second risky game if available and the pair stays a sane hook (combined <= ~15)
+    for c in risky[1:]:
+        if c["fixkey"] != risky[0]["fixkey"] and risky[0]["odds"] * c["odds"] <= 15.0:
+            bankers.append(c)
+            break
+    banker_keys = {b["fixkey"] for b in bankers}
+    banker_matches = {b["match"] for b in bankers}
     safe = await _master_leg_candidates(now, 1.10, 1.55)
-    safe = [c for c in safe if c["fixkey"] != banker["fixkey"]
+    safe = [c for c in safe if c["fixkey"] not in banker_keys
             and learn_verdict("master", c["market"])[0] != "veto"]
     if len(safe) < 3:
         return {"skipped": "not-enough-safe", "have": len(safe)}
     zit = sorted(safe, key=lambda c: c["odds"])[:4]  # 3-4 chill ζητούμενα behind the hook
-    chosen = [banker] + zit
+    chosen = bankers + zit
     chosen, prod = await _enrich_legs_real_odds(chosen)
     n = len(chosen)
     bot = await _get_master_bot()
@@ -9616,13 +9624,13 @@ async def master_riskparade_build() -> dict:
         "category": "value", "master_category": "mittel", "master_day": day, "ai_rating": 8.0,
         "ai_analysis": f"👑 TipJarMaster System {n - 1}/{n} · Risk-Banker (Παρέλαση).",
         "bet_type": "system", "system_from": n - 1, "system_total": n, "system_style": "risk",
-        "legs": _pack_legs(chosen, {banker["match"]}), "is_parlay": True,
+        "legs": _pack_legs(chosen, banker_matches), "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
     }
     await db.tips.insert_one(tip)
-    logger.info(f"Master risk-parade: banker {banker['match']} @ {banker['odds']} + {len(zit)} safe → {prod}")
-    return {"posted": 1, "odds": prod, "banker": banker["match"], "games": n}
+    logger.info(f"Master risk-parade: {len(bankers)} risk-banker(s) {banker_matches} + {len(zit)} safe → {prod}")
+    return {"posted": 1, "odds": prod, "bankers": list(banker_matches), "games": n}
 
 
 
