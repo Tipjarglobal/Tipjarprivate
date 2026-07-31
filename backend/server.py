@@ -2605,6 +2605,91 @@ async def set_status(tip_id: str, inp: StatusInput, user: dict = Depends(get_cur
     return await db.tips.find_one({"id": tip_id}, {"_id": 0})
 
 
+# ------------------------------------------------------------------ admin slip editor
+def _admin_sanitize_legs(legs) -> list:
+    """Preserve everything an admin may edit on a leg — including `status` (which the
+    normal member sanitizer drops)."""
+    out = []
+    for lg in (legs or []):
+        if not isinstance(lg, dict):
+            continue
+        sels = [str(s).strip() for s in (lg.get("selections") or []) if str(s).strip()][:10]
+        sodds = [str(o or "").strip() for o in (lg.get("sel_odds") or [])][:10]
+        clean = {
+            "match": str(lg.get("match", "") or "").strip(),
+            "league": str(lg.get("league", "") or "").strip(),
+            "kickoff": str(lg.get("kickoff", "") or "").strip(),
+            "selections": sels,
+            "sel_odds": sodds,
+            "banker": bool(lg.get("banker", False)),
+        }
+        st = lg.get("status")
+        if st in ("pending", "live", "won", "lost", "void"):
+            clean["status"] = st
+        out.append(clean)
+    return out[:12]
+
+
+@api_router.patch("/admin/tips/{tip_id}")
+async def admin_edit_tip(tip_id: str, payload: dict, admin: dict = Depends(require_admin)):
+    """Admin correction of any existing slip: fix kickoff/times, team names & positions,
+    league/country, market/odds/stake, and edit or remove individual legs (incl. per-leg
+    status, banker, selections & odds)."""
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    upd = {}
+    for fld in ("match_time", "home_team", "away_team", "league", "country", "market", "odds", "stake"):
+        if fld in payload and payload[fld] is not None:
+            upd[fld] = str(payload[fld]).strip()
+    if payload.get("swap_teams"):
+        h = upd.get("home_team", tip.get("home_team", "") or "")
+        a = upd.get("away_team", tip.get("away_team", "") or "")
+        upd["home_team"], upd["away_team"] = a, h
+    if isinstance(payload.get("legs"), list):
+        legs = _admin_sanitize_legs(payload["legs"])
+        upd["legs"] = legs
+        upd["is_parlay"] = len(legs) > 1 or (len(legs) == 1 and len(legs[0].get("selections", [])) > 1)
+    new_odds = upd.get("odds", tip.get("odds", "") or "")
+    new_stake = upd.get("stake", tip.get("stake", "") or "")
+    if "odds" in upd or "stake" in upd:
+        upd["potential_return"] = compute_return(new_stake, new_odds, "")
+    upd["admin_edited"] = True
+    upd["admin_edited_at"] = datetime.now(timezone.utc).isoformat()
+    upd["settle_attempts"] = 0  # re-grade cleanly after an edit
+    await db.tips.update_one({"id": tip_id}, {"$set": upd})
+    return await db.tips.find_one({"id": tip_id}, {"_id": 0})
+
+
+@api_router.post("/admin/tips/{tip_id}/settle-now")
+async def admin_settle_tip_now(tip_id: str, admin: dict = Depends(require_admin)):
+    """Manual 'Spiel zuende' trigger — forces the AI results engine to re-check THIS slip.
+    Resets its retry budget then runs the matching settle pass. Returns the fresh slip;
+    `settled` is true only when the engine actually resolved it (won/lost/void/cashed)."""
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    await db.tips.update_one({"id": tip_id}, {"$set": {"settle_attempts": 0}})
+    _reset_api_quota_flag()
+    result = {}
+    try:
+        if tip.get("is_parlay"):
+            result["parlays"] = await settle_multimatch_parlays()
+        else:
+            result["singles"] = await settle_pending_tips()
+    except Exception as e:
+        logger.error(f"manual settle failed for {tip_id}: {e}")
+        result["error"] = str(e)
+    fresh = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    result["tip"] = fresh
+    result["settled"] = bool(fresh and fresh.get("status") not in ("pending", "live"))
+    if _api_quota_exhausted():
+        result["reason"] = "API-Football Tageslimit erreicht – bitte später erneut versuchen."
+    elif not result["settled"]:
+        result["reason"] = "Spiel noch nicht als beendet erkannt – bitte kurz nach Abpfiff erneut versuchen."
+    return result
+
+
 # ------------------------------------------------------------------ leaderboard
 @api_router.get("/leaderboard")
 async def leaderboard():

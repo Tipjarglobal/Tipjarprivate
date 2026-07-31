@@ -1,0 +1,77 @@
+{
+  "summary": "Frontend testing of TipJar for 3 features: (1) editable market field in Submit-Tip modal + empty-slip guard, (2) Community-Live badge on live community slips, (3) Admin slip editor + 'Spiel zuende' manual settle. App loads clean with no compile/runtime errors ('editOpen is not defined' fix confirmed). Admin login (admin@tipjar.com) succeeds. Tasks 2 & 3 pass fully. Task 1 element-existence & editability & scan-prefill & success flow all pass; however the empty-slip validation is effectively unreachable because of a code fallback (line 131 in SubmitTipModal.jsx) that ignores the user's cleared value if the detected market is non-empty — see 'critical_code_review_comments' & 'action_items'.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "SubmitTipModal.jsx (publish validation)",
+        "issue": "The empty-slip guard cannot be triggered by clearing 'market-edit-input' after analysis. Line 131 uses `mkt = (marketEdit || d.market || '').trim()` — because scan always populates d.market via LLM, the fallback masks the user's cleared value and the tip still posts (verified: after clearing input and clicking Publish, tip was posted with the original detected market). The German validation toast t('submit.selectionRequired') and selection-hint only render when BOTH marketEdit is empty AND detected.legs have no selections, which in practice is unreachable via typical text/image scans (LLM always fills something).",
+        "selector": "[data-testid=\"publish-button\"] / [data-testid=\"market-edit-input\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "task_1_editable_market": {
+      "detected_panel_appears": true,
+      "market_edit_input_present": true,
+      "market_edit_input_tag": "input",
+      "market_edit_input_editable": true,
+      "prefilled_from_scan": true,
+      "prefilled_examples": ["Total Over 0.5", "Lazio Goals, Juventus Cards, Total Corners", "Over 0.5 Goals"],
+      "successful_publish_with_market": true,
+      "empty_market_guard_triggered_by_clearing_input": false,
+      "note": "Guard only fires when scan returns empty market AND no leg selections — see bug above."
+    },
+    "task_2_community_live_badge": {
+      "count_on_community_live_view": 2,
+      "testids_verified": ["community-live-badge-deneb-042a1accd2", "community-live-badge-polaris-ac755c53a7"],
+      "background_color": "rgb(240, 68, 60)",
+      "white_pulsing_dot_present": true
+    },
+    "task_3_admin_slip_editor": {
+      "admin_tools_row_present": true,
+      "admin_edit_opens_modal": true,
+      "admin_slip_editor_testid_present": true,
+      "fields_present": ["edit-home", "edit-away", "edit-swap-teams", "edit-matchtime", "edit-league", "admin-slip-save"],
+      "swap_teams_works": true,
+      "per_leg_controls": {
+        "edit-leg-status": true,
+        "status_options": ["Offen","Live","Gewonnen","Verloren","Annulliert"],
+        "edit-leg-banker": true,
+        "sel-inputs": true,
+        "edit-remove-leg": true,
+        "addsel": true
+      },
+      "save_toast": "Schein aktualisiert ✓",
+      "modal_closes_after_save": true,
+      "league_change_persists_on_reopen": true
+    },
+    "task_3_settle_now": {
+      "button_present": true,
+      "click_response_status": 200,
+      "toast_message": "Spiel noch nicht als beendet erkannt – bitte kurz nach Abpfiff erneut versuchen.",
+      "no_500_or_js_errors": true
+    }
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix Submit-Tip empty-slip guard: replace `const mkt = (marketEdit || d.market || \"\").trim();` with `const mkt = (marketEdit ?? d.market ?? \"\").trim();` OR simply use `marketEdit.trim()` (since useEffect already syncs marketEdit ← detected.market). This will let a user's intentional clear actually create the empty-market case and surface t('submit.selectionRequired') + data-testid='selection-hint'."
+  ],
+  "critical_code_review_comments": [
+    "SubmitTipModal.jsx:131 — `mkt = (marketEdit || d.market || '').trim()` breaks the intended UX where clearing 'market-edit-input' should trigger the empty-slip guard. Use `marketEdit.trim()` since marketEdit is already synced to d.market via useEffect on detected change.",
+    "RateWall.jsx:989-1002 — doSettleNow handles error path via toast.error(apiErr(err)); OK. Success/live paths validated end-to-end.",
+    "AdminSlipEditor works correctly — swap, per-leg, status/banker toggles, addsel, remove — all wired via api.patch('/admin/tips/{id}').",
+    "Community-live-badge correctly uses `tip.status==='live' && isMemberPick` — validated on the ?area=livecommunity view."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend only per request)", "frontend": "~92%" },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (works, welcome toast shown)",
+  "seed_data_creation": "None. Test artifacts: two admin edits landed on Deneb slip (league changed to a test value 'TESTLG-<ts>' and status Offen from Live). Two additional test tips were posted from admin during Task 1 verification (they will show on Rate Wall) — main agent may want to prune.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tasks 2 and 3 fully verified with data-testids. Task 1's element/editability/scan-prefill/success paths work. Only the empty-market guard is functionally broken due to `||` fallback in publish() line 131. Fix is one-line. After fix, retest by clearing market-edit-input and clicking publish — expect German error toast 'Bitte trage deine Wett-Auswahl ein...' and data-testid='selection-hint' visible, no /api/tips POST.",
+  "rca_of_the_issue": "Root cause of empty-slip guard failure: In SubmitTipModal.jsx line 131 the expression `(marketEdit || d.market || '').trim()` uses JS truthy fallback. When the user clears the input, `marketEdit === ''` (falsy), so the expression falls through to `d.market`, which is populated by the LLM analyze endpoint (LLM always returns something like 'Over 0.5 Goals' or 'Total Over 0.5' even for random text). The publish therefore proceeds with the detected market, /api/tips POST succeeds, and the German validation toast/hint never surface. Fix: use `marketEdit.trim()` directly OR use nullish coalescing on a value that stays unset (e.g. don't auto-sync marketEdit with d.market and instead show d.market as placeholder). Reproduction: (1) admin login → Submit a Tip; (2) type any text; (3) rate 5 stars; (4) click Publish → scan finishes, detected-panel appears, marketEdit prefilled; (5) clear market-edit-input; (6) click Publish → observe: toast 'Your tip is live on the Rate Wall!' instead of expected German error toast."
+}

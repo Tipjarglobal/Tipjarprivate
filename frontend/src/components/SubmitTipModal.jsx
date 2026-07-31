@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Modal, { Field, inputCls, btnPrimary } from "./Modal";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Sparkles, GraduationCap, ArrowRight, RefreshCw, HelpCircle, AlertTriangle, ShieldCheck } from "lucide-react";
@@ -61,13 +61,16 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
   const [publishing, setPublishing] = useState(false);
   const [clarify, setClarify] = useState(null);
   const [timing, setTiming] = useState(null);
+  const [marketEdit, setMarketEdit] = useState("");
   const inputRef = useRef();
 
   const reset = () => {
     setFiles([]); setPreviews([]); setText(""); setDetected(null); setSelfStars(0);
-    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload"); setClarify(null); setTiming(null);
+    setScanning(false); setPublishing(false); setTutStep(0); setTab("upload"); setClarify(null); setTiming(null); setMarketEdit("");
   };
   const close = () => { reset(); onClose(); };
+
+  useEffect(() => { setMarketEdit(detected?.market || ""); }, [detected]);
 
   const pick = async (list) => {
     const incoming = Array.from(list || []);
@@ -125,14 +128,22 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
         d = await scan();
         if (!d) { setPublishing(false); return; }
       }
+      const mkt = (marketEdit || d.market || "").trim();
+      const hasLegSel = Array.isArray(d.legs) && d.legs.some((l) => (l.selections || []).length > 0);
+      if (!mkt && !hasLegSel) {
+        toast.error(t("submit.selectionRequired"));
+        setPublishing(false);
+        return;
+      }
+      const analysis = (!(d.market || "").trim() && mkt) ? "" : d.analysis;
       const { data } = await api.post("/tips", {
         raw_text: text,
         image_path: d.image_path,
         image_paths: d.image_paths,
         home_team: d.home_team, away_team: d.away_team,
         match_time: d.match_time, country: d.country,
-        league: d.league, market: d.market, odds: d.odds,
-        ai_rating: d.rating, ai_analysis: d.analysis,
+        league: d.league, market: mkt, odds: d.odds,
+        ai_rating: d.rating, ai_analysis: analysis,
         legs: d.legs, is_parlay: d.is_parlay,
         stake: d.stake, potential_return: d.potential_return,
         self_rating: selfStars,
@@ -319,8 +330,23 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                   <Detail label={t("submit.league")} value={detected.league} />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">{t("submit.market")}</p>
-                  <p className="text-white font-semibold">{detected.market || "—"}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">{t("submit.market")}</p>
+                  <input
+                    data-testid="market-edit-input"
+                    value={marketEdit}
+                    onChange={(e) => setMarketEdit(e.target.value)}
+                    placeholder={t("submit.selectionPh")}
+                    className={`w-full rounded-lg bg-void border px-3 py-2 text-sm text-white font-semibold placeholder:text-zinc-600 focus:outline-none focus:ring-1 ${
+                      !marketEdit.trim() && !(detected.legs || []).some((l) => (l.selections || []).length)
+                        ? "border-amber-500/60 ring-1 ring-amber-500/40 bg-amber-500/5"
+                        : "border-elevated focus:ring-volt/50"
+                    }`}
+                  />
+                  {!marketEdit.trim() && !(detected.legs || []).some((l) => (l.selections || []).length) && (
+                    <p data-testid="selection-hint" className="text-[11px] text-amber-400 mt-1 flex items-center gap-1">
+                      <AlertTriangle size={12} /> {t("submit.selectionRequired")}
+                    </p>
+                  )}
                 </div>
                 {detected.legs && detected.legs.length > 0 && (
                   <div className="space-y-2">

@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, ShieldCheck, Ban, AlertTriangle, Crown } from "lucide-react";
+import { Flame, Users, Trophy, Zap, RefreshCw, CheckCircle2, XCircle, Radio, Clock, Trash2, Share2, Brain, Send, Lightbulb, ImagePlus, Banknote, MessageCircle, Search, Star, ShieldCheck, Ban, AlertTriangle, Crown, Pencil } from "lucide-react";
 import StarRating from "./StarRating";
 import AiRatingStars from "./AiRatingStars";
 import { Systems } from "./Systems";
 import { QualifierBriefing } from "./QualifierBriefing";
 import { MasterAvatar } from "./MasterAvatar";
 import { OddsValue } from "./OddsValue";
+import AdminSlipEditor from "./AdminSlipEditor";
 import api, { apiErr, fileUrl } from "../api";
 import { useProseTranslations } from "../proseI18n";
 import { shareSlip } from "../shareSlip";
@@ -919,6 +920,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [settling, setSettling] = useState(false);
   const correctInputRef = useRef(null);
   const isAiPick = ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"].includes(tip.source)
     && ["pending", "live"].includes(tip.status);
@@ -982,6 +985,21 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
     }
   };
   const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart", "hq-master"].includes(tip.source);
+  const isCommunityLive = tip.status === "live" && isMemberPick;
+  const doSettleNow = async () => {
+    if (settling) return;
+    setSettling(true);
+    try {
+      const { data } = await api.post(`/admin/tips/${tip.id}/settle-now`);
+      if (data.settled) toast.success(`✅ Abgerechnet: ${t(`wall.${data.tip?.status === "cashed_out" ? "cashed" : data.tip?.status}`) || data.tip?.status}`);
+      else toast.message(data.reason || "Spiel noch nicht als beendet erkannt — bitte später erneut versuchen.");
+      onRefresh?.();
+    } catch (err) {
+      toast.error(apiErr(err));
+    } finally {
+      setSettling(false);
+    }
+  };
   const isExpert = !!tip.is_expert;
   const isMaster = !!tip.is_master;
   return (
@@ -1084,7 +1102,13 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               <AlertTriangle size={10} /> {t("wall.liveDanger")}
             </span>
           )}
-          <StatusBadge status={tip.status} t={t} report={tip.report} />
+          {isCommunityLive ? (
+            <span data-testid={`community-live-badge-${tip.id}`} className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-[#F0443C] text-white shadow-[0_0_12px_rgba(240,68,60,0.6)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live
+            </span>
+          ) : (
+            <StatusBadge status={tip.status} t={t} report={tip.report} />
+          )}
           {canDelete && (
             <button
               onClick={() => onDelete(tip)}
@@ -1303,6 +1327,23 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             <Ban size={12} /> Annulliert · Push (Einsatz zurück)
           </button>
         </div>
+      )}
+      {isAdmin && (
+        <div className="mt-2 flex items-center gap-2" data-testid={`admin-tools-${tip.id}`}>
+          <button onClick={() => setEditOpen(true)} data-testid={`admin-edit-${tip.id}`}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors">
+            <Pencil size={12} /> Bearbeiten
+          </button>
+          {isCommunityLive && (
+            <button onClick={doSettleNow} disabled={settling} data-testid={`admin-settle-now-${tip.id}`}
+              className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 disabled:opacity-50 transition-colors">
+              <Radio size={12} className={settling ? "animate-pulse" : ""} /> {settling ? "Prüfe…" : "Spiel zuende"}
+            </button>
+          )}
+        </div>
+      )}
+      {editOpen && (
+        <AdminSlipEditor tip={tip} onClose={() => setEditOpen(false)} onSaved={() => { setEditOpen(false); onRefresh?.(); }} />
       )}
     </motion.div>
   );
