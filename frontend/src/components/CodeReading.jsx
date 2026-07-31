@@ -7,7 +7,7 @@ import { useAuth } from "../auth";
 
 const L = {
   de: {
-    title: "Code Reading",
+    title: "Codemining",
     guide: "Die fertigen Scheine der Wettanbieter (z.B. 'Akku des Tages', Boost-Angebote) sind so gebaut, dass DU verlierst. Wir lesen den Schein und spielen bewusst DAGEGEN — oder machen NO BET. Wichtig: Lade nur Angebote von Anbietern hoch, die den Spieler in die Falle locken wollen — NICHT von Bet365 (deren Quoten sind fair). Die KI liest jedes Spiel und gibt dir unsere Gegen-Lesart.",
     howTitle: "So funktioniert's",
     steps: [
@@ -38,7 +38,7 @@ const L = {
     games: "Spiele",
   },
   el: {
-    title: "Ανάγνωση Κωδικών",
+    title: "Codemining",
     guide: "Τα έτοιμα κουπόνια των πρακτόρων (π.χ. «Παρολί της ημέρας», ενισχυμένες προσφορές) είναι φτιαγμένα για να ΧΑΝΕΙΣ. Εμείς διαβάζουμε το κουπόνι και παίζουμε επίτηδες ΑΝΤΙΘΕΤΑ — ή NO BET. Σημαντικό: ανέβασε μόνο προσφορές από εταιρίες που θέλουν να παγιδέψουν τον παίκτη — ΟΧΙ από Bet365 (οι αποδόσεις τους είναι δίκαιες). Η ΚΙ διαβάζει κάθε αγώνα και σου δίνει την αντίθετη ανάγνωση.",
     howTitle: "Πώς δουλεύει",
     steps: [
@@ -69,7 +69,7 @@ const L = {
     games: "αγώνες",
   },
   en: {
-    title: "Code Reading",
+    title: "Codemining",
     guide: "Bookmakers' ready-made slips (e.g. 'Accumulator of the day', boosted offers) are built to make YOU lose. We read the slip and deliberately play AGAINST it — or NO BET. Important: only upload offers from bookies that want to trap the player — NOT from Bet365 (their odds are fair). The AI reads every game and gives you our counter-read.",
     howTitle: "How it works",
     steps: [
@@ -166,21 +166,40 @@ export function CodeReading() {
     e.target.value = "";
     if (!files.length) return;
     setScanning(true);
+    let images;
     try {
-      const images = await Promise.all(files.map((file) => new Promise((res, rej) => {
+      images = await Promise.all(files.map((file) => new Promise((res, rej) => {
         const r = new FileReader();
         r.onload = () => res(String(r.result).split(",")[1]);
         r.onerror = rej;
         r.readAsDataURL(file);
       })));
+    } catch {
+      toast.error("Datei-Fehler"); setScanning(false); return;
+    }
+    try {
       const { data } = await api.post("/admin/code-reading/scan", { images });
-      if (!data.reads) { toast.info(data.note || t.none); }
-      else { toast.success(`${data.scanned} ${t.done}`); }
+      const jid = data.job_id;
+      if (!jid) { setScanning(false); load(); return; }
+      let tries = 0;
+      const poll = async () => {
+        tries++;
+        try {
+          const { data: st } = await api.get(`/admin/code-reading/scan-status/${jid}`);
+          if (st.status === "done") {
+            if (!st.reads) toast.info(st.note || t.none);
+            else toast.success(`${st.scanned} ${t.done}`);
+            setScanning(false); load(); return;
+          }
+          if (st.status === "error") { toast.error("Scan fehlgeschlagen"); setScanning(false); load(); return; }
+        } catch { /* keep polling */ }
+        if (tries < 45) setTimeout(poll, 3000);
+        else { setScanning(false); load(); }
+      };
+      setTimeout(poll, 2500);
     } catch (err) {
       toast.error(err?.response?.status === 403 ? t.adminOnly : "Scan fehlgeschlagen");
-    } finally {
       setScanning(false);
-      load();  // reads are stored server-side even if the response timed out at the proxy
     }
   };
 

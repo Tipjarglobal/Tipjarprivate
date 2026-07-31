@@ -7735,13 +7735,18 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — a team scoring at least once "
         "is usually the certain part. Only choose NO BET here if that team faces a very strong defensive favourite likely to shut them out.\n"
         "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → cap them: '<Team> Unter 3.5 Tore'.\n"
-        "4) A whole-match total like 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
+        "4) A WHOLE-MATCH total like 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
         "5) Straight win / 1X2 / double chance / handicap → NO BET (we NEVER buy a plain win/1X).\n"
-        "6) Early draw / result at minute 15-30 → 'Über 0.5 Tore 1. Halbzeit'.\n"
+        "6) ANY first-half / half-time goals bet (e.g. '1st half Over 0.5', '1. Halbzeit Über 0.5', 'HT Over 0.5'), "
+        "OR an early draw/result at minute 15-30 → KEEP 'Über 0.5 Tore 1. Halbzeit' (they expect an early goal — usually a safe single). stars 8-10.\n"
         "7) A team's LAST goal 55-90' / scores late → '<Team> trifft bis zur 60. Minute'.\n"
         "8) 'Team does NOT score' / 'Over 0.5 – No' → play against: '<Team> trifft (Über 0.5 Tore)'.\n"
         "Identify WHICH team a total refers to and put the team name into our_market. "
-        "reason: SHORT, in GERMAN, explaining why. stars: 6-10 for a counter pick, 0 for no_bet.\n"
+        "PRESERVE period info in code_market (e.g. '1. Halbzeit', '1st half', 'HT', minute). "
+        "reason: a SHORT but CONCRETE explanation in GERMAN of WHY this pick is safe — name the real football reason "
+        "(z.B. Heimteam extrem torgefährlich und trifft fast jede erste Halbzeit; Gegner hat in wenigen Tagen ein "
+        "wichtigeres Spiel und rotiert; Team trifft in fast jedem Spiel). Nicht nur die Regel wiederholen. "
+        "Bei NO BET: erkläre, warum es nicht sicher genug ist. stars: 6-10 for a counter pick, 0 for no_bet.\n"
         "Reply ONLY JSON: {\"legs\":[{\"home\":\"\",\"away\":\"\",\"league\":\"\",\"kickoff\":\"\","
         "\"code_market\":\"\",\"read\":\"counter|no_bet\",\"our_market\":\"\",\"reason\":\"\",\"stars\":0}]}")
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"coderead-{uuid.uuid4()}",
@@ -7766,58 +7771,82 @@ async def code_reading():
     return {"count": len(reads), "reads": reads}
 
 
+_CR_SCAN_JOBS: dict = {}  # job_id -> {status, scanned, reads, note/error}
+
+
+async def _run_code_scan(job_id: str, images: list):
+    """Background worker: OCR + interpret + store (kept off the 60s request path)."""
+    try:
+        legs = await _code_read_scan_images(images)
+        if not legs:
+            _CR_SCAN_JOBS[job_id] = {"status": "done", "scanned": 0, "reads": 0,
+                                     "note": "Keine Fußball-Legs erkannt (oder LLM-Budget)."}
+            return
+        now = datetime.now(timezone.utc)
+        day = _berlin_now().date().isoformat()
+        stored = []
+        for lg in legs:
+            home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
+            market = (lg.get("code_market") or lg.get("market") or "").strip()
+            if not (home and away):
+                continue
+            await db.code_reads.delete_many({"day": day, "home": home, "away": away, "outcome": {"$exists": False}})
+            read = lg.get("read") if lg.get("read") in ("counter", "no_bet") else None
+            if read:
+                our_market = (lg.get("our_market") or "").strip() or None
+                if read == "counter" and not our_market:
+                    read = None
+            if read:
+                try:
+                    stars = max(0, min(10, int(lg.get("stars") or (7 if read == "counter" else 0))))
+                except (ValueError, TypeError):
+                    stars = 7 if read == "counter" else 0
+                interp = {"read": read, "our_market": (lg.get("our_market") or "").strip() or None,
+                          "alt_market": None, "reason": (lg.get("reason") or "").strip() or "—",
+                          "pattern": f"ai_{read}", "stars": stars}
+                interp = _code_apply_learn(interp)
+            else:
+                if not market:
+                    continue
+                interp = _code_read_interpret(market, home, away)
+            doc = {
+                "id": f"cr-{uuid.uuid4().hex[:10]}", "day": day,
+                "home": home, "away": away, "league": lg.get("league") or "",
+                "kickoff": lg.get("kickoff") or "", "code_market": market,
+                "code_odds": lg.get("odds") or "",
+                "read": interp["read"], "our_market": interp.get("our_market"),
+                "alt_market": interp.get("alt_market"), "reason": interp["reason"],
+                "pattern": interp.get("pattern"), "stars": interp.get("stars", 0),
+                "created_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=30)).isoformat(),
+            }
+            await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
+            stored.append(doc)
+        _CR_SCAN_JOBS[job_id] = {"status": "done", "scanned": len(legs), "reads": len(stored)}
+    except Exception as e:
+        logger.error(f"code scan job {job_id} failed: {e}")
+        _CR_SCAN_JOBS[job_id] = {"status": "error", "error": str(e)[:200]}
+    # keep the jobs dict small
+    if len(_CR_SCAN_JOBS) > 50:
+        for k in list(_CR_SCAN_JOBS)[:-25]:
+            _CR_SCAN_JOBS.pop(k, None)
+
+
 @api_router.post("/admin/code-reading/scan")
 async def admin_code_reading_scan(payload: dict, admin: dict = Depends(require_admin)):
-    """Admin uploads a SpinBetter accumulator screenshot (base64 images) → OCR → interpret → store."""
+    """Kick off an async scan (avoids the 60s proxy timeout for multi-image Vision calls)."""
     images = payload.get("images") or []
     if not images:
         raise HTTPException(status_code=400, detail="no images")
-    legs = await _code_read_scan_images(images)
-    if not legs:
-        return {"scanned": 0, "reads": 0, "note": "Keine Fußball-Legs erkannt (oder LLM-Budget)."}
-    now = datetime.now(timezone.utc)
-    day = _berlin_now().date().isoformat()
-    stored = []
-    for lg in legs:
-        home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
-        market = (lg.get("code_market") or lg.get("market") or "").strip()
-        if not (home and away):
-            continue
-        # replace only THIS match's unsettled read (keep manual entries & other scans)
-        await db.code_reads.delete_many({"day": day, "home": home, "away": away, "outcome": {"$exists": False}})
-        read = lg.get("read") if lg.get("read") in ("counter", "no_bet") else None
-        if read:  # AI already decided the pick (owner philosophy)
-            our_market = (lg.get("our_market") or "").strip() or None
-            if read == "counter" and not our_market:
-                read = None  # incomplete → fall back to regex
-        if read:
-            try:
-                stars = max(0, min(10, int(lg.get("stars") or (7 if read == "counter" else 0))))
-            except (ValueError, TypeError):
-                stars = 7 if read == "counter" else 0
-            interp = {"read": read, "our_market": (lg.get("our_market") or "").strip() or None,
-                      "alt_market": None, "reason": (lg.get("reason") or "").strip() or "—",
-                      "pattern": f"ai_{read}", "stars": stars}
-            interp = _code_apply_learn(interp)
-        else:  # fallback to the deterministic regex interpreter
-            if not market:
-                continue
-            interp = _code_read_interpret(market, home, away)
-        doc = {
-            "id": f"cr-{uuid.uuid4().hex[:10]}", "day": day,
-            "home": home, "away": away, "league": lg.get("league") or "",
-            "kickoff": lg.get("kickoff") or "", "code_market": market,
-            "code_odds": lg.get("odds") or "",
-            "read": interp["read"], "our_market": interp.get("our_market"),
-            "alt_market": interp.get("alt_market"), "reason": interp["reason"],
-            "pattern": interp.get("pattern"),
-            "stars": interp.get("stars", 0),
-            "created_at": now.isoformat(),
-            "expires_at": (now + timedelta(hours=30)).isoformat(),
-        }
-        await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
-        stored.append(doc)
-    return {"scanned": len(legs), "reads": len(stored), "reads_data": stored}
+    job_id = uuid.uuid4().hex[:12]
+    _CR_SCAN_JOBS[job_id] = {"status": "processing"}
+    asyncio.create_task(_run_code_scan(job_id, images))
+    return {"job_id": job_id, "status": "processing"}
+
+
+@api_router.get("/admin/code-reading/scan-status/{job_id}")
+async def admin_code_reading_scan_status(job_id: str, admin: dict = Depends(require_admin)):
+    return _CR_SCAN_JOBS.get(job_id, {"status": "unknown"})
 
 
 async def _grade_code_our_market(our_market: str, home: str, away: str, fx: dict):

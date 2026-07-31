@@ -32,7 +32,7 @@ import SecretInsights from "./components/SecretInsights";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
-const CR_LABEL = { de: "Code Reading", el: "Ανάγνωση Κωδικών", en: "Code Reading" };
+const CR_LABEL = { de: "Codemining", el: "Codemining", en: "Codemining" };
 const CR_SUB = {
   de: "Wettanbieter-Scheine lesen und dagegen spielen",
   el: "Διάβασε τα κουπόνια των πρακτόρων και παίξε αντίθετα",
