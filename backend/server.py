@@ -254,7 +254,8 @@ async def admin_smart_run(admin: dict = Depends(require_admin)):
     a = await smart_autopost()
     b = await favourite_smart_autopost()
     c = await mental_autopost()
-    return {"player_props": a, "favourites": b, "mental": c}
+    d = await smart_h2h_autopost()
+    return {"player_props": a, "favourites": b, "mental": c, "h2h_cycle": d}
 
 
 @api_router.post("/admin/smart/reset")
@@ -7225,6 +7226,228 @@ async def favourite_smart_autopost() -> dict:
         posted += 1
     logger.info(f"Favourite Smart run: posted {posted} of {len(cand)} candidates")
     return {"posted": posted, "candidates": len(cand)}
+
+
+# ── H2H-"Zyklus"-Smart-Picks (owner 2026-06) ────────────────────────────────
+# Owner: "Lass die H2H zeigen, welches Team endlich treffen oder gewinnen soll."
+# Beispiel: Lazio hat bei Roma seit 3 Jahren nicht getroffen + Roma wackelt zuhause
+# → Top-Gelegenheit, dass Lazio endlich trifft. Fokus: HEIM- vs. AUSWÄRTSFORM +
+# H2H-Torflauten. Die "gewitterte" Story steht in ai_analysis, der konkrete Pick
+# (Team trifft / Team gewinnt — beide sauber abrechenbar) direkt darunter.
+SMART_H2H_MAX = 5  # neue Fixtures pro Lauf (jede analysiert kostet API-Calls, 12h gecacht)
+
+
+def _venue_h2h_drought(h2h, host_id, visitor_id):
+    """Consecutive most-recent H2H meetings AT the host's ground where the visitor
+    scored ZERO. Returns (count, [years])."""
+    count, years = 0, []
+    for m in h2h or []:
+        if m.get("home_id") == host_id and m.get("away_id") == visitor_id:
+            if (m.get("ga") or 0) == 0:
+                count += 1
+                if m.get("year"):
+                    years.append(m["year"])
+            else:
+                break
+    return count, years
+
+
+def _h2h_team_drought(h2h, team_id):
+    """Consecutive most-recent H2H meetings (any venue) where the team scored ZERO."""
+    count, years = 0, []
+    for m in h2h or []:
+        if m.get("home_id") == team_id:
+            tg = m.get("gh")
+        elif m.get("away_id") == team_id:
+            tg = m.get("ga")
+        else:
+            continue
+        if (tg or 0) == 0:
+            count += 1
+            if m.get("year"):
+                years.append(m["year"])
+        else:
+            break
+    return count, years
+
+
+def _scores_regularly(rows, team_id, thresh=0.5):
+    """True when the team scored in >= thresh of its last matches (so a H2H blank is an
+    anomaly primed for mean-reversion, not a genuinely toothless side)."""
+    played = scored = 0
+    for r in rows or []:
+        if r.get("home_id") == team_id:
+            gf = r.get("gh")
+        elif r.get("away_id") == team_id:
+            gf = r.get("ga")
+        else:
+            continue
+        played += 1
+        if (gf or 0) >= 1:
+            scored += 1
+    return played >= 4 and (scored / played) >= thresh
+
+
+def _yrs(years):
+    uniq = sorted(set(y for y in years if y))
+    return ", ".join(uniq) if uniq else ""
+
+
+def _cycle_signal(home, away, hid, aid, h2h, hrec, arec):
+    """Detect the strongest 'the cycle is due' pattern from H2H history + home/away form.
+    Returns {team, market, kind, odds, rating, story} or None (→ post nothing)."""
+    home_seq = match_stats.venue_split(hrec, hid, want_home=True)   # home team AT HOME
+    away_seq = match_stats.venue_split(arec, aid, want_home=False)  # away team AWAY
+    home_scoreless = match_stats._scoreless_streak(home_seq)
+    away_scoreless = match_stats._scoreless_streak(away_seq)
+    home_winless = match_stats._winless_streak(home_seq)
+    away_winless = match_stats._winless_streak(away_seq)
+    home_leaks = sum(1 for m in home_seq if m["ga"] >= 1) >= max(3, int(len(home_seq) * 0.7)) if home_seq else False
+    away_leaks = sum(1 for m in away_seq if m["ga"] >= 1) >= max(3, int(len(away_seq) * 0.7)) if away_seq else False
+
+    # S1 — AWAY hasn't scored AT this venue for years, but generally scores + host leaks (Lazio@Roma)
+    vc_a, vy_a = _venue_h2h_drought(h2h, hid, aid)
+    if vc_a >= 2 and _scores_regularly(arec, aid) and home_leaks:
+        return {
+            "team": away, "market": f"{away} Über 0.5 Tore", "kind": "team_o05",
+            "odds": 1.45, "rating": round(min(9.0, 7.0 + 0.5 * (vc_a - 1)), 1),
+            "story": (f"🔍 {away} hat bei {home} seit {vc_a} Duellen nicht getroffen "
+                      f"({_yrs(vy_a)}) — trifft aber sonst regelmäßig, und {home} kassiert "
+                      f"zuhause fast immer. Der Zyklus ist fällig: diesmal trifft {away} endlich."),
+        }
+
+    # S2 — AWAY scoreless in its last away games → due to score (or win vs a weak host)
+    if away_scoreless >= 3:
+        if home_winless >= 3:
+            return {
+                "team": away, "market": f"{away} Sieg", "kind": "win",
+                "odds": 2.70, "rating": round(min(9.0, 7.0 + 0.4 * (away_scoreless - 3)), 1),
+                "story": (f"🔍 {away} hat seit {away_scoreless} Auswärtsspielen nicht getroffen — "
+                          f"und {home} ist zuhause seit {home_winless} Spielen sieglos. Im Zyklus "
+                          f"kippt das: {away} bricht die Flaute und holt auswärts den Sieg."),
+            }
+        return {
+            "team": away, "market": f"{away} Über 0.5 Tore", "kind": "team_o05",
+            "odds": 1.55, "rating": round(min(8.5, 7.0 + 0.3 * (away_scoreless - 3)), 1),
+            "story": (f"🔍 {away} hat in den letzten {away_scoreless} Auswärtsspielen nicht "
+                      f"getroffen — so eine Torflaute hält im Zyklus nicht ewig. Jetzt ist es "
+                      f"Zeit, dass {away} endlich trifft."),
+        }
+
+    # S3 — HOME scoreless at home → due to score (or win vs a weak visitor)
+    if home_scoreless >= 3:
+        if away_winless >= 3:
+            return {
+                "team": home, "market": f"{home} Sieg", "kind": "win",
+                "odds": 2.30, "rating": round(min(9.0, 7.0 + 0.4 * (home_scoreless - 3)), 1),
+                "story": (f"🔍 {home} hat zuhause seit {home_scoreless} Spielen nicht getroffen — "
+                          f"und {away} ist auswärts seit {away_winless} Spielen sieglos. Der Zyklus "
+                          f"dreht: {home} trifft endlich und gewinnt vor eigenem Publikum."),
+            }
+        return {
+            "team": home, "market": f"{home} Über 0.5 Tore", "kind": "team_o05",
+            "odds": 1.40, "rating": round(min(8.5, 7.0 + 0.3 * (home_scoreless - 3)), 1),
+            "story": (f"🔍 {home} hat in den letzten {home_scoreless} Heimspielen nicht getroffen — "
+                      f"vor eigenem Publikum hält so eine Flaute im Zyklus nicht. Jetzt trifft {home}."),
+        }
+
+    # S4 — HOME has a general H2H scoring drought vs this opponent, but scores otherwise
+    hc, hy = _h2h_team_drought(h2h, hid)
+    if hc >= 3 and _scores_regularly(hrec, hid):
+        return {
+            "team": home, "market": f"{home} Über 0.5 Tore", "kind": "team_o05",
+            "odds": 1.45, "rating": round(min(8.5, 7.0 + 0.4 * (hc - 2)), 1),
+            "story": (f"🔍 {home} hat gegen {away} in den letzten {hc} Duellen ({_yrs(hy)}) nicht "
+                      f"getroffen — trifft aber sonst regelmäßig. Nach so vielen Nullnummern bringt "
+                      f"der Zyklus endlich ein {home}-Tor."),
+        }
+    return None
+
+
+async def smart_h2h_autopost() -> dict:
+    """Owner 2026-06: read the H2H history + home/away form of upcoming fixtures, 'smell'
+    which team is DUE to finally score or win (cycles return), and post it into Smart Picks —
+    the detected story in the analysis, the concrete pick right below. Only settlement-safe
+    markets ('{team} Über 0.5 Tore', '{team} Sieg'). API-quota-gated + 12h-cached."""
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    # upcoming, whitelisted, deduped by fixture
+    cand, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        home, away = p.get("home"), p.get("away")
+        if not home or not away:
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 2 or h > SMART_LOOKAHEAD_H:
+            continue
+        key = _match_key(home, away)
+        if key in seen:
+            continue
+        seen.add(key)
+        cand.append((ko, p))
+    cand.sort(key=lambda x: x[0])  # earliest kickoffs first
+    posted, analysed = 0, 0
+    for ko, p in cand:
+        if posted >= SMART_H2H_MAX:
+            break
+        if _api_quota_exhausted():
+            break
+        home, away = p.get("home"), p.get("away")
+        mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
+        tip_id = f"smarth2h-{mkey}"
+        if await db.tips.find_one({"id": tip_id}, {"_id": 1}):
+            continue
+        # don't double up on a fixture a favourite/qualifier smart pick already covers
+        if await db.tips.find_one(
+                {"id": {"$in": [f"smartfav-{mkey}", f"qual-{mkey}"]},
+                 "status": {"$in": ["pending", "live"]}}, {"_id": 1}):
+            continue
+        hid = await resolve_team_id(home)
+        aid = await resolve_team_id(away)
+        if not hid or not aid:
+            continue
+        h2h = await match_stats.h2h_detailed(hid, aid)
+        hrec = await match_stats.team_recent(hid)
+        arec = await match_stats.team_recent(aid)
+        analysed += 1
+        if not h2h and not hrec and not arec:
+            continue
+        sig = _cycle_signal(home, away, hid, aid, h2h or [], hrec or [], arec or [])
+        if not sig:
+            continue
+        rating = sig["rating"]
+        stars = "⭐" * int(round(rating))
+        analysis = (f"{stars} Zyklus-Witterung (H2H + Heim/Auswärtsform):\n\n{sig['story']}\n\n"
+                    f"➡️ Pick: {sig['market']}. Anstoß {p.get('kickoff') or '—'}. "
+                    f"Quoten sind Schätzungen.")
+        await db.tips.insert_one({
+            "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None,
+            "home_team": home, "away_team": away, "match_time": p.get("kickoff") or "",
+            "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Smart Pick",
+            "league_code": p.get("league_code") or "",
+            "market": sig["market"], "kind": sig["kind"], "team": sig["team"],
+            "odds": f"{sig['odds']:.2f}", "is_parlay": False,
+            "ai_rating": rating, "ai_analysis": analysis,
+            "legs": [], "stake": "", "potential_return": "",
+            "h2h_cycle": True,
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "smart", "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        posted += 1
+    logger.info(f"Smart H2H (cycle) run: posted {posted}, analysed {analysed} of {len(cand)}")
+    return {"posted": posted, "analysed": analysed, "candidates": len(cand)}
+
 
 
 GIFT_MAX_PER_RUN = 3  # owner: 2-3 "Geschenke" (Asian Über 1.0) per day

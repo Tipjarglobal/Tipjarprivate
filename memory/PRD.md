@@ -1087,3 +1087,27 @@ Preview-DB hatte 0 offene Smart-DC-Picks → das gemeldete Valérenga 1X lag auf
 HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy"; danach postet der Smart-Loop
 keine unbegründeten 1X-Kombis mehr. OFFEN/Backlog: volle "Zyklus"-H2H-Auswertung (team_form/h2h_stats
 in match_stats.py existieren, kosten aber API-Quota) — aktuell nur regelbasiert, ohne fresh H2H-Fetch.
+
+## Update 2026-06 (14) — H2H-"Zyklus"-Smart-Picks (welches Team endlich trifft/gewinnt)
+Owner: "Lass die H2H zeigen, welches Team endlich treffen oder gewinnen soll." Beispiele:
+Lazio hat bei Roma seit 3 Jahren (2023/24/25) nicht getroffen + Roma wackelt → Lazio trifft;
+"PAOK hat seit 3 Auswärtsspielen nicht getroffen → jetzt holen sie den Sieg". Fokus HEIM- vs.
+AUSWÄRTSFORM + H2H-Torflauten. Story wird IM Smart-Pick erzählt, konkreter Pick direkt darunter.
+UMGESETZT:
+- `match_stats.py`: `h2h_detailed` (per-Duell Historie, gecacht), `team_recent` (letzte 20 Spiele),
+  `venue_split` (Heim-/Auswärtsserie), `_scoreless_streak`/`_winless_streak`. Alles 12h-gecacht +
+  quota-gated (schont API-Football).
+- `server.py`: `_venue_h2h_drought`, `_h2h_team_drought`, `_scores_regularly`, `_cycle_signal`
+  (erkennt 4 Muster, Priorität S1>S2>S3>S4) und `smart_h2h_autopost()` (im smart_loop + admin/smart/run):
+  • S1: Gast trifft bei diesem Gegner seit ≥2 Duellen nicht, trifft sonst regelmäßig, Gastgeber
+    kassiert zuhause fast immer → "{Gast} Über 0.5 Tore" (Lazio@Roma-Muster).
+  • S2: Gast seit ≥3 Auswärtsspielen ohne Tor → "{Gast} Über 0.5 Tore"; ist der Gastgeber zuhause
+    sieglos (≥3) → Upgrade "{Gast} Sieg" (PAOK-Muster).
+  • S3: Gastgeber zuhause ≥3 ohne Tor → "{Heim} Über 0.5 Tore"/"{Heim} Sieg".
+  • S4: Heim-Team H2H ≥3 torlos gegen diesen Gegner, trifft sonst → "{Heim} Über 0.5 Tore".
+  • kein Muster → GAR KEIN Pick (selektiv, kein Müll). Max 5 neue Fixtures/Lauf. source="smart",
+    h2h_cycle=True, Story in ai_analysis, Märkte über judge_market sauber abrechenbar.
+GETESTET: Unit (Lazio@Roma→Lazio trifft, PAOK-Auswärtsflaute+schwacher Gastgeber→PAOK Sieg,
+No-Signal→None, venue_drought 3 Jahre) + Live-Lauf (5 echte Picks: Karpaty@Kryvbas Venue-Flaute,
+Widzew/Indy Auswärtsflaute, Puebla H2H-Flaute, Laos Heimflaute) + Screenshot (Story+Pick rendern,
+i18n übersetzt automatisch). HINWEIS: live erst nach "Save to GitHub → Deploy".

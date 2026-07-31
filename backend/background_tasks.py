@@ -44,6 +44,7 @@ from server import (
     mental_autopost,
     qualifier_autopost,
     smart_autopost,
+    smart_h2h_autopost,
     snapshot_systems,
 )
 
@@ -396,6 +397,7 @@ async def smart_loop():
             if API_FOOTBALL_KEY:
                 logger.info(f"HQ loop C (Smart): {await smart_autopost()}")
                 logger.info(f"HQ loop C (FavSmart): {await favourite_smart_autopost()}")
+                logger.info(f"HQ loop C (H2H-Zyklus): {await smart_h2h_autopost()}")
                 logger.info(f"HQ loop C (Gift): {await gift_of_the_day()}")
                 logger.info(f"HQ loop C (K.o.-Duell): {await knockout_tie_autopost()}")
                 logger.info(f"HQ loop C (Mental): {await mental_autopost()}")
