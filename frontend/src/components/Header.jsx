@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown, Info, Share2, PlusSquare } from "lucide-react";
+import { Globe, Clock, Wallet, User, LogOut, ChevronDown, Plus, Download, Layers, Users, Radio, Sparkles, Brain, Flag, MessageCircle, Target, Crown, Info, Share2, PlusSquare, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import NotificationBell from "./NotificationBell";
 import Mailbox from "./Mailbox";
@@ -93,7 +93,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewScorers, onViewSettled, counts = {}, newCounts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, counts = {}, newCounts = {} }) {
   const { t, lang, setLang, tz, setTz } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -245,7 +245,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
               <span className="text-zinc-300">{t("ai.correct.guide.body")}</span>
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-8 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-9 gap-2">
             <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
             <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
             <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
@@ -254,6 +254,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
             <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
             <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
             <QuickView onClick={onViewScorers} icon={Target} label={t("nav.viewscorers")} testId="view-scorers-btn" variant="pink" />
+            <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Code Reading" testId="view-codereading-btn" variant="grey" />
           </div>
         </div>
       </div>
@@ -269,6 +270,7 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
     gold: "bg-[#E3A81B] text-black hover:bg-[#c8920f] shadow-[0_0_16px_rgba(227,168,27,0.45)]",
     blue: "bg-[#2563eb] text-white hover:bg-[#1d4fd8] shadow-[0_0_18px_rgba(37,99,235,0.55)] animate-pulse",
     checkered: "bg-white text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(255,255,255,0.25)]",
+    grey: "bg-zinc-300 text-black hover:bg-zinc-200 shadow-[0_0_16px_rgba(212,212,216,0.3)]",
   };
   const btn = (
     <button

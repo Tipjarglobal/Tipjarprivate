@@ -14,6 +14,7 @@ import PromoBanner from "./components/PromoBanner";
 import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
 import StatisticsView from "./components/StatisticsView";
+import { CodeReading } from "./components/CodeReading";
 
 import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
@@ -31,6 +32,13 @@ import SecretInsights from "./components/SecretInsights";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
+const CR_LABEL = { de: "Code Reading", el: "Ανάγνωση Κωδικών", en: "Code Reading" };
+const CR_SUB = {
+  de: "Wettanbieter-Scheine lesen und dagegen spielen",
+  el: "Διάβασε τα κουπόνια των πρακτόρων και παίξε αντίθετα",
+  en: "Read bookmaker slips and play against them",
+};
+
 // Small black & white checkered "finish flag" marker for the Settled area.
 function CheckeredFlag({ size = 14 }) {
   return (
@@ -46,7 +54,7 @@ function CheckeredFlag({ size = 14 }) {
 }
 
 function Home() {
-  const { t, setLang } = useI18n();
+  const { t, setLang, lang } = useI18n();
   const { user } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
@@ -248,6 +256,7 @@ function Home() {
         onViewLive={() => openTipsView("live")}
         onViewSmart={() => openTipsView("smart")}
         onViewScorers={() => openTipsView("scorers")}
+        onViewCodeReading={() => openTipsView("codereading")}
         onViewSettled={() => openTipsView("settled")}
         counts={counts}
         newCounts={newCounts}
@@ -370,7 +379,7 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"], ["codereading", "codereading"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "master") {
@@ -381,6 +390,8 @@ function Home() {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
                 } else if (v === "scorers") {
                   cls = active ? "bg-[#F9A8D4] text-black shadow-[0_0_14px_rgba(249,168,212,0.45)]" : "bg-[#F9A8D4]/15 border border-[#F9A8D4]/40 text-[#F9A8D4] hover:bg-[#F9A8D4]/25";
+                } else if (v === "codereading") {
+                  cls = active ? "bg-zinc-300 text-black shadow-[0_0_14px_rgba(212,212,216,0.35)]" : "bg-zinc-700/40 border border-zinc-500/50 text-zinc-200 hover:bg-zinc-700/60";
                 } else if (v === "settled") {
                   cls = active ? "bg-white text-black shadow-[0_0_14px_rgba(255,255,255,0.35)]" : "bg-surface border border-white/40 text-white hover:bg-white/10";
                 } else {
@@ -395,7 +406,7 @@ function Home() {
                 >
                   {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : "bg-blue-400"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
                   {v === "settled" && <CheckeredFlag />}
-                  {t(lbl)}
+                  {v === "codereading" ? (CR_LABEL[lang] || CR_LABEL.en) : t(lbl)}
                   {counts[v] != null && (
                     <span className={`text-[10px] font-mono rounded-full px-1.5 ${active ? "bg-black/20" : "bg-void/60 text-zinc-400"}`}>{counts[v]}</span>
                   )}
@@ -407,6 +418,8 @@ function Home() {
           <DisclaimerBar />
           {tipsView === "scorers" ? (
             <StatisticsView />
+          ) : tipsView === "codereading" ? (
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-16"><CodeReading /></div>
           ) : (
             <RateWall refreshKey={refreshKey} requireLogin={requireLogin} view={tipsView} initialSub={tipsSub} onUserClick={openProfile} />
           )}
