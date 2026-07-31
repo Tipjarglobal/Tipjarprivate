@@ -115,3 +115,8 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Regel-Nuance: Geschenk auf EIN Team ("Qarabag unter") sperrt nur dieses Team (Gegner darf
   weiter "trifft"); ein Match-"unter" sperrt jedes "über"/"trifft" im ganzen Spiel.
 
+
+## 12. KEINE Feature-Vorschläge / Next Action Items (Owner 2026-07-31)
+- Owner: "Frag diese 4 Sachen nicht wieder." → beim finish-Tool KEINE ausgedachten
+  Feature-Ideen / Enhancement-Vorschläge auflisten. Nur bauen, was der Owner explizit sagt.
+  Kurze Abschluss-Zusammenfassung ohne "Next Action Items"-Ideen.
