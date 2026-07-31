@@ -931,12 +931,19 @@ AI_SYSTEM = (
     "multi-match parlay/accumulator (several matches) — and/or the user's written tip. "
     "Read it precisely and return ONLY strict JSON, no markdown, with keys: "
     "is_parlay (true if more than one match OR more than one selection), "
+    "bet_type (\"system\" ONLY if the slip is explicitly a SYSTEM/combination bet — look for labels like "
+    "'System', 'Systemwette', 'System 2/3', '3 aus 4', '12 aus 14', '12/14', 'X von Y', 'Kombi X/Y'; "
+    "otherwise \"\"). "
+    "system_from (integer X = minimum winning legs, e.g. 12 in '12 aus 14'; 0 if not a system) and "
+    "system_total (integer Y = total legs, e.g. 14 in '12 aus 14'; 0 if not a system). "
     "legs (array with ONE object per MATCH, each: {\"match\": \"Home - Away\", "
     "\"league\": \"competition/league name, e.g. 'Allsvenskan', 'La Liga', 'UEFA Nations League'\", "
     "\"kickoff\": \"HH:MM or ''\", \"selections\": [\"exact market lines, e.g. 'Total Over 1.5', "
     "'Djurgaren Total Over 0.5', 'Fouls Over 21.5'\"], "
     "\"sel_odds\": [\"the decimal odd for EACH selection in the SAME order, e.g. '1.24'; use '' if a "
-    "selection's odd is not shown\"]}), "
+    "selection's odd is not shown\"], "
+    "\"combo_odds\": \"if this ONE match is a bet-builder (2+ selections combined into a SINGLE odd on "
+    "the slip), put that single combined decimal odd here as a string (e.g. '1.40'); else ''\"}), "
     "home_team, away_team, match_time, country, league, "
     "market (a short human summary of all selections), odds (total/combined odds as a string), "
     "stake (string, '' if unknown), "
@@ -1010,6 +1017,14 @@ def _tip_has_known_teams(tip: dict) -> bool:
     return False
 
 
+def _safe_int(v) -> int:
+    try:
+        return int(float(str(v).strip()))
+    except (ValueError, TypeError):
+        return 0
+
+
+
 def _sanitize_legs(legs) -> list:
     out = []
     if isinstance(legs, list):
@@ -1028,6 +1043,7 @@ def _sanitize_legs(legs) -> list:
                     "kickoff": str(lg.get("kickoff", "") or ""),
                     "selections": [str(s) for s in sels if s][:10],
                     "sel_odds": [str(o or "") for o in sodds][:10],
+                    "combo_odds": str(lg.get("combo_odds", "") or ""),
                     "banker": bool(lg.get("banker", False)),
                 })
     return out[:12]
@@ -1039,6 +1055,7 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         "league": "", "market": text.strip()[:60], "odds": "",
         "rating": 5.0, "analysis": "Auto-rating unavailable, rated neutral.",
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+        "bet_type": "", "system_from": 0, "system_total": 0,
         "safe": True, "flag_reason": "", "ai_error": False,
     }
     if not EMERGENT_LLM_KEY:
@@ -1090,6 +1107,9 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
             "potential_return": compute_return(data.get("stake"), data.get("odds"), str(data.get("potential_return", "") or "")),
             "legs": _sanitize_legs(data.get("legs")),
             "is_parlay": bool(data.get("is_parlay", False)),
+            "bet_type": ("system" if str(data.get("bet_type", "")).lower() == "system" else ""),
+            "system_from": _safe_int(data.get("system_from")),
+            "system_total": _safe_int(data.get("system_total")),
             "rating": round(rating, 1),
             "analysis": str(data.get("analysis", "") or "")[:200],
             "safe": bool(data.get("safe", True)),
@@ -1679,22 +1699,31 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
     })
     if dup:
         raise HTTPException(status_code=409, detail="You already posted this tip — duplicates aren't allowed.")
-    # LIVE at post time: a bet counts as live only if its match is IN-PLAY when posted
-    # (kickoff window OR — reliably, ignoring slip-timezone quirks — API-Football live list).
+    # LIVE at post time — owner 2026-06: a COMMUNITY slip lands in the small "Community Live"
+    # area ONLY when the member explicitly posts it as LIVE (timing == "live"). Long pregame
+    # community slips must ALWAYS stay in the pregame community area — never auto-promoted to
+    # live just because one leg happens to be in-play right now.
     now_dt = datetime.now(timezone.utc)
     timing = (inp.timing or "").strip().lower()
-    is_live_post = _looks_live_now(match_time, legs, now_dt) or timing == "live"
-    if not is_live_post and API_FOOTBALL_KEY:
-        try:
-            live_fx = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"})
-            if live_fx:
-                # Single match OR any leg of a parlay (treble) currently in-play → LIVE slip.
-                if inp.home_team and inp.away_team and _find_live_fixture(live_fx, inp.home_team, inp.away_team):
-                    is_live_post = True
-                elif legs and _parlay_live_fixture(live_fx, legs):
-                    is_live_post = True
-        except Exception:
-            pass
+    is_live_post = timing == "live"
+    # System-bet "Maximalquote" / fill an empty total: if no total odds were given, derive it
+    # from the legs (per game: manual combo odd, else product of the selection odds).
+    stored_odds = (inp.odds or "").strip()
+    if not stored_odds and legs:
+        gtotal, seen = 1.0, False
+        for lg in legs:
+            co = _parse_num(lg.get("combo_odds"))
+            if co and co > 1.0:
+                gtotal *= co
+                seen = True
+            else:
+                prod = _odds_product([o for o in (lg.get("sel_odds") or []) if o])
+                if prod and prod > 1.0:
+                    gtotal *= prod
+                    seen = True
+        if seen and gtotal > 1.0:
+            stored_odds = f"{round(gtotal, 2)}"
+    bet_type = "system" if (inp.bet_type or "").lower() == "system" and inp.system_total else ""
     tip = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -1708,13 +1737,16 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "country": inp.country,
         "league": inp.league,
         "market": inp.market,
-        "odds": inp.odds,
+        "odds": stored_odds,
         "ai_rating": inp.ai_rating,
         "ai_analysis": inp.ai_analysis,
         "legs": legs,
         "is_parlay": is_parlay,
+        "bet_type": bet_type,
+        "system_from": inp.system_from if bet_type else 0,
+        "system_total": inp.system_total if bet_type else 0,
         "stake": inp.stake,
-        "potential_return": compute_return(inp.stake, inp.odds, inp.potential_return),
+        "potential_return": compute_return(inp.stake, stored_odds, inp.potential_return),
         "status": "live" if is_live_post else "pending",
         "member_timing": timing or None,
         "sum_stars": inp.self_rating,
@@ -2956,7 +2988,7 @@ async def _system_match_keys() -> set:
 
 from ticket_render import (  # noqa: E402  (extracted ticket renderer)
     _fmt_selection, _to_float, _split_match, _tip_to_render_legs,
-    _render_slip_image, FONT_DIR, CREST_PATH,
+    _render_slip_image, FONT_DIR, CREST_PATH, _TICKET_LABELS,
 )
 
 
@@ -3621,29 +3653,33 @@ async def inbox_expert_decline(user: dict = Depends(get_current_user)):
 
 
 # Bump this whenever _render_slip_image output changes, so cached share images regenerate.
-SHARE_RENDER_VER = 4
+SHARE_RENDER_VER = 5
 
 
 @api_router.post("/tips/{tip_id}/share-image")
-async def tip_share_image(tip_id: str):
+async def tip_share_image(tip_id: str, lang: str = "de"):
     """Generate a TipJar-branded shareable slip image for a member pick, tagged with
-    the channel it comes from (COMMUNITY PICK for pending, LIVE PICK for live)."""
+    the channel it comes from (COMMUNITY PICK for pending, LIVE PICK for live). The image
+    text follows the viewer's selected app language (owner 2026-06)."""
+    lang = (lang or "de").split("-")[0].lower()
+    if lang not in _TICKET_LABELS:
+        lang = "de"
     tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
     if not tip:
         raise HTTPException(status_code=404, detail="Tip not found")
     if tip.get("source") in ("hq-auto", "smart"):
         raise HTTPException(status_code=400, detail="Only member tips can be shared")
     ctype = "live_pending" if tip.get("status") == "live" else "pending"
-    # Serve the cached image if we already built it — frozen system slips and posted member
-    # picks are immutable, so re-rendering (up to ~20s for a 15-leg slip) is pure waste and
-    # was the reason large slips "wouldn't share" (the tap's user-activation expired).
-    # BUT bump SHARE_RENDER_VER whenever the renderer changes so old cached images regenerate.
-    if (tip.get("status") != "live" and tip.get("share_image_path")
-            and tip.get("share_image_ver") == SHARE_RENDER_VER):
+    # Serve the cached image if we already built it for THIS language — frozen posted member
+    # picks are immutable, so re-rendering (up to ~20s for a 15-leg slip) is pure waste. BUT
+    # bump SHARE_RENDER_VER whenever the renderer changes so old cached images regenerate.
+    cached = tip.get("share_images") or {}
+    if (tip.get("status") != "live" and tip.get("share_image_ver") == SHARE_RENDER_VER
+            and cached.get(lang)):
         existing = await db.files.find_one(
-            {"storage_path": tip["share_image_path"], "is_deleted": False}, {"_id": 1})
+            {"storage_path": cached[lang], "is_deleted": False}, {"_id": 1})
         if existing:
-            return {"path": tip["share_image_path"]}
+            return {"path": cached[lang]}
     live_info = None
     if tip.get("status") == "live" and API_FOOTBALL_KEY and tip.get("home_team") and tip.get("away_team"):
         try:
@@ -3660,10 +3696,11 @@ async def tip_share_image(tip_id: str):
     # offload the CPU-heavy PIL render + the storage upload so we never block the event loop
     img = await asyncio.to_thread(
         _render_slip_image, rlegs, _to_float(tip.get("odds")), tip.get("stake", ""),
-        tip.get("potential_return", ""), tip.get("username", "TipJar"), ctype, live_info)
+        tip.get("potential_return", ""), tip.get("username", "TipJar"), ctype, live_info,
+        lang, tip.get("bet_type", ""), tip.get("system_from", 0), tip.get("system_total", 0))
     try:
         result = await asyncio.to_thread(
-            put_object, f"{APP_NAME}/shares/{tip_id}.webp", img, "image/webp")
+            put_object, f"{APP_NAME}/shares/{tip_id}.{lang}.webp", img, "image/webp")
         path = result["path"]
         await db.files.insert_one({
             "id": str(uuid.uuid4()), "storage_path": path,
@@ -3671,7 +3708,12 @@ async def tip_share_image(tip_id: str):
             "owner": tip.get("user_id"), "is_deleted": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        await db.tips.update_one({"id": tip_id}, {"$set": {"share_image_path": path, "share_image_ver": SHARE_RENDER_VER}})
+        set_fields = {f"share_images.{lang}": path, "share_image_ver": SHARE_RENDER_VER,
+                      "share_image_path": path}
+        if tip.get("share_image_ver") != SHARE_RENDER_VER:
+            # renderer changed → drop stale per-language cache so every language re-renders
+            await db.tips.update_one({"id": tip_id}, {"$unset": {"share_images": ""}})
+        await db.tips.update_one({"id": tip_id}, {"$set": set_fields})
     except Exception as ex:
         logger.error(f"share image upload failed: {ex}")
         raise HTTPException(status_code=500, detail="Image generation failed")

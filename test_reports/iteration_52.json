@@ -1,0 +1,73 @@
+{
+  "summary": "Frontend + integration verification of the 4-part System-Bets / Bet-Builder / Share-Image / Feed-Rule batch on TipJar. Admin login worked. Submit-Tip modal detected the system bet from text (AI analyzed 'System 12 aus 14: Bayern-Leipzig … Dortmund-Mainz … PSG-Lyon …'), the data-testid='detected-system-badge' rendered 'System 12/14', a data-testid='leg-combo-odds-input-0' appeared on the multi-selection Bayern-Leipzig leg and accepted '1.55'. Publish (without 'live' timing) succeeded → POST /api/tips returned status=pending, bet_type=system, system_from=12, system_total=14, computed odds=2.52 (product of legs), legs[0].combo_odds=='1.55' persisted. Community/Members feed card renders data-testid='parlay-system-badge' with text 'System 12/14 · 3 Games' (NOT 'Parlay'). Share-image endpoint tested for lang=de and lang=el — both return 200 with distinct cached paths ('…de.webp' and '…el.webp'). Pregame feed rule holds: multi-leg system tip stays status='pending', is_live_post=None, timing=None (no auto live promotion). ALL review criteria satisfied.",
+  "verified_flows": {
+    "task_1_system_detection_and_combo_input": {
+      "detected_panel_visible": true,
+      "detected_system_badge_text": "System 12/14",
+      "leg_combo_odds_input_present": true,
+      "leg_combo_odds_input_testid": "leg-combo-odds-input-0",
+      "leg_combo_odds_input_accepted_value": "1.55",
+      "publish_succeeded": true,
+      "create_tip_response": {
+        "id": "29600edd-29c3-4fa2-892e-3b237c5d39ba",
+        "status": "pending",
+        "bet_type": "system",
+        "system_from": 12,
+        "system_total": 14,
+        "odds": "2.52",
+        "legs_count": 3,
+        "leg_combo_odds": ["1.55", "", ""],
+        "timing": null,
+        "is_live_post": null
+      }
+    },
+    "task_2_community_feed_card": {
+      "parlay_system_badge_present": true,
+      "parlay_system_badge_text_on_wall": "System 12/14 · 3 Games",
+      "badge_text_says_parlay": false,
+      "note_on_combo_pill": "leg-combo-odds-<li> pill NOT rendered on card — by design. RateWall.jsx:1258 gates pill on `leg.combo_odds && selections>1 && !anySelOdds`. AI populated per-selection odds (Home Win@1.40) for our leg 0, so anySelOdds=true → pill correctly hidden. To empirically observe the pill on the card, a bet-builder leg with combo_odds set AND zero per-selection odds is required (e.g. raw text without 'Sieg 1.40'/'Über 1.5 1.30' odd tokens). Not a bug — matches spec: 'for a bet-builder leg with a combined odd AND NO per-selection odds'.",
+      "leg_combo_odds_pill_visible_on_card": false,
+      "leg_combo_odds_pill_visible_reason_ok": true
+    },
+    "task_3_share_image_language_switch": {
+      "post_de": {"status": 200, "path": "tipjar/shares/29600edd-29c3-4fa2-892e-3b237c5d39ba.de.webp"},
+      "post_el": {"status": 200, "path": "tipjar/shares/29600edd-29c3-4fa2-892e-3b237c5d39ba.el.webp"},
+      "distinct_paths": true
+    },
+    "task_4_pregame_feed_rule": {
+      "verified_via_get_api_tips": true,
+      "status": "pending",
+      "is_live_post": null,
+      "timing": null,
+      "no_auto_live_promotion_for_multi_leg_system": true
+    }
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/it52_panel.png",
+    "/app/test_reports/it52_members.png",
+    "/app/test_reports/it52_system_card.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RateWall.jsx:1258 — leg-combo-odds-<li> pill gate `leg.combo_odds && selections.length>1 && !anySelOdds` is correct per spec. Consider adding a tiny hover-title on the pill explaining 'Combined odds set by tipster' for UX clarity (minor).",
+    "SubmitTipModal.jsx:315-318 — detected-system-badge renders correctly only when `detected.bet_type === 'system' && detected.system_total`. Good defensive check; no issues.",
+    "SubmitTipModal.jsx:393-405 — leg-combo-odds-input-<li> only renders when a leg has 2+ selections. This matches product intent (bet-builder). No issues.",
+    "SubmitTipModal.jsx:155 — publish body correctly sends bet_type/system_from/system_total; server persisted them and computed odds fallback (product of leg per-selection odds = 1.40*1.30*1.25 ≈ 2.275, but backend returned 2.52 — indicates the backend computed a different fallback path, possibly using combo_odds=1.55 for leg0 [1.55*1.30*1.25 = 2.52 ✓]. Combined-odds preference over selection product is working as designed).",
+    "AuthModal login mode uses data-testid='auth-username' for the 'USERNAME OR EMAIL' field — potential UX/testing pitfall: signup and login both share testid 'auth-username'. Consider distinct testids 'auth-login-identifier' vs 'auth-signup-username' to reduce ambiguity.",
+    "Community feed card badge text is 'System 12/14 · 3 Games' (in English while app is English). i18n key 'wall.system' + 'X/Y · N Games/Spiele' path is correctly localized — verified by test."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% for surfaces exercised (create_tip, GET /api/tips, share-image?lang=)", "frontend": "100% for review criteria (system badge, combo-odds input, wall system badge, pending status)"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (works)",
+  "seed_data_creation": "One test tip created id=29600edd-29c3-4fa2-892e-3b237c5d39ba (System 12/14 with 3 legs: Bayern-Leipzig, Dortmund-Mainz, PSG-Lyon; status=pending). Main agent may want to prune via admin delete.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 review tasks pass. The only nuance: leg-combo-odds-<li> pill on card intentionally hides when AI has per-selection odds (correct per spec). To empirically observe the pill on a card, seed a bet-builder tip where legs have combo_odds set AND all selections have empty sel_odds — e.g. raw text 'Match X - Y: over 2.5 and BTTS (kombiniert 1.75)' without per-selection odd tokens.",
+  "rca_of_the_issue": "N/A — no bugs found in this iteration."
+}

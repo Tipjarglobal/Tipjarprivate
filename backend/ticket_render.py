@@ -49,10 +49,11 @@ def _tip_to_render_legs(tip: dict) -> list:
         home, away = _split_match(lg.get("match") or "")
         sels = lg.get("selections") or []
         sodds = lg.get("sel_odds") or []
+        combo = lg.get("combo_odds")  # one manual bet-builder odd for the whole game
         for i, sel in enumerate(sels):
             od = _to_float(sodds[i]) if i < len(sodds) else 0.0
             rlegs.append({"home": home, "away": away, "market": _fmt_selection(sel),
-                          "odds": od, "result": "open",
+                          "odds": od, "result": "open", "combo_odds": combo,
                           "league": lg.get("league", ""), "date": "", "time": lg.get("kickoff", ""),
                           "banker": bool(lg.get("banker")),
                           "live": bool(lg.get("live")), "live_score": lg.get("live_score") or "",
@@ -69,7 +70,46 @@ FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "f
 CREST_PATH = "/app/frontend/public/tipjar-crest.png"
 
 
-def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None) -> bytes:
+# Localized labels for the share ticket (owner 2026-06: image text follows the viewer's
+# selected app language). Keys kept minimal — only the strings drawn on the ticket.
+_TICKET_LABELS = {
+    "en": {"open": "OPEN", "live": "LIVE", "won": "WON", "parlay": "PARLAY", "system": "SYSTEM",
+           "game": "GAME", "games": "GAMES", "banker": "BANKER", "total": "TOTAL ODDS",
+           "max": "MAX ODDS", "stake": "STAKE", "win": "WIN", "poss_win": "POSS. WIN",
+           "paid": "PAID OUT", "community": "COMMUNITY PICK", "livepick": "LIVE PICK"},
+    "de": {"open": "OFFEN", "live": "LIVE", "won": "GEWONNEN", "parlay": "PARLAY", "system": "SYSTEM",
+           "game": "SPIEL", "games": "SPIELE", "banker": "BANKER", "total": "GESAMTQUOTE",
+           "max": "MAX. QUOTE", "stake": "EINSATZ", "win": "GEWINN", "poss_win": "MÖGL. GEWINN",
+           "paid": "AUSGEZAHLT", "community": "COMMUNITY-TIPP", "livepick": "LIVE-PICK"},
+    "es": {"open": "ABIERTO", "live": "EN VIVO", "won": "GANADO", "parlay": "COMBINADA", "system": "SISTEMA",
+           "game": "PARTIDO", "games": "PARTIDOS", "banker": "SEGURO", "total": "CUOTA TOTAL",
+           "max": "CUOTA MÁX", "stake": "APUESTA", "win": "GANANCIA", "poss_win": "GAN. POSIBLE",
+           "paid": "PAGADO", "community": "PICK COMUNIDAD", "livepick": "PICK EN VIVO"},
+    "el": {"open": "ΑΝΟΙΧΤΟ", "live": "LIVE", "won": "ΚΕΡΔΙΣΜΕΝΟ", "parlay": "ΠΑΡΟΛΙ", "system": "ΣΥΣΤΗΜΑ",
+           "game": "ΑΓΩΝΑΣ", "games": "ΑΓΩΝΕΣ", "banker": "ΣΤΑΝΤΑΡ", "total": "ΣΥΝΟΛΙΚΗ ΑΠΟΔΟΣΗ",
+           "max": "ΜΕΓ. ΑΠΟΔΟΣΗ", "stake": "ΠΟΝΤΑΡΙΣΜΑ", "win": "ΚΕΡΔΟΣ", "poss_win": "ΠΙΘ. ΚΕΡΔΟΣ",
+           "paid": "ΕΞΟΦΛΗΘΗΚΕ", "community": "ΤΙΠ ΚΟΙΝΟΤΗΤΑΣ", "livepick": "LIVE ΤΙΠ"},
+    "fr": {"open": "OUVERT", "live": "LIVE", "won": "GAGNÉ", "parlay": "COMBINÉ", "system": "SYSTÈME",
+           "game": "MATCH", "games": "MATCHS", "banker": "SÛR", "total": "COTE TOTALE",
+           "max": "COTE MAX", "stake": "MISE", "win": "GAIN", "poss_win": "GAIN POSS.",
+           "paid": "PAYÉ", "community": "PICK COMMUNAUTÉ", "livepick": "PICK LIVE"},
+    "it": {"open": "APERTA", "live": "LIVE", "won": "VINTA", "parlay": "MULTIPLA", "system": "SISTEMA",
+           "game": "PARTITA", "games": "PARTITE", "banker": "SICURO", "total": "QUOTA TOTALE",
+           "max": "QUOTA MAX", "stake": "PUNTATA", "win": "VINCITA", "poss_win": "VINCITA POSS.",
+           "paid": "PAGATO", "community": "PICK COMUNITÀ", "livepick": "PICK LIVE"},
+    "ar": {"open": "مفتوحة", "live": "مباشر", "won": "فائزة", "parlay": "مجمعة", "system": "نظام",
+           "game": "مباراة", "games": "مباريات", "banker": "مضمون", "total": "إجمالي الأودز",
+           "max": "أقصى أودز", "stake": "الرهان", "win": "الربح", "poss_win": "الربح المحتمل",
+           "paid": "مدفوع", "community": "توقع المجتمع", "livepick": "توقع مباشر"},
+    "tr": {"open": "AÇIK", "live": "CANLI", "won": "KAZANDI", "parlay": "KOMBİNE", "system": "SİSTEM",
+           "game": "MAÇ", "games": "MAÇLAR", "banker": "BANKO", "total": "TOPLAM ORAN",
+           "max": "MAKS ORAN", "stake": "BAHİS", "win": "KAZANÇ", "poss_win": "OLASI KAZANÇ",
+           "paid": "ÖDENDİ", "community": "TOPLULUK TAHMİNİ", "livepick": "CANLI TAHMİN"},
+}
+
+
+def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_info=None,
+                       lang="de", bet_type="", system_from=0, system_total=0) -> bytes:
     """Premium TipJar bet-ticket (v6) — a dark, glossy portrait 'ticket' with a gradient
     stage, volt accents, glassy leg panels, a status glow, a tear-off perforation and a
     scannable QR that links back to tipjarglobal.com. Same signature as before."""
@@ -130,6 +170,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
                 return f
         return font(family, lo)
 
+    def lfont(family, sz, txt):
+        """Label font that swaps to the universal FreeSans fallback for non-Latin (Greek/
+        Cyrillic/Arabic) label text so localized ticket labels never render as tofu boxes."""
+        return font(famfor(family, txt), sz)
+
     def _clean(p):
         m = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})", p or "")
         if m:
@@ -146,8 +191,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     GREEN, RED, AMBER, LIVE = (52, 211, 130), (244, 82, 74), (245, 190, 46), (255, 92, 92)
     won = ctype not in ("pending", "live_pending")
     is_live = ctype == "live_pending"
+    LB = _TICKET_LABELS.get(lang or "de", _TICKET_LABELS["de"])
+    is_system = (bet_type or "").lower() == "system" and int(system_total or 0) > 0
     STATUS = LIVE if is_live else (AMBER if ctype == "pending" else GREEN)
-    status_txt = {"pending": "OFFEN", "live_pending": "LIVE"}.get(ctype, "GEWONNEN")
+    status_txt = LB["live"] if is_live else (LB["open"] if ctype == "pending" else LB["won"])
 
     W = 1080
     M = 34                 # outer margin (gradient stage → ticket)
@@ -183,8 +230,10 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             gidx[k] = len(groups)
             groups.append({"home": l.get("home", "?") or "?", "away": l.get("away", "?") or "",
                            "league": l.get("league", ""), "date": l.get("date", ""),
-                           "time": l.get("time", ""), "result": "", "mkts": [],
+                           "time": l.get("time", ""), "result": "", "mkts": [], "combo_odds": None,
                            "banker": False, "live": False, "live_score": "", "live_min": None})
+        if l.get("combo_odds") and not groups[gidx[k]]["combo_odds"]:
+            groups[gidx[k]]["combo_odds"] = l.get("combo_odds")
         if not groups[gidx[k]]["result"]:
             r = str(l.get("result") or "").strip()
             if r and r.lower() not in ("open", "offen", "won", "lost", "gewonnen",
@@ -289,7 +338,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     d.text((logo_x + 3, hy + 60), "tipjarglobal.com", font=f_tag, fill=FAINT)
 
     # status pill (top-right, with soft glow)
-    st_w = tw(status_txt, f_status)
+    f_status_l = lfont(HEAD, 34, status_txt)
+    st_w = tw(status_txt, f_status_l)
     pw = int(st_w + (108 if is_live else 96))
     py0, py1 = hy - 4, hy + 52
     px1 = cx1
@@ -301,15 +351,20 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     else:
         check_badge(inx + 12, (py0 + py1) // 2, 15, (12, 14, 18))
         inx += 40
-    d.text((inx, py0 + 8), status_txt, font=f_status, fill=(12, 14, 18))
+    d.text((inx, py0 + 8), status_txt, font=f_status_l, fill=(12, 14, 18))
 
-    # ---- meta bar: PARLAY · N GAMES + optional live score -----------------
+    # ---- meta bar: PARLAY/SYSTEM · N GAMES + optional live score -----------------
     my = M + head_h - 6
     ng = len(groups)
-    chip = f"PARLAY · {ng} {'SPIEL' if ng == 1 else 'SPIELE'}"
-    d.rounded_rectangle([cx0, my, cx0 + tw(chip, f_chip) + 40, my + 44], 22,
+    unit = LB["game"] if ng == 1 else LB["games"]
+    if is_system:
+        chip = f"{LB['system']} {int(system_from or 0)}/{int(system_total or 0)} · {ng} {unit}"
+    else:
+        chip = f"{LB['parlay']} · {ng} {unit}"
+    f_chip_l = lfont(BODY_B, 26, chip)
+    d.rounded_rectangle([cx0, my, cx0 + tw(chip, f_chip_l) + 40, my + 44], 22,
                         outline=VOLT, width=2)
-    d.text((cx0 + 20, my + 9), chip, font=f_chip, fill=VOLT)
+    d.text((cx0 + 20, my + 9), chip, font=f_chip_l, fill=VOLT)
     if live_info and (live_info.get("minute") is not None or live_info.get("score")):
         li = "LIVE"
         if live_info.get("score"):
@@ -322,6 +377,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
 
     # ---- leg panels -------------------------------------------------------
     y = M + head_h + meta_bar_h
+    game_total, any_game_odd = 1.0, False
     for g in groups:
         p0, p1 = cx0, y
         d.rounded_rectangle([p0, p1, cx1, p1 + g["h"]], 22, fill=PANEL + (255,),
@@ -353,12 +409,21 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         ty += TITLE_H
         # ONE combined quote per GAME, shown right-aligned & vertically centred — a
         # bet-builder game's legs multiply into a single game odd (owner 2026-07-26:
-        # "jedes [Spiel] braucht seine quote rechts"). Per-market odds are folded into it.
-        nz = [float(o) for o in (l.get("odds") or 0 for l in g["mkts"]) if o]
-        game_odd = 1.0
-        for o in nz:
-            game_odd *= o
-        got = f"{game_odd:.2f}" if nz else ""
+        # "jedes [Spiel] braucht seine quote rechts"). Prefer a MANUAL combined odd the
+        # poster entered for the whole game (owner 2026-06); else multiply per-market odds.
+        combo = _to_float(g.get("combo_odds"))
+        if combo > 1.0:
+            game_odd = combo
+            got = f"{combo:.2f}"
+        else:
+            nz = [float(o) for o in (l.get("odds") or 0 for l in g["mkts"]) if o]
+            game_odd = 1.0
+            for o in nz:
+                game_odd *= o
+            got = f"{game_odd:.2f}" if nz else ""
+        game_total *= (game_odd if got else 1.0)
+        if got:
+            any_game_odd = True
         gow = tw(got, f_legodds) if got else 0
         mkt_top = ty
         for l in g["mkts"]:
@@ -373,10 +438,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             d.text((chip_x1 - gow, cym - 30), got, font=f_legodds, fill=VOLT)
         meta_x = ix + 40
         if g.get("banker"):
-            bt = "BANKER"
-            bw = tw(bt, f_meta)
+            bt = LB["banker"]
+            f_bank = lfont(BODY_M, 26, bt)
+            bw = tw(bt, f_bank)
             d.rounded_rectangle([ix + 40, ty - 2, ix + 40 + bw + 28, ty + 34], 16, fill=CYAN)
-            d.text((ix + 40 + 14, ty + 2), bt, font=f_meta, fill=(10, 14, 18))
+            d.text((ix + 40 + 14, ty + 2), bt, font=f_bank, fill=(10, 14, 18))
             meta_x = ix + 40 + bw + 28 + 16
         if g["meta"]:
             metafont = font(famfor(BODY_M, g["meta"]), 26)
@@ -396,9 +462,9 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
 
     # ---- footer -----------------------------------------------------------
     fy = y + perf_h
-    label = {"played": "MITGESPIELT", "posted": "REINGEPOSTET", "live": "LIVE-SERIE",
-             "cashed": "AUSGEZAHLT", "live_pending": "LIVE-PICK",
-             "pending": "COMMUNITY-TIPP"}.get(ctype, "GEWONNEN")
+    label = {"played": LB["community"], "posted": LB["community"], "live": LB["livepick"],
+             "cashed": LB["paid"], "live_pending": LB["livepick"],
+             "pending": LB["community"]}.get(ctype, LB["won"])
     # avatar bubble + username
     av_r = 34
     av_cx, av_cy = cx0 + av_r, fy + 30 + av_r
@@ -407,15 +473,21 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     initial = (username or "T").strip().lstrip("@")[:1].upper() or "T"
     fi = font(HEAD, 40)
     d.text((av_cx - tw(initial, fi) / 2, av_cy - 26), initial, font=fi, fill=VOLT)
-    d.text((av_cx + av_r + 20, fy + 22), label, font=f_label, fill=VOLT)
+    d.text((av_cx + av_r + 20, fy + 22), label, font=lfont(BODY_S, 26, label), fill=VOLT)
     uname = "@" + (username or "TipJar").lstrip("@")
     unfont = font(famfor(HEAD, uname), 46)
     d.text((av_cx + av_r + 18, fy + 52), trunc(uname, unfont, cw - 380), font=unfont, fill=INK)
 
-    # hero total odds (right, sits directly above the QR)
-    ot = f"{float(total_odds):.2f}" if total_odds else "—"
+    # hero total odds (right, sits directly above the QR). Prefer the stored total; else
+    # fall back to the product of the per-game odds (fixes an EMPTY GESAMTQUOTE and shows a
+    # SYSTEM's MAX odds = all legs win). Label switches to "MAX ODDS" for systems.
+    eff_total = float(total_odds) if total_odds and float(total_odds) > 1.0 else (
+        game_total if any_game_odd and game_total > 1.0 else 0.0)
+    ot = f"{eff_total:.2f}" if eff_total > 1.0 else "—"
+    otlabel = LB["max"] if is_system else LB["total"]
+    f_otl = lfont(BODY_S, 26, otlabel)
     otw = tw(ot, f_total)
-    d.text((cx1 - tw("GESAMTQUOTE", f_label), fy + 20), "GESAMTQUOTE", font=f_label, fill=MUTE)
+    d.text((cx1 - tw(otlabel, f_otl), fy + 20), otlabel, font=f_otl, fill=MUTE)
     gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(gl).text((cx1 - otw, fy + 40), ot, font=f_total, fill=VOLT + (170,))
     base.alpha_composite(gl.filter(ImageFilter.GaussianBlur(18)))
@@ -426,11 +498,11 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     d.line([(cx0, row_y - 16), (cx1, row_y - 16)], fill=(40, 45, 56), width=2)
     col2 = cx0 + 260
     if stake:
-        d.text((cx0, row_y), "EINSATZ", font=f_small, fill=FAINT)
+        d.text((cx0, row_y), LB["stake"], font=lfont(BODY_M, 24, LB["stake"]), fill=FAINT)
         d.text((cx0, row_y + 28), str(stake), font=f_fval, fill=INK)
     if winnings:
-        wlabel = "AUSGEZAHLT" if ctype == "cashed" else ("GEWINN" if won else "MÖGL. GEWINN")
-        d.text((col2, row_y), wlabel, font=f_small, fill=FAINT)
+        wlabel = LB["paid"] if ctype == "cashed" else (LB["win"] if won else LB["poss_win"])
+        d.text((col2, row_y), wlabel, font=lfont(BODY_M, 24, wlabel), fill=FAINT)
         d.text((col2, row_y + 28), str(winnings), font=f_fval, fill=VOLT)
 
     out = io.BytesIO()

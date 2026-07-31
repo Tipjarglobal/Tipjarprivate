@@ -59,6 +59,9 @@ class TipSaveInput(BaseModel):
     self_rating: int = 0
     image_paths: Optional[List[str]] = None
     timing: Optional[str] = None  # member-chosen: "live" | "today" | "later"
+    bet_type: str = ""            # "" (parlay/single) | "system"
+    system_from: int = 0          # X — minimum correct legs for a system bet
+    system_total: int = 0         # Y — total legs in a system bet
 
 
 class RateInput(BaseModel):

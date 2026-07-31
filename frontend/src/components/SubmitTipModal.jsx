@@ -118,6 +118,12 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     return { ...d, legs: d.legs.map((l, i) => (i === li ? { ...l, banker: !l.banker } : l)) };
   });
 
+  const setComboOdds = (li, val) => setDetected((d) => {
+    if (!d || !Array.isArray(d.legs)) return d;
+    const v = val.replace(",", ".").replace(/[^0-9.]/g, "");
+    return { ...d, legs: d.legs.map((l, i) => (i === li ? { ...l, combo_odds: v } : l)) };
+  });
+
   const publish = async () => {    if (!user) { requireLogin(); return; }
     if (!selfStars) { toast.error(t("submit.needStars")); return; }
     if (scanning) { toast.message(t("submit.analyzing")); return; }
@@ -146,6 +152,7 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
         league: d.league, market: mkt, odds: d.odds,
         ai_rating: d.rating, ai_analysis: analysis,
         legs: d.legs, is_parlay: d.is_parlay,
+        bet_type: d.bet_type || "", system_from: d.system_from || 0, system_total: d.system_total || 0,
         stake: d.stake, potential_return: d.potential_return,
         self_rating: selfStars,
         timing,
@@ -301,9 +308,14 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
 
           {detected && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} data-testid="detected-panel">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <Sparkles size={16} className="text-volt" />
                 <span className="text-xs font-bold uppercase tracking-[0.2em] text-volt">{t("submit.detected")}</span>
+                {detected.bet_type === "system" && detected.system_total ? (
+                  <span data-testid="detected-system-badge" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest rounded px-2 py-0.5 bg-volt/15 text-volt border border-volt/30">
+                    {t("wall.system")} {detected.system_from}/{detected.system_total}
+                  </span>
+                ) : null}
               </div>
               {(!((detected.home_team || "").trim()) && !((detected.away_team || "").trim()) && !((detected.legs || []).some((l) => ((l.match || "").trim()) && !/^(unknown|n\/?a|tbd|\?|-)$/i.test((l.match || "").trim())))) && (
                 <div data-testid="teams-missing-warning" className="flex items-start gap-2 mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-300">
@@ -378,6 +390,19 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
                             <span key={si} className="text-[11px] text-zinc-200 bg-elevated rounded px-2 py-0.5">{formatSelection(s, t)}</span>
                           ))}
                         </div>
+                        {(leg.selections || []).length > 1 && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <label className="text-[10px] uppercase tracking-widest text-zinc-500">{t("submit.comboOdds")}</label>
+                            <input
+                              data-testid={`leg-combo-odds-input-${li}`}
+                              value={leg.combo_odds || ""}
+                              onChange={(e) => setComboOdds(li, e.target.value)}
+                              inputMode="decimal"
+                              placeholder={t("submit.comboOddsPh")}
+                              className="w-24 rounded-md bg-void border border-elevated px-2 py-1 text-sm text-volt font-mono font-bold placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-volt/50"
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

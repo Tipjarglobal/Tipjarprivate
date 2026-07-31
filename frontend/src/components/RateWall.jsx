@@ -976,7 +976,8 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
     if (!isShareable || warmedFile.current || warming.current) return;
     warming.current = true;
     try {
-      const { data } = await api.post(`/tips/${tip.id}/share-image`);
+      const langParam = (typeof localStorage !== "undefined" && localStorage.getItem("tj_lang")) || "en";
+      const { data } = await api.post(`/tips/${tip.id}/share-image?lang=${encodeURIComponent(langParam)}`);
       warmedPath.current = data.path;
       try {
         const resp = await fetch(fileUrl(data.path));
@@ -1188,8 +1189,10 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           {(tip.is_parlay || tip.is_gift) && (
             <div className="flex items-center gap-2 flex-wrap">
               {tip.is_parlay && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
-                  {t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
+                <span data-testid="parlay-system-badge" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-volt bg-volt/10 border border-volt/30 rounded px-2 py-0.5">
+                  {tip.bet_type === "system" && tip.system_total
+                    ? `${t("wall.system")} ${tip.system_from}/${tip.system_total}`
+                    : t("wall.parlay")} · {tip.legs.length} {tip.legs.length > 1 ? t("wall.games") : t("wall.game")}
                 </span>
               )}
               {tip.is_gift && (
@@ -1234,21 +1237,31 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                 </div>
               </div>
               {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}
-              <div className="flex flex-wrap gap-1.5 mt-2">
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {(() => {
                   const chip = leg.status === "won" ? "bg-won/15 text-won"
                     : leg.status === "lost" ? "bg-lost/15 text-lost"
                     : leg.status === "void" ? "bg-zinc-500/10 text-zinc-400 line-through opacity-70"
                     : "text-zinc-100 bg-elevated";
                   const odCls = leg.status === "void" ? "text-zinc-500" : "text-volt";
-                  return (leg.selections || []).map((s, si) => {
-                    const od = (leg.sel_odds || [])[si];
-                    return (
-                    <span key={si} data-testid={`leg-sel-${li}-${si}`} className={`text-[11px] rounded px-2 py-1 leading-tight ${chip}`}>
-                      {formatSelection(s, t)}{od ? <span className={`ml-1 font-mono font-bold ${odCls}`}>@{od}</span> : null}
-                    </span>
-                    );
-                  });
+                  const anySelOdds = (leg.sel_odds || []).some((o) => o);
+                  return (
+                    <>
+                      {(leg.selections || []).map((s, si) => {
+                        const od = (leg.sel_odds || [])[si];
+                        return (
+                        <span key={si} data-testid={`leg-sel-${li}-${si}`} className={`text-[11px] rounded px-2 py-1 leading-tight ${chip}`}>
+                          {formatSelection(s, t)}{od ? <span className={`ml-1 font-mono font-bold ${odCls}`}>@{od}</span> : null}
+                        </span>
+                        );
+                      })}
+                      {leg.combo_odds && (leg.selections || []).length > 1 && !anySelOdds && (
+                        <span data-testid={`leg-combo-odds-${li}`} className="text-[11px] rounded px-2 py-1 leading-tight font-mono font-bold bg-volt/15 text-volt">
+                          @{leg.combo_odds}
+                        </span>
+                      )}
+                    </>
+                  );
                 })()}
               </div>
             </div>
