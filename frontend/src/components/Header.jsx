@@ -254,7 +254,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
             <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
             <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
             <QuickView onClick={onViewScorers} icon={Target} label={t("nav.viewscorers")} testId="view-scorers-btn" variant="pink" />
-            <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Codemining" testId="view-codereading-btn" variant="grey" />
+            <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Codemining" testId="view-codereading-btn" variant="grey" count={counts.codereading} />
           </div>
         </div>
       </div>
