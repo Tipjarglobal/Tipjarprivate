@@ -9518,17 +9518,16 @@ async def master_build_packs() -> dict:
             if cat == "mittel" and n >= 3:
                 sys_today = await db.tips.count_documents(
                     {"source": "hq-master", "master_category": cat, "master_day": day,
-                     "bet_type": "system"})
+                     "bet_type": "system", "system_style": "safe"})
                 make_system = sys_today == 0
             banker_matches = set()
+            BANKER_MAX = 1.55  # a banker must be genuinely SAFE ("χαλαρά") — never a filler
             if make_system:
-                sf = n - 1
                 nb = min(2 if n >= 5 else 1, n - 2)  # keep >=2 ζητούμενα so "1 may miss" stays real
-                # Owner teaching 2026-06: banker the EARLIEST safe games so progress locks in
-                # early — and NEVER banker the latest (night) game. Hitting everything and then
-                # losing a late-night banker is the worst outcome; the latest kickoff stays a
-                # ζητούμενο (an early winner as banker beats an early winner left as ζητούμενο).
-                # Also learn from mistakes: avoid market-types with a poor banker record.
+                # Owner teaching 2026-06/07: banker the EARLIEST *safe* games so progress locks
+                # in early — NEVER banker the latest (night) game, and NEVER banker just to close
+                # the slip: a banker must be genuinely safe (low odds) and not a market-type the
+                # Master keeps losing. If there's no safe banker base, don't force a system.
                 latest_match = max(chosen, key=lambda c: c["kickoff"])["match"]
 
                 def _brank(c):
@@ -9537,12 +9536,17 @@ async def master_build_packs() -> dict:
                     vm = learn_verdict("master", c["market"])[0]
                     score = 2 if (vb == "veto" or vm == "veto") else (0 if (vb == "boost" or vm == "boost") else 1)
                     return (score, c["kickoff"], c["odds"])  # safe → EARLY → low odds
-                elig = [c for c in chosen if c["match"] != latest_match]
+                elig = [c for c in chosen if c["match"] != latest_match
+                        and c["odds"] <= BANKER_MAX and _brank(c)[0] < 2]
                 bankers = sorted(elig, key=_brank)[:nb] if nb > 0 else []
-                banker_matches = {c["match"] for c in bankers}
-                market = f"System {sf}/{n}"
-                analysis = f"👑 TipJarMaster System {sf}/{n} · {len(banker_matches)} Banker."
-            else:
+                if bankers:
+                    banker_matches = {c["match"] for c in bankers}
+                    sf = n - 1
+                    market = f"System {sf}/{n}"
+                    analysis = f"👑 TipJarMaster System {sf}/{n} · {len(banker_matches)} Banker."
+                else:
+                    make_system = False  # no genuinely safe banker base → don't force a system
+            if not make_system:
                 market = f"{n}-fach Kombi"
                 analysis = f"👑 TipJarMaster {label}: {n} Spiele, Gesamtquote {prod:.2f}."
             tip = {
@@ -9556,6 +9560,7 @@ async def master_build_packs() -> dict:
                 "bet_type": "system" if make_system else "",
                 "system_from": (n - 1) if make_system else 0,
                 "system_total": n if make_system else 0,
+                "system_style": "safe" if make_system else "",
                 "legs": _pack_legs(chosen, banker_matches), "is_parlay": True,
                 "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
                 "source": "hq-master", "created_at": now.isoformat(),
@@ -9565,6 +9570,59 @@ async def master_build_packs() -> dict:
             made += 1
             openx += 1
     return {"posted": posted}
+
+
+async def master_riskparade_build() -> dict:
+    """Owner strategy "ρίσκο-banker → παρέλαση" (2026-07-31): once per day pull ONE risky,
+    high-odds pick as the BANKER (the hook), then hang a few CHILL/safe ζητούμενα behind it.
+    If the risky banker hits, the safe legs turn it into a parade. The banker must win (it is
+    the fixed leg); one of the safe ζητούμενα may miss (system (N-1)/N). Posted under 'mittel'
+    with system_style='risk' so it never collides with the daily safe-banker system."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "mittel", "master_day": day,
+             "system_style": "risk"}):
+        return {"skipped": "done-today"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "mittel", "system_style": "risk",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    # The risky hook: highest-confidence pick in a high-odds band (avoid market-types the
+    # Master keeps losing). Safe ζητούμενα: chill low-odds legs (e.g. a big fav Über line).
+    risky = await _master_leg_candidates(now, 3.0, 12.0)
+    risky = [c for c in risky if learn_verdict("master", c["market"])[0] != "veto"]
+    if not risky:
+        return {"skipped": "no-risky"}
+    banker = risky[0]  # already sorted by confidence (-weight, odds)
+    safe = await _master_leg_candidates(now, 1.10, 1.55)
+    safe = [c for c in safe if c["fixkey"] != banker["fixkey"]
+            and learn_verdict("master", c["market"])[0] != "veto"]
+    if len(safe) < 3:
+        return {"skipped": "not-enough-safe", "have": len(safe)}
+    zit = sorted(safe, key=lambda c: c["odds"])[:4]  # 3-4 chill ζητούμενα behind the hook
+    chosen = [banker] + zit
+    chosen, prod = await _enrich_legs_real_odds(chosen)
+    n = len(chosen)
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min(c["kickoff"] for c in chosen)
+    tip = {
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"System {n - 1}/{n}", "odds": f"{prod:.2f}",
+        "category": "value", "master_category": "mittel", "master_day": day, "ai_rating": 8.0,
+        "ai_analysis": f"👑 TipJarMaster System {n - 1}/{n} · Risk-Banker (Παρέλαση).",
+        "bet_type": "system", "system_from": n - 1, "system_total": n, "system_style": "risk",
+        "legs": _pack_legs(chosen, {banker["match"]}), "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    }
+    await db.tips.insert_one(tip)
+    logger.info(f"Master risk-parade: banker {banker['match']} @ {banker['odds']} + {len(zit)} safe → {prod}")
+    return {"posted": 1, "odds": prod, "banker": banker["match"], "games": n}
+
 
 
 async def _master_challenge_state():
@@ -10239,6 +10297,7 @@ async def master_loop():
                 con = await master_consensus()
                 dp = await master_doublepack()
                 packs = await master_build_packs()
+                risk = await master_riskparade_build()
                 chal = await master_challenge()
                 # Owner: the 8-leg "Safe Bets" slip fires at 00:30 Europe/Berlin.
                 safe = {}
@@ -10255,9 +10314,9 @@ async def master_loop():
                 await master_dedupe_open_slips()
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or safe.get("posted") or special.get("posted") or avatar.get("posted") \
-                        or hotc.get("posted") \
+                        or hotc.get("posted") or risk.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; challenge {chal}")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)

@@ -1024,3 +1024,14 @@ Owner (ελληνικά, με live παράδειγμα): banker τα ΠΡΩΤΑ
 `master_build_packs` (server.py) η επιλογή banker γίνεται τώρα με σειρά (learning-safe → νωρίτερο
 kickoff → χαμηλή απόδοση) και ΑΠΟΚΛΕΙΕΙ το ματς με το αργότερο kickoff. nb=min(2 αν n>=5 αλλιώς 1, n-2)
 για να μένουν πάντα ≥2 ζητούμενα. Επιβεβαιώθηκε με assertion (banker→νωρίτερο ασφαλές, όχι το νυχτερινό).
+
+## Update 2026-07-31 (10) — Κανόνες ποιότητας banker + «ρίσκο-banker → παρέλαση»
+Owner (ελληνικά): ποτέ banker/ρίσκο-ζητούμενο για γέμισμα· χαλαρά πράγματα· και ενεργοποίηση του
+«ρίσκο-banker → παρέλαση» σε special/medium.
+1. **Banker safety (server.py master_build_packs):** BANKER_MAX=1.55 + όχι veto· αν δεν υπάρχει
+   σωστή βάση banker → γυρίζει σε απλό Kombi (χωρίς banker-γέμισμα). Το ασφαλές σύστημα φέρει
+   `system_style="safe"`.
+2. **`master_riskparade_build` (νέα, στο master_loop):** 1×/ημέρα στο mittel, `system_style="risk"`.
+   1 ρίσκο high-odds banker (3.0-12.0, όχι veto) + 3-4 χαλαρά ασφαλή ζητούμενα (1.10-1.55), system
+   (N-1)/N. Χαμένος banker → όλο χαμένο (settlement). Δοκιμάστηκε live: System 4/5 @12.99, banker
+   Über 3.5 @5.00 + 4 ασφαλή, καθαρίστηκε. Δεν συγκρούεται με το ημερήσιο ασφαλές σύστημα (χωριστό style).
