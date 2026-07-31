@@ -141,7 +141,7 @@ export function CodeReading() {
     }
   };
 
-  const groups = stats ? [["master", t.sysMaster], ["code", t.sysCode], ["hq", t.sysHq]] : [];
+  const groups = stats ? [["code", t.sysCode]] : [];
   const anyLearn = stats && groups.some(([k]) => (stats[k] || []).length > 0);
 
   return (
