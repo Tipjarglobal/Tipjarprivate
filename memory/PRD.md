@@ -942,3 +942,7 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - Getestet: iteration_50 (Tasks 2&3 PASS, Task1 Bug gefunden) → Fix → iteration_51 (Fix + Regression PASS). Backend per curl verifiziert (Edit persistiert, Leg-Edit/Remove, settle-now).
 - Dateien: server.py (PATCH + settle-now Endpoints, `_admin_sanitize_legs`), SubmitTipModal.jsx, RateWall.jsx (Badge + Admin-Tools + doSettleNow), AdminSlipEditor.jsx (neu), i18n.js (submit.selectionRequired/Ph).
 
+## Update 2026-07-31 (3) — Admin-korrigiert-Badge & Auto-Abrechnung Community-Live
+- **Admin-korrigiert-Badge:** Auf jedem Schein mit `admin_edited=True` zeigt die Karte ein Indigo-Badge "vom Admin korrigiert" (`admin-edited-badge-<id>`, Stift-Icon) für Transparenz. i18n `tip.adminEdited` (de/en). Verifiziert per Screenshot.
+- **Auto-Abrechnung Community-Live:** Die bestehende `settlement_loop` deckt Community-/Experten-Live-Scheine bereits ab (Singles via `settle_pending_tips` jede Runde; Parlays via `settle_multimatch_parlays`). NEU: Für Live-Status-Scheine wurde die Parlay-Bein-Fälligkeit von 2h-nach-Anstoß auf ~105 min gesenkt (`elig_gap` in settlement.py), damit sie direkt nach Abpfiff automatisch abgerechnet werden — sicher, da `find_finished_fixture` nur FT-Spiele zurückgibt. "Spiel zuende"-Button bleibt als manueller Sofort-Trigger. Backend-Pfad fehlerfrei per curl getestet.
+

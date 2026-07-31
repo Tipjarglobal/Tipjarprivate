@@ -1059,6 +1059,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               ✏️ {t("tip.corrected")}
             </span>
           )}
+          {tip.admin_edited && (
+            <span data-testid={`admin-edited-badge-${tip.id}`} title={t("tip.adminEdited")} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/40">
+              <Pencil size={10} /> {t("tip.adminEdited")}
+            </span>
+          )}
           {tip.ai_corrected && (
             <span data-testid={`ai-corrected-badge-${tip.id}`} title={t("tip.correct.hint")} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
               <CheckCircle2 size={10} /> {t("wall.aiCorrected")}

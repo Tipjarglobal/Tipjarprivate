@@ -906,6 +906,10 @@ async def settle_multimatch_parlays() -> dict:
         all_won = all_resolved = True
         won_cnt = void_cnt = 0
         void_factor = 1.0
+        # Community/expert LIVE slips: the match is known in-play/over, so judge each leg as
+        # soon as it's plausibly full-time (~105 min after kickoff) instead of the 2h pre-match
+        # cushion — find_finished_fixture only returns FT games, so this never settles early.
+        elig_gap = timedelta(minutes=105) if tip.get("status") == "live" else timedelta(hours=2)
         for leg in legs:
             st = leg.get("status")
             if st == "won":
@@ -925,7 +929,7 @@ async def settle_multimatch_parlays() -> dict:
             if away:
                 away = (await _canonical_team_name(away)) or away
             ko = _kickoff_dt(leg.get("kickoff")) or _kickoff_dt(tip.get("match_time"))
-            if not home or not away or not (ko and ko < now - timedelta(hours=2)):
+            if not home or not away or not (ko and ko < now - elig_gap):
                 all_resolved, all_won = False, False
                 continue
             if judged >= PARLAY_JUDGE_CAP:
