@@ -123,12 +123,13 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
     if (scanning) { toast.message(t("submit.analyzing")); return; }
     setPublishing(true);
     try {
+      const hadPanel = !!detected;
       let d = detected;
       if (!d) {
         d = await scan();
         if (!d) { setPublishing(false); return; }
       }
-      const mkt = (marketEdit || d.market || "").trim();
+      const mkt = (hadPanel ? marketEdit : (d.market || "")).trim();
       const hasLegSel = Array.isArray(d.legs) && d.legs.some((l) => (l.selections || []).length > 0);
       if (!mkt && !hasLegSel) {
         toast.error(t("submit.selectionRequired"));

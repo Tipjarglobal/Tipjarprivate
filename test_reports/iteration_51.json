@@ -1,0 +1,62 @@
+{
+  "summary": "RETEST of the empty-slip guard fix in SubmitTipModal.jsx (line ~132). Code fix confirmed in place: `const mkt = (hadPanel ? marketEdit : (d.market || '')).trim();` — so when the detected panel is shown and the user clears market-edit-input, `mkt` is empty (no longer falls back to AI market). Regression check passed: with prefilled market + panel visible, publishing succeeds normally (POST /api/tips, modal closes, success toast). However, the empty-slip guard could NOT be empirically triggered end-to-end with the available bet-slip fixtures because the AI (LLM analyze endpoint) ALWAYS populates `detected.legs` with at least one leg containing selections (e.g. 'Over 3.5', 'Both Teams to Score (BTTS)', 'OGC Nice to Win'). Since the guard is gated on `if (!mkt && !hasLegSel)`, and `hasLegSel === true` in every scan we ran, the guard is correctly bypassed and the publish is allowed — this is the correct behavior for a slip that has valid leg selections.",
+  "test_scenarios_executed": {
+    "regression_prefilled_market_publish": {
+      "steps": "admin login → Submit a Tip → upload /tmp/betslip.png (from /app/frontend/public/tipjar-slip-real.png) → wait for detected-panel → market-edit-input prefilled by AI (e.g. 'Match Winner, Totals & BTTS') → click apex-star-8 → click publish-button",
+      "result": "PASS — POST /api/tips fired, success toast 'Your tip is live on the Rate Wall! 🔥', modal closed. Regression works as intended.",
+      "post_made": true,
+      "modal_closed_after_publish": true
+    },
+    "empty_market_with_parlay_legs": {
+      "steps": "same as above but CLEAR market-edit-input to '' before clicking publish",
+      "result": "POST /api/tips STILL fires (legs have selections, so hasLegSel=true → guard correctly bypassed). selection-hint NOT visible (as expected, because hint visibility condition also requires no leg selections). This matches the intended logic — legs with selections are valid content.",
+      "hint_visible_after_clear": false,
+      "post_made": true,
+      "reason": "hasLegSel=true — AI-detected parlay has 5-6 legs each with a selection (Over 3.5, BTTS, Match Winner, etc.)"
+    },
+    "text_only_publish": {
+      "steps": "Submit-Tip modal, textarea='test', no image, apex-star-8, publish → auto-scan triggered → publish proceeded",
+      "result": "POST /api/tips fired successfully — AI populated enough content (market/legs) that guard did not need to fire. No empty-slip scenario reproduced this way either.",
+      "post_made": true
+    },
+    "empty_market_no_legs_scenario": {
+      "attempted": true,
+      "result": "COULD NOT REPRODUCE — no available image/text input causes the emergent LLM analyze endpoint to return d.legs=[] with d.market empty. Every scan yielded populated leg selections. Consequently the empty-slip guard cannot be empirically observed firing via the UI with the fixtures available.",
+      "code_review_conclusion": "The guard IS correctly written: `if (!mkt && !hasLegSel) { toast.error(t('submit.selectionRequired')); return; }` and the hint element renders under the same condition. Given the fix at line 132, if the AI were to return an empty legs array (as the review request example 'live-odds screenshot the AI reads as \"No selection made\"' implies), the guard would fire correctly."
+    }
+  },
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "code_fix_line_132": "VERIFIED — `const mkt = (hadPanel ? marketEdit : (d.market || '')).trim();` correctly present in /app/frontend/src/components/SubmitTipModal.jsx",
+    "hint_element_condition_line_346": "VERIFIED — hint renders under `!marketEdit.trim() && !(detected.legs || []).some(l => (l.selections || []).length)`",
+    "guard_condition_line_134": "VERIFIED — `if (!mkt && !hasLegSel) { toast.error(t('submit.selectionRequired')); ...; return; }`",
+    "regression_publish_with_prefilled_market": "PASS end-to-end",
+    "empty_market_guard_fires": "NOT EMPIRICALLY OBSERVED (see note above) — logically correct in code, but AI-generated legs prevent hasLegSel from ever being false in tests"
+  },
+  "test_report_links": [
+    "/app/test_reports/retest_empty_guard.png",
+    "/app/test_reports/retest_final.png"
+  ],
+  "action_items": [
+    "OPTIONAL: If the intent is to force the guard whenever the user explicitly clears the market (even for a parlay with legs), tighten guard to `if (!mkt) { ... }` instead of `if (!mkt && !hasLegSel)`. Currently the guard only fires when BOTH the market AND leg selections are empty. The current logic is defensible (parlay legs are content), so probably no change needed — this is a product decision for the main agent.",
+    "OPTIONAL: Provide a mock/fixture image that produces `d.legs=[]` and `d.market=''` from the AI so that QA can end-to-end verify the empty-slip guard rendering + toast; today the empergent LLM always returns populated legs even for gibberish input."
+  ],
+  "critical_code_review_comments": [
+    "SubmitTipModal.jsx line 132: fix correctly implemented — `hadPanel ? marketEdit : (d.market || '')` — this addresses the iteration_50 regression where cleared market was overwritten by AI fallback.",
+    "SubmitTipModal.jsx line 134: guard is gated on `!mkt && !hasLegSel`. If product wants the guard to fire whenever the user explicitly clears the market (irrespective of legs), drop the `!hasLegSel` conjunct.",
+    "Non-fix note: leg text under each detected leg is displayed but is not editable in the Submit modal (only in AdminSlipEditor). If a user wanted to strip out a bad AI selection from a leg they cannot; they'd have to reload the slip. Not a bug — just a UX gap."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend-only per request)", "frontend": "regression PASS; empty-slip guard not empirically triggerable but logically verified" },
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026! (works)",
+  "seed_data_creation": "Two test tips were posted to Rate Wall during regression (parlay with cleared market + regression run with prefilled market). Main agent may want to prune.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The fix at line 132 is correct and the regression path (prefilled market → publish success) works end-to-end. The empty-slip guard cannot be observed firing with real bet-slip images because the LLM always returns non-empty legs. If a future test requires empirical guard firing, the AI analyze endpoint must be mocked to return `{legs: [], market: ''}` or the UI must expose a way to strip legs before publish. Code review confirmed the guard renders both the toast and data-testid='selection-hint' correctly when its conditions are met.",
+  "rca_of_the_issue": "Root cause of iteration_50 bug: `mkt = (marketEdit || d.market || '').trim()` used JS truthy fallback that ignored the user's cleared value. Fix in iteration_51: `mkt = (hadPanel ? marketEdit : (d.market || '')).trim()` — when the detected panel is already visible, `marketEdit` is authoritative (whether empty or not). Verified in code. Regression path validated end-to-end. Empty-slip guard could not be empirically fired because emergent LLM always returns legs with selections (`hasLegSel=true`), and the guard requires both empty market AND empty leg selections."
+}
