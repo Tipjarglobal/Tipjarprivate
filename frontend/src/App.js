@@ -73,7 +73,7 @@ function Home() {
     try { return JSON.parse(localStorage.getItem("tj_seen_counts")) || {}; } catch { return {}; }
   });
   const [refreshKey, setRefreshKey] = useState(0);
-  const NAV_KEYS = ["ai", "smart", "systems", "members", "live", "settled", "master"];
+  const NAV_KEYS = ["ai", "smart", "members", "livecommunity", "systems", "live", "settled", "master"];
   const newCounts = {};
   NAV_KEYS.forEach((k) => { newCounts[k] = Math.max(0, (counts[k] || 0) - (seenCounts[k] || 0)); });
 
@@ -128,6 +128,7 @@ function Home() {
     const loadCounts = async () => {
       try {
         const { data } = await api.get("/tips/counts");
+        data.livecommunity = data.community_live;
         setCounts(data);
         // first ever load → treat everything as already seen (no badges on fresh visit)
         if (!localStorage.getItem("tj_seen_counts")) {
@@ -379,7 +380,7 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["members", "nav.viewmembers"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"], ["codereading", "codereading"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["livecommunity", "nav.viewlivecommunity"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"], ["codereading", "codereading"]].map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "master") {
@@ -388,6 +389,8 @@ function Home() {
                   cls = active ? "bg-[#FFC02E] text-black shadow-[0_0_14px_rgba(255,192,46,0.45)]" : "bg-[#FFC02E]/15 border border-[#FFC02E]/40 text-[#FFC02E] hover:bg-[#FFC02E]/25";
                 } else if (v === "live") {
                   cls = `animate-pulse ${active ? "bg-[#2563eb] text-white shadow-[0_0_16px_rgba(37,99,235,0.55)]" : "bg-[#2563eb]/15 border border-[#2563eb]/50 text-blue-300 hover:bg-[#2563eb]/25"}`;
+                } else if (v === "livecommunity") {
+                  cls = active ? "bg-[#38bdf8] text-black shadow-[0_0_14px_rgba(56,189,248,0.6)]" : "bg-[#38bdf8]/15 border border-[#38bdf8]/60 text-sky-300 hover:bg-[#38bdf8]/25";
                 } else if (v === "scorers") {
                   cls = active ? "bg-[#F9A8D4] text-black shadow-[0_0_14px_rgba(249,168,212,0.45)]" : "bg-[#F9A8D4]/15 border border-[#F9A8D4]/40 text-[#F9A8D4] hover:bg-[#F9A8D4]/25";
                 } else if (v === "codereading") {
@@ -402,9 +405,9 @@ function Home() {
                   key={v}
                   data-testid={`tabview-${v}`}
                   onClick={() => openTipsView(v)}
-                  className={`whitespace-nowrap flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${cls}`}
+                  className={`whitespace-nowrap flex items-center gap-1.5 rounded-full font-bold transition-colors ${v === "livecommunity" ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-xs"} ${cls}`}
                 >
-                  {v === "live" && <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : "bg-blue-400"} ${(counts.live || 0) > 0 ? "animate-pulse" : ""}`} />}
+                  {(v === "live" || v === "livecommunity") && <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : v === "livecommunity" ? "bg-sky-300" : "bg-blue-400"} ${((v === "livecommunity" ? counts.livecommunity : counts.live) || 0) > 0 ? "animate-pulse" : ""}`} />}
                   {v === "settled" && <CheckeredFlag />}
                   {v === "codereading" ? (CR_LABEL[lang] || CR_LABEL.en) : t(lbl)}
                   {counts[v] != null && (

@@ -838,8 +838,13 @@ async def tips_counts():
         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
         "hidden": {"$ne": True},
         "status": "pending"})
+    _KILIVE_SOURCES = ["hq-auto", "hq-live", "hq-system", "smart"]
     live = await db.tips.count_documents({"status": "live", "hidden": {"$ne": True},
-                                          "source": {"$nin": list(SILENT_SOURCE_SLUGS)}})
+                                          "source": {"$in": _KILIVE_SOURCES}})
+    community_live = await db.tips.count_documents({
+        "status": "live", "hidden": {"$ne": True},
+        "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master", *SILENT_SOURCE_SLUGS]},
+        "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]}})
     master = await db.tips.count_documents({"source": "hq-master", "hidden": {"$ne": True},
                                             "status": {"$in": ["pending", "live"]}})
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
@@ -874,6 +879,7 @@ async def tips_counts():
     except Exception:
         systems_n = 0
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
+            "community_live": community_live,
             "systems": systems_n, "smart": smart, "settled": settled, "master": master,
             "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
             "won_normal": won_normal_n, "void": void_n}
@@ -2432,6 +2438,9 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         # live-AI, smart, Master) are excluded so no bot ever posts into Community.
         q["source"] = {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}
         q["username"] = {"$nin": ["TipJarHQ", "TipJarHQ System"]}
+    elif source == "kilive":
+        # "Live KI Picks" — only the KI-generated live picks (no community members).
+        q["source"] = {"$in": ["hq-auto", "hq-live", "hq-system", "smart"]}
     elif source == "bestwon":
         # "Best Won" bucket (owner): all winning Smart + Risk-single + Community +
         # System picks — the special wins the owner wants to track (esp. systems).

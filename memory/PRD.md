@@ -922,3 +922,15 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
    spät definierten Routes registriert. Regressionstest bestätigt: kein bestehender Endpoint kaputt.
 8. **Test**: iteration_49.json — 100% Backend (11/11 pytest) + Frontend, keine Bugs.
 - ALLE Änderungen in PREVIEW → tipjarglobal.com braucht "Save to GitHub → Deploy".
+
+
+## Update 2026-07-31 — Live-Feed-Aufteilung (Community Live)
+- "Live Picks" nav umbenannt → "Live KI Picks" (de) / "Live AI Picks" (en); Ansicht zeigt jetzt NUR KI-Live-Picks (neuer Backend-Filter `source=kilive` = hq-auto/hq-live/hq-system/smart). Community-Sub-Chip aus der Live-Ansicht entfernt.
+- Neuer kleiner blauer Nav-Button "Community Live" (view=`livecommunity`) direkt rechts neben "Community Picks"; zeigt Live-Scheine echter Mitglieder/Community (source=members + status=live). Eigener Auto-aktualisierender Zähler via neuem count-Feld `community_live` in `/api/tips/counts`.
+- Nav neu angeordnet: ai, smart, members, livecommunity, systems, master, live, settled, scorers, codereading (Community Picks weiter links, kleiner Live-Button rechts daneben, mobil sichtbar).
+- Dateien: server.py (tips_counts + list_tips kilive-Zweig), i18n.js (nav.viewlive umbenannt, nav.viewlivecommunity neu), RateWall.jsx, App.js.
+- Getestet: curl (counts liefert community_live; kilive/members-live filtern korrekt) + mobile Screenshots.
+
+## OFFEN / PENDING (User-Entscheidung ausstehend)
+- **swagger / leere Live-Scheine**: swagger lädt Live-Oddsscreens hoch → Vision-KI erkennt keine Auswahl ("No selection made") → leerer Schein. Vorgeschlagener Fix (Markt/Auswahl-Feld editierbar machen + Pflicht-Auswahl vor Veröffentlichung) wartet noch auf Bestätigung (a/b/c). Passiert auf PRODUKTION (tipjarglobal.com), nicht Preview.
+

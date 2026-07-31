@@ -25,7 +25,6 @@ const LIVE_CATS = [
   ["banker", "Banker", "bg-cyan-400 text-void border-cyan-400", "text-cyan-300 border-cyan-400/40"],
   ["value", "Value", "bg-volt text-void border-volt", "text-volt border-volt/40"],
   ["banger", "Banger", "bg-orange-500 text-void border-orange-500", "text-orange-400 border-orange-500/40"],
-  ["community", "Community", "bg-blue-500 text-white border-blue-500", "text-blue-300 border-blue-500/40"],
 ];
 const LIVE_CAT_KEYS = {
   all: ["livecat.all.t", "livecat.all.d"],
@@ -47,6 +46,7 @@ const VIEW_TITLE_KEY = {
   systems: "nav.viewsystems",
   members: "nav.viewmembers",
   live: "nav.viewlive",
+  livecommunity: "nav.viewlivecommunity",
   smart: "nav.viewsmart",
   settled: "nav.viewsettled",
 };
@@ -59,11 +59,11 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   const { user, setUser } = useAuth();
   const [tips, setTips] = useState([]);
   const [sort, setSort] = useState("new");
-  const [status, setStatus] = useState(view === "live" ? "live" : "pending");
+  const [status, setStatus] = useState((view === "live" || view === "livecommunity") ? "live" : "pending");
   const [win, setWin] = useState("24");
   const [cat, setCat] = useState(null);
   const [liveCat, setLiveCat] = useState(null);
-  const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0, community: 0 });
+  const [liveCounts, setLiveCounts] = useState({ banker: 0, value: 0, banger: 0 });
   const [myRatings, setMyRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -101,7 +101,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
     if (!silent) setLoading(true);
     try {
       const params = { sort };
-      const st = view === "live" ? "live" : status;
+      const st = (view === "live" || view === "livecommunity") ? "live" : status;
       if (st) params.status = st;
       if (view === "ai") { params.source = "ai"; if (win !== "all") params.window = win; if (cat) params.category = cat; }
       else if (view === "master") {
@@ -110,7 +110,8 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
         if (masterTab === "slips") params.mcat = "slips";
         else if (["einfach", "mittel", "challenge", "safe", "special", "avatar", "hotscorer"].includes(masterTab)) params.mcat = masterTab;
       }
-      else if (view === "live") { if (liveCat === "community") { params.source = "members"; } else if (liveCat) params.category = liveCat; }
+      else if (view === "live") { params.source = "kilive"; if (liveCat) params.category = liveCat; }
+      else if (view === "livecommunity") { params.source = "members"; }
       else if (view === "members") params.source = "members";
       else if (view === "smart") params.source = "smart";
       const { data } = await api.get("/tips", { params });
