@@ -9268,7 +9268,7 @@ async def _master_leg_candidates(now, min_odds, max_odds):
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
         {"_id": 0, "home_team": 1, "away_team": 1, "home_team_latin": 1,
          "away_team_latin": 1, "market": 1, "odds": 1, "match_time": 1,
-         "league": 1, "is_expert": 1, "username": 1}).to_list(3000)
+         "league": 1, "is_expert": 1, "username": 1, "category": 1}).to_list(3000)
     hit = await _expert_hitrates()
     preds = await db.match_predictions.find(
         {}, {"_id": 0, "home": 1, "away": 1, "fav": 1, "fav_prob": 1}).to_list(2000)
@@ -9308,7 +9308,8 @@ async def _master_leg_candidates(now, min_odds, max_odds):
         weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
         cand = {"match": f"{home} – {away}", "home": home, "away": away, "market": market,
                 "odds": od, "kickoff": ko, "match_time": t.get("match_time"),
-                "league": t.get("league", ""), "weight": weight, "fixkey": fixkey}
+                "league": t.get("league", ""), "weight": weight, "fixkey": fixkey,
+                "category": t.get("category", "")}
         if fixkey not in seen or weight > seen[fixkey]["weight"]:
             seen[fixkey] = cand
     return sorted(seen.values(), key=lambda c: (-c["weight"], c["odds"]))
@@ -9589,27 +9590,42 @@ async def master_riskparade_build() -> dict:
             {"source": "hq-master", "master_category": "mittel", "system_style": "risk",
              "status": {"$in": ["pending", "live"]}}):
         return {"skipped": "open"}
-    # The risky hook: the Master is FREE to tie whatever it wants as the risk-banker (owner:
-    # "να δένει ότι θέλει· όλα επιτρεπτά") — one high-odds pick OR a risky PAIR of two games
-    # (his ~10 "δυάδα") both marked banker. It just avoids market-types it keeps losing.
-    risky = await _master_leg_candidates(now, 2.2, 12.0)
+    # The risky hook (owner 2026-07-31): the "νόστιμα" risk markets — HALF-TIME/FULL-TIME &
+    # SCORERS — become the Master's risk-bankers, ideally as a PAIR of games that kick off at
+    # ~the same time. Then GIFTS + VALUE picks hang behind as chill ζητούμενα. The Master is
+    # free to tie whatever it wants; it only skips market-types it keeps losing.
+    def _is_tasty(mkt):
+        m = (mkt or "").lower()
+        return any(k in m for k in (
+            "halbzeit", "1. hz", " hz", "hälfte", "halftime", "half-time", "ht/ft", "ht-ft",
+            "torschütze", "torschutze", "scorer", "trifft", "anytime", "doppelpack",
+            "hattrick", "hat-trick", "brace"))
+    risky = await _master_leg_candidates(now, 2.0, 15.0)
     risky = [c for c in risky if learn_verdict("master", c["market"])[0] != "veto"]
     if not risky:
         return {"skipped": "no-risky"}
-    bankers = [risky[0]]
-    # tie a second risky game if available and the pair stays a sane hook (combined <= ~15)
-    for c in risky[1:]:
-        if c["fixkey"] != risky[0]["fixkey"] and risky[0]["odds"] * c["odds"] <= 15.0:
+    tasty = [c for c in risky if _is_tasty(c["market"])]
+    pool = tasty if tasty else risky  # prefer tasty HT/FT & scorer; fall back to any risky
+    b1 = pool[0]
+    bankers = [b1]
+    # tie a SECOND tasty risky that starts ~the same time (±90 min) — his "δυάδα"
+    for c in pool[1:]:
+        if (c["fixkey"] != b1["fixkey"]
+                and abs((c["kickoff"] - b1["kickoff"]).total_seconds()) <= 5400
+                and b1["odds"] * c["odds"] <= 15.0):
             bankers.append(c)
             break
     banker_keys = {b["fixkey"] for b in bankers}
     banker_matches = {b["match"] for b in bankers}
-    safe = await _master_leg_candidates(now, 1.10, 1.55)
+    # ζητούμενα = GIFTS + VALUE picks (chill), attached behind the risky hook.
+    safe = await _master_leg_candidates(now, 1.10, 1.70)
     safe = [c for c in safe if c["fixkey"] not in banker_keys
             and learn_verdict("master", c["market"])[0] != "veto"]
-    if len(safe) < 3:
-        return {"skipped": "not-enough-safe", "have": len(safe)}
-    zit = sorted(safe, key=lambda c: c["odds"])[:4]  # 3-4 chill ζητούμενα behind the hook
+    gv = [c for c in safe if c.get("category") in ("gift", "value")]
+    zit_pool = gv if len(gv) >= 3 else safe
+    if len(zit_pool) < 3:
+        return {"skipped": "not-enough-safe", "have": len(zit_pool)}
+    zit = sorted(zit_pool, key=lambda c: c["odds"])[:4]
     chosen = bankers + zit
     chosen, prod = await _enrich_legs_real_odds(chosen)
     n = len(chosen)

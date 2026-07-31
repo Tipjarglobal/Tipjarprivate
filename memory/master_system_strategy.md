@@ -78,3 +78,12 @@
 3/3 στα πρώτα»). ΔΙΟΡΘΩΘΗΚΕ: η επιλογή banker ταξινομεί ΠΡΩΤΑ κατά kickoff (νωρίτερα → banker), μετά
 χαμηλή απόδοση· φίλτρο ασφαλείας (odds<=1.55, όχι veto) + εξαίρεση του τελευταίου kickoff. nb=min(3 αν
 n>=5 αλλιώς 1, n-2). Ρίσκο-banker δομή = ελεύθερη επιλογή (τώρα: 1 high-odds banker + χαλαρά ζητούμενα).
+
+## RISK CATEGORY → «ΝΟΣΤΙΜΑ» + ROLES (owner 2026-07-31)
+- Τα risk bankers του Master = «νόστιμα» markets: ημίχρονα/τελικά (HT/FT) & σκόρερς, δεμένα ως ΖΕΥΓΟΣ
+  δύο ματς που ξεκινούν ~ίδια ώρα (±90') — `master_riskparade_build`: προτιμά _is_tasty markets,
+  ζευγαρώνει 2 tasty same-time, combined <=15.
+- Τα ζητούμενα από πίσω = ΔΩΡΑ (gift) + VALUE picks (χαλαρά). `_master_leg_candidates` επιστρέφει τώρα
+  `category` ώστε να ξεχωρίζουν gift/value. Fallback σε γενικό ασφαλές pool αν <3 gift/value.
+- Single-pick pool: lookahead ήδη 5 μέρες (SMART_LOOKAHEAD_H=120) → καλύπτει 48h+. Παράγεται από
+  predictions/στατιστικά/codemining/scorer/HT-FT/K.o.-Duell/mental/gifts. Ο Master διαλέγει ό,τι του αρέσει.
