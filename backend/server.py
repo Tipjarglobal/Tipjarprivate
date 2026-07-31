@@ -62,6 +62,7 @@ from core import (
     _API_QUOTA, _api_quota_exhausted, _reset_api_quota_flag, _apifootball, _apifootball_async,
     _api_reserve_locked, _API_DAY,
 )
+from learning import refresh_learning, learn_verdict, learn_bucket, _LEARN
 
 app = FastAPI(title="TipJar API")
 api_router = APIRouter(prefix="/api")
@@ -4212,8 +4213,8 @@ async def root():
     return {"message": "TipJar API live"}
 
 
-app.include_router(api_router)
-
+# NOTE: api_router is included at the VERY BOTTOM of this module (after ALL routes are
+# defined) so late-defined endpoints (code-reading, learning, …) are registered too.
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -5429,6 +5430,12 @@ async def build_systems() -> dict:
                 mk, od = "Über 2.5 Tore", 1.55
             else:
                 mk, od = "Über 1.5 Tore", 1.30
+            # owner 2026-06: HQ learning — if this market-type keeps LOSING, fall back to a safer line
+            if learn_verdict("hq", mk)[0] == "veto":
+                for alt in (("Über 1.5 Tore", 1.30), ("Unter 4.5 Tore", 1.32), ("Unter 3.5 Tore", 1.45)):
+                    if learn_verdict("hq", alt[0])[0] != "veto":
+                        mk, od = alt
+                        break
             used.add(p["id"])
             s = _sel(p, mk, od, 7.5)
             s["banker"] = False
@@ -7615,52 +7622,105 @@ def _code_side(market: str, home: str, away: str):
     return _market_team_side(market, home, away)
 
 
+def _code_team_total_under(market: str):
+    """Detect a TEAM/individual total-UNDER leg. Returns (line, negated) or None.
+    'Gesamtzahl 1 1.5 Unter' → (1.5, False); 'Gesamtzahl 2 Unter 2.5 - Nein' → (2.5, True)."""
+    m = (market or "").lower()
+    if not re.search(r"gesamtzahl|team\s*[12]|individual|einzel", m):
+        return None
+    if "unter" not in m and "under" not in m:
+        return None
+    dm = re.search(r"(\d+\.\d+)", m)          # the decimal line (0.5/1.5/2.5…)
+    if not dm:
+        return None
+    line = float(dm.group(1))
+    negated = any(k in m for k in ("nein", " no", "- no", "nicht"))
+    return (line, negated)
+
+
+def _code_apply_learn(res: dict) -> dict:
+    """If a code-reading pattern has proven to lose too often, force it to NO BET."""
+    pat = res.get("pattern")
+    if res.get("read") == "counter" and pat:
+        verdict, rate, n = learn_verdict("code", pat, raw_bucket=True)
+        if verdict == "veto":
+            return {"read": "no_bet", "code": res.get("code"), "pattern": pat,
+                    "reason": f"Gelernt: Muster verliert zu oft ({int(rate*100)}% aus {n} Spielen) → No Bet."}
+        if verdict == "boost":
+            res["reason"] = f"{res['reason']} (bewährt: {int(rate*100)}% aus {n})"
+    return res
+
+
 def _code_read_interpret(market: str, home: str, away: str) -> dict:
-    """Turn ONE SpinBetter accumulator leg into OUR counter-pick or a NO BET (owner rules)."""
+    """Turn ONE bookmaker accumulator leg into OUR counter-pick or a NO BET (owner rules)."""
     m = (market or "").lower()
     home = home or "Heim"
     away = away or "Gast"
     side = _code_side(market, home, away)
     team = home if side == "home" else away if side == "away" else None
 
+    # (Team-total) SpinBetter bets a TEAM stays low / goes 3+ → owner counter-reads.
+    tt = _code_team_total_under(market)
+    if tt is not None:
+        line, negated = tt
+        tgt = team or home
+        if negated:
+            # "Team Gesamtzahl Unter x.5 – Nein" = they need the team to bang 3+ → we DECKEL it.
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"{tgt} Unter 3.5 Tore",
+                "alt_market": f"{tgt} 1–3 Tore", "code": market, "pattern": "team_total_over_cap",
+                "reason": f"Code will {tgt} mit 3+ Toren — das ist selten. Wir deckeln: {tgt} Unter 3.5 Tore.",
+                "stars": 7})
+        if line <= 2.5:
+            # "Team Gesamtzahl Unter 1.5/2.5" = they say the team barely scores → we back it TO score.
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"{tgt} Über 0.5 Tore",
+                "alt_market": "Beide Teams treffen", "code": market, "pattern": "team_total_under_low",
+                "reason": f"Code sagt {tgt} trifft kaum ({market}). Wir gehen dagegen: {tgt} Über 0.5 Tore — vor allem zuhause / wenn der Gegner ein wichtigeres Spiel vor der Brust hat.",
+                "stars": 7})
+        return {"read": "no_bet", "code": market, "pattern": "team_total_under_high",
+                "reason": f"Code deckelt {tgt} schon hoch (Unter {line}) — kein Gegenwert. No Bet."}
+
     # (a) SpinBetter: a team WON'T score (win + 'Über 0.5 – Nein' / clean sheet) → we take that
     #     team TO score / BTTS. "Nicht dass es 0:1 endet."
     if ("0.5" in m) and any(k in m for k in ("nein", "no", "kein", "nicht", "under", "unter")):
         tgt = team or away
-        return {"read": "counter", "our_market": f"{tgt} trifft (Über 0.5 Tore)",
-                "alt_market": "Beide Teams treffen",
-                "code": market,
+        return _code_apply_learn({"read": "counter", "our_market": f"{tgt} trifft (Über 0.5 Tore)",
+                "alt_market": "Beide Teams treffen", "code": market, "pattern": "team_scores_counter",
                 "reason": f"Code sagt: {tgt} trifft NICHT. Wir gehen dagegen — {tgt} trifft (oder beide treffen). Nicht dass es 0:1 endet.",
-                "stars": 7}
+                "stars": 7})
 
     # (b) SpinBetter: early draw / result at ~15. Minute → we expect a goal by then.
-    if re.search(r"\b(15|20|30)\b", m) and any(k in m for k in
+    if re.search(r"\b(15|20|30)(th)?\b", m) and any(k in m for k in
             ("unentschieden", "remis", "draw", "ergebnis", "result", "erstes tor", "1. tor", " x ")):
-        return {"read": "counter", "our_market": "Über 0.5 Tore 1. Halbzeit", "code": market,
+        return _code_apply_learn({"read": "counter", "our_market": "Über 0.5 Tore 1. Halbzeit",
+                "code": market, "pattern": "early_goal",
                 "reason": "Code erwartet früh noch 0:0/Unentschieden — wir sagen, bis dahin fällt ein Tor: Über 0.5 Tore 1. Halbzeit.",
-                "stars": 10}
+                "stars": 10})
 
     # (c) SpinBetter: team scores LATE (last goal 55–90 / 2nd half) → we say it scores BY ~60.
     if any(k in m for k in ("55", "60", "letztes tor", "last goal", "2. halbzeit", "second half", "spät")) \
             and (team or "trifft" in m or "tor" in m):
         tgt = team or home
-        return {"read": "counter", "our_market": f"{tgt} trifft bis zur 60. Minute", "code": market,
+        return _code_apply_learn({"read": "counter", "our_market": f"{tgt} trifft bis zur 60. Minute",
+                "code": market, "pattern": "early_scorer",
                 "reason": f"Code sieht {tgt} SPÄT treffen — wir sagen: bis zur 55.–60. Minute ist die Bude drin. Ziemlich sicher.",
-                "stars": 8}
+                "stars": 8})
 
     # (d) SpinBetter: match total Über 2.5+ → too loose for us → NO BET.
     ou = _parse_over_under(market)
     if ou and ou[0] == "over" and ou[1] >= 2.5 and team is None:
-        return {"read": "no_bet", "code": market,
+        return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
                 "reason": "Code gibt Über 2.5+ Tore — zu unsicher für uns. No Bet."}
 
     # (e) SpinBetter: straight win / double chance / handicap → NO BET ('nicht normal, 1X zu gehen').
     if any(k in m for k in ("sieg", "gewinnt", " win", "1x", "x2", "doppelte", "double chance",
                             "handicap", "1x2")) or re.match(r"^\s*s?[12]\b", m):
-        return {"read": "no_bet", "code": market,
+        return {"read": "no_bet", "code": market, "pattern": "straight_win_nobet",
                 "reason": "Code gibt einen glatten Sieg (1/2/1X). Es ist nicht normal, 1X zu gehen. No Bet."}
 
-    return {"read": "no_bet", "code": market, "reason": "Kein klarer Gegen-Wert. No Bet."}
+    return {"read": "no_bet", "code": market, "pattern": "no_value",
+            "reason": "Kein klarer Gegen-Wert. No Bet."}
 
 
 async def _code_read_scan_images(images_b64: List[str]) -> list:
@@ -7706,7 +7766,7 @@ async def admin_code_reading_scan(payload: dict, admin: dict = Depends(require_a
         return {"scanned": 0, "reads": 0, "note": "Keine Fußball-Legs erkannt (oder LLM-Budget)."}
     now = datetime.now(timezone.utc)
     day = _berlin_now().date().isoformat()
-    await db.code_reads.delete_many({"day": day})  # replace today's read
+    await db.code_reads.delete_many({"day": day, "outcome": {"$exists": False}})  # replace today's UNsettled reads (keep settled history for learning)
     stored = []
     for lg in legs:
         home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
@@ -7721,6 +7781,7 @@ async def admin_code_reading_scan(payload: dict, admin: dict = Depends(require_a
             "code_odds": lg.get("odds") or "",
             "read": interp["read"], "our_market": interp.get("our_market"),
             "alt_market": interp.get("alt_market"), "reason": interp["reason"],
+            "pattern": interp.get("pattern"),
             "stars": interp.get("stars", 0),
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(hours=30)).isoformat(),
@@ -7728,6 +7789,125 @@ async def admin_code_reading_scan(payload: dict, admin: dict = Depends(require_a
         await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
         stored.append(doc)
     return {"scanned": len(legs), "reads": len(stored), "reads_data": stored}
+
+
+async def _grade_code_our_market(our_market: str, home: str, away: str, fx: dict):
+    """Grade OUR code-reading counter-pick against the real finished fixture.
+    Returns 'won' / 'lost' / None (undecidable)."""
+    m = (our_market or "").lower()
+    mn = _norm(our_market)
+    hg, ag = fx.get("home_goals"), fx.get("away_goals")
+    if hg is None or ag is None:
+        return None
+    if "halbzeit" in m:                       # "Über 0.5 Tore 1. Halbzeit" (total, orientation-free)
+        hh, ha = fx.get("ht_home"), fx.get("ht_away")
+        if hh is None or ha is None:
+            return None
+        return "won" if (hh + ha) >= 1 else "lost"
+    # map OUR home/away onto the fixture's orientation
+    if _teams_match(fx.get("home_name", ""), home) or _teams_match(fx.get("away_name", ""), away):
+        gh, ga = hg, ag
+    else:
+        gh, ga = ag, hg
+    tg = gh if (_norm(home) and _norm(home) in mn) else (ga if (_norm(away) and _norm(away) in mn) else None)
+    if tg is not None:
+        if "unter 3.5" in m or "1–3" in m or "1-3" in m:
+            return "won" if tg <= 3 else "lost"
+        if "über 0.5" in m or "uber 0.5" in m or "trifft" in m:
+            return "won" if tg >= 1 else "lost"
+    try:
+        out = await judge_market(our_market, home, away, hg, ag)
+        return out if out in ("won", "lost") else None
+    except Exception:
+        return None
+
+
+async def settle_code_reads() -> dict:
+    """Auto-settle open code-reading counter-picks against real results (owner: 'Ergebnisse gucken')."""
+    if not API_FOOTBALL_KEY:
+        return {"ok": False, "settled": 0}
+    now = datetime.now(timezone.utc)
+    reads = await db.code_reads.find(
+        {"read": "counter", "outcome": {"$exists": False}, "our_market": {"$nin": [None, ""]}},
+        {"_id": 0}).sort("created_at", 1).to_list(120)
+    settled = 0
+    date_cache: dict = {}
+    for r in reads:
+        if _api_quota_exhausted():
+            break
+        if r.get("cr_settle_attempts", 0) >= 8:
+            continue
+        ko = _parse_kickoff(r.get("kickoff"))
+        try:
+            created = datetime.fromisoformat(r["created_at"])
+        except Exception:
+            created = now
+        ref = ko or created
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
+        if now - ref < timedelta(hours=2):
+            continue  # match not finished yet
+        home, away = r["home"], r["away"]
+        tid = await resolve_team_id(home)
+        oid = await resolve_team_id(away)
+        dates = sorted({ref.date().isoformat(), (ref + timedelta(days=1)).date().isoformat(),
+                        created.date().isoformat()})
+        fx = find_finished_fixture(tid, away, dates, oid) if tid else None
+        if not fx and oid:
+            fx = find_finished_fixture(oid, home, dates, tid)
+        if not fx:
+            fx = _datescan_fixture(home, away, dates, date_cache)
+        if not fx:
+            await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
+            continue
+        outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
+        if outcome not in ("won", "lost"):
+            await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
+            continue
+        await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+            "outcome": outcome, "score": f"{fx.get('home_goals')}-{fx.get('away_goals')}",
+            "settled_at": now.isoformat()}})
+        settled += 1
+    return {"ok": True, "settled": settled, "checked": len(reads)}
+
+
+async def learning_loop():
+    """Owner 2026-06: keep all 3 systems (master/hq/code) learning from REAL results."""
+    await asyncio.sleep(60)
+    try:
+        await refresh_learning()
+    except Exception as e:
+        logger.error(f"initial refresh_learning error: {e}")
+    while True:
+        try:
+            await settle_code_reads()
+            await refresh_learning()
+        except Exception as e:
+            logger.error(f"learning_loop error: {e}")
+        await asyncio.sleep(1200)  # every 20 min
+
+
+@api_router.get("/learning/stats")
+async def learning_stats():
+    """Honest hit-rate per market pattern & system, derived from settled results."""
+    def _fmt(sysmap):
+        rows = [{"pattern": b, "won": s["won"], "lost": s["lost"], "n": s["n"],
+                 "rate": s["rate"],
+                 "verdict": ("veto" if s["n"] >= 6 and s["rate"] < 0.40
+                             else "boost" if s["n"] >= 6 and s["rate"] >= 0.70 else "ok")}
+                for b, s in sysmap.items() if s["n"] > 0]
+        return sorted(rows, key=lambda r: (-r["n"], -r["rate"]))
+    return {"master": _fmt(_LEARN.get("master", {})),
+            "hq": _fmt(_LEARN.get("hq", {})),
+            "code": _fmt(_LEARN.get("code", {})),
+            "min_n": 6, "veto_rate": 0.40}
+
+
+@api_router.post("/admin/learning/refresh")
+async def admin_learning_refresh(admin: dict = Depends(require_admin)):
+    cr = await settle_code_reads()
+    await refresh_learning()
+    return {"ok": True, "code_reads": cr, "stats": _LEARN}
 
 
 
@@ -8881,6 +9061,9 @@ async def _master_leg_candidates(now, min_odds, max_odds):
         # owner 2026-07-30: GIFTS are the source of truth — no Master leg may contradict a gift
         # (e.g. gift 'Qarabag unter 2.5' ⇒ never a 'Qarabag über 2.5' / 'Qarabag trifft' leg).
         if _conflicts_with_gift(market, home, away, gift_map.get(_match_key(home, away))):
+            continue
+        # owner 2026-06: learning — drop leg market-types that keep LOSING (from real results)
+        if learn_verdict("master", market)[0] == "veto":
             continue
         fixkey = "|".join(sorted([_norm(home), _norm(away)]))
         weight = hit.get(t.get("username"), 0.5) if t.get("is_expert") else 0.55
@@ -10070,7 +10253,7 @@ async def backfill_leg_odds_once():
 # so every shared helper above is defined when settlement does `from server import ...`. ---
 from settlement import (
     _h2h_first_leg, _matches_between, _reg_goals,
-    find_finished_fixture,
+    find_finished_fixture, _datescan_fixture, _teams_match,
     judge_market,
     settle_pending_tips, settle_hq_combos, settle_multimatch_parlays,
     purge_settled_tips, expire_stale_pending, settlement_loop,
@@ -10337,6 +10520,7 @@ async def startup():
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
+    _BG_TASKS.append(asyncio.create_task(learning_loop()))
     _BG_TASKS.append(asyncio.create_task(forebet_loop()))
     _BG_TASKS.append(asyncio.create_task(predictz_loop()))
     _BG_TASKS.append(asyncio.create_task(apifootball_predictions_loop()))
@@ -10752,3 +10936,8 @@ async def shutdown():
     if _BG_TASKS:
         await asyncio.gather(*_BG_TASKS, return_exceptions=True)
     client.close()
+
+
+# Include ALL API routes now that every endpoint above is defined (fixes late-defined
+# routes like /code-reading, /learning/stats never being registered).
+app.include_router(api_router)

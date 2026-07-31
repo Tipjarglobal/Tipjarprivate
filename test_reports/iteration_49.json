@@ -1,0 +1,23 @@
+{
+  "summary": "Regression + feature testing after moving app.include_router(api_router) to the bottom of server.py. Verified all pre-existing routes still respond (root, master avatar, tips feed, login) and the new learning + code-reading endpoints work with proper auth guards. Verdict logic (veto <0.4 n>=6, boost >=0.7 n>=6, else ok) validated across master/hq/code arrays. _code_read_interpret rules confirmed via direct import (team_total_under_low, team_total_over_cap, straight_win_nobet). Frontend Statistics tab renders Code Reading toggle which expands the panel with examples, upload button, empty-reads message, and Learning-Stats panel with populated master (10 rows) and hq (9 rows) learn-rows. 11/11 pytest passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_learning_regression.py",
+    "/app/test_reports/pytest/iter49_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~10945 lines — significantly over the 700-line guideline; should be split into feature modules (auth, tips, master, learning, code-reading) for maintainability.",
+    "FastAPI @app.on_event('startup'/'shutdown') is deprecated (warnings in test run). Should migrate to lifespan handlers.",
+    "emergentintegrations uses deprecated Pydantic V1 @validator — external, but worth pinning/monitoring."
+  ],
+  "updated_files": ["/app/backend/tests/test_learning_regression.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@tipjar.com / TipJarAdmin2026!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression test file /app/backend/tests/test_learning_regression.py covers include_router move + learning/code-reading endpoints and can be reused. Frontend Code Reading toggle is inside Statistics tab (click 'Statistics' button in top nav, scroll to bottom, click 'Code Reading' toggle). data-testids: code-reading-toggle-btn, code-reading-view, code-example-N, code-reading-upload-btn, code-reading-empty, learning-stats-panel, learn-group-master, learn-group-hq, learn-row-<pattern>. Learning stats endpoint /api/learning/stats is public; refresh POST /api/admin/learning/refresh requires admin bearer token. Real OCR scan not tested (per instructions).",
+  "rca of the issue": "N/A — no bugs found."
+}
