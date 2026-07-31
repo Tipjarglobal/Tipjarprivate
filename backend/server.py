@@ -9523,22 +9523,23 @@ async def master_build_packs() -> dict:
             banker_matches = set()
             BANKER_MAX = 1.55  # a banker must be genuinely SAFE ("χαλαρά") — never a filler
             if make_system:
-                nb = min(2 if n >= 5 else 1, n - 2)  # keep >=2 ζητούμενα so "1 may miss" stays real
-                # Owner teaching 2026-06/07: banker the EARLIEST *safe* games so progress locks
-                # in early — NEVER banker the latest (night) game, and NEVER banker just to close
-                # the slip: a banker must be genuinely safe (low odds) and not a market-type the
-                # Master keeps losing. If there's no safe banker base, don't force a system.
+                nb = min(3 if n >= 5 else 1, n - 2)  # keep >=2 ζητούμενα so "1 may miss" stays real
+                # Owner teaching 2026-06/07: BANKER THE EARLIEST safe games so progress locks in
+                # early (owner: "θα ήμουνα 3/3 στα πρώτα" — his mistake was bankering 4 late games
+                # that hadn't started while 3 early winners sat as ζητούμενα). NEVER banker the
+                # latest (night) game, and NEVER banker just to close the slip: a banker must be
+                # genuinely safe (low odds) and not a market-type the Master keeps losing. If no
+                # safe banker base exists, don't force a system.
                 latest_match = max(chosen, key=lambda c: c["kickoff"])["match"]
 
-                def _brank(c):
+                def _safe_banker(c):
                     b = learn_bucket(c["market"])
                     vb = learn_verdict("master", "banker_" + b, raw_bucket=True)[0]
                     vm = learn_verdict("master", c["market"])[0]
-                    score = 2 if (vb == "veto" or vm == "veto") else (0 if (vb == "boost" or vm == "boost") else 1)
-                    return (score, c["kickoff"], c["odds"])  # safe → EARLY → low odds
-                elig = [c for c in chosen if c["match"] != latest_match
-                        and c["odds"] <= BANKER_MAX and _brank(c)[0] < 2]
-                bankers = sorted(elig, key=_brank)[:nb] if nb > 0 else []
+                    return vb != "veto" and vm != "veto" and c["odds"] <= BANKER_MAX
+                elig = [c for c in chosen if c["match"] != latest_match and _safe_banker(c)]
+                # EARLIEST kickoff first (then safest odds) → lock in the first games as bankers.
+                bankers = sorted(elig, key=lambda c: (c["kickoff"], c["odds"]))[:nb] if nb > 0 else []
                 if bankers:
                     banker_matches = {c["match"] for c in bankers}
                     sf = n - 1
