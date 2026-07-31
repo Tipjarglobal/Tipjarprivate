@@ -176,11 +176,11 @@ export function CodeReading() {
       const { data } = await api.post("/admin/code-reading/scan", { images });
       if (!data.reads) { toast.info(data.note || t.none); }
       else { toast.success(`${data.scanned} ${t.done}`); }
-      load();
     } catch (err) {
       toast.error(err?.response?.status === 403 ? t.adminOnly : "Scan fehlgeschlagen");
     } finally {
       setScanning(false);
+      load();  // reads are stored server-side even if the response timed out at the proxy
     }
   };
 
