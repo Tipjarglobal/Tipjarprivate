@@ -1151,3 +1151,9 @@ S1b-Ausbruch, Rhythmus-Note angehängt) + Live-Lauf (5 Picks: 4× echte Quoten z
    Tradition) + Screenshot (Puebla 1-3 Chivas, Minnesota 0-3 Portland etc., i18n übersetzt).
 Auch notiert (owner-Muster): Bodø/Glimt trifft VOR der 30. Min (im Codemining bestätigt) →
 master_system_strategy.md. HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## User-Präferenz (2026-06) — WICHTIG (nicht mehr vorschlagen)
+Owner: "Stelle diese 3 Fragen nicht." → NIE wieder als Next Action Items vorschlagen:
+1. Bodø-Frühtor-Pick (automatischer "Tor vor 30. Min"-Pick), 2. Blacklist-Verwaltungsliste mit
+Ein-Klick-Entsperren, 3. Rhythmus-Konfidenz/Zyklus-Score pro Pick.
+Allgemein: am Ende KEINE aufgedrängten Feature-Vorschläge/Rückfragen mehr, wenn nicht angefragt.
