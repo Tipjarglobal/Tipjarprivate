@@ -904,7 +904,7 @@ async def settle_multimatch_parlays() -> dict:
             continue
         changed = any_lost = False
         all_won = all_resolved = True
-        won_cnt = void_cnt = 0
+        won_cnt = void_cnt = lost_cnt = 0
         void_factor = 1.0
         # Community/expert LIVE slips: the match is known in-play/over, so judge each leg as
         # soon as it's plausibly full-time (~105 min after kickoff) instead of the 2h pre-match
@@ -917,6 +917,7 @@ async def settle_multimatch_parlays() -> dict:
                 continue
             if st == "lost":
                 any_lost, all_won = True, False
+                lost_cnt += 1
                 continue
             if st == "void":
                 void_cnt += 1
@@ -1006,12 +1007,28 @@ async def settle_multimatch_parlays() -> dict:
             changed = True
             if leg["status"] == "lost":
                 any_lost, all_won = True, False
+                lost_cnt += 1
             else:
                 won_cnt += 1
         # Void legs (un-settleable/annulled) count as a PUSH: neutral for win/loss. The slip
         # wins when every remaining leg won, loses on any lost leg, and is fully void only when
         # no leg won. Legs still awaiting a result keep the slip pending (all_resolved=False).
-        if any_lost:
+        # SYSTEM bets (owner 2026-06, e.g. "System 3/4") settle X-of-Y: they WIN as soon as X
+        # legs are won (some legs may lose), and LOSE only once reaching X is impossible. Void
+        # legs drop out of the total (Y shrinks); the required hits never exceed what's left.
+        is_system = (tip.get("bet_type") or "").lower() == "system" and int(tip.get("system_total") or 0) > 0
+        if is_system:
+            eff_total = len(legs) - void_cnt
+            need = min(int(tip.get("system_from") or 0), eff_total)
+            if need <= 0:
+                new_status = "void" if void_cnt else None
+            elif won_cnt >= need:
+                new_status = "won"
+            elif (eff_total - lost_cnt) < need:
+                new_status = "lost"
+            else:
+                new_status = None  # still reachable → keep pending
+        elif any_lost:
             new_status = "lost"
         elif all_resolved:
             new_status = "won" if won_cnt > 0 else ("void" if void_cnt else None)

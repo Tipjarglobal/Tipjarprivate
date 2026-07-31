@@ -958,3 +958,45 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - Der "Community Picks"-QuickView-Knopf auf der Homepage (Header.jsx) ist jetzt ein geteilter Button: "Community Picks" links (→ members), separater kleiner blauer "LIVE"-Button rechts (→ livecommunity), einzeln klickbar. Testids: `view-members-btn-wrap`, `view-members-btn`, `view-members-btn-live`. Live-Zähler aus `counts.community_live`. Klick-Test bestätigt: blauer Teil öffnet Community-Live.
 - Dateien: App.js (onViewLiveCommunity Prop), Header.jsx (QuickView split-render via liveAction/liveCount).
 
+
+## Update 2026-07-31 (6) — Systemwetten, Bet-Builder-Kombiquote, Share-Bild-Fixes, Community-Pregame-Regel
+Owner-Wahlen: KI erkennt System automatisch · GESAMTQUOTE bei System = Maximalquote · manuelles
+Kombi-Quoten-Feld pro Bet-Builder-Spiel · Share-Bild-Text in gewählter App-Sprache. Getestet:
+testing_agent iteration_52 (alle 4 Aufgaben bestanden) + Render-Bilder de/en/el + curl-E2E.
+1. **Systemwetten (KI-erkannt):** `AI_SYSTEM`-Prompt liest jetzt `bet_type` ("system"), `system_from`,
+   `system_total` (z.B. "12 aus 14") vom Schein/Text. `analyze_tip` + `_sanitize_legs` + `TipSaveInput`
+   + `create_tip` tragen die Felder. Frontend zeigt "System X/Y" statt "Parlay":
+   `parlay-system-badge` (RateWall) + `detected-system-badge` (SubmitTipModal). i18n `wall.system`
+   (alle 8 Sprachen). Verifiziert: KI erkannte "System 12 aus 14" aus Text korrekt.
+2. **Bet-Builder-Kombiquote (manuell):** pro Spiel mit 2+ Auswahlen kann der Poster EINE Kombiquote
+   eingeben (`leg.combo_odds`). KI liest sie auch selbst (`combo_odds` je Leg). SubmitTipModal:
+   `leg-combo-odds-input-<li>`. Karte: `leg-combo-odds-<li>`-Pill (nur wenn keine Einzel-Quoten da).
+   Ticket bevorzugt `combo_odds` vor dem Produkt der Einzelquoten. i18n `submit.comboOdds/Ph`.
+3. **Share-Bild (`ticket_render.py`):** (a) **GESAMTQUOTE nie mehr leer** — fällt auf das Produkt der
+   Pro-Spiel-Quoten zurück; bei System heißt das Label "MAX. QUOTE" (Maximalquote). (b) **Voll
+   lokalisiert** via neuem `_TICKET_LABELS`-Dict (8 Sprachen) + `lfont()` FreeSans-Fallback → keine
+   Tofu-Boxen bei Griechisch/Arabisch/Kyrillisch (Status/SYSTEM/BANKER/GESAMTQUOTE/EINSATZ/…).
+   (c) SYSTEM-Chip "SYSTEM X/Y · N SPIELE". `_render_slip_image(..., lang, bet_type, system_from,
+   system_total)`. `SHARE_RENDER_VER 4→5`; share-image cached PRO SPRACHE (`share_images` map),
+   Endpoint akzeptiert `?lang=`; Frontend übergibt `tj_lang`.
+4. **Community-Pregame-Regel (Owner):** lange Pregame-Community-Scheine bleiben IMMER im pregame
+   Community-Bereich. In `create_tip` ist `is_live_post = (timing == "live")` — KEINE automatische
+   Live-Promotion mehr über `_looks_live_now`/API-Football-Leg-Check (die verschob lange Kombis
+   fälschlich in Community-Live, sobald ein Bein lief). Nur explizit als "Live" gepostete Tipps → Live.
+   Verifiziert: 3-Bein-System bleibt `status=pending`.
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy".
+
+
+## Update 2026-07-31 (7) — TipJarMaster postet sichere Systemwetten + X-aus-Y-Abrechnung
+Owner: „Lass den Master gelegentlich eine sichere Systemwette posten … im special, easy und
+medium Bereich kann er frei posten." Umgesetzt & getestet (Logik-Assertions + lokaler Render).
+1. **Master-Systemwette:** `master_build_packs` (server.py) macht 1×/Tag den ersten Mittel-Pack mit
+   ≥3 Spielen zu einem SICHEREN System `(N-1)/N` ("1 Tipp darf danebengehen") — `bet_type="system"`,
+   `system_from=N-1`, `system_total=N`, `market="System X/Y"`, passende `ai_analysis`. Karte zeigt den
+   `parlay-system-badge` "System X/Y · N Spiele" neben dem Mittel-Badge; Share-Bild zeigt "SYSTEM X/Y"
+   + MAX. QUOTE. Lokal gerendert verifiziert (@TipJarMaster, System 3/4, MAX 6.20).
+2. **System-Abrechnung X aus Y** (`settlement.py::settle_multimatch_parlays`): neuer System-Zweig —
+   gewinnt SOFORT sobald `won_cnt >= min(system_from, eff_total)` (einige Beine dürfen verlieren),
+   verliert erst wenn `eff_total - lost_cnt < need` (unerreichbar), sonst pending. Void-Beine fallen
+   aus dem Total (eff_total = legs - void). `lost_cnt` neu getrackt. 7 Branch-Assertions bestanden
+   (3/4 mit 1 Niete → gewonnen; 2 Nieten → verloren; offen & erreichbar → pending; Void reduziert Y).

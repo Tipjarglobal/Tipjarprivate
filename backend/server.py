@@ -9508,15 +9508,37 @@ async def master_build_packs() -> dict:
             tid = f"master-{uuid.uuid4().hex[:10]}"
             first_ko = min(c["kickoff"] for c in chosen)
             label = "Einfach" if cat == "einfach" else "Mittel"
+            n = len(chosen)
+            # Owner 2026-06: the Master should occasionally post a SAFE SYSTEM bet so the
+            # community sees the mechanic live. Once per day the first Mittel pack with >=3
+            # games becomes a "one may miss" system (N-1)/N — it still pays if a single leg
+            # loses. Kept to Mittel where X-of-Y is meaningful (Einfach can be 2 legs).
+            make_system = False
+            if cat == "mittel" and n >= 3:
+                sys_today = await db.tips.count_documents(
+                    {"source": "hq-master", "master_category": cat, "master_day": day,
+                     "bet_type": "system"})
+                make_system = sys_today == 0
+            if make_system:
+                sf = n - 1
+                market = f"System {sf}/{n}"
+                analysis = (f"👑 TipJarMaster System {sf}/{n}: {n} sichere Spiele — es darf sogar "
+                            f"1 Tipp danebengehen und der Schein gewinnt trotzdem. "
+                            f"Maximalquote {prod:.2f}.")
+            else:
+                market = f"{n}-fach Kombi"
+                analysis = f"👑 TipJarMaster {label}: {n} Spiele, Gesamtquote {prod:.2f}."
             tip = {
                 "id": tid, "user_id": bot["id"], "username": bot["username"],
                 "is_master": True, "is_expert": False,
                 "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-                "market": f"{len(chosen)}-fach Kombi", "odds": f"{prod:.2f}",
+                "market": market, "odds": f"{prod:.2f}",
                 "category": "banker" if cat == "einfach" else "value",
                 "master_category": cat, "master_day": day, "ai_rating": 8.5,
-                "ai_analysis": (f"👑 TipJarMaster {label}: {len(chosen)} Spiele, "
-                                f"Gesamtquote {prod:.2f}."),
+                "ai_analysis": analysis,
+                "bet_type": "system" if make_system else "",
+                "system_from": (n - 1) if make_system else 0,
+                "system_total": n if make_system else 0,
                 "legs": _pack_legs(chosen), "is_parlay": True,
                 "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
                 "source": "hq-master", "created_at": now.isoformat(),
