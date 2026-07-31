@@ -28,7 +28,7 @@ const L = {
     ],
     empty: "Noch keine Reads. Lade einen Buchmacher-Screenshot (Akku des Tages / Boost) hoch.",
     nobet: "NO BET", counter: "UNSER GEGEN-PICK", code: "Code sagt",
-    upload: "Screenshot hochladen", scanning: "Lese Code…",
+    upload: "Bilder hochladen (max. 4)", scanning: "Lese Code…",
     adminOnly: "Nur für Admin.", done: "gelesen", none: "Keine Fußball-Legs erkannt.",
     won: "gewonnen", lost: "verloren", score: "Ergebnis",
     learnTitle: "Lern-Statistik", learnSub: "Trefferquote je Muster — aus echten Ergebnissen gelernt",
@@ -59,7 +59,7 @@ const L = {
     ],
     empty: "Καμία ανάγνωση ακόμη. Ανέβασε ένα screenshot «Παρολί της ημέρας» / ενισχυμένης προσφοράς.",
     nobet: "NO BET", counter: "ΤΟ ΑΝΤΙΘΕΤΟ ΜΑΣ", code: "Ο κώδικας λέει",
-    upload: "Ανέβασε screenshot", scanning: "Διαβάζω κώδικα…",
+    upload: "Ανέβασε εικόνες (έως 4)", scanning: "Διαβάζω κώδικα…",
     adminOnly: "Μόνο για διαχειριστή.", done: "διαβάστηκαν", none: "Δεν βρέθηκαν legs.",
     won: "κερδισμένο", lost: "χαμένο", score: "Σκορ",
     learnTitle: "Στατιστικά Μάθησης", learnSub: "Ποσοστό επιτυχίας ανά μοτίβο — από πραγματικά αποτελέσματα",
@@ -90,7 +90,7 @@ const L = {
     ],
     empty: "No reads yet. Upload a bookmaker 'Accumulator of the day' / boosted-offer screenshot.",
     nobet: "NO BET", counter: "OUR COUNTER-PICK", code: "Code says",
-    upload: "Upload screenshot", scanning: "Reading code…",
+    upload: "Upload images (max 4)", scanning: "Reading code…",
     adminOnly: "Admin only.", done: "read", none: "No football legs detected.",
     won: "won", lost: "lost", score: "Score",
     learnTitle: "Learning stats", learnSub: "Hit-rate per pattern — learned from real results",
@@ -162,18 +162,18 @@ export function CodeReading() {
   };
 
   const onFile = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []).slice(0, 4);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     setScanning(true);
     try {
-      const b64 = await new Promise((res, rej) => {
+      const images = await Promise.all(files.map((file) => new Promise((res, rej) => {
         const r = new FileReader();
         r.onload = () => res(String(r.result).split(",")[1]);
         r.onerror = rej;
         r.readAsDataURL(file);
-      });
-      const { data } = await api.post("/admin/code-reading/scan", { images: [b64] });
+      })));
+      const { data } = await api.post("/admin/code-reading/scan", { images });
       if (!data.reads) { toast.info(data.note || t.none); }
       else { toast.success(`${data.scanned} ${t.done}`); }
       load();
@@ -239,7 +239,7 @@ export function CodeReading() {
           {scanning ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
           {scanning ? t.scanning : t.upload}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile}
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onFile}
           data-testid="code-reading-file-input" />
       </div>
 
