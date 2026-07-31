@@ -898,3 +898,27 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
    Bugs. Avatar-UI, Zyklus, Minuten-Chip, Lokalisierung (el/en), Anti-Underdog, kein Live->7★
    Über-Linie, ht-goal-Dedup alle bestätigt. Seed-Testdaten wieder entfernt.
 - ALLE Änderungen in PREVIEW → „Save to GitHub → Deploy" für tipjarglobal.com nötig.
+
+## 2026-07-31 — Lern-Framework (Code-Reader + Master + HQ) + Route-Bugfix
+1. **Neues Modul `learning.py`**: aggregiert ALLE abgerechneten Picks (won/lost) aus der DB
+   pro System (master/hq/code) und Markt-Muster (`learn_bucket`) zu ECHTER Trefferquote.
+   `learn_verdict()` → veto (<40% bei ≥6), boost (≥70%), sonst ok. `refresh_learning()`
+   mutiert den geteilten `_LEARN`-Cache in-place + persistiert Snapshot in `db.learn_stats`.
+2. **Rückkopplung verdrahtet**: `_master_leg_candidates` droppt vetoed Bein-Muster;
+   `build_systems` (Value-Loop) fällt bei vetoed Markt auf sichere Linie zurück;
+   `_code_read_interpret` → NO BET bei vetoed Muster (`_code_apply_learn`).
+3. **Code-Reader lernt**: dauerhaftes Speichern (nur unsettled today wird bei Re-Scan ersetzt),
+   `settle_code_reads()` + `_grade_code_our_market()` werten Gegen-Pick gegen echtes Ergebnis
+   (API-Football find_finished_fixture/_datescan), Ergebnis-Badge (✓/✗ + Score) pro Karte.
+   Neue Regeln: `team_total_under_low` (Team Unter 1.5 → Team Über 0.5),
+   `team_total_over_cap` (Team Unter 2.5–Nein → Team Unter 3.5). Frühes-Remis-Regex fixt EN "15th".
+4. **`learning_loop`** (startup, alle 20 min): settle_code_reads → refresh_learning. Init-Refresh ~60s.
+5. **Endpoints**: GET /api/learning/stats (public, formatiert), POST /api/admin/learning/refresh (admin).
+6. **UI**: `CodeReading.jsx` neu — Guide, Beispiele, Upload, Outcome-Badges, "Lern-Statistik"-Panel
+   (Master/HQ/Code je Muster mit %, n, Verdict-Badge herabgestuft/bewährt/aktiv).
+7. **BUGFIX (kritisch, latent aus Vorsession)**: `app.include_router(api_router)` lief bei Zeile
+   4216, während `/code-reading` & `/learning`-Routes DANACH definiert waren → NIE registriert
+   (Code-Reader war live gar nicht erreichbar). include_router ans Dateiende verschoben → alle
+   spät definierten Routes registriert. Regressionstest bestätigt: kein bestehender Endpoint kaputt.
+8. **Test**: iteration_49.json — 100% Backend (11/11 pytest) + Frontend, keine Bugs.
+- ALLE Änderungen in PREVIEW → tipjarglobal.com braucht "Save to GitHub → Deploy".
