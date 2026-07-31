@@ -5049,6 +5049,30 @@ def _fav_team(p):
     return None
 
 
+def _opp_win_practically_impossible(p) -> bool:
+    """Owner 2026-06 ("wir spielen kein lotto"): a Doppelte Chance (1X/X2) may ONLY be played
+    when the OTHER side ('2' resp. '1') practically CANNOT win — never as a Lotto odds-filler on
+    a swingy game (the catastrophic Valérenga 1X). Signals (no extra API quota):
+      • the favourite must be genuinely DOMINANT (high fav_prob),
+      • predicted to WIN (not draw) by a clear goal margin,
+      • and NOT in a swingy Scandinavian/nordic league where — per owner — "jedes Ergebnis kommt
+        im Zyklus" (any result eventually shows up), so demand an even more dominant favourite."""
+    fav = p.get("fav")
+    if fav not in ("home", "away"):
+        return False
+    fav_prob = p.get("fav_prob") or 0
+    ph, pa = p.get("ph"), p.get("pa")
+    fg = (ph if fav == "home" else pa)
+    og = (pa if fav == "home" else ph)
+    if fg is None or og is None:
+        margin = 1 if fav_prob >= 74 else 0
+    else:
+        margin = fg - og
+    scand = _is_scandinavian(p.get("league"), p.get("league_code"), p.get("country"))
+    thresh = 74 if scand else 68
+    return fav_prob >= thresh and margin >= 1
+
+
 def _sel(p, market, odds, rating):
     return {
         "id": f"{p['id']}-{re.sub(r'[^a-z0-9]', '', market.lower())[:10]}",
@@ -7126,16 +7150,38 @@ async def favourite_smart_autopost() -> dict:
         if await db.tips.find_one({"id": f"qual-{mkey}", "status": {"$in": ["pending", "live"]}}, {"_id": 1}):
             continue
         very_dominant = fav_prob >= 66 and fg >= 3
+        goal_game = bool(p.get("btts")) or fg >= 2
         if very_dominant:
+            # Correlated (NOT a Lotto pair): a win by 2+ ALREADY implies 2+ goals — the
+            # Über 1.5 is deduped away, leaving a clean handicap on a dominant favourite.
             legs_spec = [(f"{fav} -1.5 Handicap", 1.85, ""),
                          ("Über 1.5 Tore", 1.30, "")]
-            why = (f"{fav} ist klarer Favorit (Sieg-Wahrscheinlichkeit {fav_prob}%) und wird "
-                   f"laut Prognose {fg} Tore schießen — Kombi zielt auf einen Sieg mit 2+ Toren Vorsprung.")
+            why = (f"{fav} ist klar dominant (Sieg-Wahrscheinlichkeit {fav_prob}%, Prognose {fg} "
+                   f"eigene Tore) — sauberer Handicap-Pick auf den Sieg mit 2+ Toren Vorsprung, "
+                   f"kein aufgeblasener Zusatz.")
+        elif _opp_win_practically_impossible(p) and goal_game:
+            # The opponent practically CANNOT win AND it's a goal game → back the favourite to
+            # win in a scoring match (both legs carry real reasoning, not odds-padding).
+            if p.get("btts"):
+                legs_spec = [(f"{fav} Sieg", 1.70, ""), ("Beide Teams treffen", 1.70, "")]
+                why = (f"{fav} ist so dominant, dass ein Gegner-Sieg praktisch ausscheidet — und "
+                       f"beide Teams treffen laut Muster. Favoriten-Sieg in einem Torspiel, keine "
+                       f"willkürliche Kombi.")
+            else:
+                legs_spec = [(f"{fav} Sieg", 1.70, "")]
+                why = (f"{fav} ist so dominant, dass ein Gegner-Sieg praktisch ausscheidet — "
+                       f"klarer Einzel-Sieg, kein Lotto-Füller.")
+        elif _opp_win_practically_impossible(p):
+            # Opponent truly can't win, but goals aren't safe → a CLEAN single Double Chance,
+            # never padded with an arbitrary Über 1.5 (that was the Valérenga-1X mistake).
+            legs_spec = [(f"{fav} Doppelte Chance {dc}", round(_dc_odds(fav_prob), 2),
+                          "dc_1x" if dc == "1X" else "dc_x2")]
+            why = (f"{fav} verliert praktisch nicht (Gegner-Sieg ausgeschlossen, {fav_prob}%) — "
+                   f"saubere Doppelte Chance als Einzel-Pick, ohne aufgeblasenes Zusatz-Bein.")
         else:
-            legs_spec = [(f"{fav} Doppelte Chance {dc}", 1.30, "dc_1x" if dc == "1X" else "dc_x2"),
-                         ("Über 1.5 Tore", 1.30, "")]
-            why = (f"{fav} ist starker Favorit ({fav_prob}%). SICHER gebaut: {fav} verliert nicht "
-                   f"UND es fallen 2+ Tore — schon ein 1:1 reicht für diesen Schein.")
+            # Smart area DETECTS an un-playable 'Lotto' spot (e.g. a Norwegian mid-table 'favourite'
+            # where any result is possible in the cycle) → post NOTHING rather than a 1X+Über filler.
+            continue
         combo_legs = [{"home": home, "away": away, "market": mk, "odds": str(od),
                        "kind": kd, "team": fav if "-1.5" in mk or "Chance" in mk else "",
                        "status": "open"} for (mk, od, kd) in legs_spec]

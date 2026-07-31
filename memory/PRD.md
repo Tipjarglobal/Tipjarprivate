@@ -1062,3 +1062,28 @@ Getestet: Halbzeit-Logik (Assertions), Generator (Fav 1.55 → half_any + first_
 NICHT umgesetzt (bewusst): die 2 LIVE-Ideen — „Ecken nach 70'" ist mit API-Football NICHT sauber
 abrechenbar (keine zeit-gesplitteten Ecken), und „nächstes Tor" bräuchte Live-Event-Polling (Void-Risiko).
 Bewusst weggelassen, um NICHT den unabrechenbaren Müll zu erzeugen, den der Owner gerade beklagt hat.
+
+
+## Update 2026-06 (13) — "Wir spielen kein Lotto": 1X/X2 nur wenn Gegnersieg unmöglich
+Owner (frustriert, Beispiel Valérenga 1X in den Single-/Smart-Picks): die KI baute "1X + Über 1.5"
+NUR um die Quote künstlich aufzublasen ("Lotto-Füller"). Owner-Regel: eine Doppelte Chance darf NUR
+gespielt werden, wenn ein Gegner-Sieg praktisch UNMÖGLICH ist; sonst gar keine DC. Zusätzlich
+Owner-Philosophie: "Zyklus"-Denken — Teams bringen alle Ergebnisse im Zyklus, Historie/H2H beachten
+(z. B. nach 3 torlosen Duellen fällt endlich ein Tor), jedes Team einzeln bewerten. "Nie Lotto-Füller."
+UMGESETZT (server.py):
+1. Neuer Helper `_opp_win_practically_impossible(p)` (nach `_fav_team`): DC (1X/X2) nur zulässig, wenn
+   der Favorit wirklich dominant ist (fav_prob ≥ 68, in skandinavischen/nordischen "Zyklus"-Ligen ≥ 74)
+   UND laut Prognose mit ≥1 Tor Vorsprung GEWINNT (kein Remis-Muster).
+2. `favourite_smart_autopost` neu verdrahtet — KEIN "DC 1X + Über 1.5"-Füller mehr:
+   • sehr dominant (≥66 %, ≥3 Tore) → "-1.5 Handicap" (+Über 1.5 wird als impliziert entdeduped) — sauber;
+   • Gegnersieg unmöglich + Torspiel (btts) → "{Fav} Sieg + Beide Teams treffen" (korreliert);
+   • Gegnersieg unmöglich, Tore unsicher → sauberer EINZEL-"{Fav} Doppelte Chance";
+   • sonst (Valérenga-Fall: nicht dominanter "Favorit", jedes Ergebnis im Zyklus möglich) → GAR KEIN Pick
+     (der Smart-Bereich erkennt jetzt un-spielbare Spots und postet nichts statt eines 1X-Füllers).
+GETESTET: `_opp_win_practically_impossible` Unit (6 Fälle, alle korrekt: Valérenga-Nordic-Mid-Fav →
+abgelehnt, Bayern/PSG-dominant → zugelassen) + Zweig-Entscheidung simuliert (Valérenga/Mid → SKIP,
+Bayern → Handicap, PSG → Sieg+BTTS). Backend lädt sauber, `favourite_smart_autopost` läuft fehlerfrei.
+Preview-DB hatte 0 offene Smart-DC-Picks → das gemeldete Valérenga 1X lag auf PRODUCTION.
+HINWEIS: greift auf tipjarglobal.com erst nach "Save to GitHub → Deploy"; danach postet der Smart-Loop
+keine unbegründeten 1X-Kombis mehr. OFFEN/Backlog: volle "Zyklus"-H2H-Auswertung (team_form/h2h_stats
+in match_stats.py existieren, kosten aber API-Quota) — aktuell nur regelbasiert, ohne fresh H2H-Fetch.
