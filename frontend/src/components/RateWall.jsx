@@ -82,10 +82,18 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   // tips surface instantly without scrolling/searching.
   const [starSort, setStarSort] = useState(false);
   const [topOnly, setTopOnly] = useState(false);
+  const [clCount, setClCount] = useState(0);
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
     setLiveCat(null);
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "members") { setClCount(0); return; }
+    let cancel = false;
+    api.get("/tips/counts").then(({ data }) => { if (!cancel) setClCount(data.community_live || 0); }).catch(() => {});
+    return () => { cancel = true; };
   }, [view]);
 
   // Deep-link from a push notification carries a sub-tab (e.g. master "special"): select it
@@ -607,6 +615,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
         </div>
       )}
 
+      {/* Community Live jump — small blue live button right inside the Community area */}
+      {view === "members" && (
+        <div className="mb-5 flex" data-testid="community-live-jump-wrap">
+          <button data-testid="community-live-jump"
+            onClick={() => window.dispatchEvent(new CustomEvent("tj-open-view", { detail: "livecommunity" }))}
+            className="inline-flex items-center gap-2 rounded-full bg-[#38bdf8]/15 border border-[#38bdf8]/60 text-sky-300 hover:bg-[#38bdf8]/25 hover:text-white px-4 py-2 text-xs font-black uppercase tracking-wide transition-colors shadow-[0_0_12px_rgba(56,189,248,0.25)]">
+            <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-pulse" />
+            Community Live
+            {clCount > 0 && <span className="text-[11px] font-mono rounded-full bg-void/60 px-1.5 text-sky-200">{clCount}</span>}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-zinc-500 text-center py-16">{t("common.loading")}</p>
       ) : tips.length === 0 ? (
@@ -986,6 +1007,14 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   };
   const isMemberPick = !["hq-auto", "hq-system", "hq-live", "smart", "hq-master"].includes(tip.source);
   const isCommunityLive = tip.status === "live" && isMemberPick;
+  const _cl_state = tip.live_state || ((tip.live_minute != null || tip.live_score) ? { minute: tip.live_minute, score: tip.live_score } : null);
+  const _cl_liveLegs = (tip.legs || []).filter((l) => l.live && l.live_score);
+  const liveScoreText =
+    (!(tip.legs && tip.legs.length) && _cl_state && _cl_state.score)
+      ? `${_cl_state.score}${_cl_state.minute ? ` ${_cl_state.minute}'` : ""}`
+      : (_cl_liveLegs.length === 1
+          ? `${_cl_liveLegs[0].live_score}${_cl_liveLegs[0].live_minute ? ` ${_cl_liveLegs[0].live_minute}'` : ""}`
+          : null);
   const doSettleNow = async () => {
     if (settling) return;
     setSettling(true);
@@ -1109,7 +1138,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           )}
           {isCommunityLive ? (
             <span data-testid={`community-live-badge-${tip.id}`} className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-[#F0443C] text-white shadow-[0_0_12px_rgba(240,68,60,0.6)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live{liveScoreText ? <span className="font-mono tracking-normal normal-case ml-0.5">· {liveScoreText}</span> : null}
             </span>
           ) : (
             <StatusBadge status={tip.status} t={t} report={tip.report} />

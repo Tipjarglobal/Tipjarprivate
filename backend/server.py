@@ -878,8 +878,12 @@ async def tips_counts():
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
+    # Codemining: how many codes are currently mined pre-game (active, not yet settled).
+    _now_iso = datetime.now(timezone.utc).isoformat()
+    codereading = await db.code_reads.count_documents(
+        {"expires_at": {"$gt": _now_iso}, "outcome": {"$exists": False}})
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
-            "community_live": community_live,
+            "community_live": community_live, "codereading": codereading,
             "systems": systems_n, "smart": smart, "settled": settled, "master": master,
             "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
             "won_normal": won_normal_n, "void": void_n}

@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
-import { useI18n } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin } from "../i18n";
+import { useProseTranslations } from "../proseI18n";
 import { useAuth } from "../auth";
 
 const L = {
@@ -122,7 +123,7 @@ const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "
 const INP = "bg-void border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-volt/60 outline-none w-full";
 
 export function CodeReading() {
-  const { lang } = useI18n();
+  const { lang, t: i18nT } = useI18n();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const t = L[lang] || L.en;
@@ -135,6 +136,11 @@ export function CodeReading() {
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const trReason = useProseTranslations(reads.map((r) => r.reason).filter(Boolean), lang);
+  const trText = (txt) => {
+    if (!txt) return txt;
+    return lang === "de" ? txt : (trReason(txt) !== txt ? trReason(txt) : localizeProse(toLatin(txt), i18nT, lang));
+  };
 
   const load = () => api.get("/code-reading")
     .then(({ data }) => setReads(data.reads || []))
@@ -330,7 +336,7 @@ export function CodeReading() {
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-500 mb-2">
-                  <span className="opacity-70">{t.code}:</span> <span className="line-through">{r.code_market}</span>
+                  <span className="opacity-70">{t.code}:</span> <span className="line-through">{localizeMarket(r.code_market, i18nT)}</span>
                   {r.code_odds ? ` @ ${r.code_odds}` : ""}
                 </p>
                 {noBet ? (
@@ -343,17 +349,17 @@ export function CodeReading() {
                       <Target size={13} /> {t.counter}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-white bg-volt/15 border border-volt/40 rounded px-2 py-0.5">{r.our_market}</span>
+                      <span className="text-sm font-bold text-white bg-volt/15 border border-volt/40 rounded px-2 py-0.5">{formatSelection(r.our_market, i18nT)}</span>
                       {r.stars ? (
                         <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-amber-300">
                           <Star size={11} className="fill-amber-300" /> {r.stars}
                         </span>
                       ) : null}
                     </div>
-                    {r.alt_market && <p className="text-[11px] text-zinc-400 mt-1">alt: {r.alt_market}</p>}
+                    {r.alt_market && <p className="text-[11px] text-zinc-400 mt-1">alt: {formatSelection(r.alt_market, i18nT)}</p>}
                   </div>
                 )}
-                <p className="text-[11px] text-zinc-400 mt-2 leading-snug">{r.reason}</p>
+                <p className="text-[11px] text-zinc-400 mt-2 leading-snug">{trText(r.reason)}</p>
               </div>
             );
           })}

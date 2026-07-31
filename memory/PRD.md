@@ -946,3 +946,11 @@ Rückfragen nur bei echten Blockern (fehlende Keys o.ä.).
 - **Admin-korrigiert-Badge:** Auf jedem Schein mit `admin_edited=True` zeigt die Karte ein Indigo-Badge "vom Admin korrigiert" (`admin-edited-badge-<id>`, Stift-Icon) für Transparenz. i18n `tip.adminEdited` (de/en). Verifiziert per Screenshot.
 - **Auto-Abrechnung Community-Live:** Die bestehende `settlement_loop` deckt Community-/Experten-Live-Scheine bereits ab (Singles via `settle_pending_tips` jede Runde; Parlays via `settle_multimatch_parlays`). NEU: Für Live-Status-Scheine wurde die Parlay-Bein-Fälligkeit von 2h-nach-Anstoß auf ~105 min gesenkt (`elig_gap` in settlement.py), damit sie direkt nach Abpfiff automatisch abgerechnet werden — sicher, da `find_finished_fixture` nur FT-Spiele zurückgibt. "Spiel zuende"-Button bleibt als manueller Sofort-Trigger. Backend-Pfad fehlerfrei per curl getestet.
 
+## Update 2026-07-31 (4) — Codemining i18n, Community-Live-Knopf, Zähler & Live-Score
+- **Codemining pro Sprache übersetzt:** CodeReading.jsx übersetzt jetzt `reason` (Analyse) via `useProseTranslations` + `localizeProse`/`toLatin`-Fallback und lokalisiert Märkte (`localizeMarket`/`formatSelection`) — vorher nur Deutsch. Selber Mechanismus wie RateWall ai_analysis.
+- **Blauer "Community Live"-Knopf in der Community-Ansicht:** Zusätzlich zum Nav-Pill gibt es jetzt in der "Community Picks"-Ansicht einen prominenten kleinen blauen Button (`community-live-jump`, pulsierender Punkt + Zähler), der per `tj-open-view`-Event zur Community-Live-Ansicht springt. (Nav-Pill "Community Live" existierte bereits im Preview — Produktion braucht Deploy.)
+- **Codemining-Zähler:** `/api/tips/counts` liefert neu `codereading` = Anzahl aktiver, noch nicht abgerechneter (pre-game) geminter Codes. Zahl auf dem "Codemining"-Nav-Button (z.B. 7).
+- **Live-Score im Community-Live-Badge:** Rotes Live-Badge zeigt nun Spielstand + Minute (z.B. "LIVE · 0:0 37'"), aus `tip.live_state` (Einzel) bzw. einzigem live Leg (Parlay). Annotation via bestehendem `live_annotate_sync`.
+- Getestet: curl (codereading=7, community_live=4) + Screenshots (blauer Knopf, Zähler 7, Live-Score-Badge "0:0 37'"). Frontend kompiliert fehlerfrei.
+- Dateien: server.py (tips_counts codereading), CodeReading.jsx (i18n), RateWall.jsx (community-live-jump + clCount + liveScoreText im Badge).
+
