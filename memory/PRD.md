@@ -1111,3 +1111,21 @@ GETESTET: Unit (Lazio@Roma→Lazio trifft, PAOK-Auswärtsflaute+schwacher Gastge
 No-Signal→None, venue_drought 3 Jahre) + Live-Lauf (5 echte Picks: Karpaty@Kryvbas Venue-Flaute,
 Widzew/Indy Auswärtsflaute, Puebla H2H-Flaute, Laos Heimflaute) + Screenshot (Story+Pick rendern,
 i18n übersetzt automatisch). HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## Update 2026-06 (15) — Zyklus-Upgrade: Tor-Rhythmus + 0:0-Schutz + echte Quoten
+Drei Erweiterungen der H2H-Zyklus-Smart-Picks (server.py):
+1. **Tor-Rhythmus** (`_goal_rhythm`, `_rhythm_note`): liest je Team die zuletzt erzielten Tore
+   (Heim-/Auswärts-Sequenz) und leitet ab, was im Zyklus fällig ist — 0 fehlt zuletzt → Nullnummer
+   überfällig (blank_due); kein 3+ zuletzt → Torausbruch überfällig (big_due). Neue Zeile
+   "📈 Tor-Rhythmus {Team}: 1-2-1-2 (Ø …) → …" in JEDER Zyklus-Story. Neues Signal S1b: big_due +
+   Ø≥1.2 + Gegner kassiert reihenweise → "{Team} Über 1.5 Tore" (Torausbruch fällig).
+2. **0:0-Traditionsschutz** (`_zero_tradition`): erkennt chronisch torarme Duelle (≥3 der letzten 6
+   H2H mit ≤1 Tor ODER ≥2× 0:0, wie Chelsea–Liverpool) → alle tor-versprechenden Signale (S1/S1b/S3/
+   S4 + die "trifft"-Variante von S2) werden UNTERDRÜCKT; ein evtl. Sieg-Pick bekommt einen ⚠️-Hinweis.
+3. **Echte Buchmacherquoten** (`apply_real_odds` in `smart_h2h_autopost`): schärft die Quote jedes
+   Zyklus-Picks (Sieg UND Über-Märkte) mit echten API-Football-Odds, wenn Kontingent frei — sonst
+   Schätzung. Feld `real_odds` + Hinweis "Echte Buchmacherquote"/"Quoten sind Schätzungen".
+GETESTET: Unit (Rhythmus blank_due/big_due, 0:0-Tradition True/False, Suppression unter Tradition,
+S1b-Ausbruch, Rhythmus-Note angehängt) + Live-Lauf (5 Picks: 4× echte Quoten z. B. Widzew @1.33 statt
+1.55, Indy @1.28; neue Über-1.5-Ausbruch-Picks Portland/Deportivo Tachira) + Screenshot (Rhythmus-Zeile
++ "Echte Buchmacherquote" rendern, i18n übersetzt). HINWEIS: live erst nach "Save to GitHub → Deploy".

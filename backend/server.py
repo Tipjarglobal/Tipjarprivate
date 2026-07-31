@@ -7293,9 +7293,48 @@ def _yrs(years):
     return ", ".join(uniq) if uniq else ""
 
 
+def _goal_rhythm(gf):
+    """Owner 'Zyklus'-Idee: ein Team spielt seine Tor-Zahlen im Rhythmus durch (1-2-4 →
+    dann ist 0 oder 3 fällig). gf = zuletzt erzielte Tore, NEUESTE zuerst. Rückgabe:
+      blank_due  — 0 kam zuletzt NICHT vor → eine Nullnummer ist überfällig
+      big_due    — kein 3+ zuletzt → ein Torausbruch (3+) ist überfällig"""
+    s = [x for x in (gf or []) if x is not None][:6]
+    if len(s) < 4:
+        return None
+    recent = s[:5]
+    return {"seq": s, "blank_due": (0 not in recent),
+            "big_due": (max(recent) <= 2), "avg": round(sum(s) / len(s), 2)}
+
+
+def _rhythm_note(team, rh):
+    if not rh:
+        return ""
+    seq = "-".join(str(x) for x in rh["seq"])
+    if rh["big_due"]:
+        due = "ein Torausbruch (3+) ist im Zyklus überfällig"
+    elif rh["blank_due"]:
+        due = "eine Nullnummer ist im Zyklus fällig"
+    else:
+        due = "der Rhythmus bleibt im Torfluss"
+    return f"📈 Tor-Rhythmus {team}: {seq} (Ø {rh['avg']}) → {due}."
+
+
+def _zero_tradition(h2h, k=6):
+    """0:0-Traditionsschutz (owner: 'außer sie haben eine zu große Tradition mit 0-0 wie
+    Chelsea mit Liverpool'): True, wenn die letzten Duelle chronisch torarm waren — dann
+    verspricht die Zyklus-Logik dort KEINE Tore."""
+    ms = list(h2h or [])[:k]
+    if len(ms) < 3:
+        return False
+    low = sum(1 for m in ms if (m.get("gh") or 0) + (m.get("ga") or 0) <= 1)
+    nils = sum(1 for m in ms if (m.get("gh") or 0) == 0 and (m.get("ga") or 0) == 0)
+    return low >= 3 or nils >= 2
+
+
 def _cycle_signal(home, away, hid, aid, h2h, hrec, arec):
-    """Detect the strongest 'the cycle is due' pattern from H2H history + home/away form.
-    Returns {team, market, kind, odds, rating, story} or None (→ post nothing)."""
+    """Detect the strongest 'the cycle is due' pattern from H2H history + home/away form +
+    goal rhythm. Returns {team, market, kind, odds, rating, story} or None (→ post nothing).
+    Respects the 0:0 tradition: never promises goals in chronically goalless duels."""
     home_seq = match_stats.venue_split(hrec, hid, want_home=True)   # home team AT HOME
     away_seq = match_stats.venue_split(arec, aid, want_home=False)  # away team AWAY
     home_scoreless = match_stats._scoreless_streak(home_seq)
@@ -7304,63 +7343,101 @@ def _cycle_signal(home, away, hid, aid, h2h, hrec, arec):
     away_winless = match_stats._winless_streak(away_seq)
     home_leaks = sum(1 for m in home_seq if m["ga"] >= 1) >= max(3, int(len(home_seq) * 0.7)) if home_seq else False
     away_leaks = sum(1 for m in away_seq if m["ga"] >= 1) >= max(3, int(len(away_seq) * 0.7)) if away_seq else False
+    rh_home = _goal_rhythm([m["gf"] for m in home_seq])
+    rh_away = _goal_rhythm([m["gf"] for m in away_seq])
+    zt = _zero_tradition(h2h)          # goalless tradition → suppress goal promises
+
+    def _finish(sig):
+        """Attach the picked team's goal-rhythm note to the story."""
+        if not sig:
+            return None
+        rh = rh_home if sig["team"] == home else rh_away
+        note = _rhythm_note(sig["team"], rh)
+        if note:
+            sig["story"] = f"{sig['story']} {note}"
+        if zt:
+            sig["story"] += (" ⚠️ Achtung: Dieses Duell hat 0:0-Tradition — Tore sind hier "
+                             "seltener, entsprechend vorsichtiger Einsatz.")
+        return sig
+
+    is_goal_pick = lambda mkt: "über" in mkt.lower()  # noqa: E731
 
     # S1 — AWAY hasn't scored AT this venue for years, but generally scores + host leaks (Lazio@Roma)
     vc_a, vy_a = _venue_h2h_drought(h2h, hid, aid)
-    if vc_a >= 2 and _scores_regularly(arec, aid) and home_leaks:
-        return {
+    if not zt and vc_a >= 2 and _scores_regularly(arec, aid) and home_leaks and not (rh_away and rh_away["blank_due"]):
+        return _finish({
             "team": away, "market": f"{away} Über 0.5 Tore", "kind": "team_o05",
             "odds": 1.45, "rating": round(min(9.0, 7.0 + 0.5 * (vc_a - 1)), 1),
             "story": (f"🔍 {away} hat bei {home} seit {vc_a} Duellen nicht getroffen "
                       f"({_yrs(vy_a)}) — trifft aber sonst regelmäßig, und {home} kassiert "
                       f"zuhause fast immer. Der Zyklus ist fällig: diesmal trifft {away} endlich."),
-        }
+        })
+
+    # S1b — GOAL-RHYTHM explosion: a team hasn't hit 3+ for a while, scores regularly, opp leaks
+    if not zt and rh_away and rh_away["big_due"] and rh_away["avg"] >= 1.2 and _scores_regularly(arec, aid) and home_leaks:
+        return _finish({
+            "team": away, "market": f"{away} Über 1.5 Tore", "kind": "team_o15",
+            "odds": 1.90, "rating": 7.5,
+            "story": (f"🔍 {away} spielt im Zyklus einen Torausbruch an (kein 3+-Spiel zuletzt) "
+                      f"und {home} kassiert zuhause reihenweise — jetzt kommt der große Auftritt: "
+                      f"{away} trifft 2+."),
+        })
+    if not zt and rh_home and rh_home["big_due"] and rh_home["avg"] >= 1.2 and _scores_regularly(hrec, hid) and away_leaks:
+        return _finish({
+            "team": home, "market": f"{home} Über 1.5 Tore", "kind": "team_o15",
+            "odds": 1.85, "rating": 7.5,
+            "story": (f"🔍 {home} ist im Zyklus reif für einen Torausbruch (kein 3+-Spiel zuletzt) "
+                      f"und {away} kassiert auswärts reihenweise — vor eigenem Publikum trifft "
+                      f"{home} jetzt 2+."),
+        })
 
     # S2 — AWAY scoreless in its last away games → due to score (or win vs a weak host)
     if away_scoreless >= 3:
         if home_winless >= 3:
-            return {
+            return _finish({
                 "team": away, "market": f"{away} Sieg", "kind": "win",
                 "odds": 2.70, "rating": round(min(9.0, 7.0 + 0.4 * (away_scoreless - 3)), 1),
                 "story": (f"🔍 {away} hat seit {away_scoreless} Auswärtsspielen nicht getroffen — "
                           f"und {home} ist zuhause seit {home_winless} Spielen sieglos. Im Zyklus "
                           f"kippt das: {away} bricht die Flaute und holt auswärts den Sieg."),
-            }
-        return {
-            "team": away, "market": f"{away} Über 0.5 Tore", "kind": "team_o05",
-            "odds": 1.55, "rating": round(min(8.5, 7.0 + 0.3 * (away_scoreless - 3)), 1),
-            "story": (f"🔍 {away} hat in den letzten {away_scoreless} Auswärtsspielen nicht "
-                      f"getroffen — so eine Torflaute hält im Zyklus nicht ewig. Jetzt ist es "
-                      f"Zeit, dass {away} endlich trifft."),
-        }
+            })
+        if not zt:
+            return _finish({
+                "team": away, "market": f"{away} Über 0.5 Tore", "kind": "team_o05",
+                "odds": 1.55, "rating": round(min(8.5, 7.0 + 0.3 * (away_scoreless - 3)), 1),
+                "story": (f"🔍 {away} hat in den letzten {away_scoreless} Auswärtsspielen nicht "
+                          f"getroffen — so eine Torflaute hält im Zyklus nicht ewig. Jetzt ist es "
+                          f"Zeit, dass {away} endlich trifft."),
+            })
 
     # S3 — HOME scoreless at home → due to score (or win vs a weak visitor)
     if home_scoreless >= 3:
         if away_winless >= 3:
-            return {
+            return _finish({
                 "team": home, "market": f"{home} Sieg", "kind": "win",
                 "odds": 2.30, "rating": round(min(9.0, 7.0 + 0.4 * (home_scoreless - 3)), 1),
                 "story": (f"🔍 {home} hat zuhause seit {home_scoreless} Spielen nicht getroffen — "
                           f"und {away} ist auswärts seit {away_winless} Spielen sieglos. Der Zyklus "
                           f"dreht: {home} trifft endlich und gewinnt vor eigenem Publikum."),
-            }
-        return {
-            "team": home, "market": f"{home} Über 0.5 Tore", "kind": "team_o05",
-            "odds": 1.40, "rating": round(min(8.5, 7.0 + 0.3 * (home_scoreless - 3)), 1),
-            "story": (f"🔍 {home} hat in den letzten {home_scoreless} Heimspielen nicht getroffen — "
-                      f"vor eigenem Publikum hält so eine Flaute im Zyklus nicht. Jetzt trifft {home}."),
-        }
+            })
+        if not zt:
+            return _finish({
+                "team": home, "market": f"{home} Über 0.5 Tore", "kind": "team_o05",
+                "odds": 1.40, "rating": round(min(8.5, 7.0 + 0.3 * (home_scoreless - 3)), 1),
+                "story": (f"🔍 {home} hat in den letzten {home_scoreless} Heimspielen nicht getroffen — "
+                          f"vor eigenem Publikum hält so eine Flaute im Zyklus nicht. Jetzt trifft {home}."),
+            })
 
     # S4 — HOME has a general H2H scoring drought vs this opponent, but scores otherwise
     hc, hy = _h2h_team_drought(h2h, hid)
-    if hc >= 3 and _scores_regularly(hrec, hid):
-        return {
+    if not zt and hc >= 3 and _scores_regularly(hrec, hid):
+        return _finish({
             "team": home, "market": f"{home} Über 0.5 Tore", "kind": "team_o05",
             "odds": 1.45, "rating": round(min(8.5, 7.0 + 0.4 * (hc - 2)), 1),
             "story": (f"🔍 {home} hat gegen {away} in den letzten {hc} Duellen ({_yrs(hy)}) nicht "
                       f"getroffen — trifft aber sonst regelmäßig. Nach so vielen Nullnummern bringt "
                       f"der Zyklus endlich ein {home}-Tor."),
-        }
+        })
     return None
 
 
@@ -7425,11 +7502,20 @@ async def smart_h2h_autopost() -> dict:
         sig = _cycle_signal(home, away, hid, aid, h2h or [], hrec or [], arec or [])
         if not sig:
             continue
+        # Zyklus-Sieg-/Tor-Picks mit ECHTEN Buchmacherquoten schärfen (nur wenn Kontingent frei).
+        odds_val, real = sig["odds"], False
+        if not _api_quota_exhausted():
+            try:
+                odds_str, real = await apply_real_odds(
+                    sig["market"], sig["odds"], home, away, p.get("kickoff") or "")
+                odds_val = float(odds_str)
+            except Exception:
+                odds_val, real = sig["odds"], False
         rating = sig["rating"]
         stars = "⭐" * int(round(rating))
+        odds_note = "Echte Buchmacherquote." if real else "Quoten sind Schätzungen."
         analysis = (f"{stars} Zyklus-Witterung (H2H + Heim/Auswärtsform):\n\n{sig['story']}\n\n"
-                    f"➡️ Pick: {sig['market']}. Anstoß {p.get('kickoff') or '—'}. "
-                    f"Quoten sind Schätzungen.")
+                    f"➡️ Pick: {sig['market']}. Anstoß {p.get('kickoff') or '—'}. {odds_note}")
         await db.tips.insert_one({
             "id": tip_id, "user_id": hq["id"], "username": "TipJarHQ",
             "raw_text": "", "image_path": None,
@@ -7437,7 +7523,7 @@ async def smart_h2h_autopost() -> dict:
             "country": p.get("country") or "", "league": p.get("league") or "TipJarHQ Smart Pick",
             "league_code": p.get("league_code") or "",
             "market": sig["market"], "kind": sig["kind"], "team": sig["team"],
-            "odds": f"{sig['odds']:.2f}", "is_parlay": False,
+            "odds": f"{odds_val:.2f}", "real_odds": real, "is_parlay": False,
             "ai_rating": rating, "ai_analysis": analysis,
             "legs": [], "stake": "", "potential_return": "",
             "h2h_cycle": True,
