@@ -1017,3 +1017,10 @@ Owner (ελληνικά, teaching): κανένας σταθερός κανόνα
    πλούσια per-leg buckets (team_over_0.5 12/7, over_goals 5/5, under_goals 4/0, …). `banker_*` γεμίζουν
    καθώς κατεβαίνουν & αρχίζουν να αποδίδουν συστήματα με bankers.
 HINWEIS: preview → tipjarglobal.com μόνο μετά από "Save to GitHub → Deploy".
+
+## Update 2026-07-31 (9) — Master banker TIMING (νωρίτερα = banker, ποτέ το νυχτερινό)
+Owner (ελληνικά, με live παράδειγμα): banker τα ΠΡΩΤΑ σίγουρα ματς (κλειδώνει η πρόοδος), ΠΟΤΕ banker
+στο τελευταίο/νυχτερινό ματς (πιάνεις τα πάντα & χάνεις στο τέλος = χειρότερο). Στο
+`master_build_packs` (server.py) η επιλογή banker γίνεται τώρα με σειρά (learning-safe → νωρίτερο
+kickoff → χαμηλή απόδοση) και ΑΠΟΚΛΕΙΕΙ το ματς με το αργότερο kickoff. nb=min(2 αν n>=5 αλλιώς 1, n-2)
+για να μένουν πάντα ≥2 ζητούμενα. Επιβεβαιώθηκε με assertion (banker→νωρίτερο ασφαλές, όχι το νυχτερινό).

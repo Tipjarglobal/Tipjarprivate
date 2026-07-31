@@ -9523,21 +9523,25 @@ async def master_build_packs() -> dict:
             banker_matches = set()
             if make_system:
                 sf = n - 1
-                nb = 2 if n >= 5 else 1
-                # Owner teaching 2026-06: MARK BANKERS on the slip. Bankers = the safest legs
-                # (lowest odds), but the Master LEARNS FROM MISTAKES — it avoids market-types
-                # with a poor banker record (a lost banker kills the whole system). State only
-                # which system was chosen; no long explanation.
+                nb = min(2 if n >= 5 else 1, n - 2)  # keep >=2 ζητούμενα so "1 may miss" stays real
+                # Owner teaching 2026-06: banker the EARLIEST safe games so progress locks in
+                # early — and NEVER banker the latest (night) game. Hitting everything and then
+                # losing a late-night banker is the worst outcome; the latest kickoff stays a
+                # ζητούμενο (an early winner as banker beats an early winner left as ζητούμενο).
+                # Also learn from mistakes: avoid market-types with a poor banker record.
+                latest_match = max(chosen, key=lambda c: c["kickoff"])["match"]
+
                 def _brank(c):
                     b = learn_bucket(c["market"])
                     vb = learn_verdict("master", "banker_" + b, raw_bucket=True)[0]
                     vm = learn_verdict("master", c["market"])[0]
                     score = 2 if (vb == "veto" or vm == "veto") else (0 if (vb == "boost" or vm == "boost") else 1)
-                    return (score, c["odds"])
-                bankers = sorted(chosen, key=_brank)[:nb]
+                    return (score, c["kickoff"], c["odds"])  # safe → EARLY → low odds
+                elig = [c for c in chosen if c["match"] != latest_match]
+                bankers = sorted(elig, key=_brank)[:nb] if nb > 0 else []
                 banker_matches = {c["match"] for c in bankers}
                 market = f"System {sf}/{n}"
-                analysis = f"👑 TipJarMaster System {sf}/{n} · {nb} Banker."
+                analysis = f"👑 TipJarMaster System {sf}/{n} · {len(banker_matches)} Banker."
             else:
                 market = f"{n}-fach Kombi"
                 analysis = f"👑 TipJarMaster {label}: {n} Spiele, Gesamtquote {prod:.2f}."
