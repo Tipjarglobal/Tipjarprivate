@@ -1129,3 +1129,25 @@ GETESTET: Unit (Rhythmus blank_due/big_due, 0:0-Tradition True/False, Suppressio
 S1b-Ausbruch, Rhythmus-Note angehängt) + Live-Lauf (5 Picks: 4× echte Quoten z. B. Widzew @1.33 statt
 1.55, Indy @1.28; neue Über-1.5-Ausbruch-Picks Portland/Deportivo Tachira) + Screenshot (Rhythmus-Zeile
 + "Echte Buchmacherquote" rendern, i18n übersetzt). HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## Update 2026-06 (16) — Admin-Blacklist-Knopf + Zyklus-Endergebnis
+1. **Admin-Blacklist-Knopf** (jede Pick-Karte, nur Admin): roter "Blacklist"-Button → Dialog mit
+   Auswahl "Dieses Spiel blacklisten" ODER "Die ganze Liga blacklisten (+ Liganame)".
+   - Backend (`server.py`): dynamische DB-Blacklist `db.dyn_blacklist` → gespiegelt in In-Memory-Sets
+     `_DYN_BL_LEAGUES`/`_DYN_BL_MATCHES`, die die zentrale `_team_or_league_blocked()` mitprüft
+     (→ blockt automatisch künftige Preds/Slips via `_pred_whitelisted`/`store_match_prediction`).
+     `refresh_dyn_blacklist()` (Startup + nach jedem Schreiben). Endpoints: `POST /admin/tips/{id}/blacklist`
+     {scope:match|league}, `GET /admin/blacklist`, `DELETE /admin/blacklist/{id}`. `_purge_blacklisted()`
+     löscht passende match_predictions + versteckt offene Tips sofort (Settlement unberührt).
+   - Frontend (`RateWall.jsx` TipCard): Button `admin-blacklist-{id}` + Dialog `blacklist-dialog-{id}`
+     mit `blacklist-match-{id}`/`blacklist-league-{id}`/`blacklist-cancel-{id}`. i18n `wall.bl.*` (en/de).
+   - Getestet: curl (match-Blacklist → 10 Preds entfernt, 1 Tip versteckt, `_team_or_league_blocked`
+     True für das Spiel, False für andere) + Screenshot (Dialog mit beiden Optionen).
+2. **Zyklus-Endergebnis** (`_due_goals`, `_cycle_scoreline` in server.py): leitet aus BEIDEN Tor-
+   Rhythmen je Team die "fällige" Tor-Zahl ab (0 fehlt→Nullnummer, kein 3+→Ausbruch; bei beidem offen
+   entscheidet Gegner-Abwehr) und hängt eine Prognose-Zeile an jede Zyklus-Story an:
+   "🎯 Zyklus-Endergebnis (gewittert): Heim X-Y Gast" (in 0:0-Tradition → 0-0). Nur NARRATIV, kein
+   exakter Score als Wette (Owner-Regel). Getestet: Unit (3-0 bei leckem Gast/solidem Heim, 0-0 unter
+   Tradition) + Screenshot (Puebla 1-3 Chivas, Minnesota 0-3 Portland etc., i18n übersetzt).
+Auch notiert (owner-Muster): Bodø/Glimt trifft VOR der 30. Min (im Codemining bestätigt) →
+master_system_strategy.md. HINWEIS: live erst nach "Save to GitHub → Deploy".

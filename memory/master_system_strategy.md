@@ -87,3 +87,9 @@ n>=5 αλλιώς 1, n-2). Ρίσκο-banker δομή = ελεύθερη επι�
   `category` ώστε να ξεχωρίζουν gift/value. Fallback σε γενικό ασφαλές pool αν <3 gift/value.
 - Single-pick pool: lookahead ήδη 5 μέρες (SMART_LOOKAHEAD_H=120) → καλύπτει 48h+. Παράγεται από
   predictions/στατιστικά/codemining/scorer/HT-FT/K.o.-Duell/mental/gifts. Ο Master διαλέγει ό,τι του αρέσει.
+
+## Owner-Treffer / Muster-Notizen (bestätigt vom Owner)
+- 2026-06: Owner lag RICHTIG — Bodø/Glimt trifft VOR der 30. Minute (Frühstarter). Im Codemining
+  ("Code-Reading"/Smart Picks) entdeckt/bestätigt. → Bodø/Glimt-Heimspiele: "Tor vor 30. Min /
+  frühes Tor" ist ein wertvolles wiederkehrendes Muster. Bei künftiger Live-/Frühtor-Logik oder
+  Smart-Picks für Bodø/Glimt berücksichtigen.

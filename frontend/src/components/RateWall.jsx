@@ -943,7 +943,23 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   const [correcting, setCorrecting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [settling, setSettling] = useState(false);
+  const [blOpen, setBlOpen] = useState(false);
+  const [blacklisting, setBlacklisting] = useState(false);
   const correctInputRef = useRef(null);
+  const doBlacklist = async (scope) => {
+    if (blacklisting) return;
+    setBlacklisting(true);
+    try {
+      const { data } = await api.post(`/admin/tips/${tip.id}/blacklist`, { scope });
+      toast.success(`${scope === "league" ? t("wall.bl.leagueDone") : t("wall.bl.matchDone")}: ${data.label} · ${data.tips_hidden}× ausgeblendet, ${data.predictions_removed}× Prognosen entfernt`, { duration: 6000 });
+      setBlOpen(false);
+      onRefresh?.();
+    } catch (err) {
+      toast.error(apiErr(err) || "Blacklist fehlgeschlagen");
+    } finally {
+      setBlacklisting(false);
+    }
+  };
   const isAiPick = ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"].includes(tip.source)
     && ["pending", "live"].includes(tip.status);
   const doCorrect = async (e) => {
@@ -1381,12 +1397,49 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors">
             <Pencil size={12} /> Bearbeiten
           </button>
+          <button onClick={() => setBlOpen(true)} data-testid={`admin-blacklist-${tip.id}`}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 transition-colors">
+            <Ban size={12} /> {t("wall.bl.btn")}
+          </button>
           {isCommunityLive && (
             <button onClick={doSettleNow} disabled={settling} data-testid={`admin-settle-now-${tip.id}`}
               className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 disabled:opacity-50 transition-colors">
               <Radio size={12} className={settling ? "animate-pulse" : ""} /> {settling ? "Prüfe…" : "Spiel zuende"}
             </button>
           )}
+        </div>
+      )}
+      {blOpen && isAdmin && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
+          data-testid={`blacklist-dialog-${tip.id}`} onClick={() => !blacklisting && setBlOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-[#F0443C]/40 bg-void p-5"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 text-[#F0443C] font-black text-base mb-1">
+              <Ban size={18} /> {t("wall.bl.title")}
+            </div>
+            <p className="text-xs text-zinc-400 mb-4">{t("wall.bl.desc")}</p>
+            <div className="rounded-lg bg-white/5 px-3 py-2 mb-4 text-sm">
+              <div className="font-bold">{tip.home_team || tip.legs?.[0]?.match || "—"}{tip.away_team ? ` – ${tip.away_team}` : ""}</div>
+              {tip.league && <div className="text-[11px] text-zinc-500">{tip.league}</div>}
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => doBlacklist("match")} disabled={blacklisting}
+                data-testid={`blacklist-match-${tip.id}`}
+                className="w-full flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-xl bg-[#F0443C] text-void hover:opacity-90 disabled:opacity-50 transition">
+                <Ban size={14} /> {t("wall.bl.match")}
+              </button>
+              <button onClick={() => doBlacklist("league")} disabled={blacklisting || !tip.league}
+                data-testid={`blacklist-league-${tip.id}`}
+                className="w-full flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-xl bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 disabled:opacity-40 transition">
+                <Ban size={14} /> {t("wall.bl.league")}{tip.league ? ` (${tip.league})` : ""}
+              </button>
+              <button onClick={() => setBlOpen(false)} disabled={blacklisting}
+                data-testid={`blacklist-cancel-${tip.id}`}
+                className="w-full text-xs font-bold py-2 rounded-xl text-zinc-400 hover:text-white transition">
+                {t("wall.bl.cancel")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {editOpen && (

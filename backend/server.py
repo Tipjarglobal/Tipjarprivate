@@ -23,7 +23,7 @@ import bcrypt
 import secrets
 import requests
 import resend
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadFile, File, Form, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, UploadFile, File, Form, Header, Query, Body
 from fastapi.responses import Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -263,6 +263,81 @@ async def admin_smart_reset(admin: dict = Depends(require_admin)):
     deleted = (await db.tips.delete_many({"source": "smart"})).deleted_count
     res = await smart_autopost()
     return {"deleted": deleted, **res}
+
+
+async def _purge_blacklisted() -> dict:
+    """Remove predictions + hide open tips whose (top-level) fixture/league is now blacklisted.
+    Settlement is unaffected (it never filters `hidden`); master slips get their blacklisted legs
+    stripped by master_dedupe_open_slips in the master loop."""
+    preds = await db.match_predictions.find(
+        {}, {"_id": 0, "id": 1, "home": 1, "away": 1, "league": 1}).to_list(4000)
+    dead = [p["id"] for p in preds
+            if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league"))]
+    if dead:
+        await db.match_predictions.delete_many({"id": {"$in": dead}})
+    tips = await db.tips.find(
+        {"status": {"$in": ["pending", "live"]}},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1}).to_list(3000)
+    hide = [t["id"] for t in tips
+            if _team_or_league_blocked(t.get("home_team"), t.get("away_team"), t.get("league"))]
+    if hide:
+        await db.tips.update_many({"id": {"$in": hide}}, {"$set": {"hidden": True}})
+    return {"predictions_removed": len(dead), "tips_hidden": len(hide)}
+
+
+@api_router.post("/admin/tips/{tip_id}/blacklist")
+async def admin_blacklist_tip(tip_id: str, body: dict = Body(default={}),
+                              admin: dict = Depends(require_admin)):
+    """Admin button: blacklist THIS match (scope='match') or the WHOLE league (scope='league').
+    Adds a dynamic-blacklist entry → future picks/predictions on it are auto-excluded, and existing
+    open ones are purged immediately."""
+    scope = (body or {}).get("scope")
+    if scope not in ("match", "league"):
+        raise HTTPException(status_code=400, detail="scope must be 'match' or 'league'")
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="tip not found")
+    home = (tip.get("home_team") or "").strip()
+    away = (tip.get("away_team") or "").strip()
+    league = (tip.get("league") or "").strip()
+    if (not home or not away or not league) and (tip.get("legs") or []):
+        lg0 = tip["legs"][0]
+        league = league or (lg0.get("league") or "").strip()
+        parts = re.split(r"\s[–\-]\s", lg0.get("match") or "")
+        if len(parts) == 2:
+            home = home or parts[0].strip()
+            away = away or parts[1].strip()
+    now = datetime.now(timezone.utc).isoformat()
+    if scope == "league":
+        if not league:
+            raise HTTPException(status_code=400, detail="no league on this pick")
+        entry = {"id": f"bl-lg-{hashlib.md5(league.lower().encode()).hexdigest()[:10]}",
+                 "type": "league", "keyword": league.lower(), "label": league,
+                 "added_by": admin.get("email"), "at": now}
+    else:
+        if not home or not away:
+            raise HTTPException(status_code=400, detail="no teams on this pick")
+        entry = {"id": f"bl-mt-{hashlib.md5((home + '|' + away).lower().encode()).hexdigest()[:10]}",
+                 "type": "match", "keywords": [home.lower(), away.lower()],
+                 "label": f"{home} – {away}", "added_by": admin.get("email"), "at": now}
+    await db.dyn_blacklist.update_one({"id": entry["id"]}, {"$set": entry}, upsert=True)
+    await refresh_dyn_blacklist()
+    purged = await _purge_blacklisted()
+    logger.info(f"Admin blacklist ({scope}): {entry['label']} → {purged}")
+    return {"ok": True, "scope": scope, "label": entry["label"], **purged}
+
+
+@api_router.get("/admin/blacklist")
+async def admin_list_blacklist(admin: dict = Depends(require_admin)):
+    items = await db.dyn_blacklist.find({}, {"_id": 0}).sort("at", -1).to_list(500)
+    return {"count": len(items), "items": items}
+
+
+@api_router.delete("/admin/blacklist/{entry_id}")
+async def admin_unblacklist(entry_id: str, admin: dict = Depends(require_admin)):
+    res = await db.dyn_blacklist.delete_one({"id": entry_id})
+    await refresh_dyn_blacklist()
+    return {"ok": True, "deleted": res.deleted_count}
 
 
 @api_router.post("/smart/idea")
@@ -4497,13 +4572,40 @@ MATCH_BLACKLIST = (
     ("cska moscow", "baltika"),
 )
 
+# ── Dynamic (admin-button) blacklist ─────────────────────────────────────────
+# Admins can blacklist a single MATCH or a whole LEAGUE from any pick card. Entries
+# live in db.dyn_blacklist and are mirrored into these in-memory sets (refreshed on
+# write + startup) so the hot _team_or_league_blocked() check stays synchronous/fast.
+_DYN_BL_LEAGUES: set = set()          # league-name substrings
+_DYN_BL_MATCHES: list = []            # list of (home_kw, away_kw) tuples
+
+
+async def refresh_dyn_blacklist():
+    global _DYN_BL_LEAGUES, _DYN_BL_MATCHES
+    try:
+        leagues, matches = set(), []
+        async for d in db.dyn_blacklist.find({}, {"_id": 0}):
+            if d.get("type") == "league" and d.get("keyword"):
+                leagues.add(d["keyword"].lower())
+            elif d.get("type") == "match" and len(d.get("keywords") or []) == 2:
+                matches.append((d["keywords"][0].lower(), d["keywords"][1].lower()))
+        _DYN_BL_LEAGUES, _DYN_BL_MATCHES = leagues, matches
+    except Exception as e:
+        logger.warning(f"refresh_dyn_blacklist failed: {e}")
+
 
 def _team_or_league_blocked(home: str, away: str, league: str = "") -> bool:
     h, a = (home or "").lower(), (away or "").lower()
-    hay = f" {h} {a} {(league or '').lower()} "
+    lg = (league or "").lower()
+    hay = f" {h} {a} {lg} "
     if any(kw in hay for kw in TEAM_LEAGUE_BLACKLIST):
         return True
+    if any(kw and kw in f" {lg} " for kw in _DYN_BL_LEAGUES):
+        return True
     for x, y in MATCH_BLACKLIST:
+        if (x in h and y in a) or (x in a and y in h):
+            return True
+    for x, y in _DYN_BL_MATCHES:
         if (x in h and y in a) or (x in a and y in h):
             return True
     return False
@@ -7331,6 +7433,36 @@ def _zero_tradition(h2h, k=6):
     return low >= 3 or nils >= 2
 
 
+def _due_goals(rh, opp_leaks):
+    """Owner-Zyklus: die zuletzt FEHLENDE Tor-Zahl ist fällig. 0 fehlt → Nullnummer;
+    kein 3+ → Ausbruch; wenn beides offen, entscheidet die Gegner-Abwehr (leck → mehr)."""
+    if not rh:
+        return None
+    if rh["blank_due"] and rh["big_due"]:
+        return 3 if opp_leaks else 0
+    if rh["blank_due"]:
+        return 0
+    if rh["big_due"]:
+        return 3 if opp_leaks else 2
+    return max(1, round(rh["avg"]))
+
+
+def _cycle_scoreline(home, away, rh_home, rh_away, home_leaks, away_leaks, zt):
+    """Short 'gewittertes' cycle end-result line from both teams' goal rhythms (narrative
+    only — never a bet). In a 0:0-tradition duel it leans goalless."""
+    hg = _due_goals(rh_home, away_leaks)
+    ag = _due_goals(rh_away, home_leaks)
+    if zt:
+        hg = min(hg, 0) if hg is not None else hg
+        ag = min(ag, 0) if ag is not None else ag
+    if hg is None and ag is None:
+        return ""
+    if hg is None or ag is None:
+        t, g = (home, hg) if hg is not None else (away, ag)
+        return f"🎯 Zyklus-Prognose: {t} ~{g} Tore fällig."
+    return f"🎯 Zyklus-Endergebnis (gewittert): {home} {hg}-{ag} {away}."
+
+
 def _cycle_signal(home, away, hid, aid, h2h, hrec, arec):
     """Detect the strongest 'the cycle is due' pattern from H2H history + home/away form +
     goal rhythm. Returns {team, market, kind, odds, rating, story} or None (→ post nothing).
@@ -7348,13 +7480,16 @@ def _cycle_signal(home, away, hid, aid, h2h, hrec, arec):
     zt = _zero_tradition(h2h)          # goalless tradition → suppress goal promises
 
     def _finish(sig):
-        """Attach the picked team's goal-rhythm note to the story."""
+        """Attach the picked team's goal-rhythm note + the gewittertes Zyklus-Endergebnis."""
         if not sig:
             return None
         rh = rh_home if sig["team"] == home else rh_away
         note = _rhythm_note(sig["team"], rh)
         if note:
             sig["story"] = f"{sig['story']} {note}"
+        scoreline = _cycle_scoreline(home, away, rh_home, rh_away, home_leaks, away_leaks, zt)
+        if scoreline:
+            sig["story"] = f"{sig['story']} {scoreline}"
         if zt:
             sig["story"] += (" ⚠️ Achtung: Dieses Duell hat 0:0-Tradition — Tore sind hier "
                              "seltener, entsprechend vorsichtiger Einsatz.")
@@ -11348,6 +11483,7 @@ async def startup():
     except Exception as e:
         logger.error(f"cn1 blacklist seed: {e}")
     await _refresh_blocked_leagues()
+    await refresh_dyn_blacklist()
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))
