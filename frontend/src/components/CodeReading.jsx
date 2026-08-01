@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2 } from "lucide-react";
+import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin } from "../i18n";
@@ -117,9 +117,9 @@ const PAT_LABEL = {
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
 const FL = {
-  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Alle aktiven löschen", clearConfirm: "Wirklich ALLE aktiven Codes löschen? (Beendete bleiben erhalten)", cleared: "Aktive gelöscht" },
-  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Clear all active", clearConfirm: "Delete ALL active codes? (Finished ones are kept)", cleared: "Active cleared" },
-  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Καθαρισμός ενεργών", clearConfirm: "Διαγραφή ΟΛΩΝ των ενεργών; (Τα τελειωμένα μένουν)", cleared: "Καθαρίστηκαν" },
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Alle aktiven löschen", clearConfirm: "Wirklich ALLE aktiven Codes löschen? (Beendete bleiben erhalten)", cleared: "Aktive gelöscht", verified: "Geprüft", verifyBtn: "Als echt markieren", unverify: "Haken entfernen" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Clear all active", clearConfirm: "Delete ALL active codes? (Finished ones are kept)", cleared: "Active cleared", verified: "Verified", verifyBtn: "Mark as real", unverify: "Remove check" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Καθαρισμός ενεργών", clearConfirm: "Διαγραφή ΟΛΩΝ των ενεργών; (Τα τελειωμένα μένουν)", cleared: "Καθαρίστηκαν", verified: "Επαλήθ.", verifyBtn: "Σήμανση ως πραγματικό", unverify: "Αφαίρεση" },
 };
 
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
@@ -180,6 +180,14 @@ export function CodeReading() {
       toast.success(`${fl.cleared} (${data.deleted}) ✓`);
       load();
     } catch { toast.error("Fehlgeschlagen"); }
+  };
+
+  const toggleVerify = async (id, current) => {
+    const next = !current;
+    setReads((rs) => rs.map((x) => (x.id === id ? { ...x, verified: next } : x)));
+    setFinished((rs) => rs.map((x) => (x.id === id ? { ...x, verified: next } : x)));
+    try { await api.post(`/admin/code-reading/${id}/verify`, { verified: next }); }
+    catch { toast.error("Fehlgeschlagen"); load(); }
   };
 
   const onFile = async (e) => {
@@ -363,6 +371,12 @@ export function CodeReading() {
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="font-bold text-white text-sm truncate">{r.home} – {r.away}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {r.verified && (
+                      <span data-testid={`code-read-verified-${r.id}`} title={fl.verified}
+                        className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide rounded-full px-2 py-0.5 bg-emerald-500 text-void">
+                        <BadgeCheck size={12} />{fl.verified}
+                      </span>
+                    )}
                     {verdict ? (
                       <span data-testid={`code-read-verdict-${r.id}`}
                         className={`inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wide rounded-full px-2.5 py-0.5 ${verdict.chip}`}>
@@ -371,6 +385,13 @@ export function CodeReading() {
                     ) : r.league ? (
                       <span className="text-[10px] text-zinc-500">{r.league}</span>
                     ) : null}
+                    {isAdmin && (
+                      <button onClick={() => toggleVerify(r.id, !!r.verified)} data-testid={`code-read-verify-${r.id}`}
+                        className={`transition-colors ${r.verified ? "text-emerald-400 hover:text-emerald-300" : "text-zinc-500 hover:text-emerald-400"}`}
+                        title={r.verified ? fl.unverify : fl.verifyBtn}>
+                        <BadgeCheck size={15} />
+                      </button>
+                    )}
                     {isAdmin && (
                       <button onClick={() => removeRead(r.id)} data-testid={`code-read-delete-${r.id}`}
                         className="text-zinc-500 hover:text-red-400 transition-colors" title={fl.del}>

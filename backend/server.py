@@ -9300,6 +9300,16 @@ async def admin_code_reading_delete(read_id: str, admin: dict = Depends(require_
     return {"ok": True, "deleted": res.deleted_count}
 
 
+@api_router.post("/admin/code-reading/{read_id}/verify")
+async def admin_code_reading_verify(read_id: str, payload: dict = None,
+                                    admin: dict = Depends(require_admin)):
+    """Owner: admin toggles a 'verified' checkmark on any code-read (active OR finished) to mark
+    it as a REAL, hand-uploaded slip (vs a stray test entry)."""
+    verified = True if payload is None else bool(payload.get("verified", True))
+    res = await db.code_reads.update_one({"id": read_id}, {"$set": {"verified": verified}})
+    return {"ok": True, "verified": verified, "matched": res.matched_count}
+
+
 @api_router.post("/admin/code-reading/clear-active")
 async def admin_code_reading_clear_active(admin: dict = Depends(require_admin)):
     """Owner: wipe ALL still-active (upcoming/in-play, not yet settled) code-reads in one tap.
