@@ -8651,6 +8651,18 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
         return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
                 "reason": f"Code gibt Über {('%g' % ou[1])} Tore — zu unsicher für uns. No Bet."}
 
+    # (d3) Nested DOUBLE-CHANCE combo ('1, Ergebnis + Gesamtzahl 1X Und GU 2.5 – Nein', '1X + Over/Under').
+    #      Owner (Everton – Colo-Colo): don't NO-BET it — the 1X/X2 side won't lose by 3 goals →
+    #      safe counter '<Team> +2.5 (Handicap)' (the opponent won't win by a 3-goal margin).
+    if re.search(r"\b1x\b|\bx2\b", m) and any(k in m for k in ("gesamtzahl", "gu ", "über", "ueber", "unter", "under", " und ", " and ")):
+        dc_side = "home" if "1x" in m else "away"
+        tgt = home if dc_side == "home" else away
+        return _code_apply_learn({
+            "read": "counter", "our_market": f"{tgt} +2.5 (Handicap)",
+            "alt_market": f"{tgt} Doppelte Chance", "code": market, "pattern": "combo_dc_plus25",
+            "reason": f"Verschachtelte Doppelte-Chance-Kombi. Der Code sieht {tgt} nicht verlieren — der Gegner gewinnt hier nicht mit 3 Toren Abstand. Sicher dagegen: {tgt} +2.5 Handicap.",
+            "stars": 8})
+
     # (d2) Trap 'underdog +1/+1.5 handicap' leg (e.g. 'Handicap 2 (+1.5)', 'Team 2 +1.5', '<Team> +1').
     #      The team GETTING the plus is the underdog → the OTHER side is the clear favourite. Owner: the
     #      slip is built to lose, so the real read is the favourite winning COMFORTABLY → we buy
