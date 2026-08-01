@@ -6867,14 +6867,21 @@ async def _hot_scorer_for_team(team_name: str, seasons: list[int]) -> dict | Non
     return best
 
 
-QUAL_KEYWORDS = ("qualif", "champions", "europa", "conference", "uefa", "libertadores",
-                 "sudamericana", "afc ", "caf ", "concacaf", "play-off", "playoff",
+QUAL_KEYWORDS = ("qualif", "champions league", "europa league", "conference league", "uefa",
+                 "libertadores", "sudamericana", "afc champions", "caf champions", "concacaf champions",
                  "preliminary", "wcq", "ecq")
 
 
 def _looks_two_legged(pred) -> bool:
     txt = f"{pred.get('league','')} {pred.get('league_code','')} {pred.get('country','')}".lower()
-    return any(k in txt for k in QUAL_KEYWORDS)
+    # Domestic leagues named "Championship"/"League One"/"League Two" are NOT two-legged ties —
+    # guard against the "champions" keyword matching "Championship" (owner: Ayr/Arbroath was a
+    # LEAGUE game, no first leg existed → the AI must not invent a "Hinspiel"/qualification).
+    if "championship" in txt or "league one" in txt or "league two" in txt or "1. lig" in txt:
+        return False
+    if any(k in txt for k in QUAL_KEYWORDS):
+        return True
+    return "play-off" in txt or "playoff" in txt
 
 
 async def qualifier_autopost() -> dict:

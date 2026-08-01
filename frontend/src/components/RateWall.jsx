@@ -1401,7 +1401,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
             className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 transition-colors">
             <Ban size={12} /> {t("wall.bl.btn")}
           </button>
-          {isCommunityLive && (
+          {isAdmin && (
             <button onClick={doSettleNow} disabled={settling} data-testid={`admin-settle-now-${tip.id}`}
               className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold py-1.5 rounded-lg bg-[#F0443C]/15 text-[#F0443C] hover:bg-[#F0443C]/25 disabled:opacity-50 transition-colors">
               <Radio size={12} className={settling ? "animate-pulse" : ""} /> {settling ? "Prüfe…" : "Spiel zuende"}

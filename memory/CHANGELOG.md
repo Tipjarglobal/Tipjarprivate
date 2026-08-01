@@ -1,5 +1,13 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX: AI erfand „Hinspiel"/Qualifikation bei Liga-Spielen + „Spiel zuende" für alle Picks
+- **Erfundenes Hinspiel (Ayr–Arbroath, Inverness–Dunfermline):** `_looks_two_legged()` prüfte u.a. das Keyword `"champions"` — das matcht `"Scotland Championship"`! Dadurch wurden reine LIGA-Spiele als zweibeinige Champions-League-Qualis behandelt und ein „Hinspiel-Aggregat" (letztes H2H als erstes Leg) erfunden → „X führt nach Hinspiel 2:0 / 0:0 im Hinspiel". 
+  - Fix: `QUAL_KEYWORDS` präzisiert (`champions league`, `europa league`, `conference league`, `afc/caf/concacaf champions` …) + expliziter Ausschluss für `championship` / `league one` / `league two` / `1. lig`. Verifiziert: Scotland/England Championship → nicht zweibeinig; echte UEFA-Qualis/Play-offs → weiterhin zweibeinig.
+- **„Spiel zuende" (Force-Settle) für ALLE Admin-Picks:** Der Knopf war in `RateWall.jsx` hinter `isCommunityLive` versteckt → bei Master/HQ-Picks nicht sichtbar. Jetzt für jeden Admin-Pick sichtbar (`admin-settle-now-{id}`). Backend-Endpoints existierten bereits: `PATCH /admin/tips/{id}` (Anstoßzeit via „Bearbeiten") + `POST /admin/tips/{id}/settle-now`.
+  - Workflow: Pick → **Bearbeiten** (Anstoßzeit korrigieren) → Speichern → **Spiel zuende** (erzwingt Abrechnung).
+- Backend startet sauber, Frontend kompiliert. ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — Codemining: Zwei-Stufen-Defaults + Karten-Notiz nur pro Spiel
 - **Karten-Notiz = nur dieses Spiel** (Wunsch A): Notiz auf einer Karte schreibt jetzt einen READ-LOKALEN Override (`ov_local`/`ov`) → KEIN Übertrag auf andere Spiele mit demselben Code. Endpoint `POST /admin/code-reading/{id}/override` (leer = Override löschen). Note-Badge/Editor lesen jetzt `r.ov_local`/`r.ov`.
 - **Neues Panel „Code-Defaults"** (`CodeDefaultsPanel.jsx`, Button in Codemining-Toolbar): pro Code
