@@ -1,5 +1,15 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemining: „Fertige abrechnen"-Knopf + Einzel-Settle
+- Owner will fertige Codemining-Spiele manuell verschieben/abrechnen + fragte nach dem Kontroll-Panel.
+- `_settle_one_code_read(r, now, cache, force=False)` aus `settle_code_reads` extrahiert (DRY). `force=True` umgeht das kickoff+2h-Gate.
+- Neue Admin-Endpoints: `POST /admin/code-reading/{id}/settle-now` (ein Read) und `POST /admin/code-reading/settle-finished` (alle Reads mit bereits erfolgtem Anstoß → Beendet).
+- Frontend: Toolbar-Knopf „Fertige abrechnen" (rot, `code-settle-finished-btn`) im Codemining (Admin).
+- Getestet: settle-finished antwortet sauber `{ok, settled}`. Backend/Frontend kompilieren.
+- Panel-Standort: Codemining-Tab → Toolbar → fuchsia Knopf „Code-Defaults" (nur Admin). Erscheint auf Prod erst nach Deploy.
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — Gifts: ein Gift pro Spiel + bessere Halbzeit-Märkte (Owner-Wünsche)
 - Owner sah 2 widersprüchliche Gifts auf DEMSELBEN Spiel („gewinnt mind. eine Halbzeit" @1.25 vs „gewinnt NICHT beide Halbzeiten" @1.55) — Lotto. Wollte: 1 Pick/Spiel + sinnvollere Märkte.
 - **Neue, auto-abrechenbare Gift-Märkte** (`settlement.py` `_special_gift_kind` + `_grade_special_gift`):

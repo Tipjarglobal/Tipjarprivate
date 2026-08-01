@@ -9410,85 +9410,79 @@ async def settle_code_reads() -> dict:
             break
         if r.get("cr_settle_attempts", 0) >= 8:
             continue
-        ko = _parse_kickoff(r.get("kickoff"))
-        try:
-            created = datetime.fromisoformat(r["created_at"])
-        except Exception:
-            created = now
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        # Owner 2026-08: NEVER settle before the match is actually over. If the kickoff parses,
-        # require it to be >2h in the past. If the kickoff string is UNPARSEABLE we must NOT fall
-        # back to created_at (that grades a game that hasn't even started yet against the wrong
-        # fixture — Gimnasia/Everton bug) — only settle such reads once they're clearly ancient.
+        if await _settle_one_code_read(r, now, date_cache, force=False):
+            settled += 1
+    return {"ok": True, "settled": settled, "checked": len(reads)}
+
+
+async def _settle_one_code_read(r: dict, now, date_cache: dict, force: bool = False) -> bool:
+    """Settle ONE code-read against the real result. force=True bypasses the kickoff+2h gate
+    (admin 'jetzt abrechnen'). Returns True only when actually graded."""
+    ko = _parse_kickoff(r.get("kickoff"))
+    try:
+        created = datetime.fromisoformat(r["created_at"])
+    except Exception:
+        created = now
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if not force:
         if ko is not None:
             if now - ko < timedelta(hours=2):
-                continue  # not finished yet (or not even kicked off)
-        else:
-            if now - created < timedelta(hours=18):
-                continue
-        home, away = r["home"], r["away"]
-        tid = await resolve_team_id(home)
-        oid = await resolve_team_id(away)
-        ref = ko or created
-        dates = sorted({ref.date().isoformat(), (ref + timedelta(days=1)).date().isoformat(),
-                        created.date().isoformat()})
-        fx = find_finished_fixture(tid, away, dates, oid, self_name=home) if tid else None
-        if not fx and oid:
-            fx = find_finished_fixture(oid, home, dates, tid, self_name=away)
-        if not fx:
-            fx = _datescan_fixture(home, away, dates, date_cache)
-        if not fx:
+                return False
+        elif now - created < timedelta(hours=18):
+            return False
+    home, away = r["home"], r["away"]
+    tid = await resolve_team_id(home)
+    oid = await resolve_team_id(away)
+    ref = ko or created
+    dates = sorted({ref.date().isoformat(), (ref + timedelta(days=1)).date().isoformat(),
+                    created.date().isoformat()})
+    fx = find_finished_fixture(tid, away, dates, oid, self_name=home) if tid else None
+    if not fx and oid:
+        fx = find_finished_fixture(oid, home, dates, tid, self_name=away)
+    if not fx:
+        fx = _datescan_fixture(home, away, dates, date_cache)
+    if not fx:
+        await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
+        return False
+    score = f"{fx.get('home_goals')}-{fx.get('away_goals')}"
+    gm = ""
+    fid = fx.get("fixture_id")
+    if fid and score != "0-0" and not _api_quota_exhausted():
+        gm = await _code_goal_minutes(fid, fx)
+    is_no_bet = r.get("read") == "no_bet"
+    code_out = None
+    if is_no_bet:
+        code_mkt = r.get("code_market") or r.get("code") or ""
+        if code_mkt and _is_straightwin_code(code_mkt):
+            ws = _code_win_side(code_mkt, home, away)
+            if ws in ("home", "away"):
+                code_mkt = f"{home if ws == 'home' else away} Sieg"
+        if code_mkt:
+            try:
+                code_out = await judge_market(code_mkt, home, away,
+                                              fx.get("home_goals"), fx.get("away_goals"))
+            except Exception:
+                code_out = None
+    if r.get("score"):
+        upd = {"goal_minutes": gm, "fixture_id": fid}
+        if is_no_bet and code_out in ("won", "lost", "void"):
+            upd["code_outcome"] = code_out
+        await db.code_reads.update_one({"id": r["id"]}, {"$set": upd})
+        return True
+    if r.get("read") == "counter" and r.get("our_market"):
+        outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
+        if outcome not in ("won", "lost", "push"):
             await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
-            continue
-        score = f"{fx.get('home_goals')}-{fx.get('away_goals')}"
-        gm = ""
-        fid = fx.get("fixture_id")
-        if fid and score != "0-0" and not _api_quota_exhausted():
-            gm = await _code_goal_minutes(fid, fx)
-        is_no_bet = r.get("read") == "no_bet"
-        # For NO-BET reads: judge whether the BOOKIE's original code leg actually CAME. If it did
-        # NOT come → our no-bet "saved us" (correct/blue). If it DID come → we missed it (uncorrect/
-        # orange). Owner 2026-06.
-        code_out = None
-        if is_no_bet:
-            code_mkt = r.get("code_market") or r.get("code") or ""
-            # owner 2026-08: a straight-win code like '1X2 S2' is opaque to the grader → translate the
-            # selection into an explicit '<Team> Sieg' so code_outcome is graded correctly
-            # (Rangers-Code kam NICHT → No Bet rettet uns = blau; LASK-Code KAM → orange).
-            if code_mkt and _is_straightwin_code(code_mkt):
-                ws = _code_win_side(code_mkt, home, away)
-                if ws in ("home", "away"):
-                    code_mkt = f"{home if ws == 'home' else away} Sieg"
-            if code_mkt:
-                try:
-                    code_out = await judge_market(code_mkt, home, away,
-                                                  fx.get("home_goals"), fx.get("away_goals"))
-                except Exception:
-                    code_out = None
-        # Backfill: read already graded (has score) → just add minutes / code_outcome.
-        if r.get("score"):
-            upd = {"goal_minutes": gm, "fixture_id": fid}
-            if is_no_bet and code_out in ("won", "lost", "void"):
-                upd["code_outcome"] = code_out
-            await db.code_reads.update_one({"id": r["id"]}, {"$set": upd})
-            settled += 1
-            continue
-        if r.get("read") == "counter" and r.get("our_market"):
-            outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
-            if outcome not in ("won", "lost", "push"):
-                await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
-                continue
-            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-                "outcome": outcome, "score": score, "goal_minutes": gm,
-                "fixture_id": fid, "settled_at": now.isoformat()}})
-        else:
-            # NO-BET: record score + minutes + whether the bookie's code leg came (code_outcome).
-            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-                "outcome": "info", "score": score, "goal_minutes": gm,
-                "code_outcome": code_out, "fixture_id": fid, "settled_at": now.isoformat()}})
-        settled += 1
-    return {"ok": True, "settled": settled, "checked": len(reads)}
+            return False
+        await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+            "outcome": outcome, "score": score, "goal_minutes": gm,
+            "fixture_id": fid, "settled_at": now.isoformat()}})
+    else:
+        await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+            "outcome": "info", "score": score, "goal_minutes": gm,
+            "code_outcome": code_out, "fixture_id": fid, "settled_at": now.isoformat()}})
+    return True
 
 
 async def learning_loop():
@@ -9621,6 +9615,41 @@ async def admin_code_reading_note(payload: dict, admin: dict = Depends(require_a
 async def admin_code_reading_notes(admin: dict = Depends(require_admin)):
     notes = await db.code_notes.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     return {"notes": notes}
+
+
+@api_router.post("/admin/code-reading/{read_id}/settle-now")
+async def admin_code_reading_settle_now(read_id: str, admin: dict = Depends(require_admin)):
+    """Owner: force-settle a single code-read NOW (bypass the kickoff+2h wait) so a finished game
+    moves to the Beendet tab immediately with its verdict."""
+    if not API_FOOTBALL_KEY:
+        raise HTTPException(status_code=400, detail="API-Football nicht konfiguriert.")
+    r = await db.code_reads.find_one({"id": read_id}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="read not found")
+    ok = await _settle_one_code_read(r, datetime.now(timezone.utc), {}, force=True)
+    return {"ok": True, "settled": 1 if ok else 0,
+            "detail": "Abgerechnet." if ok else "Kein beendetes Spiel gefunden (Teams/Datum prüfen)."}
+
+
+@api_router.post("/admin/code-reading/settle-finished")
+async def admin_code_reading_settle_finished(admin: dict = Depends(require_admin)):
+    """Owner: force-settle ALL past-kickoff open reads now → move finished games to Beendet."""
+    if not API_FOOTBALL_KEY:
+        raise HTTPException(status_code=400, detail="API-Football nicht konfiguriert.")
+    now = datetime.now(timezone.utc)
+    reads = await db.code_reads.find(
+        {"outcome": {"$exists": False}}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    cache: dict = {}
+    settled = 0
+    for r in reads:
+        if _api_quota_exhausted():
+            break
+        ko = _parse_kickoff(r.get("kickoff"))
+        if ko is None or ko > now:  # only games that have actually kicked off
+            continue
+        if await _settle_one_code_read(r, now, cache, force=True):
+            settled += 1
+    return {"ok": True, "settled": settled}
 
 
 # ── Per-game local override (card note applies to THIS game only) ─────────────
