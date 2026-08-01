@@ -1,5 +1,14 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX (kritisch): Falsches Fixture beim Abrechnen (deutsche Torschützen auf SA-Spielen)
+- Symptom (Prod): Gimnasia y Esgrima–Union de Santa Fe zeigte „2-1, Dynamo Dresden 22',52' · Union Berlin 19'"; Everton VdM–Colo-Colo „1-2, Hamburger SV 49' · Everton 40',90'+4" — Endstände FREMDER (deutscher) Spiele, obwohl die Spiele noch liefen.
+- **Ursache:** `find_finished_fixture` (settlement.py) hatte einen Blind-Fallback „Team hat genau EIN beendetes Spiel am Tag → nimm es". Wenn `resolve_team_id` kollidiert (SA-Klub → deutscher Klub gleichen Namensteils), wurde dessen fremdes Spiel ohne Gegner-Check akzeptiert.
+- **Fix:** Neuer Parameter `self_name` + `_self_ok()`: die Fixture-Seite mit `team_id` MUSS namentlich zum gesuchten Klub passen — sowohl im Match-Loop als auch im len==1-Fallback. An alle 5 Aufrufer übergeben (code-reading ×2, live-force ×1, settle_pending ×1, parlays ×2).
+- Verifiziert: `_teams_match('Dynamo Dresden','Gimnasia…')=False`, `('Hamburger SV','Everton VdM')=False` → falsche Fixtures verworfen; `('Everton','Everton de Viña…')=True`, `('Colo Colo','Colo-Colo')=True` → legitime bleiben.
+- Zusammen mit dem Timing-Gate (nie vor Anpfiff+2h abrechnen) ist der Wrong-Fixture-Bug beidseitig abgesichert. Bereits falsch abgerechnete Alt-Einträge müssen gelöscht werden / laufen aus (~30h).
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — FIX: AI erfand „Hinspiel"/Qualifikation bei Liga-Spielen + „Spiel zuende" für alle Picks
 - **Erfundenes Hinspiel (Ayr–Arbroath, Inverness–Dunfermline):** `_looks_two_legged()` prüfte u.a. das Keyword `"champions"` — das matcht `"Scotland Championship"`! Dadurch wurden reine LIGA-Spiele als zweibeinige Champions-League-Qualis behandelt und ein „Hinspiel-Aggregat" (letztes H2H als erstes Leg) erfunden → „X führt nach Hinspiel 2:0 / 0:0 im Hinspiel". 
   - Fix: `QUAL_KEYWORDS` präzisiert (`champions league`, `europa league`, `conference league`, `afc/caf/concacaf champions` …) + expliziter Ausschluss für `championship` / `league one` / `league two` / `1. lig`. Verifiziert: Scotland/England Championship → nicht zweibeinig; echte UEFA-Qualis/Play-offs → weiterhin zweibeinig.

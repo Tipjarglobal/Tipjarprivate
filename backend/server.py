@@ -9414,9 +9414,9 @@ async def settle_code_reads() -> dict:
         ref = ko or created
         dates = sorted({ref.date().isoformat(), (ref + timedelta(days=1)).date().isoformat(),
                         created.date().isoformat()})
-        fx = find_finished_fixture(tid, away, dates, oid) if tid else None
+        fx = find_finished_fixture(tid, away, dates, oid, self_name=home) if tid else None
         if not fx and oid:
-            fx = find_finished_fixture(oid, home, dates, tid)
+            fx = find_finished_fixture(oid, home, dates, tid, self_name=away)
         if not fx:
             fx = _datescan_fixture(home, away, dates, date_cache)
         if not fx:
@@ -10135,7 +10135,7 @@ async def live_autopost() -> dict:
                      (ko + timedelta(days=1)).date().isoformat(),
                      (ko - timedelta(days=1)).date().isoformat()]
         tid = await resolve_team_id(lt["home_team"]) if dates else None
-        fx = find_finished_fixture(tid, lt["away_team"], dates) if (tid and dates) else None
+        fx = find_finished_fixture(tid, lt["away_team"], dates, self_name=lt["home_team"]) if (tid and dates) else None
         if fx:
             hg, ag = fx["home_goals"] or 0, fx["away_goals"] or 0
             res = _live_bet_landed(lt.get("market"), hg, ag, lt["home_team"], lt["away_team"])

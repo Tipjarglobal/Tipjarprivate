@@ -578,8 +578,23 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
     return None
 
 
-def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponent_id: int = None):
+def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponent_id: int = None,
+                          self_name: str = None):
     opponent_name = _en_name(opponent_name)
+    self_c = _en_name(self_name) if self_name else None
+
+    def _self_ok(fx):
+        # Guard against resolve_team_id() cross-league collisions (e.g. an Argentinian club
+        # id-matching a German one → grading a SA game against a German result). The fixture side
+        # that carries team_id MUST match the club name we actually searched for.
+        if not self_c:
+            return True
+        hid = fx.get("teams", {}).get("home", {}).get("id")
+        th = fx.get("teams", {}).get("home", {}).get("name", "")
+        ta = fx.get("teams", {}).get("away", {}).get("name", "")
+        self_side = th if hid == team_id else ta
+        return _teams_match(self_side, self_c)
+
     for di, date in enumerate(dates):
         try:
             yr = int(date[:4])
@@ -593,6 +608,8 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
                         if fx.get("fixture", {}).get("status", {}).get("short") in FINISHED_STATUSES]
             chosen = None
             for fx in finished:
+                if not _self_ok(fx):
+                    continue  # this fixture's resolved side isn't even our team → skip
                 th = fx.get("teams", {}).get("home", {}).get("name", "")
                 ta = fx.get("teams", {}).get("away", {}).get("name", "")
                 hid = fx.get("teams", {}).get("home", {}).get("id")
@@ -605,8 +622,9 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
                     break
             # Fallback: a club plays at most ONE match per calendar day. If neither id nor
             # name matched the opponent but the resolved team has exactly ONE finished fixture
-            # on its EXACT kickoff date, that game IS the match → settle it.
-            if chosen is None and di == 0 and len(finished) == 1:
+            # on its EXACT kickoff date, that game IS the match → settle it. Only accept it when
+            # the resolved side genuinely matches our team name (prevents wrong-fixture grading).
+            if chosen is None and di == 0 and len(finished) == 1 and _self_ok(finished[0]):
                 chosen = finished[0]
             if chosen is not None:
                 th = chosen.get("teams", {}).get("home", {}).get("name", "")
@@ -703,7 +721,8 @@ async def settle_pending_tips() -> dict:
         away_c = tip.get("away_team_latin") or (await _canonical_team_name(tip["away_team"])) or tip["away_team"]
         opponent = away_c if opponent == tip["away_team"] else home_c
         opponent_id = await resolve_team_id(opponent)
-        fx = find_finished_fixture(team_id, opponent, dates, opponent_id) if team_id else None
+        self_c = home_c if opponent == away_c else away_c
+        fx = find_finished_fixture(team_id, opponent, dates, opponent_id, self_name=self_c) if team_id else None
         if not fx:
             # Fallback: scan the date's fixtures and match both team names directly.
             fx = _datescan_fixture(home_c, away_c, dates, date_cache)
@@ -815,7 +834,8 @@ async def settle_hq_combos() -> dict:
             team_id = await resolve_team_id(away)
             opponent = home
         opponent_id = await resolve_team_id(opponent)
-        fx = find_finished_fixture(team_id, opponent, dates, opponent_id) if team_id else None
+        self_c = home if opponent == away else away
+        fx = find_finished_fixture(team_id, opponent, dates, opponent_id, self_name=self_c) if team_id else None
         if not fx:
             fx = _datescan_fixture(home, away, dates)
         if not fx:
@@ -1050,7 +1070,8 @@ async def settle_multimatch_parlays() -> dict:
                 team_id = await resolve_team_id(away)
                 opp = home
             opp_id = await resolve_team_id(opp)
-            fx = find_finished_fixture(team_id, opp, dates, opp_id) if team_id else None
+            self_c = home if opp == away else away
+            fx = find_finished_fixture(team_id, opp, dates, opp_id, self_name=self_c) if team_id else None
             if not fx:
                 # robust fallback for obscure clubs (diacritics, city suffixes, season
                 # detection): scan all fixtures on the date and match both team names.
