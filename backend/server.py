@@ -8685,6 +8685,18 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "reason": f"Code gibt dem Außenseiter +{('%g' % float(plusm.group(1).replace(',', '.')))} — er sieht {fav} als klaren Favoriten. Wir kaufen {fav} -1 Handicap: Sieg mit 2+ Toren = gewonnen (~1.76), knapper 1-Tor-Sieg = Einsatz zurück (Push).",
                 "stars": 9})
 
+    # (e0) Owner 2026-08 (Salzburg, 4× korrigiert): a NEXT-GOAL / exact-Nth-goal / 'kein N. Tor' code
+    #      ('Nächstes Tor … 4', 'Kein 4. Tor', 'next goal … no goal 4', 'exaktes/x-tes Tor') is a
+    #      trap-bookie goal-progression bet — too specific to play straight, but it signals goals in the
+    #      game → we take the safe overall line: 'Asiatisch Über 2.0 Tore' (3+ = won, exactly 2 = Push).
+    if (re.search(r"n[äa]chstes?\s+tor|next\s+goal|kein\s+\d+\.?\s*tor|kein\s+tor\s*\d|"
+                  r"exaktes?\s+tor|\bx[-\s]?tes?\s+tor|\d+\.\s*tor\b|\d+(?:st|nd|rd|th)\s+goal", m)):
+        return _code_apply_learn({
+            "read": "counter", "our_market": "Asiatisch Über 2.0 Tore",
+            "alt_market": None, "code": market, "pattern": "match_over_asian2",
+            "reason": "Code wettet auf ein exaktes/nächstes Tor im Spielverlauf — viel zu speziell zum Nachspielen. Wir nehmen die sichere Gesamt-Linie: Asiatisch Über 2.0 Tore — bei 3+ Toren gewonnen, bei genau 2 Toren Einsatz zurück (Push). Bombensicher bei ~1.20.",
+            "stars": 9})
+
     # (e) SpinBetter: straight win / double chance / handicap → NO BET ('nicht normal, 1X zu gehen').
     if any(k in m for k in ("sieg", "gewinnt", " win", "1x", "x2", "doppelte", "double chance",
                             "handicap", "1x2")) or re.match(r"^\s*s?[12]\b", m):
