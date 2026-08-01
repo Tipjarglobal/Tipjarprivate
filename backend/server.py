@@ -963,10 +963,13 @@ async def tips_counts():
     _cr_grace = timedelta(minutes=150)
     codereading = 0
     for _r in _cr_docs:
-        if _r.get("outcome") in ("won", "lost") or _r.get("score"):
+        if _r.get("outcome") in ("won", "lost", "info") or _r.get("score"):
             continue
         _ko = _parse_kickoff(_r.get("kickoff"))
         if _ko is not None and _ko + _cr_grace < _cr_now:
+            continue
+        _cr = _parse_kickoff(_r.get("created_at"))
+        if _ko is None and _cr is not None and (_cr_now - _cr) > timedelta(hours=10):
             continue
         codereading += 1
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
@@ -8423,11 +8426,14 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
         line, negated = tt
         tgt = team or home
         if negated:
-            # "Team Gesamtzahl Unter x.5 – Nein" = they need the team to bang 3+ → we DECKEL it.
+            # "Team Gesamtzahl Unter x.5 – Nein" = they NEED the team to go 3+ (over x.5). The
+            # DIRECT counter is the same line un-negated: '<Team> Unter x.5' (owner: Widzew =
+            # Unter 2.5, NICHT 3.5 — bei 3.5 würde ein 3:x beide Seiten gewinnen lassen).
+            ln = ("%g" % line)
             return _code_apply_learn({
-                "read": "counter", "our_market": f"{tgt} Unter 3.5 Tore",
-                "alt_market": f"{tgt} 1–3 Tore", "code": market, "pattern": "team_total_over_cap",
-                "reason": f"Code will {tgt} mit 3+ Toren — das ist selten. Wir deckeln: {tgt} Unter 3.5 Tore.",
+                "read": "counter", "our_market": f"{tgt} Unter {ln} Tore",
+                "alt_market": f"{tgt} Über 0.5 Tore", "code": market, "pattern": "team_total_over_cap",
+                "reason": f"Code will {tgt} mit {int(line) + 1}+ Toren — selten. Wir gehen direkt dagegen: {tgt} Unter {ln} Tore (höchstens {int(line)}).",
                 "stars": 7})
         if line <= 2.5:
             # "Team Gesamtzahl Unter 1.5/2.5" = they say the team barely scores → we back it TO score.
@@ -8492,7 +8498,7 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "2) If they cap a TEAM low or back a team to just score (e.g. 'Team Total Under 1.5', 'Team Over 0.5', "
         "'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — a team scoring at least once "
         "is usually the logical part. Only choose NO BET here if that team faces a very strong defensive favourite likely to shut them out.\n"
-        "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → cap them: '<Team> Unter 3.5 Tore'.\n"
+        "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → the DIRECT counter is the SAME line un-negated: '<Team> Unter 2.5 Tore' (NOT Unter 3.5 — at exactly 3 both sides would win).\n"
         "4) A WHOLE-MATCH total like 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
         "5) Straight win / 1X2 / double chance / handicap → NO BET (we NEVER buy a plain win/1X).\n"
         "6) ANY first-half / half-time goals bet (e.g. '1st half Over 0.5', '1. Halbzeit Über 0.5', 'HT Over 0.5'), "
@@ -8534,8 +8540,11 @@ async def code_reading():
     active, finished = [], []
     for r in reads:
         ko = _parse_kickoff(r.get("kickoff"))
-        is_over = (r.get("outcome") in ("won", "lost")) or bool(r.get("score")) \
-            or (ko is not None and ko + grace < now_dt)
+        created = _parse_kickoff(r.get("created_at"))
+        stale = created is not None and (now_dt - created) > timedelta(hours=10)
+        is_over = (r.get("outcome") in ("won", "lost", "info")) or bool(r.get("score")) \
+            or (ko is not None and ko + grace < now_dt) \
+            or (ko is None and stale)
         (finished if is_over else active).append(r)
     return {"count": len(active), "reads": active, "finished": finished}
 

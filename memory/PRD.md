@@ -1204,3 +1204,15 @@ Backfill: bereits abgerechnete Spiele bekommen die Minuten nachträglich (Query 
 `goal_minutes missing & score != 0-0`). GETESTET: settle-Lauf (Bodø 4-0 → 17',25',63',77' inkl. Eigentor;
 Brügge–Union 1-1 ohne Shootout; Sparta 3-1 mit Zlin 57') + Screenshot (6 Minuten-Zeilen im Beendet-Tab).
 HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## Update 2026-06 (20) — Codemining Counter-Fix (Unter 2.5 statt 3.5) + Auto-Leeren
+1. **Logik-Bug behoben** (`_code_read_interpret` negated-Zweig): Wenn der Bookie-Code ein Team auf 3+
+   Tore setzt ("Gesamtzahl 2 Unter 2.5 = Nein"), ist die DIREKTE Gegenwette dieselbe Linie un-negiert:
+   "{Team} Unter {line} Tore" (z. B. Widzew Unter 2.5, NICHT 3.5 — bei genau 3 würden sonst beide Seiten
+   gewinnen). LLM-Fallback-Prompt ebenfalls angepasst.
+2. **Aktiver Codeminer leert sich zuverlässig**: `/code-reading` is_over + Homepage-Zähler behandeln jetzt
+   auch outcome=="info" (No-Bet) und veraltete Reads ohne Anstoß (created_at > 10h) als beendet →
+   wandern in "Beendet". Verifiziert: ACTIVE=0, finished=7, Homepage-Badge=0.
+WICHTIG (PROD): Gilt live auf tipjarglobal.com erst nach "Save to GitHub → Deploy" — Produktion läuft
+noch mit altem Code (zeigt dort Widzew 3.5 + volle aktive Liste). Nach Deploy settelt der Prod-Loop die
+beendeten Spiele und leert die aktive Liste ebenfalls.
