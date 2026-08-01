@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { X, Plus, Trash2, Check, Loader2, Wand2, Layers, Lock } from "lucide-react";
+import { X, Plus, Trash2, Check, Loader2, Wand2, Layers, Lock, Sparkles, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
 
@@ -13,6 +13,8 @@ const T = {
     notePh: "Notiz (optional)", addOpt: "Option speichern", root: "Einwurzeln", locked: "Eingewurzelt",
     clearPerm: "Permanent entfernen", noOpts: "Keine Optionen — füge eine hinzu.", close: "Schließen",
     saved: "Gespeichert", done: "Erledigt", fail: "Fehlgeschlagen",
+    aiBtn: "KI-Vorschlag holen", aiLoading: "Analysiere Historie…", aiApply: "Als Option übernehmen",
+    aiGames: "beendete Spiele analysiert", aiNobet: "KI empfiehlt: No Bet", aiConf: "Sicherheit",
   },
   en: {
     title: "Code defaults", sub: "Experiment per code, then root the true default.",
@@ -23,6 +25,8 @@ const T = {
     notePh: "Note (optional)", addOpt: "Save option", root: "Root", locked: "Rooted",
     clearPerm: "Remove permanent", noOpts: "No options — add one.", close: "Close",
     saved: "Saved", done: "Done", fail: "Failed",
+    aiBtn: "Get AI suggestion", aiLoading: "Analysing history…", aiApply: "Use as option",
+    aiGames: "finished games analysed", aiNobet: "AI suggests: No Bet", aiConf: "Confidence",
   },
   el: {
     title: "Code defaults", sub: "Πειραματίσου ανά κωδικό, μετά ρίζωσε το αληθινό default.",
@@ -33,6 +37,8 @@ const T = {
     notePh: "Σημείωση (προαιρετικό)", addOpt: "Αποθήκευση", root: "Ρίζωμα", locked: "Ρίζωσε",
     clearPerm: "Αφαίρεση μόνιμου", noOpts: "Καμία επιλογή — πρόσθεσε μία.", close: "Κλείσιμο",
     saved: "Αποθηκεύτηκε", done: "Έγινε", fail: "Απέτυχε",
+    aiBtn: "Πρόταση από ΚΙ", aiLoading: "Ανάλυση ιστορικού…", aiApply: "Χρήση ως επιλογή",
+    aiGames: "τελειωμένα παιχνίδια αναλύθηκαν", aiNobet: "Η ΚΙ προτείνει: No Bet", aiConf: "Σιγουριά",
   },
 };
 
@@ -50,6 +56,7 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
   const [busy, setBusy] = useState(false);
   const [forms, setForms] = useState({}); // per-key add-option form
   const [perms, setPerms] = useState({}); // per-key permanent form
+  const [ai, setAi] = useState({}); // per-key AI suggestion { loading, data }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,6 +130,26 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
     } catch { toast.error(fl.fail); } finally { setBusy(false); }
   };
 
+  const askAi = async (d) => {
+    setAi((s) => ({ ...s, [d.key]: { loading: true } }));
+    try {
+      const { data } = await api.get(`/admin/code-reading/defaults/${encodeURIComponent(d.key)}/ai-suggest`);
+      setAi((s) => ({ ...s, [d.key]: { loading: false, data } }));
+      if (!data.ok && data.message) toast.info(data.message);
+    } catch (e) {
+      setAi((s) => ({ ...s, [d.key]: { loading: false } }));
+      toast.error(e?.response?.data?.detail || fl.fail);
+    }
+  };
+
+  const applyAi = (d) => {
+    const data = ai[d.key]?.data;
+    if (!data) return;
+    setF(d.key, { our_market: data.no_bet ? "" : (data.our_market || ""), no_bet: !!data.no_bet,
+      note: (data.trend || "").slice(0, 200) });
+    toast.success(fl.aiApply + " ✓");
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/75 p-3 overflow-y-auto" data-testid="code-defaults-panel" onClick={onClose}>
       <div className="bg-void border border-zinc-700 rounded-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
@@ -154,8 +181,39 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
 
                 {/* TEMPORARY */}
                 <div className={`rounded-lg p-2.5 mb-2 ${hasPerm ? "opacity-50" : "bg-zinc-900/50"}`}>
-                  <p className="text-[11px] font-black text-amber-300 uppercase tracking-wide mb-1">{fl.temp}</p>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-[11px] font-black text-amber-300 uppercase tracking-wide">{fl.temp}</p>
+                    <button disabled={ai[d.key]?.loading || hasPerm} onClick={() => askAi(d)}
+                      data-testid={`code-default-ai-${d.key}`}
+                      className="inline-flex items-center gap-1 text-[10px] font-black text-sky-300 border border-sky-500/40 rounded-full px-2.5 py-1 hover:bg-sky-500/15 disabled:opacity-40">
+                      {ai[d.key]?.loading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                      {ai[d.key]?.loading ? fl.aiLoading : fl.aiBtn}
+                    </button>
+                  </div>
                   <p className="text-[10px] text-zinc-500 mb-2">{fl.tempHint}</p>
+                  {ai[d.key]?.data?.ok && (
+                    <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-2.5 mb-2" data-testid={`code-default-ai-box-${d.key}`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <TrendingUp size={12} className="text-sky-300" />
+                        <span className="text-[10px] font-black text-sky-300 uppercase tracking-wide">
+                          {ai[d.key].data.games} {fl.aiGames}
+                        </span>
+                        {ai[d.key].data.confidence != null && (
+                          <span className="text-[10px] text-sky-400 ml-auto">{fl.aiConf}: {ai[d.key].data.confidence}/10</span>
+                        )}
+                      </div>
+                      {ai[d.key].data.trend && <p className="text-[11px] text-zinc-200 leading-snug mb-1.5">{ai[d.key].data.trend}</p>}
+                      {ai[d.key].data.no_bet ? (
+                        <p className="text-[11px] font-bold text-red-300 mb-1.5">{fl.aiNobet}</p>
+                      ) : ai[d.key].data.our_market ? (
+                        <p className="text-[12px] font-black text-white bg-sky-500/20 border border-sky-500/40 rounded px-2 py-1 inline-block mb-1.5">{ai[d.key].data.our_market}</p>
+                      ) : null}
+                      <button disabled={busy || hasPerm} onClick={() => applyAi(d)} data-testid={`code-default-ai-apply-${d.key}`}
+                        className="block mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-200 border border-sky-500/50 rounded-full px-3 py-1 hover:bg-sky-500/20 disabled:opacity-40">
+                        <Check size={12} />{fl.aiApply}
+                      </button>
+                    </div>
+                  )}
                   <div className="space-y-1.5 mb-2">
                     {(d.options || []).length === 0 && <p className="text-[11px] text-zinc-600">{fl.noOpts}</p>}
                     {(d.options || []).map((o) => {

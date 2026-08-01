@@ -1,5 +1,27 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemines nach Startzeit sortiert + KI-Vorschlag für Code-Defaults + Tablet-3-Reihen
+- **Aktive Codemines chronologisch sortiert** (`server.py` `code_reading`): die aktive Liste wird
+  jetzt aufsteigend nach Anstoß (`kickoff`) sortiert — nächstes Spiel oben; Spiele ohne parsebaren
+  Anstoß ganz ans Ende. Beendete Spiele bleiben nach Datum (neueste zuerst).
+- **KI-Vorschlag im Code-Defaults-Panel** (neuer Endpoint `GET /admin/code-reading/defaults/{key}/ai-suggest`):
+  sucht ALLE beendeten Codemines mit demselben Code-Key in der Historie, zieht pro Spiel die echten
+  Match-Statistiken getrennt für Heim/Gast (Torschüsse, Schüsse aufs Tor, Ecken, Fouls, Paraden,
+  Ballbesitz) via API-Football `/fixtures/statistics` + Endergebnis/Torminuten, cached sie DAUERHAFT
+  in `db.code_fixture_stats` (spart Credits), und lässt das Emergent-LLM ein wiederkehrendes Muster
+  finden → JSON {trend, our_market, no_bet, confidence}. Kein Mindest-Spielzahl-Filter (versucht es
+  immer). Frontend `CodeDefaultsPanel.jsx`: Button „KI-Vorschlag holen" pro Code + Ergebnis-Box
+  (Trend, Pick, Sicherheit) + „Als Option übernehmen" (füllt das Temporär-Formular vor).
+  Verifiziert E2E mit geseedeten Daten: 3 Spiele → Trend „Heimteam immer über 6.5 Ecken (9,7,8)" →
+  Pick „Heimteam: Über 6.5 Ecken", confidence 9. Ohne Detail-Statistik meldet die KI ehrlich „kein
+  Muster / No Bet".
+- **Tablet-Layout der 9 Homepage-Bereich-Knöpfe** (`Header.jsx`): `md:grid-cols-3 xl:grid-cols-9` →
+  auf Tablets (bis 1279px) 3 Reihen à 3, passend zur Farbgruppierung (Reihe 1 grün: AI/Smart/System;
+  Reihe 2 rot-gelb-blau: Master/Members/Live; Reihe 3 weiß-rosa-grau: Settled/Statistics/Codemining);
+  auf Desktop (≥1280) weiter alle 9 in einer Reihe. Verifiziert per Messung @820px.
+HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
+
+
 ## 2026-08-01 — Codemining: „Fertige abrechnen"-Knopf + Einzel-Settle
 - Owner will fertige Codemining-Spiele manuell verschieben/abrechnen + fragte nach dem Kontroll-Panel.
 - `_settle_one_code_read(r, now, cache, force=False)` aus `settle_code_reads` extrahiert (DRY). `force=True` umgeht das kickoff+2h-Gate.

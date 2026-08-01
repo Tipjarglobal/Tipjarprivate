@@ -9065,6 +9065,10 @@ async def code_reading():
             or (ko is not None and ko + grace < now_dt)
             or (ko is None and stale))
         (finished if is_over else active).append(r)
+    # Owner 2026-06: active codemines sorted chronologically by kickoff (next game first);
+    # games without a parseable kickoff go last. Finished stays newest-first (query order).
+    _far = datetime.max.replace(tzinfo=timezone.utc)
+    active.sort(key=lambda r: _parse_kickoff(r.get("kickoff")) or _far)
     return {"count": len(active), "reads": active, "finished": finished}
 
 
@@ -9707,6 +9711,148 @@ async def admin_cr_defaults_list(admin: dict = Depends(require_admin)):
         out.append({**d, "count": 0})
     out.sort(key=lambda x: (-x.get("count", 0), (x.get("code_market") or "").lower()))
     return {"defaults": out}
+
+
+# ── Code-Defaults KI-Vorschlag (owner 2026-06) ───────────────────────────────
+# Für einen Code schaut die KI in die HISTORIE aller beendeten Codemines mit demselben Code,
+# zieht pro Spiel die echten Match-Statistiken (Torschüsse, Schüsse aufs Tor, Ecken, Fouls,
+# Torhüter-Paraden) getrennt für Heim/Gast + Endergebnis, findet ein wiederkehrendes Muster und
+# schlägt daraus eine konkrete temporäre Option (unser Gegen-Pick) vor.
+_CR_STAT_TYPES = {
+    "total shots": "shots", "shots on goal": "sot", "corner kicks": "corners",
+    "fouls": "fouls", "goalkeeper saves": "saves", "ball possession": "poss",
+}
+
+
+async def _code_read_fixture_stats(r: dict) -> dict | None:
+    """Fetch + permanently cache the per-team match statistics of a finished code-read's fixture.
+    Returns {home:{...}, away:{...}, score, goal_minutes} or None."""
+    fid = r.get("fixture_id")
+    if not fid:
+        return None
+    cached = await db.code_fixture_stats.find_one({"fixture_id": fid}, {"_id": 0})
+    if cached:
+        return cached.get("data")
+    if _api_quota_exhausted():
+        return None
+    try:
+        blocks = await _apifootball_async("/fixtures/statistics", {"fixture": fid}) or []
+    except Exception as e:
+        logger.warning(f"code stats fetch failed (fx {fid}): {e}")
+        return None
+    if not blocks:
+        return None
+
+    def _norm_team(n):
+        return _norm(n or "")
+
+    hn, an = _norm_team(r.get("home")), _norm_team(r.get("away"))
+
+    def _pull(block):
+        out = {}
+        for row in block.get("statistics") or []:
+            key = _CR_STAT_TYPES.get((row.get("type") or "").lower())
+            if key:
+                out[key] = row.get("value")
+        return out
+
+    home_stats = away_stats = None
+    for i, b in enumerate(blocks[:2]):
+        tn = _norm_team((b.get("team") or {}).get("name"))
+        stats = _pull(b)
+        if hn and (tn in hn or hn in tn):
+            home_stats = stats
+        elif an and (tn in an or an in tn):
+            away_stats = stats
+        elif i == 0 and home_stats is None:
+            home_stats = stats
+        elif away_stats is None:
+            away_stats = stats
+    data = {"home": home_stats or {}, "away": away_stats or {},
+            "score": r.get("score") or "", "goal_minutes": r.get("goal_minutes") or ""}
+    await db.code_fixture_stats.update_one(
+        {"fixture_id": fid}, {"$set": {"fixture_id": fid, "data": data,
+                                       "cached_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True)
+    return data
+
+
+_CR_SUGGEST_SYSTEM = (
+    "Du bist ein professioneller Fußball-Wett-Analyst für TipJar. Du bekommst die HISTORIE aller "
+    "beendeten Spiele, die bei einem Buchmacher denselben 'Code' (dieselbe Wett-Vorlage) hatten, "
+    "inklusive echter Match-Statistiken pro Spiel (getrennt für Heim- und Auswärtsteam: Torschüsse, "
+    "Schüsse aufs Tor, Ecken, Fouls, Paraden, Ballbesitz, Endergebnis, Torminuten). "
+    "Deine Aufgabe: finde ein WIEDERKEHRENDES, datengetriebenes Muster über diese Spiele hinweg "
+    "(z.B. 'in 4 von 5 Spielen hatte das Heimteam über 5.5 Torschüsse' oder 'Auswärtsteam bekam "
+    "immer über 4.5 Ecken'). Leite daraus EINE konkrete, bei jedem Buchmacher spielbare temporäre "
+    "Gegen-Option ab (Über/Unter-Linie auf Torschüsse/Ecken/Tore/Paraden, Team-Tor, Doppelte Chance "
+    "usw.). Sei ehrlich: wenn die Daten KEIN klares Muster zeigen, sage das. "
+    "Antworte NUR als striktes JSON: {\"trend\": \"1-2 kurze deutsche Sätze mit den konkreten Zahlen\", "
+    "\"our_market\": \"konkreter Pick als kurzes deutsches Markt-Label, oder leer wenn kein Muster\", "
+    "\"no_bet\": true/false, \"confidence\": 1-10}."
+)
+
+
+def _fmt_side_stats(s: dict) -> str:
+    if not s:
+        return "—"
+    order = [("shots", "Schüsse"), ("sot", "aufs Tor"), ("corners", "Ecken"),
+             ("fouls", "Fouls"), ("saves", "Paraden"), ("poss", "Ballbesitz")]
+    parts = [f"{lbl} {s[k]}" for k, lbl in order if s.get(k) not in (None, "")]
+    return ", ".join(parts) if parts else "—"
+
+
+@api_router.get("/admin/code-reading/defaults/{key}/ai-suggest")
+async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_admin)):
+    """Analyse the history of finished code-reads with the SAME code and suggest a data-driven
+    temporary option (owner 2026-06)."""
+    # All finished reads that map to this code key (any time, verified or not).
+    all_reads = await db.code_reads.find(
+        {"score": {"$nin": [None, ""]}},
+        {"_id": 0, "home": 1, "away": 1, "score": 1, "goal_minutes": 1,
+         "code_market": 1, "fixture_id": 1, "kickoff": 1, "our_market": 1}).to_list(400)
+    hist = [r for r in all_reads if _code_note_key(r.get("code_market") or "") == key]
+    code_market = next((r.get("code_market") for r in hist if r.get("code_market")), key)
+    if not hist:
+        return {"ok": False, "games": 0,
+                "message": "Noch keine beendeten Spiele mit diesem Code in der Historie."}
+    lines, used = [], 0
+    for r in hist:
+        st = await _code_read_fixture_stats(r)
+        line = f"• {r.get('home')} {r.get('score') or '?'} {r.get('away')}"
+        if r.get("goal_minutes"):
+            line += f" (Tore: {r['goal_minutes']})"
+        if st:
+            used += 1
+            line += (f"\n   Heim: {_fmt_side_stats(st.get('home'))}"
+                     f"\n   Gast: {_fmt_side_stats(st.get('away'))}")
+        else:
+            line += "\n   (keine Detail-Statistik verfügbar)"
+        lines.append(line)
+    context = (f"Code / Buchmacher-Vorlage: {code_market}\n"
+               f"Beendete Spiele mit diesem Code: {len(hist)} "
+               f"(davon {used} mit Detail-Statistik)\n\n" + "\n".join(lines))
+    if not EMERGENT_LLM_KEY:
+        return {"ok": False, "games": len(hist),
+                "message": "KI nicht verfügbar (kein Schlüssel)."}
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"crsug-{uuid.uuid4()}",
+                       system_message=_CR_SUGGEST_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
+        resp = await chat.send_message(UserMessage(
+            text=f"{context}\n\nFinde das Muster und schlage die temporäre Option vor (JSON)."))
+        raw = (resp if isinstance(resp, str) else str(resp)).strip()
+        s, e = raw.find("{"), raw.rfind("}")
+        data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}
+    except Exception as ex:
+        logger.warning(f"code ai-suggest failed: {ex}")
+        return {"ok": False, "games": len(hist), "message": "KI-Analyse fehlgeschlagen."}
+    return {"ok": True, "games": len(hist), "with_stats": used,
+            "code_market": code_market,
+            "trend": (data.get("trend") or "").strip(),
+            "our_market": (data.get("our_market") or "").strip(),
+            "no_bet": bool(data.get("no_bet")),
+            "confidence": data.get("confidence")}
+
 
 
 @api_router.post("/admin/code-reading/defaults/{key}/option")

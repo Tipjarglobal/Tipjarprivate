@@ -245,7 +245,7 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
               <span className="text-zinc-300">{t("ai.correct.guide.body")}</span>
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-9 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-9 gap-2">
             <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
             <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
             <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
