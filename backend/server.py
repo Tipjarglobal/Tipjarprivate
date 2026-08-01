@@ -8524,11 +8524,33 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "reason": f"Code sieht {tgt} SPÄT treffen — wir sagen: bis zur 55.–60. Minute ist die Bude drin. Ziemlich sicher.",
                 "stars": 8})
 
-    # (d) SpinBetter: match total Über 2.5+ → too loose for us → NO BET.
-    ou = _parse_over_under(market)
-    if ou and ou[0] == "over" and ou[1] >= 2.5 and team is None:
+    # (c2) Code caps the WHOLE match at 'exact N goals or fewer – No' (genaue Zahl/Anzahl N oder
+    #      weniger – Nein) = the match will have MORE than N goals → Über N.5. Owner: Über 1.5 ist die
+    #      sauberste sichere Linie überhaupt → BEHALTEN. Über 2.5+ bleibt zu locker → No Bet.
+    gm = re.search(r"(?:genaue\s*(?:zahl|anzahl)|exact\s*(?:number|total)?|exakte?\s*(?:zahl|anzahl))"
+                   r"[^0-9]*(\d+)\s*(?:oder\s*weniger|or\s*(?:fewer|less)|or\s*under|und\s*weniger)", m)
+    if gm and team is None and any(k in m for k in ("nein", " no", "- no", "– no")):
+        ln = int(gm.group(1)) + 0.5
+        if ln <= 1.5:
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"Über {('%g' % ln)} Tore",
+                "code": market, "pattern": "match_over_clean",
+                "reason": f"Code sagt: NICHT {int(gm.group(1))} Tore oder weniger → im Spiel fallen mehr. Über {('%g' % ln)} Tore ist bombensicher — sauberer geht's nicht, wir behalten es.",
+                "stars": 8})
         return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
-                "reason": "Code gibt Über 2.5+ Tore — zu unsicher für uns. No Bet."}
+                "reason": f"Code impliziert nur Über {('%g' % ln)} Tore — zu locker. No Bet."}
+
+    # (d) Whole-match total OVER: Über 1.5 = sauberste sichere Linie → BEHALTEN; Über 2.5+ → No Bet.
+    ou = _parse_over_under(market)
+    if ou and ou[0] == "over" and team is None:
+        if ou[1] <= 1.5:
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"Über {('%g' % ou[1])} Tore",
+                "code": market, "pattern": "match_over_clean",
+                "reason": f"Code gibt Über {('%g' % ou[1])} Tore — die sauberste sichere Linie überhaupt. Wir behalten Über {('%g' % ou[1])} Tore.",
+                "stars": 8})
+        return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
+                "reason": f"Code gibt Über {('%g' % ou[1])} Tore — zu unsicher für uns. No Bet."}
 
     # (e) SpinBetter: straight win / double chance / handicap → NO BET ('nicht normal, 1X zu gehen').
     if any(k in m for k in ("sieg", "gewinnt", " win", "1x", "x2", "doppelte", "double chance",
@@ -8552,7 +8574,9 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — a team scoring at least once "
         "is usually the logical part. Only choose NO BET here if that team faces a very strong defensive favourite likely to shut them out.\n"
         "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → the DIRECT counter is the SAME line un-negated: '<Team> Unter 2.5 Tore' (NOT Unter 3.5 — at exactly 3 both sides would win).\n"
-        "4) A WHOLE-MATCH total like 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
+        "4) WHOLE-MATCH total: if the code implies the match goes OVER 1.5 goals (e.g. 'Over 1.5', "
+        "'exact number 1 or fewer – No', 'genaue Zahl 1 oder weniger – Nein') → KEEP 'Über 1.5 Tore' "
+        "as a very safe single (the cleanest line there is). Only 'Over 2.5'+ / 'Under 2.5' with no clear edge → NO BET.\n"
         "5) Straight win / 1X2 / double chance / handicap → NO BET (we NEVER buy a plain win/1X).\n"
         "6) ANY first-half / half-time goals bet (e.g. '1st half Over 0.5', '1. Halbzeit Über 0.5', 'HT Over 0.5'), "
         "OR an early draw/result at minute 15-30 → KEEP 'Über 0.5 Tore 1. Halbzeit' (they expect an early goal — usually a safe single). stars 8-10.\n"
