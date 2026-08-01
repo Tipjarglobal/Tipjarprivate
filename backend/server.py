@@ -6234,6 +6234,26 @@ def _is_scandinavian(*vals) -> bool:
     return any(k in s for k in _SCAND_KEYS)
 
 
+# Owner 2026-06: on the British Isles (England, Scotland, Wales, Ireland, N. Ireland) — esp.
+# lower divisions & season openers — ANY result can happen (3:0 can become 0:3). Directional
+# gifts (1X2, 'first 2 goals', 'wins a half') are pure Lotto there. Prefer a TOTALS gift
+# ('Über 2 asiatische Tore'). "Auf dieser Insel spielen sie jeder verrückt."
+# NOTE: match on NATION / country-code only — NEVER on ambiguous words like 'championship'
+# or 'premier league' (would wrongly flag USL Championship / Ghana Premier League etc.).
+_BRITISH_KEYS = (
+    "england", "scotland", "wales", "northern ireland", "republic of ireland", "eire",
+    "scottish", "english", "welsh", "cymru", "spfl", "league of ireland", "airtricity",
+    "eng.", "sco.", "wal.", "nir.", "irl.", "gb-",
+)
+
+
+def _is_british_isles(*vals) -> bool:
+    s = " " + " ".join(str(v or "").lower() for v in vals) + " "
+    if any(k in s for k in _BRITISH_KEYS):
+        return True
+    return " ireland " in s  # plain 'Ireland' (not already caught) — still British Isles
+
+
 # Leagues the owner REFUSES to use for OVER-goals / Pfeffer picks. Predictions there
 # routinely over-estimate goals (0:0 / 1:0 grind, then a late goal) — Brazil above all
 # ("Ich hasse es, Brasilien als Pfeffer zu benutzen", 2026-07-21). Atletico Mineiro (pred 5, real 1:1)
@@ -7822,7 +7842,7 @@ async def gift_specials_autopost() -> dict:
     now = datetime.now(timezone.utc)
     day = now.date().isoformat()
     counts = {}
-    for k in ("half_any", "not_both_halves", "first_two"):
+    for k in ("half_any", "not_both_halves", "first_two", "asian_o2"):
         counts[k] = await db.tips.count_documents(
             {"source": "hq-auto", "is_gift": True, "gift_kind": k, "gift_day": day})
     if all(counts[k] >= GIFT2_MAX_PER_KIND for k in counts):
@@ -7834,7 +7854,10 @@ async def gift_specials_autopost() -> dict:
             continue
         fav = _fav_team(p)
         fav_prob = int(float(p.get("fav_prob") or 0))
-        if not fav or p.get("fav") not in ("home", "away") or fav_prob < 60:
+        british = _is_british_isles(p.get("league"), p.get("league_code"), p.get("country"))
+        goals_game = int(float(p.get("total") or 0)) >= 3 or bool(p.get("over25"))
+        strong_fav = bool(fav) and p.get("fav") in ("home", "away") and fav_prob >= 60
+        if not (strong_fav or (british and goals_game)):
             continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
@@ -7852,14 +7875,6 @@ async def gift_specials_autopost() -> dict:
         fav_home = p.get("fav") == "home"
         fav_goals = (p.get("ph") or 0) if fav_home else (p.get("pa") or 0)
         opp_goals = (p.get("pa") or 0) if fav_home else (p.get("ph") or 0)
-        try:
-            odds = await ensure_match_odds(home, away, p.get("kickoff") or "")
-        except Exception:
-            odds = {}
-        try:
-            win_od = float(odds.get("win_home") if fav_home else odds.get("win_away"))
-        except (TypeError, ValueError):
-            continue
         mkey = hashlib.md5(_match_key(home, away).encode()).hexdigest()[:8]
         base = {
             "user_id": hq["id"], "username": "TipJarHQ", "raw_text": "", "image_path": None,
@@ -7884,6 +7899,32 @@ async def gift_specials_autopost() -> dict:
                                       "gift_kind": kind})
             counts[kind] += 1
             posted += 1
+
+        british = _is_british_isles(p.get("league"), p.get("league_code"), p.get("country"))
+        if british:
+            # Owner 2026-06: no directional Lotto gift on the British Isles ("jeder schlägt jeden",
+            # 3:0 kann 0:3 werden). Offer a TOTALS gift instead: 'Über 2 asiatische Tore' (push/
+            # refund at exactly 2) — only when goals are genuinely likely (0:0 practically excluded).
+            pred_total = int(float(p.get("total") or (fav_goals + opp_goals)))
+            zz = _zero_zero_assessment(p)
+            if (counts["asian_o2"] < GIFT2_MAX_PER_KIND and zz["over_safe"]
+                    and (pred_total >= 3 or p.get("over25"))):
+                await _post("asian_o2", "Über 2 asiatische Tore", 1.50,
+                            f"🎁 Auf den britischen Inseln ist das 1X2 oder 'wer zuerst 2 Tore' "
+                            f"reines Lotto — jeder kann jeden schlagen (3:0 kann 0:3 werden). "
+                            f"Sicherer als Geschenk: Über 2 asiatische Tore — bei genau 2 Toren "
+                            f"gibt's den Einsatz zurück. Prognose {pred_total} Tore. Quote geschätzt.")
+            continue
+
+        # non-British → directional gifts need the favourite's real win odds
+        try:
+            odds = await ensure_match_odds(home, away, p.get("kickoff") or "")
+        except Exception:
+            odds = {}
+        try:
+            win_od = float(odds.get("win_home") if fav_home else odds.get("win_away"))
+        except (TypeError, ValueError):
+            continue
 
         if counts["half_any"] < GIFT2_MAX_PER_KIND and win_od > 1.30:
             await _post("half_any", f"{fav} gewinnt mindestens eine Halbzeit", 1.25,

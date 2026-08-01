@@ -370,6 +370,30 @@ def _grade_goal_leg(kind, market, team, fx):
         if g == 1:
             return GRADE_VOID
         return False
+    # ── Asian FULL-TIME "Über 2.0" (match OR team total): 3+ goals WIN, exactly 2 goals
+    #    REFUNDS the stake (push/void), <=1 loses. Owner rule 2026-06 (British-Isles gift:
+    #    'Über 2 asiatische Tore' instead of a Lotto 1X2 / first-2-goals pick). ──
+    _asian_o2 = (
+        ("asian" in m or "asiat" in m)
+        and re.search(r"(über|over)\s*2(\.0)?(?![.\d])", m)
+        and "2.5" not in m and "halbzeit" not in m and " hz" not in m and "1. halb" not in m)
+    if _asian_o2:
+        hn, an = fx.get("home_name", ""), fx.get("away_name", "")
+        side = None
+        if hn and _sig_tokens(hn) and _sig_tokens(hn) & _sig_tokens(m):
+            side = "home"
+        elif an and _sig_tokens(an) and _sig_tokens(an) & _sig_tokens(m):
+            side = "away"
+        elif team and _teams_match(hn, team):
+            side = "home"
+        elif team and _teams_match(an, team):
+            side = "away"
+        g = hg if side == "home" else (ag if side == "away" else total)
+        if g >= 3:
+            return True
+        if g == 2:
+            return GRADE_VOID
+        return False
     # Corner (Ecken) Over/Under — settled from fixture statistics (fx['corners']).
     if k in ("corner_o", "corner_u") or "ecken" in m:
         ctot = fx.get("corners")

@@ -1216,3 +1216,17 @@ HINWEIS: live erst nach "Save to GitHub → Deploy".
 WICHTIG (PROD): Gilt live auf tipjarglobal.com erst nach "Save to GitHub → Deploy" — Produktion läuft
 noch mit altem Code (zeigt dort Widzew 3.5 + volle aktive Liste). Nach Deploy settelt der Prod-Loop die
 beendeten Spiele und leert die aktive Liste ebenfalls.
+
+## Update 2026-06 (21) — British-Isles-Geschenke: kein Lotto, "Über 2 asiatische Tore"
+Owner: "Ray-Roberts/Raith zuerst 2 Tore" war Lotto (Saisonstart, nur Schätzung). Auf britischen Inseln
+ist 1X2 / "wer zuerst 2 Tore" unzuverlässig ("jeder schlägt jeden"). UMGESETZT:
+- `_is_british_isles(...)` (präzise, nur Nation/Code — kein USL/Ghana Fehlalarm) in `gift_specials_autopost`:
+  britische Spiele bekommen KEIN direktionales Geschenk mehr, sondern "Über 2 asiatische Tore" (neuer
+  gift_kind `asian_o2`, @1.50), nur bei echtem Torspiel (Prognose >=3/over25 & 0:0 unwahrscheinlich).
+  Kandidatenfilter für britische Torspiele ohne klaren Favoriten gelockert; Totals-Geschenk braucht keine
+  Sieg-Quote.
+- Abrechnung (`settlement._grade_goal_leg`): Asian Über 2.0 ergänzt — 3+ Tore gewonnen, genau 2 = Einsatz
+  zurück (void/push), <=1 verloren. Unit-getestet.
+GETESTET: Detektor (Scotland/England/Wales/Irland=True; USL/Ghana/Bundesliga=False), Asian-2.0-Grading
+(3-0/2-1 won, 1-1/2-0 void, 1-0/0-0 lost), Live-Lauf (Welsh Premier → Über 2 asiatische Tore, keine
+first_two mehr auf britischen Ligen). HINWEIS: live erst nach "Save to GitHub → Deploy".

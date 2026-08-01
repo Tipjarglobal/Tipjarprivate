@@ -102,3 +102,12 @@ n>=5 αλλιώς 1, n-2). Ρίσκο-banker δομή = ελεύθερη επι�
   Counter-Read für "S2 + Gesamtzahl 2 Unter 2.5 Nein" (Auswärts muss 3+ treffen) → deckeln auf Unter 2.5/3.5.
 - 2026-06: Dundee United – Rangers endete 1-1. Owner: "no bet 2 war sehr richtig" → NO-BET auf glatten
   Rangers-Sieg (1X2/Sieg2) war korrekt. NO-BET-Logik für glatte Siege bestätigt.
+
+## British-Isles-Regel (Owner 2026-06) — WICHTIG für Geschenke/Picks
+- England/Schottland/Wales/Irland/Nordirland: "jeder schlägt jeden", 3:0 kann 0:3 werden. 1X2 und
+  "wer zuerst 2 Tore" sind dort reines LOTTO (v. a. Saisonstart, wenn Teamform unbekannt = nur Schätzung).
+- REGEL: Auf britischen Inseln KEINE direktionalen Geschenke (first_two / Halbzeit-Sieg / 1X2).
+  Stattdessen Totals-Geschenk "Über 2 asiatische Tore" (Push/Rückgabe bei genau 2) — nur wenn Torspiel
+  (Prognose >=3 / over25 & 0:0 unwahrscheinlich).
+- Detektor `_is_british_isles`: NUR nach Nation/Ländercode (england/scotland/wales/ireland, eng./sco./
+  wal./nir./irl.) — NIE nach "championship"/"premier league" (sonst USL/Ghana Fehlalarm).
