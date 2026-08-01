@@ -361,6 +361,11 @@ export function CodeReading() {
                     🏁 {t.endResult}: {r.score}
                   </div>
                 )}
+                {r.goal_minutes && (
+                  <p data-testid={`code-read-minutes-${r.id}`} className="text-[11px] text-zinc-400 mb-2">
+                    ⚽ {r.goal_minutes}
+                  </p>
+                )}
                 {noBet ? (
                   <div className="inline-flex items-center gap-1.5 text-xs font-black text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded-full px-2.5 py-1">
                     <Ban size={13} /> {t.nobet}

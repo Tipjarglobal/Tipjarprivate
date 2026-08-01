@@ -8654,6 +8654,52 @@ async def _grade_code_our_market(our_market: str, home: str, away: str, fx: dict
         return None
 
 
+async def _code_goal_minutes(fixture_id, fx) -> str:
+    """Formatted goal minutes per team for a finished fixture (owner 2026-06: 'schreib in welche
+    Minuten die Tore gefallen sind'), e.g. 'Wisla 23', 67' · Widzew 81'+2'.'
+    Capped to the regulation/AET goal count so penalty-shootout events are excluded; own goals
+    are credited to the team that benefits."""
+    try:
+        events = await _apifootball_async("/fixtures/events", {"fixture": fixture_id})
+    except Exception:
+        events = None
+    if not events:
+        return ""
+    hn = (fx.get("home_name") or "").lower().strip()
+    an = (fx.get("away_name") or "").lower().strip()
+    hg = int(fx.get("home_goals") or 0)
+    ag = int(fx.get("away_goals") or 0)
+    home_min, away_min = [], []
+    for ev in events:
+        if (ev.get("type") or "") != "Goal" or (ev.get("detail") or "") == "Missed Penalty":
+            continue
+        if (ev.get("comments") or "") == "Penalty Shootout":
+            continue
+        tm = (((ev.get("team") or {}).get("name")) or "").lower().strip()
+        tinfo = ev.get("time") or {}
+        el, ex = tinfo.get("elapsed"), tinfo.get("extra")
+        if el is None:
+            continue
+        label = f"{el}'" + (f"+{ex}" if ex else "")
+        is_home = bool(tm) and (tm in hn or hn in tm) if hn else False
+        is_away = bool(tm) and (tm in an or an in tm) if an else False
+        if is_home:
+            home_min.append(label)
+        elif is_away:
+            away_min.append(label)
+        elif len(home_min) < hg:
+            home_min.append(label)
+        elif len(away_min) < ag:
+            away_min.append(label)
+    home_min, away_min = home_min[:hg], away_min[:ag]
+    parts = []
+    if home_min:
+        parts.append(f"{fx.get('home_name')} {', '.join(home_min)}")
+    if away_min:
+        parts.append(f"{fx.get('away_name')} {', '.join(away_min)}")
+    return " · ".join(parts)
+
+
 async def settle_code_reads() -> dict:
     """Auto-settle open code-reading counter-picks against real results (owner: 'Ergebnisse gucken')."""
     if not API_FOOTBALL_KEY:
@@ -8662,8 +8708,11 @@ async def settle_code_reads() -> dict:
     # Grade counter-picks AND fetch the final score for NO-BET games too, so every finished
     # game shows an 'Endergebnis' in the Beendet tab (owner 2026-06).
     reads = await db.code_reads.find(
-        {"score": {"$exists": False},
-         "$or": [{"read": "counter", "our_market": {"$nin": [None, ""]}}, {"read": "no_bet"}]},
+        {"$and": [
+            {"$or": [{"read": "counter", "our_market": {"$nin": [None, ""]}}, {"read": "no_bet"}]},
+            {"$or": [{"score": {"$exists": False}},
+                     {"goal_minutes": {"$exists": False}, "score": {"$nin": [None, "", "0-0"]}}]},
+        ]},
         {"_id": 0}).sort("created_at", 1).to_list(120)
     settled = 0
     date_cache: dict = {}
@@ -8696,17 +8745,29 @@ async def settle_code_reads() -> dict:
             await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
             continue
         score = f"{fx.get('home_goals')}-{fx.get('away_goals')}"
+        gm = ""
+        fid = fx.get("fixture_id")
+        if fid and score != "0-0" and not _api_quota_exhausted():
+            gm = await _code_goal_minutes(fid, fx)
+        # Backfill: read already graded (has score) but missing goal minutes → just add minutes.
+        if r.get("score"):
+            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+                "goal_minutes": gm, "fixture_id": fid}})
+            settled += 1
+            continue
         if r.get("read") == "counter" and r.get("our_market"):
             outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
             if outcome not in ("won", "lost"):
                 await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
                 continue
             await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-                "outcome": outcome, "score": score, "settled_at": now.isoformat()}})
+                "outcome": outcome, "score": score, "goal_minutes": gm,
+                "fixture_id": fid, "settled_at": now.isoformat()}})
         else:
-            # NO-BET: no bet outcome, just record the final score for the Beendet tab.
+            # NO-BET: no bet outcome, just record the final score + goal minutes for the Beendet tab.
             await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-                "outcome": "info", "score": score, "settled_at": now.isoformat()}})
+                "outcome": "info", "score": score, "goal_minutes": gm,
+                "fixture_id": fid, "settled_at": now.isoformat()}})
         settled += 1
     return {"ok": True, "settled": settled, "checked": len(reads)}
 

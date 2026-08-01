@@ -1194,3 +1194,13 @@ GETESTET: Endpoint-Split (aktiv vs. finished mit Scores für Counter+No-Bet) + S
 zeigt Widzew 0-0, Rangers 1-1 NO BET, LASK 3-0 NO BET, Sparta 3-1 etc.; Badge "Codemining 8" = ACTIVE).
 Owner-Feedback notiert (Widzew Unter 2.5 Treffer, Rangers 1-1 No-Bet korrekt). HINWEIS: live erst nach
 "Save to GitHub → Deploy".
+
+## Update 2026-06 (19) — Codemining: Tor-Minuten auf beendeten Spielen
+Owner: "Schreib auch in welche Minuten die Tore gefallen sind." → `settle_code_reads` holt jetzt via
+`/fixtures/events` die Tor-Minuten je Team (`_code_goal_minutes`), speichert `goal_minutes` + `fixture_id`.
+Anzeige im Beendet-Tab als "⚽ {Heim} 17', 25' · {Gast} 63'". Robust: auf reguläre Toranzahl gecappt
+(Elfmeterschießen ausgeschlossen), Eigentore korrekt (API listet sie beim profitierenden Team).
+Backfill: bereits abgerechnete Spiele bekommen die Minuten nachträglich (Query enthält
+`goal_minutes missing & score != 0-0`). GETESTET: settle-Lauf (Bodø 4-0 → 17',25',63',77' inkl. Eigentor;
+Brügge–Union 1-1 ohne Shootout; Sparta 3-1 mit Zlin 57') + Screenshot (6 Minuten-Zeilen im Beendet-Tab).
+HINWEIS: live erst nach "Save to GitHub → Deploy".
