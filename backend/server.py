@@ -9008,6 +9008,7 @@ async def _run_code_scan(job_id: str, images: list):
                 "alt_market": interp.get("alt_market"), "reason": interp["reason"],
                 "pattern": interp.get("pattern"), "stars": interp.get("stars", 0),
                 "created_at": now.isoformat(),
+                "verified": True,
                 "expires_at": (now + timedelta(hours=30)).isoformat(),
             }
             await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
