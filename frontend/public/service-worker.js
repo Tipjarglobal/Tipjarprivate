@@ -1,4 +1,4 @@
-const CACHE = "tipjar-shell-v4";
+const CACHE = "tipjar-shell-v5";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -17,22 +17,48 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  // Never cache API calls
-  if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.startsWith("/api/")) return;      // never cache API calls
   if (url.origin !== self.location.origin) return;
-  // Network-first everywhere (fresh code when online, cached shell when offline)
+
+  // (1) NAVIGATIONS (the HTML shell): network-first so a fresh deploy loads immediately;
+  //     fall back to the cached index.html ONLY when the network is truly unreachable (offline).
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put("/index.html", copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match("/index.html").then((c) => c || Response.error()))
+    );
+    return;
+  }
+
+  // (2) STATIC ASSETS (hashed JS/CSS/images — immutable): cache-first, else network.
+  //     CRITICAL: never fall back to index.html here. Returning HTML for a .js/.css request
+  //     throws "Unexpected token '<'" and black-screens the app (the old bug + reload loop).
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        return res;
-      })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match("/index.html")))
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => cached || Response.error());
+    })
   );
 });
 
