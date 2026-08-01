@@ -1,5 +1,16 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX (Codemining): Noch-nicht-gestartete Spiele fälschlich "Beendet" mit falschem Endstand
+- Symptom: Gimnasia–Union (20:30) & Everton VdM–Colo-Colo (21:00) standen um 19:52 unter "Beendet" mit Endständen FREMDER Spiele (deutsche Torschützen: Dynamo Dresden, Union Berlin, HSV).
+- **Ursache:** In `settle_code_reads` diente `ref = ko or created_at` als "Spiel vorbei?"-Referenz. Bei UNPARSEBARER Anstoffzeit fiel es auf `created_at` zurück → ein vor Stunden erstellter Read wurde VOR Anpfiff bewertet und gegen ein falsches (bereits beendetes) Fixture gematcht.
+- **Fixes (intern, kein Knopf):**
+  1. `settle_code_reads`: parsebarer Kickoff muss >2h alt sein; unparsebarer Kickoff wird NICHT mehr über created_at gegradet — erst nach 18h. Kein Pre-Kickoff-Settlement mehr.
+  2. `_purge_and_refresh_code_reads` (läuft bei jedem Feed-Öffnen): **Selbstheilung** — ein Read mit ZUKÜNFTIGEM Anstoß, der (fälschlich) score/outcome/settled_at trägt, wird bereinigt (`$unset`) + `cr_settle_attempts=0` → springt zurück nach Aktiv. Heilt die zwei kaputten Live-Einträge nach Deploy automatisch.
+  3. `code_reading()`-Split: ein Spiel mit Anstoß in der Zukunft ist IMMER "Aktiv" (Sicherheitsnetz), nie "Beendet".
+- Getestet (pymongo+curl e2e): Read mit Zukunfts-Kickoff + Bogus-Score → nach GET /code-reading Score/Outcome entfernt, in ACTIVE statt FINISHED ✅. Backend startet sauber.
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — FIX (Backend/Web-Push): Bodø gestern + Aberdeen 3× Alarme
 - Betraf den ECHTEN OS-Web-Push (`background_tasks.push_watch_loop`), NICHT das In-App-Board vom vorigen Fix.
 - **Stale-Spiele (Bodø war gestern):** Bisher umgingen Picks OHNE saubere Anstoßzeit (Datum-only / unparsebar) den "noch spielbar"-Filter (`ko is None` → nicht geskippt). Neu: `_pick_still_playable(tp, now)` — Clock-Kickoff muss >= now-15min sein; reine Datum-only-Slips nur wenn der Spieltag heute/später ist; KEINE Zeit-Info → nicht pushen. Live-Picks brauchen jetzt einen echten Clock-Kickoff < 3h alt.

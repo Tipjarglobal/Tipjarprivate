@@ -8897,16 +8897,31 @@ async def _purge_and_refresh_code_reads() -> dict:
     BEFORE the ingest filter existed, and (2) re-apply the latest owner rules to still-open reads
     (e.g. 'Falkirk nicht zweimal' → 'Falkirk Unter 2.5 Tore') so rule changes propagate WITHOUT a
     re-scan. AI/async reads (Porto builder, straight-win +1.5) are left untouched."""
-    removed = reinterp = 0
+    removed = reinterp = healed = 0
+    now_dt = datetime.now(timezone.utc)
     cur = await db.code_reads.find(
         {}, {"_id": 0, "id": 1, "home": 1, "away": 1, "league": 1, "code_market": 1,
-             "our_market": 1, "read": 1, "outcome": 1, "rooted": 1}).to_list(500)
+             "our_market": 1, "read": 1, "outcome": 1, "rooted": 1,
+             "kickoff": 1, "score": 1, "settled_at": 1}).to_list(500)
     for r in cur:
         home, away = r.get("home") or "", r.get("away") or ""
         if _team_or_league_blocked(home, away, r.get("league") or ""):
             await db.code_reads.delete_one({"id": r["id"]})
             removed += 1
             continue
+        # Owner 2026-08: a match that has NOT kicked off yet must NEVER carry a final score/outcome.
+        # A premature or wrong-fixture settlement (e.g. unparseable kickoff → graded against the wrong
+        # game, showing German scorers on an Argentinian match) is self-healed here: strip the bogus
+        # result so the read snaps straight back to ACTIVE.
+        ko = _parse_kickoff(r.get("kickoff"))
+        if ko is not None and ko > now_dt + timedelta(minutes=1) and \
+                (r.get("score") or r.get("outcome") or r.get("settled_at")):
+            await db.code_reads.update_one({"id": r["id"]}, {
+                "$unset": {"score": "", "outcome": "", "goal_minutes": "", "code_outcome": "",
+                           "settled_at": "", "fixture_id": ""},
+                "$set": {"cr_settle_attempts": 0}})
+            healed += 1
+            r["outcome"] = None  # let the note / re-interpret steps below still apply
         if r.get("outcome"):  # settled → don't re-interpret, only blacklist-purge applies
             continue
         if r.get("rooted"):  # owner rooted the note into this read → locked, never re-interpret
@@ -8934,7 +8949,7 @@ async def _purge_and_refresh_code_reads() -> dict:
             "alt_market": fresh.get("alt_market"), "reason": fresh["reason"],
             "pattern": fresh.get("pattern"), "stars": fresh.get("stars", 0)}})
         reinterp += 1
-    return {"removed": removed, "reinterpreted": reinterp}
+    return {"removed": removed, "reinterpreted": reinterp, "healed": healed}
 
 
 @api_router.get("/code-reading")
@@ -8960,9 +8975,12 @@ async def code_reading():
         ko = _parse_kickoff(r.get("kickoff"))
         created = _parse_kickoff(r.get("created_at"))
         stale = created is not None and (now_dt - created) > timedelta(hours=10)
-        is_over = (r.get("outcome") in ("won", "lost", "info")) or bool(r.get("score")) \
-            or (ko is not None and ko + grace < now_dt) \
-            or (ko is None and stale)
+        # A game that hasn't kicked off yet is ALWAYS active — never show a future match as finished.
+        not_started = ko is not None and ko > now_dt
+        is_over = (not not_started) and (
+            (r.get("outcome") in ("won", "lost", "info")) or bool(r.get("score"))
+            or (ko is not None and ko + grace < now_dt)
+            or (ko is None and stale))
         (finished if is_over else active).append(r)
     return {"count": len(active), "reads": active, "finished": finished}
 
@@ -9305,14 +9323,22 @@ async def settle_code_reads() -> dict:
             created = datetime.fromisoformat(r["created_at"])
         except Exception:
             created = now
-        ref = ko or created
-        if ref.tzinfo is None:
-            ref = ref.replace(tzinfo=timezone.utc)
-        if now - ref < timedelta(hours=2):
-            continue  # match not finished yet
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        # Owner 2026-08: NEVER settle before the match is actually over. If the kickoff parses,
+        # require it to be >2h in the past. If the kickoff string is UNPARSEABLE we must NOT fall
+        # back to created_at (that grades a game that hasn't even started yet against the wrong
+        # fixture — Gimnasia/Everton bug) — only settle such reads once they're clearly ancient.
+        if ko is not None:
+            if now - ko < timedelta(hours=2):
+                continue  # not finished yet (or not even kicked off)
+        else:
+            if now - created < timedelta(hours=18):
+                continue
         home, away = r["home"], r["away"]
         tid = await resolve_team_id(home)
         oid = await resolve_team_id(away)
+        ref = ko or created
         dates = sorted({ref.date().isoformat(), (ref + timedelta(days=1)).date().isoformat(),
                         created.date().isoformat()})
         fx = find_finished_fixture(tid, away, dates, oid) if tid else None
