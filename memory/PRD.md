@@ -1178,3 +1178,19 @@ Allgemein: am Ende KEINE aufgedrängten Feature-Vorschläge/Rückfragen mehr, we
 Owner-Kontext: Beschwerde über "Easy = Challenge + 1 Lotto-Spiel" (Club Brugge BTTS) → Admin kann jetzt
 das Lotto-Leg ODER den ganzen Schein entfernen, und es bleibt weg. Bodø-Frühtor (vor 30. Min) als
 Risk-Banker-Kandidat notiert. HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## Update 2026-06 (18) — Codemining: Endergebnis + "Beendet"-Tab + Homepage-Zähler
+Owner-Wünsche (Codemining-Feed):
+1. **Endergebnis auf jedes beendete Spiel**: `settle_code_reads` holt jetzt für ALLE beendeten Reads
+   (Counter UND No-Bet) das Schlussergebnis und speichert `score` (No-Bet → outcome="info", nur Score).
+   Frontend zeigt bei Counter "gewonnen/verloren X-Y", bei No-Bet eine "🏁 Endergebnis: X-Y"-Pille.
+2. **"Beendet"-Tab**: `/code-reading` liefert jetzt `{count, reads(active), finished}` — beendete Spiele
+   (Anstoß+150min vorbei ODER outcome/score gesetzt) werden NICHT mehr gelöscht, sondern in `finished`
+   verschoben. Frontend (CodeReading.jsx): Tabs "Aktiv"/"Beendet" (code-tab-active/-done), beendete Karten
+   mit Endergebnis. i18n de/en/el (tabActive/tabDone/endResult).
+3. **Homepage-Zähler**: `/tips/counts` `codereading` zählt nur noch AKTIVE Reads (nicht beendete) — sobald
+   ein Spiel in "Beendet" wandert, zählt die Badge es nicht mehr.
+GETESTET: Endpoint-Split (aktiv vs. finished mit Scores für Counter+No-Bet) + Screenshot ("Beendet"-Tab
+zeigt Widzew 0-0, Rangers 1-1 NO BET, LASK 3-0 NO BET, Sparta 3-1 etc.; Badge "Codemining 8" = ACTIVE).
+Owner-Feedback notiert (Widzew Unter 2.5 Treffer, Rangers 1-1 No-Bet korrekt). HINWEIS: live erst nach
+"Save to GitHub → Deploy".

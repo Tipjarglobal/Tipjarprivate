@@ -96,3 +96,9 @@ n>=5 αλλιώς 1, n-2). Ρίσκο-banker δομή = ελεύθερη επι�
 - 2026-06 (Ergänzung): Owner: "Bodø trifft bis zur 30. Minute" kann man als RISK-BANKER probieren.
   → Kandidat für master_riskparade / Risk-Banker: Bodø/Glimt Heimspiel "Tor vor 30. Min" (@~1.30-1.5)
   als risk-banker-Bein testen (nur wenn abrechenbar via API-Football HZ/Minute-Events).
+
+## Codemining Owner-Feedback (bestätigte Treffer)
+- 2026-06: Widzew Łódź (Wisla Płock – Widzew) endete 0-0. Owner nahm "Unter 2.5" (Gegen-Pick) → gewonnen.
+  Counter-Read für "S2 + Gesamtzahl 2 Unter 2.5 Nein" (Auswärts muss 3+ treffen) → deckeln auf Unter 2.5/3.5.
+- 2026-06: Dundee United – Rangers endete 1-1. Owner: "no bet 2 war sehr richtig" → NO-BET auf glatten
+  Rangers-Sieg (1X2/Sieg2) war korrekt. NO-BET-Logik für glatte Siege bestätigt.

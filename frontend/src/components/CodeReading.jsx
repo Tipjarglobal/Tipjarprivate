@@ -37,6 +37,7 @@ const L = {
     vVeto: "herabgestuft", vBoost: "bewährt", vOk: "aktiv",
     noLearn: "Noch keine abgerechneten Daten — sobald Spiele fertig sind, lernt das System hier.",
     games: "Spiele",
+    tabActive: "Aktiv", tabDone: "Beendet", endResult: "Endergebnis",
   },
   el: {
     title: "Codemining",
@@ -68,6 +69,7 @@ const L = {
     vVeto: "υποβαθμισμένο", vBoost: "δοκιμασμένο", vOk: "ενεργό",
     noLearn: "Δεν υπάρχουν ακόμη δεδομένα — το σύστημα μαθαίνει μόλις τελειώσουν αγώνες.",
     games: "αγώνες",
+    tabActive: "Ενεργά", tabDone: "Τελείωσαν", endResult: "Τελικό σκορ",
   },
   en: {
     title: "Codemining",
@@ -99,6 +101,7 @@ const L = {
     vVeto: "downgraded", vBoost: "proven", vOk: "active",
     noLearn: "No settled data yet — the system learns here once games finish.",
     games: "games",
+    tabActive: "Active", tabDone: "Finished", endResult: "Final score",
   },
 };
 
@@ -129,6 +132,8 @@ export function CodeReading() {
   const t = L[lang] || L.en;
   const fl = FL[lang] || FL.en;
   const [reads, setReads] = useState([]);
+  const [finished, setFinished] = useState([]);
+  const [crTab, setCrTab] = useState("active");
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -136,14 +141,14 @@ export function CodeReading() {
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const trReason = useProseTranslations(reads.map((r) => r.reason).filter(Boolean), lang);
+  const trReason = useProseTranslations([...reads, ...finished].map((r) => r.reason).filter(Boolean), lang);
   const trText = (txt) => {
     if (!txt) return txt;
     return lang === "de" ? txt : (trReason(txt) !== txt ? trReason(txt) : localizeProse(toLatin(txt), i18nT, lang));
   };
 
   const load = () => api.get("/code-reading")
-    .then(({ data }) => setReads(data.reads || []))
+    .then(({ data }) => { setReads(data.reads || []); setFinished(data.finished || []); })
     .catch(() => {})
     .finally(() => setLoading(false));
 
@@ -303,13 +308,24 @@ export function CodeReading() {
         </div>
       )}
 
+      {/* Aktiv / Beendet tabs */}
+      <div className="flex items-center gap-2 mb-4" data-testid="code-reading-tabs">
+        {[["active", t.tabActive, reads.length], ["done", t.tabDone, finished.length]].map(([v, lbl, n]) => (
+          <button key={v} onClick={() => setCrTab(v)} data-testid={`code-tab-${v}`}
+            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wide border transition-colors ${crTab === v ? "bg-volt text-void border-volt" : "bg-void/40 text-zinc-300 border-zinc-700 hover:text-white"}`}>
+            {v === "done" && <Check size={12} />}{lbl}
+            <span className={`text-[10px] font-mono rounded-full px-1.5 ${crTab === v ? "bg-black/25 text-void" : "bg-zinc-800 text-zinc-400"}`}>{n}</span>
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-volt" /></div>
-      ) : reads.length === 0 ? (
-        <p data-testid="code-reading-empty" className="text-center text-zinc-500 py-12 text-sm">{t.empty}</p>
+      ) : (crTab === "active" ? reads : finished).length === 0 ? (
+        <p data-testid="code-reading-empty" className="text-center text-zinc-500 py-12 text-sm">{crTab === "done" ? "—" : t.empty}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {reads.map((r) => {
+          {(crTab === "active" ? reads : finished).map((r) => {
             const noBet = r.read === "no_bet";
             const settled = r.outcome === "won" || r.outcome === "lost";
             return (
@@ -339,6 +355,12 @@ export function CodeReading() {
                   <span className="opacity-70">{t.code}:</span> <span className="line-through">{localizeMarket(r.code_market, i18nT)}</span>
                   {r.code_odds ? ` @ ${r.code_odds}` : ""}
                 </p>
+                {r.score && r.outcome !== "won" && r.outcome !== "lost" && (
+                  <div data-testid={`code-read-score-${r.id}`}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-black text-white bg-zinc-800 border border-zinc-600 rounded-full px-2.5 py-1 mb-2">
+                    🏁 {t.endResult}: {r.score}
+                  </div>
+                )}
                 {noBet ? (
                   <div className="inline-flex items-center gap-1.5 text-xs font-black text-zinc-400 bg-zinc-800/60 border border-zinc-700 rounded-full px-2.5 py-1">
                     <Ban size={13} /> {t.nobet}

@@ -954,10 +954,21 @@ async def tips_counts():
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
     except Exception:
         systems_n = 0
-    # Codemining: how many codes are currently mined pre-game (active, not yet settled).
+    # Codemining: count only ACTIVE (upcoming/in-play) reads — finished games moved to the
+    # 'Beendet' tab must no longer inflate the homepage badge (owner 2026-06).
     _now_iso = datetime.now(timezone.utc).isoformat()
-    codereading = await db.code_reads.count_documents(
-        {"expires_at": {"$gt": _now_iso}, "outcome": {"$exists": False}})
+    _cr_now = datetime.now(timezone.utc)
+    _cr_docs = await db.code_reads.find(
+        {"expires_at": {"$gt": _now_iso}}, {"_id": 0, "kickoff": 1, "outcome": 1, "score": 1}).to_list(300)
+    _cr_grace = timedelta(minutes=150)
+    codereading = 0
+    for _r in _cr_docs:
+        if _r.get("outcome") in ("won", "lost") or _r.get("score"):
+            continue
+        _ko = _parse_kickoff(_r.get("kickoff"))
+        if _ko is not None and _ko + _cr_grace < _cr_now:
+            continue
+        codereading += 1
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
             "community_live": community_live, "codereading": codereading,
             "systems": systems_n, "smart": smart, "settled": settled, "master": master,
@@ -8511,20 +8522,22 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
 
 @api_router.get("/code-reading")
 async def code_reading():
-    """The Code-Reading channel: our counter-reads of SpinBetter's accumulator of the day."""
+    """The Code-Reading channel: our counter-reads of the bookies' accumulator of the day.
+    Split into ACTIVE (upcoming/in-play) and FINISHED (match over) so the app can show a
+    'Beendet' tab with the final score on every past game — and the homepage badge only
+    counts the active ones (owner 2026-06)."""
     now_dt = datetime.now(timezone.utc)
     now = now_dt.isoformat()
     reads = await db.code_reads.find(
-        {"expires_at": {"$gt": now}}, {"_id": 0}).sort("created_at", -1).to_list(60)
-    # owner 2026-07-31: DROP reads whose match is already OVER (kickoff + 150 min). Finished
-    # games (e.g. yesterday's Europa-Conference fixtures) must NOT linger in the smart-picks
-    # channel — even if a stale/misdated accumulator re-scan re-creates them. Reads without a
-    # parseable kickoff are kept (can't judge them safely).
+        {"expires_at": {"$gt": now}}, {"_id": 0}).sort("created_at", -1).to_list(120)
     grace = timedelta(minutes=150)
-    fresh = [r for r in reads
-             if (_parse_kickoff(r.get("kickoff")) is None
-                 or _parse_kickoff(r.get("kickoff")) + grace > now_dt)]
-    return {"count": len(fresh), "reads": fresh}
+    active, finished = [], []
+    for r in reads:
+        ko = _parse_kickoff(r.get("kickoff"))
+        is_over = (r.get("outcome") in ("won", "lost")) or bool(r.get("score")) \
+            or (ko is not None and ko + grace < now_dt)
+        (finished if is_over else active).append(r)
+    return {"count": len(active), "reads": active, "finished": finished}
 
 
 _CR_SCAN_JOBS: dict = {}  # job_id -> {status, scanned, reads, note/error}
@@ -8646,8 +8659,11 @@ async def settle_code_reads() -> dict:
     if not API_FOOTBALL_KEY:
         return {"ok": False, "settled": 0}
     now = datetime.now(timezone.utc)
+    # Grade counter-picks AND fetch the final score for NO-BET games too, so every finished
+    # game shows an 'Endergebnis' in the Beendet tab (owner 2026-06).
     reads = await db.code_reads.find(
-        {"read": "counter", "outcome": {"$exists": False}, "our_market": {"$nin": [None, ""]}},
+        {"score": {"$exists": False},
+         "$or": [{"read": "counter", "our_market": {"$nin": [None, ""]}}, {"read": "no_bet"}]},
         {"_id": 0}).sort("created_at", 1).to_list(120)
     settled = 0
     date_cache: dict = {}
@@ -8679,13 +8695,18 @@ async def settle_code_reads() -> dict:
         if not fx:
             await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
             continue
-        outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
-        if outcome not in ("won", "lost"):
-            await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
-            continue
-        await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-            "outcome": outcome, "score": f"{fx.get('home_goals')}-{fx.get('away_goals')}",
-            "settled_at": now.isoformat()}})
+        score = f"{fx.get('home_goals')}-{fx.get('away_goals')}"
+        if r.get("read") == "counter" and r.get("our_market"):
+            outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
+            if outcome not in ("won", "lost"):
+                await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
+                continue
+            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+                "outcome": outcome, "score": score, "settled_at": now.isoformat()}})
+        else:
+            # NO-BET: no bet outcome, just record the final score for the Beendet tab.
+            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+                "outcome": "info", "score": score, "settled_at": now.isoformat()}})
         settled += 1
     return {"ok": True, "settled": settled, "checked": len(reads)}
 
