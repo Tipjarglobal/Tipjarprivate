@@ -1,5 +1,15 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX: Single-Picks — nur EIN Pick pro Spiel (Risk > Value > Banker)
+- Owner: dasselbe Spiel wurde 3-4× gepostet (Risk + Value + Banker) → Single-Tab überflutet. „Wenn du den Risk gegeben hast, ist fertig."
+- **Ursache:** `_dedupe_hq_tips()` (a) deduplizierte absichtlich PRO Kategorie (`|{_cat}`), so blieb pro Spiel je ein Risk/Value/Banker; UND (b) wurde **nie aufgerufen** (toter Code).
+- **Fix:**
+  1. Dedup-Schlüssel auf „core" umgestellt: risk/value/banker eines Spiels kollabieren zu EINEM Pick; behalten wird das Größte (Rang Risk 3 > Value 2 > Banker 1, dann höchste Quote). Gifts/mental/banger bleiben separate Tabs.
+  2. `await _dedupe_hq_tips()` in `master_loop` eingehängt (läuft alle 120s, DB-only, unabhängig vom API-Key) + Logging.
+- Verifiziert (DB e2e): Spiel mit risk/value/banker → nur Risk überlebt; Gift bleibt; zusätzlich 7 echte Alt-Duplikate der Preview-DB entfernt.
+- ⚠️ Wirkt erst nach Deploy; danach räumt der Loop den Bestand binnen ~2 Min auf.
+
+
 ## 2026-08-01 — Vierer-Live-Kombi jetzt VORMATCH (~25 Min vor Anstoß)
 - Owner: die 4-Bein-Live-Kombi soll spielbar sein → nicht mehr aus laufenden Spielen (Linie schon erfüllt = nicht mehr wettbar), sondern **vor Anstoß**.
 - Neu in `live_autopost()` (server.py): Kombi wird aus gespeicherten Forebet/Predictz-Vorhersagen (`match_predictions`, quota-frei) gebaut und gepostet, sobald das **früheste** gewählte Spiel ~25 Min vor Anstoß ist. Alle 4 Spiele liegen in einer **3h-Spanne** (Fenster ab dem Anchor).

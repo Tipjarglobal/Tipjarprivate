@@ -5128,6 +5128,19 @@ async def _dedupe_hq_tips() -> int:
     survivors = {d["id"]: d for d in docs}
     to_delete: set = set()
 
+    # owner 2026-08: RISK is the biggest → keep it and drop Value/Banker for the SAME match.
+    _KEEP_RANK = {"risk": 3, "value": 2, "banker": 1}
+    _SPECIAL = ("gift", "gifts", "mental", "banger", "avatar")
+
+    def _cat_of(d):
+        return (d.get("category") or d.get("pick_type") or "value").lower()
+
+    def _grp(d):
+        # collapse risk/value/banker of one match into a single "core" pick; keep gifts/mental
+        # /banger as their own separate tabs (those are not the flooding the owner complained about).
+        c = _cat_of(d)
+        return c if c in _SPECIAL else "core"
+
     def dedup_by(keyfn):
         groups: dict = {}
         for d in survivors.values():
@@ -5140,22 +5153,19 @@ async def _dedupe_hq_tips() -> int:
         for arr in groups.values():
             if len(arr) < 2:
                 continue
-            # keep highest risk: VALUE first, then highest odds
-            arr.sort(key=lambda d: (d.get("pick_type") == "value", _odd(d)), reverse=True)
+            # keep the BIGGEST: Risk > Value > Banker, then highest odds
+            arr.sort(key=lambda d: (_KEEP_RANK.get(_cat_of(d), 0), _odd(d)), reverse=True)
             for d in arr[1:]:
                 to_delete.add(d["id"])
 
     def _mt(d):
         return (d.get("match_time") or "").strip()
 
-    def _cat(d):
-        return d.get("category") or d.get("pick_type") or "value"
-
-    # dedupe PER CATEGORY so Banker / Value / Risk each keep their own pick per match
+    # ONE core pick per match (Risk beats Value beats Banker). Gifts/mental/banger stay separate.
     # 1) exact both-team key  2) same kickoff + same home  3) same kickoff + same away
-    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_cat(d)}")
-    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}|{_cat(d)}" if _mt(d) and d.get("home_team") else None)
-    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}|{_cat(d)}" if _mt(d) and d.get("away_team") else None)
+    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_grp(d)}")
+    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}|{_grp(d)}" if _mt(d) and d.get("home_team") else None)
+    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}|{_grp(d)}" if _mt(d) and d.get("away_team") else None)
 
     if to_delete:
         await db.tips.delete_many({"id": {"$in": list(to_delete)}})
@@ -12117,6 +12127,12 @@ async def master_loop():
                         or hotc.get("posted") or risk.get("posted") or gifts2.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
                     logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; gifts2 {gifts2}; challenge {chal}")
+            # Owner 2026-08: exactly ONE single-game pick per match (Risk > Value > Banker) —
+            # kills the Risk+Value+Banker triple-posting of the same fixture. DB-only, so it runs
+            # every cycle regardless of the API-Football key.
+            deduped = await _dedupe_hq_tips()
+            if deduped:
+                logger.info(f"Master: deduped {deduped} redundant single picks (one per match)")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)
