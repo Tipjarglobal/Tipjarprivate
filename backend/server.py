@@ -8537,10 +8537,23 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
             return _code_apply_learn({
                 "read": "counter", "our_market": f"{tgt} Über 0.5 Tore",
                 "alt_market": "Beide Teams treffen", "code": market, "pattern": "team_total_under_low",
-                "reason": f"Code sagt {tgt} trifft kaum ({market}). Wir gehen dagegen: {tgt} Über 0.5 Tore — vor allem zuhause / wenn der Gegner ein wichtigeres Spiel vor der Brust hat.",
+                "reason": f"Code sagt {tgt} trifft kaum ({market}) — eine Falle. {tgt} trifft trotzdem: der Favorit kassiert hier ein Tor. Wir gehen dagegen mit {tgt} Über 0.5 Tore.",
                 "stars": 7})
         return {"read": "no_bet", "code": market, "pattern": "team_total_under_high",
                 "reason": f"Code deckelt {tgt} schon hoch (Unter {line}) — kein Gegenwert. No Bet."}
+
+    # (Team-total OVER) Code needs a SPECIFIC team to score 2+/3+ ('Gesamtzahl 1 1.5 Über',
+    # 'Team 1 Über 1.5'). Owner-Regel (Falkirk): sichere Gegen-Deckelung → '<Team> Unter 2.5 Tore'
+    # (das Team läuft NICHT Amok). Niemals hier 'Über 0.5' spielen.
+    if team is not None and re.search(r"team\s*[12]|individual|einzel|gesamtzahl\s*[12]\b", m) \
+            and any(k in m for k in ("über", "ueber", "over")):
+        dm = re.search(r"(\d+\.\d+)", m)
+        if dm and float(dm.group(1)) >= 1.5:
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"{team} Unter 2.5 Tore",
+                "alt_market": f"{team} Unter 1.5 Tore", "code": market, "pattern": "team_total_over_counter",
+                "reason": f"Code erwartet von {team} 2+ Tore (über {dm.group(1)}). Wir gehen sicher dagegen: {team} trifft nicht so oft → {team} Unter 2.5 Tore.",
+                "stars": 8})
 
     # (a) SpinBetter: a team WON'T score (win + 'Über 0.5 – Nein' / clean sheet) → we take that
     #     team TO score / BTTS. "Nicht dass es 0:1 endet."
@@ -8667,10 +8680,13 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "1) Keep ONLY what is LOGICAL / clearly makes sense. Prefer one safe single over combos. If nothing looks logical → NO BET.\n"
         "CORE IDEA: the code always HINTS at something real (a team will score, the game is open, a side is capped). "
         "NEVER copy their narrow/exotic bet — take the SAFE, BROADER, LOGICAL version of that hint as ONE single.\n"
-        "2) If they cap a TEAM low or back a team to just score (e.g. 'Team Total Under 1.5', 'Team Over 0.5', "
-        "'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — a team scoring at least once "
-        "is usually the logical part. Only choose NO BET here if that team faces a very strong defensive favourite likely to shut them out.\n"
-        "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → the DIRECT counter is the SAME line un-negated: '<Team> Unter 2.5 Tore' (NOT Unter 3.5 — at exactly 3 both sides would win).\n"
+        "2) If they cap a TEAM low or back a team to just score (e.g. 'Team Total Under 0.5/1.5', 'Team Over 0.5', "
+        "'Gesamtzahl 2 0.5 Unter', 'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — the "
+        "team scores at least once. Owner rule: even against a strong defensive favourite that favourite WILL concede a "
+        "goal here → do NOT pick NO BET for this (that favourite ist EXAKT der, der ein Tor kassiert).\n"
+        "3) If they NEED a team to score 2+ or 3+ ('Team Total Over 1.5', 'Gesamtzahl 1 1.5 Über', "
+        "'Team Total Under 2.5 – No') → counter with a SAFE cap: '<Team> Unter 2.5 Tore' (the team won't run riot). "
+        "NEVER play 'Über 0.5' here, and NOT 'Unter 3.5' (at exactly 3 both sides would win).\n"
         "4) WHOLE-MATCH total: if the code implies the match goes OVER 1.5 goals (e.g. 'Over 1.5', "
         "'exact number 1 or fewer – No', 'genaue Zahl 1 oder weniger – Nein') → KEEP 'Über 1.5 Tore' "
         "as a very safe single (the cleanest line there is). "
@@ -8728,7 +8744,8 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
 
 
 _REINTERP_RULES = {"team_not_twice", "match_over_clean", "match_over_asian2",
-                   "goal_window_broaden", "underdog_plus15_fav_minus1"}
+                   "goal_window_broaden", "underdog_plus15_fav_minus1",
+                   "team_total_under_low", "team_total_over_cap", "team_total_over_counter"}
 
 
 async def _purge_and_refresh_code_reads() -> dict:

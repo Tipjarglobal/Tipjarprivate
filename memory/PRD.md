@@ -1317,3 +1317,28 @@ GETESTET: German-Russia-Block + Spartak-Trnava-Ausnahme, Purge entfernt Russen-R
 re-interpretiert → „Falkirk Unter 2.5 Tore". Endpoint 200.
 HINWEIS: greift live erst nach „Save to GitHub → Deploy"; danach heilen bestehende Einträge beim
 nächsten Öffnen des Codemining automatisch.
+
+## Update 2026-08 (27) — Team-Total-Codes korrekt + Selbstheilung erweitert
+- Team-Total OVER Handler NEU: 'Gesamtzahl 1 1.5 Über' / 'Team 1 Über 1.5' (Buchmacher braucht Team 2+)
+  → Gegen-Pick '<Team> Unter 2.5 Tore' (pattern team_total_over_counter, ★8). Erfordert explizite
+  Team-Nummer, damit Ganzspiel 'Gesamtzahl 3.5 Über' weiter → Asiatisch Über 2.0 (match_over_asian2).
+- Team-Total UNDER low ('Gesamtzahl 2 0.5 Unter' = Torreense trifft nicht) → '<Team2> Über 0.5 Tore'
+  (Favorit KASSIERT ein Tor). Reason geschärft ('Porto wird Tor kassieren'). Vision-Prompt Regel 2+3
+  entsprechend: kein NO BET mehr für den Favoriten-Shutout-Fall; Team-Over → Unter 2.5.
+- Re-Interpretations-Whitelist erweitert: team_total_under_low, team_total_over_cap,
+  team_total_over_counter → bestehende (falsche AI-)Reads heilen beim nächsten Codemining-Load.
+GETESTET: Porto→'S.C.U. Torreense Über 0.5' (★7), Falkirk→'FC Falkirk Unter 2.5' (★8),
+Salzburg 'über 3.5'/'Gesamtzahl 3.5 Über'→'Asiatisch Über 2.0' (★10); Selbstheilung von 3 synthetischen
+Falsch-Reads bestätigt. Endpoint 200.
+HINWEIS: Screenshot war Produktion — greift live erst nach 'Save to GitHub → Deploy', danach Auto-Korrektur.
+
+## Update 2026-08 (28) — Sprache: Englisch primär, Codemining-Analysen sprachabhängig
+- Standardsprache ist bereits Englisch (i18n.js Fallback "en"). Codemining-Analysen (reason) werden
+  über die bestehende Pipeline /api/i18n/translate (quellsprachen-agnostisch, DE-Quelle) in die gewählte
+  Sprache übersetzt: EN standardmäßig, DE nur bei Deutsch, EL nur bei Griechisch. In der PREVIEW verifiziert
+  (Screenshot: Motor-Lublin/Widzew/Bodø-Reasons erscheinen auf Englisch bei lang=en).
+- Fix kleiner DE-Rest: alt_market ("Aggressiv: …") läuft jetzt ebenfalls durch die Prosa-Übersetzung
+  (trText) + "alt:"-Label lokalisiert (FL.alt), damit keine deutschen Wörter mehr durchrutschen.
+HINWEIS: Screenshots des Owners stammen von Produktion (tipjarglobal.com) — dort greift erst der letzte
+Deploy; Sprachauswahl muss auf English stehen. Kein Architektur-Wechsel auf Englisch-als-Quelle nötig,
+da die DE→Ziel-Übersetzung genau das gewünschte Verhalten liefert.

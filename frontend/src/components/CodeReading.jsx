@@ -117,9 +117,9 @@ const PAT_LABEL = {
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
 const FL = {
-  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen" },
-  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete" },
-  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή" },
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ." },
 };
 
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
@@ -141,7 +141,8 @@ export function CodeReading() {
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const trReason = useProseTranslations([...reads, ...finished].map((r) => r.reason).filter(Boolean), lang);
+  const trReason = useProseTranslations(
+    [...reads, ...finished].flatMap((r) => [r.reason, r.alt_market]).filter(Boolean), lang);
   const trText = (txt) => {
     if (!txt) return txt;
     return lang === "de" ? txt : (trReason(txt) !== txt ? trReason(txt) : localizeProse(toLatin(txt), i18nT, lang));
@@ -391,7 +392,7 @@ export function CodeReading() {
                         </span>
                       ) : null}
                     </div>
-                    {r.alt_market && <p className="text-[11px] text-zinc-400 mt-1">alt: {formatSelection(r.alt_market, i18nT)}</p>}
+                    {r.alt_market && <p className="text-[11px] text-zinc-400 mt-1">{fl.alt}: {trText(formatSelection(r.alt_market, i18nT))}</p>}
                   </div>
                 )}
                 <p className="text-[11px] text-zinc-400 mt-2 leading-snug">{trText(r.reason)}</p>
