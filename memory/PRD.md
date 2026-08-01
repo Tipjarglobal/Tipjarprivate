@@ -1355,3 +1355,15 @@ GETESTET: Backend-Filter (Brügge past raus, Salzburg future bleibt); Screenshot
 Teams/Liga/„Today 21:30"/Pick + Swipe-Controls + Hint. Frontend kompiliert.
 HINWEIS: Avatar-Analysetext nutzt dieselbe DE→Ziel-Übersetzung wie Codemining (EN bei English).
 Live erst nach „Save to GitHub → Deploy".
+
+## Update 2026-08 (30) — Avatar 2/View, Verdict-Default, Straight-Win-Text, Salzburg
+- Master-Avatar: 2 Tipps pro Ansicht (PAGE=2), manuelles Wischen + Pfeile/Punkte/„Swipe"-Hinweis,
+  kein Auto-Rotate. Endpoint /api/master/avatar postet nur PLAYABLE (parsebarer, zukünftiger Anpfiff);
+  unparsebare/vergangene raus. Screenshot: 2 Bubbles, Teams/Liga/„Today HH:MM"/Pick.
+- Codemining FINISHED: jede Karte zeigt jetzt IMMER ein Verdict; bei unklarer Bewertung Default CORRECT.
+- Straight-Win-Begründung explizit: „Wir verzichten darauf, auf einen <Favorit>-Sieg zu tippen …"
+  (z.B. Slovan Liberec) — getestet: Slovan→Teplice +1.5, Reason nennt den abgelehnten Sieg.
+- Salzburg-Codes (über 3.5 / Gesamtzahl 3.5 Über) → „Asiatisch Über 2.0 Tore" ★10 (getestet;
+  self-heal via Re-Interpretation-Whitelist match_over_asian2).
+HINWEIS: live erst nach „Save to GitHub → Deploy"; Straight-Win aktualisiert bestehende Reads beim
+nächsten Scan (async), Totals/Team-Codes heilen beim Öffnen automatisch.

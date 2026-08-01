@@ -928,7 +928,9 @@ async def master_avatar():
     calls = []
     for d in docs:
         ko = _parse_kickoff(d.get("match_time") or "")
-        if ko and ko <= now:  # already kicked off / finished → not playable, skip
+        # PLAYABLE only: must have a parseable kickoff that is still in the future.
+        # Unparseable / past kickoffs (e.g. yesterday's Bodø/Brügge) are never posted.
+        if not ko or ko <= now:
             continue
         calls.append(d)
         if len(calls) >= 12:
@@ -8941,25 +8943,26 @@ async def _code_straightwin_decision(home: str, away: str, market: str):
                      f"der Heimsieg lohnt sich hier nicht zu kaufen." if euro else "")
         safe_15 = (n >= 4 and ratio <= 0.34) or (euro is not None and n >= 3 and ratio <= 0.5)
         if safe_15:
-            stat = f"Favorit gewann nur {big}/{n} der relevanten Spiele mit 2+ Toren" if n else "wenig Blowout-Historie"
+            stat = f"{fav_name} gewann nur {big}/{n} der relevanten Spiele mit 2+ Toren" if n else "wenig Blowout-Historie"
             return _code_apply_learn({
                 "read": "counter", "our_market": f"{dog_name} +1.5 (Handicap)",
                 "alt_market": None, "code": market, "pattern": "straightwin_dog_plus15",
-                "reason": (f"Glatten Heimsieg kaufen wir nicht. Aber {dog_name} +1.5 sieht sicher aus: "
-                           f"{stat} — verliert {dog_name} also nur knapp mit 1 Tor, ist der Einsatz zurück (Push), "
-                           f"höchstens {dog_name} verliert mit 2+.{euro_note}"),
+                "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie. "
+                           f"Stattdessen {dog_name} +1.5: {stat} — verliert {dog_name} nur knapp mit 1 Tor, ist der "
+                           f"Einsatz zurück (Push), erst ab 2+ Toren verloren.{euro_note}"),
                 "stars": 8 if euro else 7})
         if euro:
             return {"read": "no_bet", "code": market, "pattern": "straightwin_euro_nobet",
-                    "reason": (f"Glatten Heimsieg kaufen wir nicht.{euro_note} Auch {dog_name} +1.5 ist bei "
-                               f"{big}/{n} Blowout-Spielen nicht klar genug. No Bet.")}
+                    "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie.{euro_note} "
+                               f"Auch {dog_name} +1.5 ist bei {big}/{n} Blowout-Spielen nicht klar genug. No Bet.")}
         if n:
             return {"read": "no_bet", "code": market, "pattern": "straightwin_bigwin_nobet",
-                    "reason": (f"Glatten Heimsieg spielen wir nicht — und {fav_name} gewinnt zu oft deutlich "
-                               f"({big}/{n} mit 2+ Toren), daher ist auch {dog_name} +1.5 zu riskant. No Bet.")}
+                    "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie. "
+                               f"Und {fav_name} gewinnt zu oft deutlich ({big}/{n} mit 2+ Toren), daher ist auch "
+                               f"{dog_name} +1.5 zu riskant. No Bet.")}
         return {"read": "no_bet", "code": market, "pattern": "straightwin_nodata_nobet",
-                "reason": (f"Glatten Heimsieg kaufen wir nicht; für eine sichere {dog_name} +1.5-Alternative "
-                           f"fehlen belastbare H2H/Form-Daten. No Bet.")}
+                "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie; "
+                           f"für eine sichere {dog_name} +1.5-Alternative fehlen belastbare H2H/Form-Daten. No Bet.")}
     except Exception as e:
         logger.warning(f"straightwin decision failed ({home} v {away}): {e}")
         return None

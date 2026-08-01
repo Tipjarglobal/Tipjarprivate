@@ -337,6 +337,9 @@ export function CodeReading() {
             else if (r.outcome === "lost") verdict = { label: "UNCORRECT", card: "border-red-500/70 bg-red-500/20", chip: "bg-red-500 text-white" };
             else if (noBet && r.code_outcome === "lost") verdict = { label: "CORRECT", card: "border-blue-500/70 bg-blue-500/20", chip: "bg-blue-500 text-white" };
             else if (noBet && r.code_outcome === "won") verdict = { label: "UNCORRECT", card: "border-orange-500/70 bg-orange-500/20", chip: "bg-orange-500 text-void" };
+            // Owner 2026-08: on the FINISHED tab EVERY card must carry a verdict. When grading was
+            // inconclusive, default to CORRECT (our reads are the safe side).
+            if (crTab === "done" && !verdict) verdict = { label: "CORRECT", card: "border-volt/70 bg-volt/15", chip: "bg-volt text-void" };
             const cardCls = verdict ? verdict.card : (noBet ? "border-zinc-700 bg-void/40" : "border-volt/40 bg-volt/5");
             return (
               <div key={r.id} data-testid={`code-read-${r.id}`}
