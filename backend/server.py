@@ -4625,7 +4625,11 @@ TEAM_LEAGUE_BLACKLIST = ("golden", "mogadishu", "kahibah", "blumenau", "brc",
                          "lokomotiv moscow", "dynamo moscow", "dinamo moscow", "krasnodar",
                          "fc rostov", "baltika", "akhmat", "rubin kazan", "krylia sovetov",
                          "orenburg", "fakel", "pari nn", "nizhny novgorod", "khimki",
-                         "fc ural", "fc sochi", "akron togliatti", "fc dynamo makhachkala")
+                         "fc ural", "fc sochi", "akron togliatti", "fc dynamo makhachkala",
+                         # owner 2026-08: German / transliterated spellings the OCR emits
+                         # (league tagged "Russland", clubs "Moskau/Sotschi/Machatschkala"…).
+                         "russland", "russische", "moskau", "sotschi", "machatschkala",
+                         "rostow", "sankt petersburg", "st. petersburg zenit", "samara")
 
 # Owner MATCH blacklist: block ONE specific fixture only (BOTH team keywords must match).
 # Used when the teams themselves are legit clubs we must NOT ban globally (e.g. CSKA Moscow,
@@ -8698,9 +8702,10 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "EUROPA-FAKTOR: If ONE team recently (a few days ago) played a EUROPEAN match (Champions League, "
         "Europa League, Conference League), they are TIRED/rotated → the OTHER team scoring / the game "
         "opening up is even safer. Say it explicitly in the reason and rate up to 10 stars.\n"
-        "IMPORTANT: COMPLETELY OMIT any RUSSIAN game (Russian league or Russian club such as Zenit, "
-        "CSKA/Spartak/Lokomotiv/Dynamo Moscow, Krasnodar, Rostov, Baltika, Akhmat, Rubin Kazan, Sochi, "
-        "Krylia Sovetov, Orenburg, Fakel, Pari NN, Ural, Akron) — do NOT return it in legs at all.\n"
+        "IMPORTANT: COMPLETELY OMIT any RUSSIAN game (Russian league / 'Russland' / 'Russische' league or "
+        "any Russian club such as Zenit, CSKA/Spartak/Lokomotiv/Dynamo Moscow (Moskau), Krasnodar, Rostov "
+        "(Rostow), Baltika, Akhmat, Rubin Kazan, Sochi (Sotschi), Krylia Sovetov (Samara), Orenburg, Fakel, "
+        "Pari NN, Ural, Akron, Makhachkala (Machatschkala)) — do NOT return it in legs at all.\n"
         "Identify WHICH team a total refers to and put the team name into our_market. "
         "PRESERVE period info in code_market (e.g. '1. Halbzeit', '1st half', 'HT', minute). "
         "reason: a SHORT but CONCRETE explanation in GERMAN of WHY this pick is safe — name the real football reason "
@@ -8722,12 +8727,53 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         return []
 
 
+_REINTERP_RULES = {"team_not_twice", "match_over_clean", "match_over_asian2",
+                   "goal_window_broaden", "underdog_plus15_fav_minus1"}
+
+
+async def _purge_and_refresh_code_reads() -> dict:
+    """Owner 2026-08: (1) remove any BLACKLISTED (e.g. Russian) codemining entry that was stored
+    BEFORE the ingest filter existed, and (2) re-apply the latest owner rules to still-open reads
+    (e.g. 'Falkirk nicht zweimal' → 'Falkirk Unter 2.5 Tore') so rule changes propagate WITHOUT a
+    re-scan. AI/async reads (Porto builder, straight-win +1.5) are left untouched."""
+    removed = reinterp = 0
+    cur = await db.code_reads.find(
+        {}, {"_id": 0, "id": 1, "home": 1, "away": 1, "league": 1, "code_market": 1,
+             "our_market": 1, "read": 1, "outcome": 1}).to_list(500)
+    for r in cur:
+        home, away = r.get("home") or "", r.get("away") or ""
+        if _team_or_league_blocked(home, away, r.get("league") or ""):
+            await db.code_reads.delete_one({"id": r["id"]})
+            removed += 1
+            continue
+        if r.get("outcome"):  # settled → don't re-interpret, only blacklist-purge applies
+            continue
+        mkt = r.get("code_market") or ""
+        if not mkt or _is_straightwin_code(mkt):
+            continue
+        fresh = _code_read_interpret(mkt, home, away)
+        if fresh.get("pattern") not in _REINTERP_RULES:
+            continue
+        if fresh.get("read") == r.get("read") and (fresh.get("our_market") or None) == (r.get("our_market") or None):
+            continue
+        await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+            "read": fresh["read"], "our_market": fresh.get("our_market"),
+            "alt_market": fresh.get("alt_market"), "reason": fresh["reason"],
+            "pattern": fresh.get("pattern"), "stars": fresh.get("stars", 0)}})
+        reinterp += 1
+    return {"removed": removed, "reinterpreted": reinterp}
+
+
 @api_router.get("/code-reading")
 async def code_reading():
     """The Code-Reading channel: our counter-reads of the bookies' accumulator of the day.
     Split into ACTIVE (upcoming/in-play) and FINISHED (match over) so the app can show a
     'Beendet' tab with the final score on every past game — and the homepage badge only
     counts the active ones (owner 2026-06)."""
+    try:
+        await _purge_and_refresh_code_reads()
+    except Exception as e:
+        logger.warning(f"code-reading purge/refresh failed: {e}")
     now_dt = datetime.now(timezone.utc)
     now = now_dt.isoformat()
     reads = await db.code_reads.find(

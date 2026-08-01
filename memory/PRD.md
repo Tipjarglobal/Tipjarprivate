@@ -1299,3 +1299,21 @@ HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
 OFFEN (nächster Lotto-Schritt): Team-„Über 0.5"-Fallacy (ein Team, das nie trifft, trifft nicht plötzlich)
 per Torquote-Check filtern; „Unter 3.5/4.5"-Padding aus Same-Game-Buildern (Pfeffer) entfernen.
 HINWEIS: live erst nach „Save to GitHub → Deploy".
+
+## Update 2026-08 (26) — Selbstheilende Codemining-Bereinigung + Verdict-Farbfix
+- ROOT CAUSE „sehe noch russische Spiele / Falkirk falsch": Filter/Regeln griffen nur bei NEUEN Scans;
+  bereits gespeicherte Reads wurden nie aktualisiert/entfernt.
+- NEU `_purge_and_refresh_code_reads()` läuft bei JEDEM GET /api/code-reading (und ist idempotent):
+  (1) löscht ALLE geblacklisteten (russischen) code_reads – auch bereits beendete;
+  (2) re-interpretiert offene Reads mit den neuesten Owner-Regeln (Whitelist: team_not_twice,
+      match_over_clean, match_over_asian2, goal_window_broaden, underdog_plus15_fav_minus1) →
+      z.B. „Falkirk nicht zweimal" wird zu „Falkirk Unter 2.5 Tore" OHNE Re-Scan. AI/async-Reads
+      (Porto-Builder, Straight-Win +1.5) bleiben unangetastet (straight-win & non-whitelist übersprungen).
+- Russland-Blacklist um DEUTSCHE/transliterierte Varianten erweitert: russland, russische, moskau,
+  sotschi, machatschkala, rostow, sankt petersburg, samara (+ Vision-Prompt aktualisiert).
+- Verdict-Farbfix (No-Bet Straight-Win): code_outcome wird jetzt über einen expliziten „<Team> Sieg"
+  bewertet (Rangers→lost=blau CORRECT, LASK→won=orange UNCORRECT). Im UI bestätigt.
+GETESTET: German-Russia-Block + Spartak-Trnava-Ausnahme, Purge entfernt Russen-Read, Falkirk
+re-interpretiert → „Falkirk Unter 2.5 Tore". Endpoint 200.
+HINWEIS: greift live erst nach „Save to GitHub → Deploy"; danach heilen bestehende Einträge beim
+nächsten Öffnen des Codemining automatisch.
