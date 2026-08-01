@@ -8461,6 +8461,18 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
     side = _code_side(market, home, away)
     team = home if side == "home" else away if side == "away" else None
 
+    # (owner 2026-08) Code says a team WON'T score twice ('nicht zweimal', 'score twice – No',
+    # '2+ Tore – Nein') → they cap the team at max 1 goal. Unser sicherer Read: dieselbe Seite mit
+    # etwas Luft nach oben → '<Team> Unter 2.5 Tore' (bei Falkirk exakt so vom Owner gewünscht).
+    if re.search(r"zweimal|zwei\s*mal|2\s*mal|twice", m) and \
+            any(k in m for k in ("nicht", "nein", " no", "kein", "won't", "wont", "won t")):
+        tgt = team or home
+        return _code_apply_learn({
+            "read": "counter", "our_market": f"{tgt} Unter 2.5 Tore",
+            "alt_market": f"{tgt} Unter 1.5 Tore", "code": market, "pattern": "team_not_twice",
+            "reason": f"Code sagt: {tgt} trifft nicht zweimal (höchstens 1 Tor). Wir gehen sicher dagegen ab: {tgt} Unter 2.5 Tore.",
+            "stars": 7})
+
     # (Team-total) SpinBetter bets a TEAM stays low / goes 3+ → owner counter-reads.
     tt = _code_team_total_under(market)
     if tt is not None:
@@ -8546,6 +8558,11 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "OR an early draw/result at minute 15-30 → KEEP 'Über 0.5 Tore 1. Halbzeit' (they expect an early goal — usually a safe single). stars 8-10.\n"
         "7) A team's LAST goal 55-90' / scores late → '<Team> trifft bis zur 60. Minute'.\n"
         "8) 'Team does NOT score' / 'Over 0.5 – No' → play against: '<Team> trifft (Über 0.5 Tore)'.\n"
+        "8b) '<Team> won't score twice' / '<Team> nicht zweimal' / '<Team> to score 2+ – No' / "
+        "'<Team> individual Over 1.5 – No' (they cap the team at max 1 goal) → '<Team> Unter 2.5 Tore'.\n"
+        "IMPORTANT: COMPLETELY OMIT any RUSSIAN game (Russian league or Russian club such as Zenit, "
+        "CSKA/Spartak/Lokomotiv/Dynamo Moscow, Krasnodar, Rostov, Baltika, Akhmat, Rubin Kazan, Sochi, "
+        "Krylia Sovetov, Orenburg, Fakel, Pari NN, Ural, Akron) — do NOT return it in legs at all.\n"
         "Identify WHICH team a total refers to and put the team name into our_market. "
         "PRESERVE period info in code_market (e.g. '1. Halbzeit', '1st half', 'HT', minute). "
         "reason: a SHORT but CONCRETE explanation in GERMAN of WHY this pick is safe — name the real football reason "
@@ -8608,6 +8625,10 @@ async def _run_code_scan(job_id: str, images: list):
             home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
             market = (lg.get("code_market") or lg.get("market") or "").strip()
             if not (home and away):
+                continue
+            # owner 2026-08: Russian (and other blacklisted) games must NEVER appear in Codemining —
+            # Germany boycotts Russian football. Skip them completely on ingest (by team/league keyword).
+            if _team_or_league_blocked(home, away, lg.get("league") or ""):
                 continue
             # owner 2026-07-31: never store a read for a match that is ALREADY OVER — a stale
             # or mis-dated accumulator (AI date confusion) must not inject yesterday's games.
