@@ -9131,6 +9131,13 @@ async def settle_code_reads() -> dict:
         code_out = None
         if is_no_bet:
             code_mkt = r.get("code_market") or r.get("code") or ""
+            # owner 2026-08: a straight-win code like '1X2 S2' is opaque to the grader → translate the
+            # selection into an explicit '<Team> Sieg' so code_outcome is graded correctly
+            # (Rangers-Code kam NICHT → No Bet rettet uns = blau; LASK-Code KAM → orange).
+            if code_mkt and _is_straightwin_code(code_mkt):
+                ws = _code_win_side(code_mkt, home, away)
+                if ws in ("home", "away"):
+                    code_mkt = f"{home if ws == 'home' else away} Sieg"
             if code_mkt:
                 try:
                     code_out = await judge_market(code_mkt, home, away,
