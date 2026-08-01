@@ -9300,6 +9300,30 @@ async def admin_code_reading_delete(read_id: str, admin: dict = Depends(require_
     return {"ok": True, "deleted": res.deleted_count}
 
 
+@api_router.post("/admin/code-reading/clear-active")
+async def admin_code_reading_clear_active(admin: dict = Depends(require_admin)):
+    """Owner: wipe ALL still-active (upcoming/in-play, not yet settled) code-reads in one tap.
+    FINISHED reads (have an outcome/score, or match long over) are NEVER touched."""
+    now_dt = datetime.now(timezone.utc)
+    grace = timedelta(minutes=150)
+    reads = await db.code_reads.find(
+        {"expires_at": {"$gt": now_dt.isoformat()}},
+        {"_id": 0, "id": 1, "kickoff": 1, "created_at": 1, "outcome": 1, "score": 1}).to_list(500)
+    to_delete = []
+    for r in reads:
+        ko = _parse_kickoff(r.get("kickoff"))
+        created = _parse_kickoff(r.get("created_at"))
+        stale = created is not None and (now_dt - created) > timedelta(hours=10)
+        is_over = (r.get("outcome") in ("won", "lost", "info")) or bool(r.get("score")) \
+            or (ko is not None and ko + grace < now_dt) \
+            or (ko is None and stale)
+        if not is_over:
+            to_delete.append(r["id"])
+    if to_delete:
+        await db.code_reads.delete_many({"id": {"$in": to_delete}})
+    return {"ok": True, "deleted": len(to_delete)}
+
+
 
 def _live_bet_landed(market: str, hg, ag, home: str, away: str):
     """True=won, False=not yet/lost, None=not a goal-progress market (skip)."""

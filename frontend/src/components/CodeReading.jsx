@@ -117,9 +117,9 @@ const PAT_LABEL = {
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
 const FL = {
-  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt" },
-  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt" },
-  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ." },
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Alle aktiven löschen", clearConfirm: "Wirklich ALLE aktiven Codes löschen? (Beendete bleiben erhalten)", cleared: "Aktive gelöscht" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Clear all active", clearConfirm: "Delete ALL active codes? (Finished ones are kept)", cleared: "Active cleared" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Καθαρισμός ενεργών", clearConfirm: "Διαγραφή ΟΛΩΝ των ενεργών; (Τα τελειωμένα μένουν)", cleared: "Καθαρίστηκαν" },
 };
 
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
@@ -171,6 +171,15 @@ export function CodeReading() {
   const removeRead = async (id) => {
     try { await api.delete(`/admin/code-reading/${id}`); toast.success(fl.del + " ✓"); load(); }
     catch { toast.error("Fehlgeschlagen"); }
+  };
+
+  const clearActive = async () => {
+    if (!window.confirm(fl.clearConfirm)) return;
+    try {
+      const { data } = await api.post("/admin/code-reading/clear-active");
+      toast.success(`${fl.cleared} (${data.deleted}) ✓`);
+      load();
+    } catch { toast.error("Fehlgeschlagen"); }
   };
 
   const onFile = async (e) => {
@@ -318,6 +327,12 @@ export function CodeReading() {
             <span className={`text-[10px] font-mono rounded-full px-1.5 ${crTab === v ? "bg-black/25 text-void" : "bg-zinc-800 text-zinc-400"}`}>{n}</span>
           </button>
         ))}
+        {isAdmin && crTab === "active" && reads.length > 0 && (
+          <button onClick={clearActive} data-testid="code-clear-active-btn"
+            className="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border border-red-500/50 text-red-300 hover:bg-red-500/15 transition-colors">
+            <Trash2 size={13} />{fl.clearBtn}
+          </button>
+        )}
       </div>
 
       {loading ? (
