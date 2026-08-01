@@ -1,5 +1,13 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX (Backend/Web-Push): Bodø gestern + Aberdeen 3× Alarme
+- Betraf den ECHTEN OS-Web-Push (`background_tasks.push_watch_loop`), NICHT das In-App-Board vom vorigen Fix.
+- **Stale-Spiele (Bodø war gestern):** Bisher umgingen Picks OHNE saubere Anstoßzeit (Datum-only / unparsebar) den "noch spielbar"-Filter (`ko is None` → nicht geskippt). Neu: `_pick_still_playable(tp, now)` — Clock-Kickoff muss >= now-15min sein; reine Datum-only-Slips nur wenn der Spieltag heute/später ist; KEINE Zeit-Info → nicht pushen. Live-Picks brauchen jetzt einen echten Clock-Kickoff < 3h alt.
+- **Aberdeen 3×:** Neu `_push_match_sig(tp, area)` (Teams/Parlay-Legs normalisiert) + Mongo-Collection `push_sent` (24h). Dasselbe Fixture+Bereich wird nicht mehr doppelt gepusht, auch wenn das Backend den Pick unter neuer id neu erzeugt.
+- Unit-getestet (ISO/DD-MM-YYYY-HH-MM/„1. Aug 2026"): gestern/vergangen/keine-Zeit → False; heute/zukünftig → True; Parlay mit bereits gestartetem Bein → False; Sig-Gleichheit bei gleichem Match ✅. Backend startet sauber.
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — FIX: Benachrichtigungen (Duplikate + Phantom-Alerts)
 - **6× dasselbe Spiel (Aberdeen):** Dedup lief nur über `tip.id` → bei jeder Neu-Generierung desselben Spiels (neue id) feuerte eine neue Benachrichtigung. Neu: **match-level Dedup** (`notifSig` = area + normalisierte Teams / Parlay-Legs), persistiert in localStorage `tj_notified_sigs`, 24h-Fenster. Dasselbe Spiel+Bereich meldet sich nicht mehr doppelt. Greift in `fireAlert` + `fireAlertBatch`.
 - **Live-Pick doppelt (Cobresal):** Live-Picks stecken in beiden Feeds (`?sort=new` UND `?status=live`). Section-1 überspringt jetzt `status==="live"` → nur der Live-Watcher meldet Live-Picks. Kein Doppel-Ring mehr.

@@ -278,6 +278,72 @@ def _earliest_kickoff(tip: dict):
     return min(kos) if kos else None
 
 
+def _all_kickoff_strs(tp: dict) -> list:
+    """Every kickoff string attached to a tip (own time + all legs)."""
+    times = [tp.get("match_time")]
+    for lg in (tp.get("legs") or []):
+        times.append(lg.get("kickoff"))
+    for lg in (tp.get("combo_legs") or []):
+        times.append(lg.get("kickoff") or lg.get("match_time"))
+    return [t for t in times if (t or "").strip()]
+
+
+def _clock_kickoffs(tp: dict) -> list:
+    """Parsed kickoffs that carry an actual clock TIME (date-only strings excluded)."""
+    out = []
+    for t in _all_kickoff_strs(tp):
+        if _kickoff_is_date_only(t):
+            continue
+        k = _parse_kickoff(t)
+        if k:
+            out.append(k)
+    return out
+
+
+def _pick_still_playable(tp: dict, now_dt) -> bool:
+    """Owner: only PUSH a pre-match pick you can STILL play. Games that already kicked off — or
+    whose day is already over (incl. date-only slips like 'Bodø gestern') — must never push. A
+    pick with NO resolvable kickoff at all is treated as not-pushable (can't confirm playability)."""
+    times = _all_kickoff_strs(tp)
+    if not times:
+        return False
+    clock = _clock_kickoffs(tp)
+    if clock:
+        return min(clock) >= (now_dt - timedelta(minutes=15))
+    # only date-only slips → the (latest) game day must be today or later
+    try:
+        today = _berlin_now().date()
+    except Exception:
+        today = now_dt.date()
+    days = [k.date() for k in (_parse_kickoff(t) for t in times) if k]
+    return bool(days) and max(days) >= today
+
+
+def _ns_push(s) -> str:
+    return " ".join(str(s or "").strip().lower().split())
+
+
+def _push_match_sig(tp: dict, area: str) -> str:
+    """Stable per-MATCH signature so the same fixture is never web-pushed twice (even if the
+    backend re-creates the pick under a fresh id)."""
+    base = "live" if area.startswith("live") else area
+    if tp.get("is_parlay"):
+        legs = sorted(
+            f"{_ns_push(lg.get('home') or lg.get('home_team'))}-{_ns_push(lg.get('away') or lg.get('away_team'))}"
+            for lg in (tp.get("legs") or []))
+        return f"{base}|parlay|{'|'.join(legs)}"
+    return f"{base}|{_ns_push(tp.get('home_team'))}|{_ns_push(tp.get('away_team'))}"
+
+
+async def _push_sig_seen(sig: str) -> bool:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    doc = await db.push_sent.find_one({"sig": sig}, {"_id": 0, "ts": 1})
+    return bool(doc and (doc.get("ts") or "") > cutoff)
+
+
+async def _push_sig_mark(sig: str):
+    await db.push_sent.update_one(
+        {"sig": sig}, {"$set": {"sig": sig, "ts": datetime.now(timezone.utc).isoformat()}}, upsert=True)
 
 
 async def push_watch_loop():
@@ -303,21 +369,25 @@ async def push_watch_loop():
                 # one bundled digest per area with multiple.
                 by_area = {}
                 now_dt = datetime.now(timezone.utc)
-                grace = now_dt - timedelta(minutes=15)
                 for tp in fresh:
-                    ko = _earliest_kickoff(tp)
                     if tp.get("status") == "live":
-                        # A genuine in-play pick's kickoff is recent. If it is more than 3h in
-                        # the past the match is long over → never fire a "live" push for a
-                        # finished game (fixes stale pushes that deep-link to nothing).
-                        if ko is not None and ko < (now_dt - timedelta(hours=3)):
+                        # A genuine in-play pick has a recent CLOCK kickoff. No clock time, or
+                        # more than 3h in the past → the match isn't really live now → skip
+                        # (kills stale 'LIVE' pushes that deep-link to a finished game).
+                        clock = _clock_kickoffs(tp)
+                        if not clock or min(clock) < (now_dt - timedelta(hours=3)):
                             continue
                     else:
-                        # Owner rule: notify ONLY about tips you can still play. A pre-match pick
-                        # whose kickoff already passed is skipped.
-                        if ko is not None and ko < grace:
+                        # Owner rule: notify ONLY about tips you can still play (incl. 'Bodø gestern').
+                        if not _pick_still_playable(tp, now_dt):
                             continue
-                    by_area.setdefault(_tip_push_area(tp), []).append(tp)
+                    area = _tip_push_area(tp)
+                    # Match-level de-dupe: never web-push the same fixture+area twice within 24h.
+                    sig = _push_match_sig(tp, area)
+                    if await _push_sig_seen(sig):
+                        continue
+                    await _push_sig_mark(sig)
+                    by_area.setdefault(area, []).append(tp)
                 for a, tps in by_area.items():
                     if len(tps) == 1:
                         await notify_all_push(_push_payload_for_tip(tps[0]))
