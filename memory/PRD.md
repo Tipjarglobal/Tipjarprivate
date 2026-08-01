@@ -1342,3 +1342,16 @@ HINWEIS: Screenshot war Produktion — greift live erst nach 'Save to GitHub →
 HINWEIS: Screenshots des Owners stammen von Produktion (tipjarglobal.com) — dort greift erst der letzte
 Deploy; Sprachauswahl muss auf English stehen. Kein Architektur-Wechsel auf Englisch-als-Quelle nötig,
 da die DE→Ziel-Übersetzung genau das gewünschte Verhalten liefert.
+
+## Update 2026-08 (29) — Master-Avatar: manuelles Wischen, nur spielbare Spiele, klare Infos
+- KEINE Auto-Rotation mehr. MasterAvatar.jsx komplett neu: EIN Bubble sichtbar, manuelles Wischen
+  (framer-motion drag) + Prev/Next-Pfeile + Punkte + animierter „Swipe for more"-Hinweis (de/en/el).
+- GET /api/master/avatar postet nur PLAYABLE Spiele: status pending UND kickoff in der Zukunft
+  (_parse_kickoff > now). Beendete/gestartete Spiele (Brügge/Bodø von gestern) werden nie mehr gezeigt.
+  Frontend hat zusätzlichen Client-Filter als Sicherheitsnetz.
+- Jede Sprechblase zeigt die 4 Kerninfos DEUTLICH: Teamnamen (groß/fett), Liga (Trophy), Datum+Uhrzeit
+  (formatKickoff, viewer-TZ), plus Pick+Quote und Analyse-Text.
+GETESTET: Backend-Filter (Brügge past raus, Salzburg future bleibt); Screenshot Master-Tab zeigt
+Teams/Liga/„Today 21:30"/Pick + Swipe-Controls + Hint. Frontend kompiliert.
+HINWEIS: Avatar-Analysetext nutzt dieselbe DE→Ziel-Übersetzung wie Codemining (EN bei English).
+Live erst nach „Save to GitHub → Deploy".

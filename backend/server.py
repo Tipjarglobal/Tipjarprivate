@@ -912,18 +912,28 @@ async def qualifier_briefing():
 
 @api_router.get("/master/avatar")
 async def master_avatar():
-    """TipJarMaster Avatar calls for today — confident minute-goal predictions (speech bubbles).
-    Powers the crown avatar + speech bubble at the top of the Master channel."""
+    """TipJarMaster Avatar calls — confident PRE-MATCH speech bubbles. Owner 2026-08: only
+    PLAYABLE games (kickoff still in the future) are returned; started/finished matches
+    (e.g. yesterday's Brügge/Bodø) are never posted as playable."""
     day = _berlin_now().date().isoformat()
     docs = await db.tips.find(
         {"source": "hq-master", "master_category": "avatar", "hidden": {"$ne": True},
-         "$or": [{"master_day": day}, {"status": {"$in": ["pending", "live"]}}]},
+         "status": "pending"},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "market": 1,
          "odds": 1, "match_time": 1, "avatar_minute": 1, "avatar_text": 1,
          "avatar_confidence": 1, "drought": 1, "status": 1,
          "avatar_player": 1, "avatar_scorer": 1, "from_codemining": 1}
-    ).sort("created_at", -1).to_list(20)
-    return {"count": len(docs), "calls": docs, "generated_at": day}
+    ).sort("created_at", -1).to_list(60)
+    now = datetime.now(timezone.utc)
+    calls = []
+    for d in docs:
+        ko = _parse_kickoff(d.get("match_time") or "")
+        if ko and ko <= now:  # already kicked off / finished → not playable, skip
+            continue
+        calls.append(d)
+        if len(calls) >= 12:
+            break
+    return {"count": len(calls), "calls": calls, "generated_at": day}
 
 
 
