@@ -299,6 +299,22 @@ async def admin_reset_pregames(admin: dict = Depends(require_admin)):
     return {"ok": True, "removed": removed, "regenerating": True}
 
 
+@api_router.post("/admin/clear-live-settled")
+async def admin_clear_live_settled(body: dict = Body(default={}),
+                                   admin: dict = Depends(require_admin)):
+    """Owner homepage button: wipe ALL current LIVE picks and ALL SETTLED history (won/lost/void/
+    cashed_out) from THIS environment's database. Runs against whatever DB the app is connected to,
+    so on production it clears production data. Pending pregames are kept. scope: 'live'|'settled'|'both'."""
+    scope = (body or {}).get("scope") or "both"
+    settled_statuses = ["won", "lost", "void", "cashed_out"]
+    live = settled = 0
+    if scope in ("live", "both"):
+        live = (await db.tips.delete_many({"status": "live"})).deleted_count
+    if scope in ("settled", "both"):
+        settled = (await db.tips.delete_many({"status": {"$in": settled_statuses}})).deleted_count
+    return {"ok": True, "live_removed": live, "settled_removed": settled}
+
+
 async def _purge_blacklisted() -> dict:
     """Remove predictions + hide open tips whose (top-level) fixture/league is now blacklisted.
     Settlement is unaffected (it never filters `hidden`); master slips get their blacklisted legs
