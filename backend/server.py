@@ -8634,7 +8634,9 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "'genaue Zahl 3 oder weniger – Nein', 'über 3.5 Tore') → they expect a goal-fest, so take "
         "'Asiatisch Über 2.0 Tore' (won at 3+ goals, stake back at EXACTLY 2 goals → push) as a near-lock at ~1.20. stars 10. "
         "Only a bare 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
-        "5) Straight win / 1X2 / double chance / handicap → NO BET (we NEVER buy a plain win/1X).\n"
+        "5) Straight win / 1X2 / double chance → read=no_bet (we NEVER buy a plain win/1X); PRESERVE the "
+        "winner selection in code_market (e.g. '1X2 S1', 'S2', 'Heimsieg') — the backend refines it into a "
+        "safe '<Underdog> +1.5 Handicap' or a specific No-Bet using H2H/form + a European-fixture check.\n"
         "6) ANY first-half / half-time goals bet (e.g. '1st half Over 0.5', '1. Halbzeit Über 0.5', 'HT Over 0.5'), "
         "OR an early draw/result at minute 15-30 → KEEP 'Über 0.5 Tore 1. Halbzeit' (they expect an early goal — usually a safe single). stars 8-10.\n"
         "7) A team's LAST goal 55-90' / scores late → '<Team> trifft bis zur 60. Minute'.\n"
@@ -8647,6 +8649,12 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "10) Trap 'underdog +1/+1.5 handicap' leg ('Handicap 2 (+1.5)', 'Team 2 +1.5', '<Team> +1'): the "
         "team GETTING the plus is the underdog, so the OTHER side is the clear favourite. Buy "
         "'<Favourite> -1 (Handicap)' (~1.76): favourite wins by 2+ = won, wins by exactly 1 = void/push. stars 9.\n"
+        "11) STRONG favourite vs WEAK underdog where the code points to the UNDERDOG being involved in "
+        "goals (the weaker side 'Team 2 Over 0.5' / to score, OR the bookie 'caps' the underdog as a trap): "
+        "if the clearly weaker team is expected to score, the big favourite will surely ALSO score AND win → "
+        "our_market = '<Favourite> Sieg & Beide Teams treffen'. Additionally set alt_market = "
+        "'Tor in jeder Halbzeit (Risk, ~2.83)' as a bolder risk alternative. stars 7-8. "
+        "ONLY when one side is a CLEAR heavy favourite (e.g. Porto vs a tiny cup side).\n"
         "EUROPA-FAKTOR: If ONE team recently (a few days ago) played a EUROPEAN match (Champions League, "
         "Europa League, Conference League), they are TIRED/rotated → the OTHER team scoring / the game "
         "opening up is even safer. Say it explicitly in the reason and rate up to 10 stars.\n"
@@ -8742,6 +8750,109 @@ async def _code_euro_fatigue(home: str, away: str, our_market: str):
         return ("", None)
 
 
+def _code_win_side(market: str, home: str, away: str):
+    """Which side the code backs to WIN (straight 1X2): 'home' | 'away' | None."""
+    m = (market or "").lower()
+    sm = re.search(r"\bs\s*([12])\b", m) or re.search(r"team\s*([12])\b", m)
+    if sm:
+        return "home" if sm.group(1) == "1" else "away"
+    if any(k in m for k in ("heimsieg", "home win", "1x2 1")):
+        return "home"
+    if any(k in m for k in ("auswärtssieg", "auswartssieg", "away win", "1x2 2")):
+        return "away"
+    return _code_side(market, home, away)
+
+
+def _is_straightwin_code(market: str) -> bool:
+    """Code leg is a plain 1X2 / match-winner bet (NOT a handicap/total)."""
+    m = (market or "").lower()
+    if re.search(r"handicap|über|ueber|over|unter|under|\+\s*\d|beide|btts|tore|goals?", m):
+        return False
+    return bool(re.search(r"1\s*x\s*2|\bs\s*[12]\b|\bsieg\b|gewinnt|\bwin\b|match\s*(result|winner)|"
+                          r"full\s*time\s*result|heimsieg|ausw", m))
+
+
+async def _fav_euro_soon(fav_id: int):
+    """Favourite plays a EUROPEAN game in the next ~5 days → rotation/focus risk. (comp, days) | None."""
+    try:
+        fx = await _apifootball_async("/fixtures", {"team": fav_id, "next": 6}) or []
+        now = datetime.now(timezone.utc)
+        for f in fx:
+            lg = ((f.get("league") or {}).get("name") or "").lower()
+            d = _parse_kickoff(((f.get("fixture") or {}).get("date") or ""))
+            if not d:
+                continue
+            days = (d - now).total_seconds() / 86400.0
+            if 0 <= days <= 5.5 and any(c in lg for c in _EURO_COMPS):
+                return ((f.get("league") or {}).get("name") or "Europa", max(1, round(days)))
+        return None
+    except Exception:
+        return None
+
+
+async def _code_straightwin_decision(home: str, away: str, market: str):
+    """Owner (Slovan Liberec – Teplice): a plain 1X2 code is NOT bought as a win. Instead check whether
+    the UNDERDOG '+1.5 Handicap' is safe (favourite rarely wins by 2+) — and flag if the favourite has a
+    European game soon (then the home win isn't worth buying). Returns an interp dict, or None."""
+    try:
+        win_side = _code_win_side(market, home, away)
+        if win_side not in ("home", "away"):
+            return None
+        fav_name = home if win_side == "home" else away
+        dog_name = away if win_side == "home" else home
+        fav_id = await resolve_team_id(fav_name)
+        dog_id = await resolve_team_id(dog_name)
+        euro = await _fav_euro_soon(fav_id) if fav_id else None
+        big = n = 0
+        if fav_id and dog_id:
+            h2h = await match_stats.h2h_detailed(fav_id, dog_id, 8) or []
+            for mtg in h2h:
+                if mtg.get("home_id") == fav_id:
+                    fg, dg = mtg.get("gh"), mtg.get("ga")
+                elif mtg.get("away_id") == fav_id:
+                    fg, dg = mtg.get("ga"), mtg.get("gh")
+                else:
+                    continue
+                if fg is None or dg is None:
+                    continue
+                n += 1
+                if fg - dg >= 2:
+                    big += 1
+            recent = await match_stats.team_recent(fav_id, 14) or []
+            for g in match_stats.venue_split(recent, fav_id, win_side == "home", k=6):
+                n += 1
+                if g["gf"] - g["ga"] >= 2:
+                    big += 1
+        ratio = (big / n) if n else 1.0
+        euro_note = (f" {fav_name} hat in ~{euro[1]} Tagen ein {euro[0]}-Spiel — rotiert/fokussiert, "
+                     f"der Heimsieg lohnt sich hier nicht zu kaufen." if euro else "")
+        safe_15 = (n >= 4 and ratio <= 0.34) or (euro is not None and n >= 3 and ratio <= 0.5)
+        if safe_15:
+            stat = f"Favorit gewann nur {big}/{n} der relevanten Spiele mit 2+ Toren" if n else "wenig Blowout-Historie"
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"{dog_name} +1.5 (Handicap)",
+                "alt_market": None, "code": market, "pattern": "straightwin_dog_plus15",
+                "reason": (f"Glatten Heimsieg kaufen wir nicht. Aber {dog_name} +1.5 sieht sicher aus: "
+                           f"{stat} — verliert {dog_name} also nur knapp mit 1 Tor, ist der Einsatz zurück (Push), "
+                           f"höchstens {dog_name} verliert mit 2+.{euro_note}"),
+                "stars": 8 if euro else 7})
+        if euro:
+            return {"read": "no_bet", "code": market, "pattern": "straightwin_euro_nobet",
+                    "reason": (f"Glatten Heimsieg kaufen wir nicht.{euro_note} Auch {dog_name} +1.5 ist bei "
+                               f"{big}/{n} Blowout-Spielen nicht klar genug. No Bet.")}
+        if n:
+            return {"read": "no_bet", "code": market, "pattern": "straightwin_bigwin_nobet",
+                    "reason": (f"Glatten Heimsieg spielen wir nicht — und {fav_name} gewinnt zu oft deutlich "
+                               f"({big}/{n} mit 2+ Toren), daher ist auch {dog_name} +1.5 zu riskant. No Bet.")}
+        return {"read": "no_bet", "code": market, "pattern": "straightwin_nodata_nobet",
+                "reason": (f"Glatten Heimsieg kaufen wir nicht; für eine sichere {dog_name} +1.5-Alternative "
+                           f"fehlen belastbare H2H/Form-Daten. No Bet.")}
+    except Exception as e:
+        logger.warning(f"straightwin decision failed ({home} v {away}): {e}")
+        return None
+
+
+
 
 async def _run_code_scan(job_id: str, images: list):
     """Background worker: OCR + interpret + store (kept off the 60s request path)."""
@@ -8787,9 +8898,15 @@ async def _run_code_scan(job_id: str, images: list):
                 if not market:
                     continue
                 interp = _code_read_interpret(market, home, away)
+            # owner 2026-08 (Slovan Liberec – Teplice): a plain 1X2 code → decide via H2H/Form + Europa-Check
+            # ob '<Underdog> +1.5 Handicap' sicher ist, sonst spezifisches No Bet (kein Standardtext).
+            if _is_straightwin_code(market):
+                dec = await _code_straightwin_decision(home, away, market)
+                if dec:
+                    interp = dec
             # owner 2026-08 EUROPA-FAKTOR: if a team just played a European game (tired/rotated),
             # our counter gets even safer → boost to 10★ and say it in the reason (factual, from API).
-            if interp.get("read") == "counter":
+            if interp.get("read") == "counter" and interp.get("pattern") != "straightwin_dog_plus15":
                 note, _tired = await _code_euro_fatigue(home, away, interp.get("our_market") or "")
                 if note:
                     base = (interp.get("reason") or "").rstrip(". ")

@@ -1267,3 +1267,18 @@ Viktoria Plzen/Banik) liefert die erwarteten Märkte + Sterne. Backend hot-reloa
 OFFEN (auf Owner-Antwort wartend): Straight-Win (1X2) → Teplice +1.5 Handicap-Alternative via H2H/Scraper
 + Europa-Rotations-Check des Favoriten (Schwelle für "+1.5 sicher" noch nicht bestätigt).
 HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
+
+## Update 2026-08 (24) — Straight-Win (1X2) → Underdog +1.5 Handicap + Porto-Regel
+- 1X2-Code (z.B. "1X2 S1") wird NICHT als Sieg gekauft. `_code_straightwin_decision` (server.py):
+  ermittelt Favorit/Underdog, prüft per API-Football H2H + Heim/Auswärtsform, wie oft der Favorit mit
+  2+ Toren gewinnt, und ob der Favorit in ~5 Tagen ein Europapokal-Spiel hat (`_fav_euro_soon`).
+  • Favorit gewinnt selten mit 2+ (Ratio <=0.34, n>=4) ODER Europa-Spiel bald → Counter "<Underdog>
+    +1.5 (Handicap)" (★7-8, Push bei 1-Tor-Niederlage).
+  • Sonst spezifisches No Bet (nennt Blowout-Quote bzw. Europa-Spiel) — KEIN generischer Standardtext mehr.
+  GETESTET live: Slovan Liberec–Teplice → "Teplice +1.5" ★7 (Favorit nur 2/13 mit 2+); Man City–Luton →
+  No Bet (3/6 Blowouts).
+- Porto-Regel (Vision-Prompt 11): klarer Favorit vs schwacher Underdog, Code deutet Underdog-Tor an →
+  "<Favorit> Sieg & Beide Teams treffen" + Risk-Alternative "Tor in jeder Halbzeit (~2.83)".
+- Wiring in `_run_code_scan`: straightwin-Override greift für AI- UND Fallback-Pfad; Europa-Fatigue-Boost
+  überspringt den +1.5-Pick.
+HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
