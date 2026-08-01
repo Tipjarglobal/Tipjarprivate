@@ -1,5 +1,14 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemining: Notiz-System, Duplikat-Schutz, Demo-Schutz, Meta-Anzeige
+- **Notiz-System (`code_notes`):** Notiz ist an den CODE-TEXT gebunden (normalisiert via `_code_note_key`). Wann immer genau dieser Code auftaucht (Scan ODER Sweep), überschreibt die Notiz automatisch den Pick — `our_market` ODER `No Bet` — + Begründung. Bleibt dauerhaft bis geändert/gelöscht. Endpoints: `POST /admin/code-reading/note` (upsert; leer = löschen), `GET /admin/code-reading/notes`, `DELETE /admin/code-reading/note/{key}`. Helper: `_lookup_code_note`, `_note_to_interp` (pattern `note_override`). Notiz wird bei `POST note` sofort auf offene Reads angewendet (via Sweep) und in `GET /code-reading` je Read als `note` mitgeliefert.
+- **Duplikat-Schutz beim Upload:** Scan überspringt ein Leg, wenn bereits ein AKTIVER Read mit gleichen Teams (`_norm`) + gleichem Match-Datum existiert (statt vorher zu löschen+neu). Kein Duplikat.
+- **Demo-Schutz:** Neuer `demo`-Flag + `POST /admin/code-reading/{id}/demo`. Wie der Haken schützt `demo=True` vor „Ungeprüfte löschen". clear-active überspringt jetzt `verified is True OR demo is True` (Projektion enthält beide Felder — Bug gefixt).
+- **Meta-Anzeige:** Jede Karte zeigt jetzt 📅 Anstoß (Datum+Uhrzeit) · Liga.
+- **Frontend:** pro Karte Admin-Buttons Notiz (StickyNote), Demo (FlaskConical), Haken (BadgeCheck); Notiz-Modal (Pick / No-Bet-Toggle / Begründung / Speichern / Löschen); DEMO- & Notiz-Badges. Labels DE/EN/EL.
+- Getestet (curl): Notiz-Override no_bet→counter inkl. sofortiger Anwendung + `note` in Response ✅; Demo geschützt, Plain gelöscht ✅; Frontend kompiliert & rendert sauber. Duplikat-Skip-Logik implementiert (voll e2e erst bei echtem Bild-Upload prüfbar).
+
+
 ## 2026-08-01 — Codemining: Team-Total & Salzburg (nächstes Tor) → Asiatisch Über 2.0
 - **Team-Total-Über-Code** (Team soll 2+ machen: „Gesamtzahl 1 Über 1.5", „Team 1 Über 1.5") → jetzt `Asiatisch Über 2.0 Tore` (Muster `match_over_asian2`) statt team-spezifischer „Unter 2.5"-Cap. Owner: keine Team-Tor-Wetten, v.a. nicht in Großbritannien. Ersetzt die alte Falkirk-Regel.
 - **Salzburg-Regel (4× korrigiert):** „nächstes Tor / exaktes N-tes Tor / kein 4. Tor / next goal"-Code → `Asiatisch Über 2.0 Tore` (neue Branch (e0) in `_code_read_interpret`). Vorher „exaktes Tor → NO BET".

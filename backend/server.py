@@ -8785,6 +8785,32 @@ _REINTERP_RULES = {"team_not_twice", "match_over_clean", "match_over_asian2",
                    "team_total_under_low", "team_total_over_cap", "team_total_over_counter"}
 
 
+def _code_note_key(code_market: str) -> str:
+    """Normalise a bookmaker code text so the SAME code always maps to the same saved owner-note."""
+    k = re.sub(r"\s+", " ", (code_market or "").strip().lower())
+    return k.strip(" .;,:-")
+
+
+async def _lookup_code_note(code_market: str):
+    key = _code_note_key(code_market)
+    if not key:
+        return None
+    return await db.code_notes.find_one({"key": key}, {"_id": 0})
+
+
+def _note_to_interp(note: dict) -> dict:
+    """Turn a saved owner-note into a code-read interpretation (takes precedence over everything)."""
+    reason = (note.get("note") or "").strip()
+    if note.get("no_bet"):
+        return {"read": "no_bet", "our_market": None, "alt_market": None,
+                "reason": reason or "Owner-Notiz: No Bet für diesen Code.",
+                "pattern": "note_override", "stars": 0}
+    om = (note.get("our_market") or "").strip() or None
+    return {"read": "counter" if om else "no_bet", "our_market": om, "alt_market": None,
+            "reason": reason or "Owner-Notiz.", "pattern": "note_override",
+            "stars": int(note.get("stars") or 9)}
+
+
 async def _purge_and_refresh_code_reads() -> dict:
     """Owner 2026-08: (1) remove any BLACKLISTED (e.g. Russian) codemining entry that was stored
     BEFORE the ingest filter existed, and (2) re-apply the latest owner rules to still-open reads
@@ -8803,6 +8829,16 @@ async def _purge_and_refresh_code_reads() -> dict:
         if r.get("outcome"):  # settled → don't re-interpret, only blacklist-purge applies
             continue
         mkt = r.get("code_market") or ""
+        note = await _lookup_code_note(mkt)
+        if note:
+            ni = _note_to_interp(note)
+            if not (ni["read"] == r.get("read") and (ni.get("our_market") or None) == (r.get("our_market") or None)):
+                await db.code_reads.update_one({"id": r["id"]}, {"$set": {
+                    "read": ni["read"], "our_market": ni.get("our_market"),
+                    "alt_market": None, "reason": ni["reason"],
+                    "pattern": ni["pattern"], "stars": ni.get("stars", 0)}})
+                reinterp += 1
+            continue
         if not mkt or _is_straightwin_code(mkt):
             continue
         fresh = _code_read_interpret(mkt, home, away)
@@ -8832,6 +8868,9 @@ async def code_reading():
     now = now_dt.isoformat()
     reads = await db.code_reads.find(
         {"expires_at": {"$gt": now}}, {"_id": 0}).sort("created_at", -1).to_list(120)
+    _notes = {n["key"]: n for n in await db.code_notes.find({}, {"_id": 0}).to_list(500)}
+    for r in reads:
+        r["note"] = _notes.get(_code_note_key(r.get("code_market") or ""))
     grace = timedelta(minutes=150)
     active, finished = [], []
     for r in reads:
@@ -8965,6 +9004,16 @@ async def _run_code_scan(job_id: str, images: list):
         now = datetime.now(timezone.utc)
         day = _berlin_now().date().isoformat()
         stored = []
+
+        def _md(kickoff, fb):
+            ko = _parse_kickoff(kickoff or "")
+            return ko.date().isoformat() if ko else fb
+        seen = set()
+        for _e in await db.code_reads.find(
+                {"outcome": {"$exists": False}, "expires_at": {"$gt": now.isoformat()}},
+                {"_id": 0, "home": 1, "away": 1, "kickoff": 1, "day": 1}).to_list(1000):
+            seen.add((_norm(_e.get("home") or ""), _norm(_e.get("away") or ""),
+                      _md(_e.get("kickoff"), _e.get("day") or day)))
         for lg in legs:
             home, away = (lg.get("home") or "").strip(), (lg.get("away") or "").strip()
             market = (lg.get("code_market") or lg.get("market") or "").strip()
@@ -8979,7 +9028,11 @@ async def _run_code_scan(job_id: str, images: list):
             ko_dt = _parse_kickoff(lg.get("kickoff") or "")
             if ko_dt is not None and ko_dt + timedelta(minutes=150) < now:
                 continue
-            await db.code_reads.delete_many({"day": day, "home": home, "away": away, "outcome": {"$exists": False}})
+            dkey = (_norm(home), _norm(away), _md(lg.get("kickoff"), day))
+            if dkey in seen:
+                continue  # owner: duplicate (same teams+date already active) → skip, keep existing
+            seen.add(dkey)
+            owner_note = await _lookup_code_note(market) if market else None
             read = lg.get("read") if lg.get("read") in ("counter", "no_bet") else None
             if read:
                 our_market = (lg.get("our_market") or "").strip() or None
@@ -9323,6 +9376,58 @@ async def admin_code_reading_verify(read_id: str, payload: dict = None,
     return {"ok": True, "verified": verified, "matched": res.matched_count}
 
 
+@api_router.post("/admin/code-reading/{read_id}/demo")
+async def admin_code_reading_demo(read_id: str, payload: dict = None,
+                                  admin: dict = Depends(require_admin)):
+    """Owner: mark a code-read as 'Demo'. Like the checkmark, a Demo entry is PROTECTED from the
+    'delete unchecked' button (it is never bulk-deleted)."""
+    is_demo = True if payload is None else bool(payload.get("demo", True))
+    res = await db.code_reads.update_one({"id": read_id}, {"$set": {"demo": is_demo}})
+    return {"ok": True, "demo": is_demo, "matched": res.matched_count}
+
+
+@api_router.post("/admin/code-reading/note")
+async def admin_code_reading_note(payload: dict, admin: dict = Depends(require_admin)):
+    """Owner note bound to a CODE TEXT: whenever exactly this code appears, react this way (a fixed
+    pick or No Bet). Stays permanently until changed. Empty payload deletes the note."""
+    code_market = (payload.get("code_market") or "").strip()
+    key = _code_note_key(code_market)
+    if not key:
+        raise HTTPException(status_code=400, detail="code_market required")
+    note_text = (payload.get("note") or "").strip()
+    our_market = (payload.get("our_market") or "").strip()
+    no_bet = bool(payload.get("no_bet"))
+    if not note_text and not our_market and not no_bet:
+        await db.code_notes.delete_one({"key": key})
+        try:
+            await _purge_and_refresh_code_reads()
+        except Exception:
+            pass
+        return {"ok": True, "deleted": True}
+    doc = {"key": key, "code_market": code_market, "note": note_text,
+           "our_market": our_market or None, "no_bet": no_bet,
+           "home": (payload.get("home") or "").strip(), "away": (payload.get("away") or "").strip(),
+           "updated_at": datetime.now(timezone.utc).isoformat()}
+    await db.code_notes.update_one({"key": key}, {"$set": doc}, upsert=True)
+    try:
+        await _purge_and_refresh_code_reads()  # apply immediately to matching open reads
+    except Exception:
+        pass
+    return {"ok": True, "key": key, "note": doc}
+
+
+@api_router.get("/admin/code-reading/notes")
+async def admin_code_reading_notes(admin: dict = Depends(require_admin)):
+    notes = await db.code_notes.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return {"notes": notes}
+
+
+@api_router.delete("/admin/code-reading/note/{key}")
+async def admin_code_reading_note_delete(key: str, admin: dict = Depends(require_admin)):
+    res = await db.code_notes.delete_one({"key": key})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
 @api_router.post("/admin/code-reading/reset-verified")
 async def admin_code_reading_reset_verified(admin: dict = Depends(require_admin)):
     """Owner: remove the 'verified' checkmark from ALL code-reads in one tap (clears the old
@@ -9341,11 +9446,11 @@ async def admin_code_reading_clear_active(admin: dict = Depends(require_admin)):
     reads = await db.code_reads.find(
         {"expires_at": {"$gt": now_dt.isoformat()}},
         {"_id": 0, "id": 1, "kickoff": 1, "created_at": 1, "outcome": 1, "score": 1,
-         "verified": 1}).to_list(500)
+         "verified": 1, "demo": 1}).to_list(500)
     to_delete = []
     for r in reads:
-        if r.get("verified") is True:
-            continue  # protected — has a checkmark
+        if r.get("verified") is True or r.get("demo") is True:
+            continue  # protected — has a checkmark or is marked as Demo
         ko = _parse_kickoff(r.get("kickoff"))
         created = _parse_kickoff(r.get("created_at"))
         stale = created is not None and (now_dt - created) > timedelta(hours=10)

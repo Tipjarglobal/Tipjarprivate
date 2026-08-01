@@ -117,9 +117,9 @@ const PAT_LABEL = {
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
 const FL = {
-  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Ungeprüfte löschen", clearConfirm: "Alle AKTIVEN Codes OHNE Haken löschen? Abgehakte (geprüfte) und beendete bleiben erhalten.", cleared: "Ungeprüfte gelöscht", verified: "Geprüft", verifyBtn: "Als echt markieren", unverify: "Haken entfernen", resetBtn: "Haken zurücksetzen", resetConfirm: "Alle Häkchen entfernen? Danach hakst du nur die ab, die du zu 100% kennst.", resetDone: "Häkchen zurückgesetzt" },
-  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Delete unchecked", clearConfirm: "Delete all ACTIVE codes WITHOUT a checkmark? Checked (verified) and finished ones are kept.", cleared: "Unchecked deleted", verified: "Verified", verifyBtn: "Mark as real", unverify: "Remove check", resetBtn: "Reset checks", resetConfirm: "Remove ALL checkmarks? Then you re-check only the ones you're 100% sure of.", resetDone: "Checks reset" },
-  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Διαγραφή χωρίς σημάδι", clearConfirm: "Διαγραφή όλων των ΕΝΕΡΓΩΝ χωρίς σημάδι; Τα σημαδεμένα και τελειωμένα μένουν.", cleared: "Διαγράφηκαν", verified: "Επαλήθ.", verifyBtn: "Σήμανση ως πραγματικό", unverify: "Αφαίρεση", resetBtn: "Επαναφορά", resetConfirm: "Αφαίρεση ΟΛΩΝ των σημαδιών; Μετά τσεκάρεις μόνο όσα ξέρεις 100%.", resetDone: "Έγινε επαναφορά" },
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Ungeprüfte löschen", clearConfirm: "Alle AKTIVEN Codes OHNE Haken löschen? Abgehakte (geprüfte) und beendete bleiben erhalten.", cleared: "Ungeprüfte gelöscht", verified: "Geprüft", verifyBtn: "Als echt markieren", unverify: "Haken entfernen", resetBtn: "Haken zurücksetzen", resetConfirm: "Alle Häkchen entfernen? Danach hakst du nur die ab, die du zu 100% kennst.", resetDone: "Häkchen zurückgesetzt", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Notiz", noteTitle: "Notiz zu diesem Code", noteHint: "Gilt immer, wenn genau dieser Code auftaucht — bleibt gespeichert bis du ihn änderst.", notePick: "Unser Pick (z.B. Víkingur Unter 2.5 Team-Tore)", noteNobet: "Stattdessen No Bet", noteText: "Begründung / Notiz", noteSave: "Notiz speichern", noteDelete: "Notiz löschen", noteSaved: "Notiz gespeichert", hasNote: "Notiz" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Delete unchecked", clearConfirm: "Delete all ACTIVE codes WITHOUT a checkmark? Checked (verified) and finished ones are kept.", cleared: "Unchecked deleted", verified: "Verified", verifyBtn: "Mark as real", unverify: "Remove check", resetBtn: "Reset checks", resetConfirm: "Remove ALL checkmarks? Then you re-check only the ones you're 100% sure of.", resetDone: "Checks reset", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Note", noteTitle: "Note for this code", noteHint: "Applies whenever exactly this code appears — stays saved until you change it.", notePick: "Our pick (e.g. Víkingur Under 2.5 team goals)", noteNobet: "No Bet instead", noteText: "Reason / note", noteSave: "Save note", noteDelete: "Delete note", noteSaved: "Note saved", hasNote: "Note" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Διαγραφή χωρίς σημάδι", clearConfirm: "Διαγραφή όλων των ΕΝΕΡΓΩΝ χωρίς σημάδι; Τα σημαδεμένα και τελειωμένα μένουν.", cleared: "Διαγράφηκαν", verified: "Επαλήθ.", verifyBtn: "Σήμανση ως πραγματικό", unverify: "Αφαίρεση", resetBtn: "Επαναφορά", resetConfirm: "Αφαίρεση ΟΛΩΝ των σημαδιών; Μετά τσεκάρεις μόνο όσα ξέρεις 100%.", resetDone: "Έγινε επαναφορά", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Σημείωση", noteTitle: "Σημείωση για αυτόν τον κωδικό", noteHint: "Ισχύει κάθε φορά που εμφανίζεται ακριβώς αυτός ο κωδικός — μένει αποθηκευμένη μέχρι να την αλλάξεις.", notePick: "Το pick μας (π.χ. Víkingur Under 2.5 team goals)", noteNobet: "No Bet αντ' αυτού", noteText: "Αιτιολογία / σημείωση", noteSave: "Αποθήκευση", noteDelete: "Διαγραφή σημείωσης", noteSaved: "Αποθηκεύτηκε", hasNote: "Σημείωση" },
 };
 
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
@@ -139,6 +139,8 @@ export function CodeReading() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [noteFor, setNoteFor] = useState(null);
+  const [noteForm, setNoteForm] = useState({ our_market: "", no_bet: false, note: "" });
   const fileRef = useRef(null);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const trReason = useProseTranslations(
@@ -196,6 +198,32 @@ export function CodeReading() {
       const { data } = await api.post("/admin/code-reading/reset-verified");
       toast.success(`${fl.resetDone} (${data.reset}) ✓`);
       load();
+    } catch { toast.error("Fehlgeschlagen"); }
+  };
+
+  const toggleDemo = async (id, current) => {
+    const next = !current;
+    setReads((rs) => rs.map((x) => (x.id === id ? { ...x, demo: next } : x)));
+    setFinished((rs) => rs.map((x) => (x.id === id ? { ...x, demo: next } : x)));
+    try { await api.post(`/admin/code-reading/${id}/demo`, { demo: next }); }
+    catch { toast.error("Fehlgeschlagen"); load(); }
+  };
+
+  const openNote = (r) => {
+    const n = r.note || {};
+    setNoteForm({ our_market: n.our_market || "", no_bet: !!n.no_bet, note: n.note || "" });
+    setNoteFor(r);
+  };
+
+  const saveNote = async () => {
+    if (!noteFor) return;
+    try {
+      await api.post("/admin/code-reading/note", {
+        code_market: noteFor.code_market, home: noteFor.home, away: noteFor.away,
+        our_market: noteForm.our_market, no_bet: noteForm.no_bet, note: noteForm.note,
+      });
+      toast.success(fl.noteSaved + " ✓");
+      setNoteFor(null); load();
     } catch { toast.error("Fehlgeschlagen"); }
   };
 
@@ -392,14 +420,36 @@ export function CodeReading() {
                         <BadgeCheck size={12} />{fl.verified}
                       </span>
                     )}
+                    {r.demo && (
+                      <span data-testid={`code-read-demo-${r.id}`} title={fl.demoBtn}
+                        className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide rounded-full px-2 py-0.5 bg-fuchsia-500 text-void">
+                        <FlaskConical size={12} />{fl.demoOn}
+                      </span>
+                    )}
+                    {r.note && (
+                      <span data-testid={`code-read-note-badge-${r.id}`} title={fl.hasNote}
+                        className="inline-flex items-center text-amber-300"><StickyNote size={13} /></span>
+                    )}
                     {verdict ? (
                       <span data-testid={`code-read-verdict-${r.id}`}
                         className={`inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wide rounded-full px-2.5 py-0.5 ${verdict.chip}`}>
                         {verdict.label === "UNCORRECT" ? <X size={12} /> : <Check size={12} />}{verdict.label}
                       </span>
-                    ) : r.league ? (
-                      <span className="text-[10px] text-zinc-500">{r.league}</span>
                     ) : null}
+                    {isAdmin && (
+                      <button onClick={() => openNote(r)} data-testid={`code-read-note-btn-${r.id}`}
+                        className={`transition-colors ${r.note ? "text-amber-300 hover:text-amber-200" : "text-zinc-500 hover:text-amber-300"}`}
+                        title={fl.noteBtn}>
+                        <StickyNote size={15} />
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button onClick={() => toggleDemo(r.id, !!r.demo)} data-testid={`code-read-demo-btn-${r.id}`}
+                        className={`transition-colors ${r.demo ? "text-fuchsia-400 hover:text-fuchsia-300" : "text-zinc-500 hover:text-fuchsia-400"}`}
+                        title={fl.demoBtn}>
+                        <FlaskConical size={15} />
+                      </button>
+                    )}
                     {isAdmin && (
                       <button onClick={() => toggleVerify(r.id, !!r.verified)} data-testid={`code-read-verify-${r.id}`}
                         className={`transition-colors ${r.verified ? "text-emerald-400 hover:text-emerald-300" : "text-zinc-500 hover:text-emerald-400"}`}
@@ -454,6 +504,42 @@ export function CodeReading() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {noteFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" data-testid="code-note-modal"
+          onClick={() => setNoteFor(null)}>
+          <div className="bg-void border border-zinc-700 rounded-2xl p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <StickyNote size={16} className="text-amber-300" />
+              <h3 className="font-black text-white text-sm">{fl.noteTitle}</h3>
+            </div>
+            <p className="text-[11px] text-zinc-400 mb-1">{noteFor.home} – {noteFor.away}</p>
+            <p className="text-[11px] text-zinc-500 mb-2"><span className="opacity-70">{t.code}:</span> {noteFor.code_market}</p>
+            <p className="text-[11px] text-amber-300/80 mb-3">{fl.noteHint}</p>
+            <label className="flex items-center gap-2 text-xs text-zinc-300 mb-3 cursor-pointer">
+              <input type="checkbox" checked={noteForm.no_bet} data-testid="code-note-nobet"
+                onChange={(e) => setNoteForm((f) => ({ ...f, no_bet: e.target.checked }))} />
+              {fl.noteNobet}
+            </label>
+            {!noteForm.no_bet && (
+              <input className={INP + " mb-3"} placeholder={fl.notePick} data-testid="code-note-pick"
+                value={noteForm.our_market} onChange={(e) => setNoteForm((f) => ({ ...f, our_market: e.target.value }))} />
+            )}
+            <textarea className={INP + " mb-4 h-24"} placeholder={fl.noteText} data-testid="code-note-text"
+              value={noteForm.note} onChange={(e) => setNoteForm((f) => ({ ...f, note: e.target.value }))} />
+            <div className="flex items-center gap-2">
+              <button onClick={saveNote} data-testid="code-note-save"
+                className="flex-1 bg-volt text-void font-black text-sm rounded-lg py-2 hover:bg-volt/90 transition-colors">{fl.noteSave}</button>
+              {noteFor.note && (
+                <button data-testid="code-note-delete"
+                  onClick={async () => { try { await api.post("/admin/code-reading/note", { code_market: noteFor.code_market }); toast.success("✓"); setNoteFor(null); load(); } catch { toast.error("Fehlgeschlagen"); } }}
+                  className="px-3 py-2 text-xs text-red-300 border border-red-500/40 rounded-lg hover:bg-red-500/15">{fl.noteDelete}</button>
+              )}
+              <button onClick={() => setNoteFor(null)} className="px-3 py-2 text-sm text-zinc-400 hover:text-white">✕</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
