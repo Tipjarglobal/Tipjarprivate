@@ -9333,15 +9333,19 @@ async def admin_code_reading_reset_verified(admin: dict = Depends(require_admin)
 
 @api_router.post("/admin/code-reading/clear-active")
 async def admin_code_reading_clear_active(admin: dict = Depends(require_admin)):
-    """Owner: wipe ALL still-active (upcoming/in-play, not yet settled) code-reads in one tap.
-    FINISHED reads (have an outcome/score, or match long over) are NEVER touched."""
+    """Owner: delete all still-active (upcoming/in-play) code-reads that have NO checkmark.
+    VERIFIED reads (verified=True) are PROTECTED and never deleted. Finished reads (have an
+    outcome/score, or match long over) are also never touched."""
     now_dt = datetime.now(timezone.utc)
     grace = timedelta(minutes=150)
     reads = await db.code_reads.find(
         {"expires_at": {"$gt": now_dt.isoformat()}},
-        {"_id": 0, "id": 1, "kickoff": 1, "created_at": 1, "outcome": 1, "score": 1}).to_list(500)
+        {"_id": 0, "id": 1, "kickoff": 1, "created_at": 1, "outcome": 1, "score": 1,
+         "verified": 1}).to_list(500)
     to_delete = []
     for r in reads:
+        if r.get("verified") is True:
+            continue  # protected — has a checkmark
         ko = _parse_kickoff(r.get("kickoff"))
         created = _parse_kickoff(r.get("created_at"))
         stale = created is not None and (now_dt - created) > timedelta(hours=10)
