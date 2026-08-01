@@ -1,5 +1,13 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemining: Team-Total & Salzburg (nächstes Tor) → Asiatisch Über 2.0
+- **Team-Total-Über-Code** (Team soll 2+ machen: „Gesamtzahl 1 Über 1.5", „Team 1 Über 1.5") → jetzt `Asiatisch Über 2.0 Tore` (Muster `match_over_asian2`) statt team-spezifischer „Unter 2.5"-Cap. Owner: keine Team-Tor-Wetten, v.a. nicht in Großbritannien. Ersetzt die alte Falkirk-Regel.
+- **Salzburg-Regel (4× korrigiert):** „nächstes Tor / exaktes N-tes Tor / kein 4. Tor / next goal"-Code → `Asiatisch Über 2.0 Tore` (neue Branch (e0) in `_code_read_interpret`). Vorher „exaktes Tor → NO BET".
+- Beide Muster (`match_over_asian2`) in `_REINTERP_RULES` → offene Reads self-healen beim Feed-Öffnen (Deploy nötig für Live).
+- Verifiziert: alle Regeln getestet OK; DC/Handicap/über 2.5 → NO BET; Frontend kompiliert, Syntax OK.
+- HINWEIS: `STRONG_FAVORITE_TEAMS` / „Favoriten-Whitelist + Odds-Check" eines anderen Agenten sind NICHT in dieser Umgebung (separater Fork).
+
+
 ## 2026-08-01 — Codemining: „Alle aktiven löschen"-Button + Herkunftsklärung
 - **New:** `POST /api/admin/code-reading/clear-active` — löscht in EINEM Tap alle noch aktiven (unabgerechneten) Codemining-Reads. **Beendete/abgerechnete Reads bleiben unangetastet** (gleiche is_over-Logik wie `/code-reading`).
 - **Frontend (`CodeReading.jsx`):** roter „Alle aktiven löschen"-Button rechts neben den Tabs (nur Admin, nur im Aktiv-Tab wenn Reads vorhanden), mit Bestätigungsdialog; Labels DE/EN/EL.
