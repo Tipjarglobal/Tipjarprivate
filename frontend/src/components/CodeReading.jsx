@@ -328,17 +328,25 @@ export function CodeReading() {
           {(crTab === "active" ? reads : finished).map((r) => {
             const noBet = r.read === "no_bet";
             const settled = r.outcome === "won" || r.outcome === "lost";
+            // Owner 2026-06: colour the WHOLE finished card + a big CORRECT/UNCORRECT verdict.
+            //  counter won → green · counter lost → red
+            //  no-bet that saved us (code did NOT come) → blue · no-bet that came anyway → orange
+            let verdict = null;
+            if (r.outcome === "won") verdict = { label: "CORRECT", card: "border-volt/70 bg-volt/15", chip: "bg-volt text-void" };
+            else if (r.outcome === "lost") verdict = { label: "UNCORRECT", card: "border-red-500/70 bg-red-500/20", chip: "bg-red-500 text-white" };
+            else if (noBet && r.code_outcome === "lost") verdict = { label: "CORRECT", card: "border-blue-500/70 bg-blue-500/20", chip: "bg-blue-500 text-white" };
+            else if (noBet && r.code_outcome === "won") verdict = { label: "UNCORRECT", card: "border-orange-500/70 bg-orange-500/20", chip: "bg-orange-500 text-void" };
+            const cardCls = verdict ? verdict.card : (noBet ? "border-zinc-700 bg-void/40" : "border-volt/40 bg-volt/5");
             return (
               <div key={r.id} data-testid={`code-read-${r.id}`}
-                className={`rounded-xl border p-4 ${noBet ? "border-zinc-700 bg-void/40" : "border-volt/40 bg-volt/5"}`}>
+                className={`rounded-xl border p-4 ${cardCls}`}>
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="font-bold text-white text-sm truncate">{r.home} – {r.away}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {settled ? (
-                      <span data-testid={`code-read-outcome-${r.id}`}
-                        className={`inline-flex items-center gap-1 text-[10px] font-black rounded-full px-2 py-0.5 ${r.outcome === "won" ? "bg-volt/20 text-volt" : "bg-red-500/15 text-red-400"}`}>
-                        {r.outcome === "won" ? <Check size={11} /> : <X size={11} />}
-                        {r.outcome === "won" ? t.won : t.lost}{r.score ? ` ${r.score}` : ""}
+                    {verdict ? (
+                      <span data-testid={`code-read-verdict-${r.id}`}
+                        className={`inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wide rounded-full px-2.5 py-0.5 ${verdict.chip}`}>
+                        {verdict.label === "CORRECT" ? <Check size={12} /> : <X size={12} />}{verdict.label}
                       </span>
                     ) : r.league ? (
                       <span className="text-[10px] text-zinc-500">{r.league}</span>
@@ -355,10 +363,10 @@ export function CodeReading() {
                   <span className="opacity-70">{t.code}:</span> <span className="line-through">{localizeMarket(r.code_market, i18nT)}</span>
                   {r.code_odds ? ` @ ${r.code_odds}` : ""}
                 </p>
-                {r.score && r.outcome !== "won" && r.outcome !== "lost" && (
-                  <div data-testid={`code-read-score-${r.id}`}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-black text-white bg-zinc-800 border border-zinc-600 rounded-full px-2.5 py-1 mb-2">
-                    🏁 {t.endResult}: {r.score}
+                {r.score && (
+                  <div data-testid={`code-read-score-${r.id}`} className="mb-2">
+                    <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold block">🏁 {t.endResult}</span>
+                    <span className="text-3xl font-black text-white tracking-wider">{r.score}</span>
                   </div>
                 )}
                 {r.goal_minutes && (

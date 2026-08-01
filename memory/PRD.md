@@ -1230,3 +1230,15 @@ ist 1X2 / "wer zuerst 2 Tore" unzuverlässig ("jeder schlägt jeden"). UMGESETZT
 GETESTET: Detektor (Scotland/England/Wales/Irland=True; USL/Ghana/Bundesliga=False), Asian-2.0-Grading
 (3-0/2-1 won, 1-1/2-0 void, 1-0/0-0 lost), Live-Lauf (Welsh Premier → Über 2 asiatische Tore, keine
 first_two mehr auf britischen Ligen). HINWEIS: live erst nach "Save to GitHub → Deploy".
+
+## Update 2026-06 (22) — Codemining Beendet-Tab: Verdict-Farben + großes Endergebnis
+Owner: beendete Codemining-Spiele sollen sehr deutlich Endergebnis + Verdict zeigen.
+- Backend (`settle_code_reads`): für NO-BET-Reads wird jetzt via `judge_market` bewertet, ob der
+  Buchmacher-Code doch KAM (`code_outcome` won/lost). Backfill via erweiterte Query.
+- Frontend (CodeReading.jsx, Beendet-Tab): großes "FINAL SCORE" (text-3xl) + Verdict-Chip + ganze Karte
+  eingefärbt:
+  • Counter gewonnen → grün "CORRECT" · Counter verloren → rot "UNCORRECT"
+  • NO-BET, Code kam NICHT (uns gerettet) → blau "CORRECT" · NO-BET, Code kam doch → orange "UNCORRECT"
+GETESTET: settle (Dundee/Rangers 1-1 → code_outcome lost → blau CORRECT; LASK 3-0 → won → orange
+UNCORRECT; alle Counter grün) + Screenshot (7 Verdict-Chips, große Ergebnisse, Farben). HINWEIS: live
+erst nach "Save to GitHub → Deploy".

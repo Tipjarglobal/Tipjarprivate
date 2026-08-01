@@ -8761,7 +8761,8 @@ async def settle_code_reads() -> dict:
         {"$and": [
             {"$or": [{"read": "counter", "our_market": {"$nin": [None, ""]}}, {"read": "no_bet"}]},
             {"$or": [{"score": {"$exists": False}},
-                     {"goal_minutes": {"$exists": False}, "score": {"$nin": [None, "", "0-0"]}}]},
+                     {"goal_minutes": {"$exists": False}, "score": {"$nin": [None, "", "0-0"]}},
+                     {"read": "no_bet", "code_outcome": {"$exists": False}}]},
         ]},
         {"_id": 0}).sort("created_at", 1).to_list(120)
     settled = 0
@@ -8799,10 +8800,25 @@ async def settle_code_reads() -> dict:
         fid = fx.get("fixture_id")
         if fid and score != "0-0" and not _api_quota_exhausted():
             gm = await _code_goal_minutes(fid, fx)
-        # Backfill: read already graded (has score) but missing goal minutes → just add minutes.
+        is_no_bet = r.get("read") == "no_bet"
+        # For NO-BET reads: judge whether the BOOKIE's original code leg actually CAME. If it did
+        # NOT come → our no-bet "saved us" (correct/blue). If it DID come → we missed it (uncorrect/
+        # orange). Owner 2026-06.
+        code_out = None
+        if is_no_bet:
+            code_mkt = r.get("code_market") or r.get("code") or ""
+            if code_mkt:
+                try:
+                    code_out = await judge_market(code_mkt, home, away,
+                                                  fx.get("home_goals"), fx.get("away_goals"))
+                except Exception:
+                    code_out = None
+        # Backfill: read already graded (has score) → just add minutes / code_outcome.
         if r.get("score"):
-            await db.code_reads.update_one({"id": r["id"]}, {"$set": {
-                "goal_minutes": gm, "fixture_id": fid}})
+            upd = {"goal_minutes": gm, "fixture_id": fid}
+            if is_no_bet and code_out in ("won", "lost", "void"):
+                upd["code_outcome"] = code_out
+            await db.code_reads.update_one({"id": r["id"]}, {"$set": upd})
             settled += 1
             continue
         if r.get("read") == "counter" and r.get("our_market"):
@@ -8814,10 +8830,10 @@ async def settle_code_reads() -> dict:
                 "outcome": outcome, "score": score, "goal_minutes": gm,
                 "fixture_id": fid, "settled_at": now.isoformat()}})
         else:
-            # NO-BET: no bet outcome, just record the final score + goal minutes for the Beendet tab.
+            # NO-BET: record score + minutes + whether the bookie's code leg came (code_outcome).
             await db.code_reads.update_one({"id": r["id"]}, {"$set": {
                 "outcome": "info", "score": score, "goal_minutes": gm,
-                "fixture_id": fid, "settled_at": now.isoformat()}})
+                "code_outcome": code_out, "fixture_id": fid, "settled_at": now.isoformat()}})
         settled += 1
     return {"ok": True, "settled": settled, "checked": len(reads)}
 
