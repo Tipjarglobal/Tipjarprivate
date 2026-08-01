@@ -57,7 +57,7 @@ from server import (
 
 
 def _special_gift_kind(market: str):
-    """Detect the owner's special GIFTS (2026-07-31) from the market text."""
+    """Detect the owner's special GIFTS from the market text."""
     m = (market or "").lower()
     if "mindestens eine halbzeit" in m:
         return "half_any"
@@ -65,6 +65,14 @@ def _special_gift_kind(market: str):
         return "not_both_halves"
     if "ersten 2 tore" in m or "erste 2 tore" in m or "ersten zwei tore" in m:
         return "first_two"
+    # owner 2026-08: cleaner half-based gifts
+    if ("1. halbzeit und" in m or "hz und" in m) and "spiel" in m and "gewinnt" in m:
+        return "ht_ft"                                   # wins 1st half AND the match
+    if "gewinnt" in m and ("1. halbzeit" in m or "erste halbzeit" in m or "1. hz" in m):
+        return "ht_win"                                  # wins the 1st half
+    if ("halbzeit" in m and ("unter 2.5" in m or "unter 2,5" in m)
+            and ("über 1.5" in m or "uber 1.5" in m or "über 0.5" in m or "uber 0.5" in m)):
+        return "ht_combo"                                # 1st half under 2.5 + full-match over
     return None
 
 
@@ -101,6 +109,24 @@ def _grade_special_gift(kind: str, market: str, home_c: str, away_c: str, fx: di
         if kind == "half_any":
             return bool(win1 or win2)
         return not (win1 and win2)                    # NOT both halves won
+    if kind in ("ht_win", "ht_ft"):
+        hh, ha = fx.get("ht_home"), fx.get("ht_away")
+        if hh is None or ha is None:
+            return None
+        f1, o1 = orient(hh, ha)                       # 1st-half goals (fav, opp)
+        if kind == "ht_win":
+            return f1 > o1                            # favourite wins the 1st half
+        fF, oF = orient(hg, ag)                        # full-time goals (fav, opp)
+        return (f1 > o1) and (fF > oF)                # wins 1st half AND the match
+    if kind == "ht_combo":
+        hh, ha = fx.get("ht_home"), fx.get("ht_away")
+        if hh is None or ha is None:
+            return None
+        ht_total = (hh or 0) + (ha or 0)
+        ft_total = (hg or 0) + (ag or 0)
+        mlow = (market or "").lower()
+        ft_line = 1.5 if ("über 1.5" in mlow or "uber 1.5" in mlow) else 0.5
+        return (ht_total < 2.5) and (ft_total > ft_line)
     if kind == "first_two":
         try:
             events = _apifootball("/fixtures/events", {"fixture": fx.get("fixture_id")}) or []

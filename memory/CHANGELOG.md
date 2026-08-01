@@ -1,5 +1,17 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Gifts: ein Gift pro Spiel + bessere Halbzeit-Märkte (Owner-Wünsche)
+- Owner sah 2 widersprüchliche Gifts auf DEMSELBEN Spiel („gewinnt mind. eine Halbzeit" @1.25 vs „gewinnt NICHT beide Halbzeiten" @1.55) — Lotto. Wollte: 1 Pick/Spiel + sinnvollere Märkte.
+- **Neue, auto-abrechenbare Gift-Märkte** (`settlement.py` `_special_gift_kind` + `_grade_special_gift`):
+  - `ht_win` „{Fav} gewinnt die 1. Halbzeit" (HT-Sieger)
+  - `ht_ft` „{Fav} gewinnt 1. Halbzeit und Spiel" (HT-Sieger UND FT-Sieger)
+  - `ht_combo` „1. Halbzeit unter 2.5 Tore & über 1.5 Tore im Spiel" (HT-Total<2.5 UND FT-Total>Linie)
+  - benotet aus HT-/FT-Score, funktioniert auch für Auswärts-Favoriten (orient).
+- **Generator** (`gift_specials_autopost`): postet jetzt genau EIN Gift pro Spiel (elif-Kette: ht_ft → ht_win → first_two → ht_combo). Die widersprüchliche half_any/not_both_halves-Ausgabe entfernt (Erkennung/Benotung bleibt für Altbestand). Kategorie bleibt `value`+`is_gift` → wird zusätzlich vom `_dedupe_hq_tips` (core) auf 1/Spiel reduziert.
+- Verifiziert (Unit): Erkennung + Benotung aller neuen Märkte (won/lost/Auswärts-Fav) korrekt. Backend startet sauber.
+- ⚠️ Wirkt erst nach Deploy; die 2 Duplikate auf Prod stammen aus altem Code ohne Dedup-Aufruf.
+
+
 ## 2026-08-01 — FIX: Single-Picks — nur EIN Pick pro Spiel (Risk > Value > Banker)
 - Owner: dasselbe Spiel wurde 3-4× gepostet (Risk + Value + Banker) → Single-Tab überflutet. „Wenn du den Risk gegeben hast, ist fertig."
 - **Ursache:** `_dedupe_hq_tips()` (a) deduplizierte absichtlich PRO Kategorie (`|{_cat}`), so blieb pro Spiel je ein Risk/Value/Banker; UND (b) wurde **nie aufgerufen** (toter Code).

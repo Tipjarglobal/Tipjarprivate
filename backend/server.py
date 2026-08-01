@@ -7931,7 +7931,7 @@ async def gift_specials_autopost() -> dict:
     now = datetime.now(timezone.utc)
     day = now.date().isoformat()
     counts = {}
-    for k in ("half_any", "not_both_halves", "first_two", "asian_o2"):
+    for k in ("ht_win", "ht_ft", "ht_combo", "first_two", "asian_o2"):
         counts[k] = await db.tips.count_documents(
             {"source": "hq-auto", "is_gift": True, "gift_kind": k, "gift_day": day})
     if all(counts[k] >= GIFT2_MAX_PER_KIND for k in counts):
@@ -8015,19 +8015,28 @@ async def gift_specials_autopost() -> dict:
         except (TypeError, ValueError):
             continue
 
-        if counts["half_any"] < GIFT2_MAX_PER_KIND and win_od > 1.30:
-            await _post("half_any", f"{fav} gewinnt mindestens eine Halbzeit", 1.25,
-                        f"🎁 {fav} ist klarer Favorit (Quote {win_od:.2f}) und gewinnt sehr "
-                        f"wahrscheinlich mindestens EINE der beiden Halbzeiten. Quote geschätzt.")
-        if counts["not_both_halves"] < GIFT2_MAX_PER_KIND and 1.0 < win_od <= 1.40:
-            await _post("not_both_halves", f"{fav} gewinnt NICHT beide Halbzeiten", 1.55,
-                        f"🎁 Selbst der starke Favorit {fav} (Quote {win_od:.2f}) gewinnt selten "
-                        f"BEIDE Halbzeiten — Value gegen beide-Halbzeiten. Quote geschätzt.")
-        if (counts["first_two"] < GIFT2_MAX_PER_KIND and win_od > 1.40
+        goals_game = int(float(p.get("total") or (fav_goals + opp_goals))) >= 3 or bool(p.get("over25"))
+        # owner 2026-08: exactly ONE gift per match (contradictory half-lotto pair removed).
+        # Best applicable: HT+FT double → HT winner → first-two → HT-under2.5 + FT-over.
+        if (counts["ht_ft"] < GIFT2_MAX_PER_KIND and 1.0 < win_od <= 1.55
+                and fav_goals >= 2 and opp_goals <= 1):
+            await _post("ht_ft", f"{fav} gewinnt 1. Halbzeit und Spiel", 2.10,
+                        f"🎁 {fav} ist klarer Favorit (Quote {win_od:.2f}) und trifft laut Prognose "
+                        f"{fav_goals}× bei kaum gefährlichem Gegner ({opp_goals}). Führt zur Halbzeit "
+                        f"UND gewinnt am Ende. Quote geschätzt.")
+        elif counts["ht_win"] < GIFT2_MAX_PER_KIND and 1.0 < win_od <= 1.80:
+            await _post("ht_win", f"{fav} gewinnt die 1. Halbzeit", 1.85,
+                        f"🎁 {fav} (Quote {win_od:.2f}) startet stark und gewinnt sehr wahrscheinlich "
+                        f"die 1. Halbzeit — früh entschieden statt Zittern bis zum Schluss. Quote geschätzt.")
+        elif (counts["first_two"] < GIFT2_MAX_PER_KIND and win_od > 1.40
                 and fav_goals >= 2 and opp_goals <= 1):
             await _post("first_two", f"{fav} schießt die ersten 2 Tore", 2.00,
                         f"🎁 {fav} trifft laut Prognose {fav_goals}×, Gegner kaum gefährlich "
                         f"({opp_goals}). Die ersten 2 Tore des Spiels von {fav}. Quote geschätzt.")
+        elif counts["ht_combo"] < GIFT2_MAX_PER_KIND and goals_game:
+            await _post("ht_combo", "1. Halbzeit unter 2.5 Tore & über 1.5 Tore im Spiel", 1.60,
+                        f"🎁 Torreiches Spiel erwartet, aber selten schon 3 Tore zur Pause: 1. Halbzeit "
+                        f"UNTER 2.5 Tore und im gesamten Spiel ÜBER 1.5 Tore. Quote geschätzt.")
     return {"posted": posted, "candidates": len(cand)}
 
 
