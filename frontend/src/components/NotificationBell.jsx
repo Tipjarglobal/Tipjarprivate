@@ -130,6 +130,41 @@ function loadHistory() {
   } catch { /* ignore */ }
   return [];
 }
+
+// Match-level dedupe (persisted): the same fixture must never spam the board just because the
+// backend re-generated the pick under a fresh id. We remember a stable per-match signature for
+// 24h and refuse to alert the same match+area twice within that window.
+const SIG_KEY = "tj_notified_sigs";
+const SIG_TTL = 24 * 3600 * 1000;
+const _sigNorm = (s) => String(s || "").trim().toLowerCase();
+function _loadSigs() {
+  try { const raw = localStorage.getItem(SIG_KEY); if (raw) return JSON.parse(raw); } catch { /* ignore */ }
+  return {};
+}
+function notifSig(tp, area) {
+  const base = area.startsWith("live") ? "live" : area;
+  if (tp.is_parlay) {
+    const legs = (tp.legs || [])
+      .map((l) => `${_sigNorm(l.home || l.home_team)}-${_sigNorm(l.away || l.away_team)}`)
+      .sort().join("|");
+    return `${base}|parlay|${legs}`;
+  }
+  return `${base}|${_sigNorm(tp.home_team)}|${_sigNorm(tp.away_team)}`;
+}
+function alreadyNotified(sig) {
+  const m = _loadSigs();
+  const now = Date.now();
+  let changed = false;
+  for (const k of Object.keys(m)) { if (now - m[k] > SIG_TTL) { delete m[k]; changed = true; } }
+  const hit = m[sig] && now - m[sig] < SIG_TTL;
+  if (changed) { try { localStorage.setItem(SIG_KEY, JSON.stringify(m)); } catch { /* ignore */ } }
+  return !!hit;
+}
+function markNotified(sig) {
+  const m = _loadSigs();
+  m[sig] = Date.now();
+  try { localStorage.setItem(SIG_KEY, JSON.stringify(m)); } catch { /* ignore */ }
+}
 function timeAgo(ts, nowLabel) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 45) return nowLabel;
@@ -239,6 +274,14 @@ export default function NotificationBell() {
   }, []);
 
   const fireAlert = (tp, area) => {
+    // Owner: a notification must ALWAYS point to a real pick — never fire an empty one.
+    if (!tp.id && area !== "systems") return;
+    // De-dupe by MATCH (not id): the same fixture won't spam even if the backend churns ids.
+    if (tp.id) {
+      const sig = notifSig(tp, area);
+      if (alreadyNotified(sig)) return;
+      markNotified(sig);
+    }
     const isLive = area.startsWith("live");
     const navArea = area.startsWith("live") ? "live" : area;
     const areaLabel = t(`bell.area.${area}`);
@@ -285,13 +328,18 @@ export default function NotificationBell() {
   // Coalesce a whole WAVE of new picks (same area) into ONE toast, so the user isn't
   // buried under a never-ending stack (owner: "es hört nie auf").
   const fireAlertBatch = (tps, area) => {
+    // Drop matches we've already alerted about (churned duplicates) before bundling.
+    const fresh = tps.filter((tp) => tp.id && !alreadyNotified(notifSig(tp, area)));
+    if (fresh.length === 0) return;
+    if (fresh.length === 1) { fireAlert(fresh[0], area); return; }
+    fresh.forEach((tp) => markNotified(notifSig(tp, area)));
     const areaLabel = t(`bell.area.${area}`);
     const navArea = area.startsWith("live") ? "live" : area;
-    const title = `${tps.length} × ${areaLabel}`;
-    const names = tps.slice(0, 3).map((tp) => tp.is_parlay
+    const title = `${fresh.length} × ${areaLabel}`;
+    const names = fresh.slice(0, 3).map((tp) => tp.is_parlay
       ? `${(tp.legs || []).length}-leg`
       : (toLatin(tp.home_team) || "Tip")).join(", ");
-    const body = tps.length > 3 ? `${names} +${tps.length - 3}` : names;
+    const body = fresh.length > 3 ? `${names} +${fresh.length - 3}` : names;
     if (area === "experts") { try { playCoin("expert"); } catch { /* ignore */ } }
     pushHistory({ key: `batch-${area}-${Date.now()}`, title, body, area, navArea, pickId: null, ts: Date.now() });
     toast.message(title, {
@@ -305,7 +353,7 @@ export default function NotificationBell() {
       },
     });
     bumpToast();
-    setUnseen((u) => u + tps.length);
+    setUnseen((u) => u + fresh.length);
   };
 
   useEffect(() => {
@@ -323,18 +371,15 @@ export default function NotificationBell() {
         } else {
           const newByArea = {};
           for (const tp of data) {
-            if (!seen.current.has(tp.id)) {
-              const area = tipArea(tp);
-              const isLive = area.startsWith("live");
-              // The star slider now also governs EXPERT picks (they used to always ring
-              // and flood the feed). Only live picks bypass it — those are time-critical
-              // and already opt-in per area.
-              const bypassThreshold = isLive;
-              if (onRef.current && (areasRef.current[area] !== false) &&
-                  (bypassThreshold || tipRating(tp) >= minRef.current)) {
-                (newByArea[area] = newByArea[area] || []).push(tp);
-              }
-              seen.current.add(tp.id);
+            if (seen.current.has(tp.id)) continue;
+            seen.current.add(tp.id);
+            // Live picks arrive in BOTH this feed and the /status=live feed — let ONLY the live
+            // watcher (below) alert them, otherwise every live pick rings twice.
+            if (tp.status === "live") continue;
+            const area = tipArea(tp);
+            if (onRef.current && (areasRef.current[area] !== false) &&
+                tipRating(tp) >= minRef.current) {
+              (newByArea[area] = newByArea[area] || []).push(tp);
             }
           }
           // One toast per area per poll: single pick → detailed, a wave → one summary.

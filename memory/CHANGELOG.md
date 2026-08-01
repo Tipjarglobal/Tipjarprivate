@@ -1,5 +1,13 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX: Benachrichtigungen (Duplikate + Phantom-Alerts)
+- **6× dasselbe Spiel (Aberdeen):** Dedup lief nur über `tip.id` → bei jeder Neu-Generierung desselben Spiels (neue id) feuerte eine neue Benachrichtigung. Neu: **match-level Dedup** (`notifSig` = area + normalisierte Teams / Parlay-Legs), persistiert in localStorage `tj_notified_sigs`, 24h-Fenster. Dasselbe Spiel+Bereich meldet sich nicht mehr doppelt. Greift in `fireAlert` + `fireAlertBatch`.
+- **Live-Pick doppelt (Cobresal):** Live-Picks stecken in beiden Feeds (`?sort=new` UND `?status=live`). Section-1 überspringt jetzt `status==="live"` → nur der Live-Watcher meldet Live-Picks. Kein Doppel-Ring mehr.
+- **Nur mit echtem Pick:** `fireAlert` bricht ab, wenn kein `tp.id` vorhanden (außer Systems-View). Klick auf Board-Eintrag springt via `tj-open-pick` zum Pick (App.js `jumpToPick`, mit "Pick nicht mehr verfügbar"-Toast als Fallback).
+- Datei: `frontend/src/components/NotificationBell.jsx`. Kompiliert (nur vorbestehende exhaustive-deps-Warnungen). Bell-Panel + Board rendern ✅.
+- Hinweis: bereits gespammte Alt-Einträge auf dem Gerät bleiben, bis "Alle löschen" getippt wird — der Fix verhindert NEUE Duplikate.
+
+
 ## 2026-08-01 — Codemining: "Ρίζωσε" (Root note) + Anstoßzeit auf Karten
 - **Root-Note-Knopf (Wand2):** Pro Karte (nur wenn eine Notiz existiert) + globaler Toolbar-Knopf "Notizen einwurzeln (n)". Backend: `POST /admin/code-reading/{id}/root-note` und `POST /admin/code-reading/root-notes` (bulk, alle aktiven Reads mit Notiz).
   - Wurzelt die Owner-Notiz FEST in den Read ein: our_market/read werden final, `pattern="rooted"`, `rooted=True`, `verified=True`.
