@@ -8352,6 +8352,9 @@ LIVE_INPLAY_STATUSES = {"1H", "2H", "ET", "BT", "P", "LIVE", "INT"}
 LIVE_MAX_TIPS = 12
 LIVE_POLL_SECONDS = 6 * 60
 LIVE_STAT_CALL_CAP = 20  # max /fixtures/statistics calls per live run (quota guard)
+# Owner 2026-08 (Samstag, viele Spiele): NUR noch Live-Picks mit 8+ Sternen melden.
+# Alles mit 7★ oder weniger wird gar nicht gepostet (kein re-offer, kein generisches Über).
+LIVE_MIN_STARS = 8.0
 
 
 def _market_team_side(market: str, home: str, away: str):
@@ -9568,6 +9571,29 @@ def _live_stat_totals(stats):
     return sog, corners, shots
 
 
+def _live_team_pressure(stats):
+    """Per-team live pressure score (shots-on-goal*2 + corners + total-shots*0.5). Returns a list
+    of (team_name, score, sog, corners) so we can name WHICH team is about to score."""
+    out = []
+    for team in (stats or []):
+        name = ((team.get("team") or {}).get("name")) or ""
+        sog = corners = shots = 0
+        for s in (team.get("statistics") or []):
+            typ = (s.get("type") or "").lower()
+            val = s.get("value")
+            if isinstance(val, str):
+                val = int(re.sub(r"[^0-9]", "", val) or 0)
+            val = val or 0
+            if "shots on goal" in typ:
+                sog = val
+            elif "corner" in typ:
+                corners = val
+            elif "total shots" in typ:
+                shots = val
+        out.append((name, sog * 2 + corners + shots * 0.5, sog, corners))
+    return out
+
+
 def _live_red_cards(stats) -> int:
     """Red cards currently on the pitch — read from the SAME live statistics payload
     (no extra API call). Owner 2026-07-30: a red card can break the flow of goals."""
@@ -9831,6 +9857,8 @@ async def live_autopost() -> dict:
         sog, corners, _ = _live_stat_totals(stats)
         odd = _live_odd(t.get("market"), minute, hg + ag)
         live_id = f"hqlive-{fid}-{t['id']}"
+        if min(7.0, float(t.get("ai_rating") or 7.0)) < LIVE_MIN_STARS:
+            continue  # owner 2026-08: 7★ or less → never posted live
         if (sog + corners) > 0:
             press_txt = f"{sog} Schüsse aufs Tor · {corners} Ecken — Druck vorhanden."
         else:
@@ -9886,33 +9914,42 @@ async def live_autopost() -> dict:
         if _team_or_league_blocked(home, away, ""):
             continue
         goals = fx.get("goals") or {}
-        total = (goals.get("home") or 0) + (goals.get("away") or 0)
-        if total > 1:
-            continue  # 0-0 or one goal → "Über 1.5/2.5" stays realistic & settleable
-        line = "1.5" if total == 0 else "2.5"
+        gh0, ag0 = goals.get("home") or 0, goals.get("away") or 0
         stats = _apifootball("/fixtures/statistics", {"fixture": fid})
         stat_calls += 1
-        if not _live_pressure_ok(stats, minute):
+        press = _live_team_pressure(stats)
+        if len(press) != 2:
             continue
-        sog, corners, _ = _live_stat_totals(stats)
-        market = f"Über {line} Tore"
-        odd = _live_odd(market, minute, total)
+        press.sort(key=lambda p: p[1], reverse=True)
+        tname, tscore, tsog, tcorn = press[0]
+        # Owner 2026-08: "oder ein Team wird treffen (nenne welches)" — only a STRONG, clearly
+        # one-sided pressure is worth an 8★+ live pick. Weak/flat games are NOT reported at all.
+        if not (tsog >= 4 or tscore >= 9):
+            continue
+        scored = gh0 if (_sig_tokens(tname) & _sig_tokens(home)) else ag0
+        if scored >= 1:
+            continue  # that team already scored → "trifft" would be settled/void
+        market = f"{tname} trifft (Über 0.5 Tore)"
+        odd = round(min(2.30, max(1.45, _live_odd("Über 1.5 Tore", minute, gh0 + ag0) + 0.15)), 2)
+        rating = 9.0 if tsog >= 6 else 8.0
+        if rating < LIVE_MIN_STARS:
+            continue
         analysis = (
-            f"LIVE-Pick ({minute}'): {market} — Stand {goals.get('home') or 0}:{goals.get('away') or 0}. "
-            f"Druck vorhanden: {sog} Schüsse aufs Tor · {corners} Ecken. "
-            f"Noch {max(90 - minute, 0)} Min. Spielzeit — live zu {odd}."
+            f"LIVE-Pick ({minute}'): {tname} trifft noch — Stand {gh0}:{ag0}. "
+            f"{tname} drückt massiv: {tsog} Schüsse aufs Tor · {tcorn} Ecken. "
+            f"Ein Tor reicht. Live zu {odd}."
         )
         live_id = f"hqlive-fresh-{fid}"
         await db.tips.update_one({"id": live_id}, {
             "$set": {
-                "market": market, "odds": f"{odd:.2f}", "ai_rating": 7.0,
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": rating,
                 "ai_analysis": analysis, "status": "live",
-                "win_prob": 0.7,
-                "category": ("banker" if (odd < 1.60 and _is_banker_safe(t.get("market"))) else "value"),
+                "win_prob": min(0.9, 1.0 / odd),
+                "category": "banker",
                 "league": _fixture_league_label(fx),
                 "country": _fixture_country(fx),
                 "league_code": "",
-                "live_minute": minute, "live_score": f"{goals.get('home') or 0}:{goals.get('away') or 0}",
+                "live_minute": minute, "live_score": f"{gh0}:{ag0}",
                 "updated_at": now,
             },
             "$setOnInsert": {
@@ -9926,7 +9963,7 @@ async def live_autopost() -> dict:
             },
         }, upsert=True)
         posted += 1
-        logger.info(f"LIVE fresh: {home} vs {away} — {market} @ {odd} ({minute}')")
+        logger.info(f"LIVE team-scores: {tname} — {market} @ {odd} ({minute}')")
 
     # 4) BANGER picks (owner, v2) — genuine 10★ in-play "goal-fest" bets.
     #    • Goal-fest continuation (total >= 3): the game is already a shootout (France–England
@@ -10003,7 +10040,7 @@ async def live_autopost() -> dict:
                 continue
             # money-back-at-2 insurance → a touch safer than the raw prob, still capped at 7★.
             wp = min(0.90, 1.0 / odd + 0.05)
-            rating = min(7.0, max(3.0, round(wp * 10, 1)))
+            rating = min(9.0, max(8.0, round(wp * 10, 1)))  # Asian money-back-at-2 = safe 8★+
             if total == 1:
                 trailing = away if gh > ag else home
                 note = (f"{trailing} liegt zurück und drückt auf den Ausgleich — bei GENAU 2 Toren "
@@ -10015,6 +10052,8 @@ async def live_autopost() -> dict:
             f"Druck: {sog} Schüsse aufs Tor · {corners} Ecken. Live zu {odd}. "
             f"Timing: am besten sofort spielen, solange die Quote hoch ist."
         )
+        if rating < LIVE_MIN_STARS:
+            continue  # owner 2026-08: only 8★+ live bangers (safe Asian money-back) get posted
         await db.tips.update_one({"id": banger_id}, {
             "$set": {
                 "market": market, "odds": f"{odd:.2f}", "ai_rating": rating,
