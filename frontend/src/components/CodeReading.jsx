@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2, BadgeCheck } from "lucide-react";
+import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2, BadgeCheck, FlaskConical, StickyNote } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin } from "../i18n";

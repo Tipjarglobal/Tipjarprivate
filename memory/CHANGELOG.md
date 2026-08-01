@@ -1,5 +1,11 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — FIX: Black Screen im Code-Mining-Tab (P0)
+- **Ursache:** `CodeReading.jsx` nutzte die Icons `FlaskConical` (Demo) & `StickyNote` (Notiz), importierte sie aber nie → `ReferenceError: FlaskConical is not defined` beim Rendern der Karten → kompletter React-Crash, ausschließlich auf dem Code-Mining-Tab. (Regression aus dem Notiz/Demo-Feature, nicht Service-Worker.)
+- **Fix:** Beide Icons dem lucide-react-Import (Zeile 2) hinzugefügt.
+- Verifiziert per Screenshot: Login als Admin → Code Mining → Aktiv- + Beendet-Tab rendern ohne Black Screen, keine Konsolenfehler.
+
+
 ## 2026-08-01 — Codemining: Notiz-System, Duplikat-Schutz, Demo-Schutz, Meta-Anzeige
 - **Notiz-System (`code_notes`):** Notiz ist an den CODE-TEXT gebunden (normalisiert via `_code_note_key`). Wann immer genau dieser Code auftaucht (Scan ODER Sweep), überschreibt die Notiz automatisch den Pick — `our_market` ODER `No Bet` — + Begründung. Bleibt dauerhaft bis geändert/gelöscht. Endpoints: `POST /admin/code-reading/note` (upsert; leer = löschen), `GET /admin/code-reading/notes`, `DELETE /admin/code-reading/note/{key}`. Helper: `_lookup_code_note`, `_note_to_interp` (pattern `note_override`). Notiz wird bei `POST note` sofort auf offene Reads angewendet (via Sweep) und in `GET /code-reading` je Read als `note` mitgeliefert.
 - **Duplikat-Schutz beim Upload:** Scan überspringt ein Leg, wenn bereits ein AKTIVER Read mit gleichen Teams (`_norm`) + gleichem Match-Datum existiert (statt vorher zu löschen+neu). Kein Duplikat.
