@@ -265,6 +265,40 @@ async def admin_smart_reset(admin: dict = Depends(require_admin)):
     return {"deleted": deleted, **res}
 
 
+async def _regen_pregames_bg():
+    """Kick a fresh regeneration after the owner's 'shut down & refill' reset (owner 2026-08)."""
+    try:
+        if API_FOOTBALL_KEY:
+            await master_live_alternatives()
+            await master_consensus()
+            await master_doublepack()
+            await master_build_packs()
+            await master_riskparade_build()
+            await master_special_build()
+            await master_avatar_calls()
+            await master_hotscorer_combo()
+            await gift_specials_autopost()
+        await master_avatar_codemining()
+        if await ensure_chromium():
+            await forebet_autopost()
+            await predictz_autopost()
+        await footballpredictions_autopost()
+        logger.info("Reset regen: pregame HQ + Master slips refilled.")
+    except Exception as e:
+        logger.error(f"reset regen failed: {e}")
+
+
+@api_router.post("/admin/reset-pregames")
+async def admin_reset_pregames(admin: dict = Depends(require_admin)):
+    """Owner homepage button (2026-08): 'kurz runterfahren und wieder aufstocken'. Removes ALL
+    PENDING pregame KI-Single (hq-auto), KI-System (hq-system) and Master (hq-master) slips —
+    NEVER live picks, never settled history — then kicks a fresh regeneration in the background."""
+    q = {"source": {"$in": ["hq-auto", "hq-system", "hq-master"]}, "status": "pending"}
+    removed = (await db.tips.delete_many(q)).deleted_count
+    asyncio.create_task(_regen_pregames_bg())
+    return {"ok": True, "removed": removed, "regenerating": True}
+
+
 async def _purge_blacklisted() -> dict:
     """Remove predictions + hide open tips whose (top-level) fixture/league is now blacklisted.
     Settlement is unaffected (it never filters `hidden`); master slips get their blacklisted legs
@@ -887,7 +921,7 @@ async def master_avatar():
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "league": 1, "market": 1,
          "odds": 1, "match_time": 1, "avatar_minute": 1, "avatar_text": 1,
          "avatar_confidence": 1, "drought": 1, "status": 1,
-         "avatar_player": 1, "avatar_scorer": 1}
+         "avatar_player": 1, "avatar_scorer": 1, "from_codemining": 1}
     ).sort("created_at", -1).to_list(20)
     return {"count": len(docs), "calls": docs, "generated_at": day}
 
@@ -5459,10 +5493,13 @@ async def build_systems() -> dict:
         if len(safe) >= 4:
             break
 
-    # 2) BANKER-KOMBI — 5 strongest favourites as Double Chance (owner's winning style)
+    # 2) BANKER-KOMBI — strongest favourites as Double Chance. Owner ("wir spielen kein Lotto"):
+    #    NUR wenn der Gegner praktisch NICHT gewinnen kann — keine schwammige Val-1X-/Fortaleza-1X-Füller.
     bankers = []
     for p in fav_sorted:
         if (p.get("fav_prob") or 0) < 45:
+            continue
+        if not _opp_win_practically_impossible(p):
             continue
         s = _dc_sel(p, 1.0, 8.5)
         if s:
@@ -5493,6 +5530,9 @@ async def build_systems() -> dict:
     for p in fav_sorted:
         team = _fav_team(p)
         if not team:
+            continue
+        # owner: kein Lotto — Doppelte Chance NUR wenn der Gegner praktisch nicht gewinnen kann.
+        if not _opp_win_practically_impossible(p):
             continue
         fp = p.get("fav_prob") or 0
         ph, pa = p.get("ph") or 0, p.get("pa") or 0
@@ -5593,7 +5633,7 @@ async def build_systems() -> dict:
             mk, od, rt = "Beide Teams treffen (BTTS)", 1.90, 7.0
         elif team and fp >= 55:
             mk, od, rt = f"{team} Sieg", round(max(1.65, min(2.6, 100.0 / fp)), 2), 7.0
-        elif team:
+        elif team and _opp_win_practically_impossible(p):
             dc = "1X" if p.get("fav") == "home" else "X2"
             mk, od, rt = f"{team} Doppelte Chance {dc}", round(_dc_odds(fp) * 1.15, 2), 7.5
         else:
@@ -8926,6 +8966,11 @@ async def _run_code_scan(job_id: str, images: list):
             await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
             stored.append(doc)
         _CR_SCAN_JOBS[job_id] = {"status": "done", "scanned": len(legs), "reads": len(stored)}
+        # owner 2026-08: freshly scanned strong reads (★>=8) go straight into the Master avatar bubble.
+        try:
+            await master_avatar_codemining()
+        except Exception as e:
+            logger.warning(f"avatar codemining refresh failed: {e}")
     except Exception as e:
         logger.error(f"code scan job {job_id} failed: {e}")
         _CR_SCAN_JOBS[job_id] = {"status": "error", "error": str(e)[:200]}
@@ -11256,6 +11301,56 @@ async def master_avatar_calls() -> dict:
     return {"posted": posted}
 
 
+async def master_avatar_codemining() -> dict:
+    """Owner 2026-08: surface the STRONGEST Codemining counter-reads (★>=8) in the TipJarMaster
+    avatar speech bubbles (e.g. 'Viktoria Plzen -1 Handicap'). Refreshes each run — old codemining
+    bubbles are cleared and the current top picks (max 3, upcoming only) re-posted as real singles."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    await db.tips.delete_many({"source": "hq-master", "master_category": "avatar",
+                               "from_codemining": True, "status": "pending"})
+    reads = await db.code_reads.find(
+        {"read": "counter", "our_market": {"$nin": [None, ""]},
+         "outcome": {"$exists": False}, "stars": {"$gte": 8}},
+        {"_id": 0}).sort("stars", -1).to_list(60)
+    bot = await _get_master_bot()
+    posted, seen = 0, set()
+    for r in reads:
+        if posted >= 3:
+            break
+        ko = _parse_kickoff(r.get("kickoff"))
+        if ko and ko + timedelta(minutes=15) < now:
+            continue  # already started / over
+        home, away = r.get("home") or "", r.get("away") or ""
+        if not (home and away):
+            continue
+        if _team_or_league_blocked(home, away, r.get("league") or ""):
+            continue
+        key = _match_key(home, away)
+        if key in seen:
+            continue
+        seen.add(key)
+        stars = int(r.get("stars") or 8)
+        text = (r.get("reason") or "").strip() or f"Codemining-Lock: {r.get('our_market')}."
+        await db.tips.insert_one({
+            "id": f"master-cm-{uuid.uuid4().hex[:8]}", "user_id": bot["id"], "username": bot["username"],
+            "is_master": True, "is_expert": False,
+            "home_team": home, "away_team": away, "match_time": r.get("kickoff") or "",
+            "country": "", "league": r.get("league") or "",
+            "market": r.get("our_market"), "odds": (r.get("code_odds") or ""),
+            "category": "banker", "master_category": "avatar", "master_day": day,
+            "avatar_call": True, "avatar_minute": None, "avatar_text": text,
+            "avatar_confidence": min(97, 70 + stars * 3), "from_codemining": True,
+            "ai_rating": round(min(9.6, 7.0 + stars / 10), 1), "ai_analysis": text,
+            "legs": [], "is_parlay": False,
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-master", "created_at": now.isoformat(),
+        })
+        posted += 1
+        logger.info(f"Master Avatar (Codemining): {r.get('our_market')} — {home} v {away} (★{stars})")
+    return {"posted": posted}
+
+
 async def master_hotscorer_combo() -> dict:
     """Owner 2026-07-30 ('Konstantelias UND Pavlidis über 1.5 Tore → Hall of Fame'): once per
     Berlin day, combine 2-3 IN-FORM strikers from different verified fixtures into ONE aggressive
@@ -11377,6 +11472,8 @@ async def master_loop():
                 special = await master_special_build()
                 # Owner "Avatar": up to 3 confident minute-goal calls per day (speech bubble).
                 avatar = await master_avatar_calls()
+                # Owner 2026-08: strongest Codemining reads (★>=8) also into the avatar bubble.
+                await master_avatar_codemining()
                 # Owner "Torjäger-Kombi": daily hot-scorer Doppelpack parlay (Hall-of-Fame shot).
                 hotc = await master_hotscorer_combo()
                 # Owner special GIFTS: half-time & first-2-goals gifts on clear favourites.

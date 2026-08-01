@@ -67,10 +67,18 @@ export function MasterAvatar({ t }) {
                   className="rounded-2xl bg-surface border border-[#E11D2A]/40 px-4 py-3 shadow-lg">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     {k === 0 && <span className="font-heading font-black text-[#E11D2A] text-sm uppercase tracking-wide">TipJarMaster</span>}
-                    <span data-testid={`master-avatar-minute-${k}`}
-                      className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-[#2ECC57] bg-[#2ECC57]/10 border border-[#2ECC57]/30 rounded-full px-2 py-0.5">
-                      <Zap size={11} /> {c.avatar_minute}'
-                    </span>
+                    {c.avatar_minute != null && (
+                      <span data-testid={`master-avatar-minute-${k}`}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-[#2ECC57] bg-[#2ECC57]/10 border border-[#2ECC57]/30 rounded-full px-2 py-0.5">
+                        <Zap size={11} /> {c.avatar_minute}'
+                      </span>
+                    )}
+                    {c.from_codemining && (
+                      <span data-testid={`master-avatar-codemining-${k}`}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E11D2A] bg-[#E11D2A]/10 border border-[#E11D2A]/40 rounded-full px-2 py-0.5">
+                        <Zap size={11} /> Codemining
+                      </span>
+                    )}
                     {c.avatar_scorer && c.avatar_player && (
                       <span data-testid={`master-avatar-scorer-${k}`}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-full px-2 py-0.5">

@@ -1282,3 +1282,20 @@ HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
 - Wiring in `_run_code_scan`: straightwin-Override greift für AI- UND Fallback-Pfad; Europa-Fatigue-Boost
   überspringt den +1.5-Pick.
 HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
+
+## Update 2026-08 (25) — Reset-Knopf + Codemining→Avatar + Lotto-Gate
+- ADMIN-HOMEPAGE-KNOPF „Runterfahren & aufstocken" (AdminResetBar.jsx, nur user.role==admin):
+  POST /api/admin/reset-pregames → löscht ALLE offenen (status pending) Pregame-Scheine der Quellen
+  hq-auto (KI-Single), hq-system (KI-System), hq-master (Master); Lives + Historie unberührt. Danach
+  Hintergrund-Regenerierung (_regen_pregames_bg: master-Builder + Avatar-Codemining + Scraper).
+  Bestätigungsdialog vorgeschaltet. GETESTET: Endpoint (removed 31, regen ok), UI + Dialog per Screenshot.
+- CODEMINING → MASTER-AVATAR (master_avatar_codemining): stärkste aktive Codemining-Counter (★>=8, kommend)
+  erscheinen als Sprechblasen des TipJarMaster (z.B. „Viktoria Plzen -1 Handicap"). Refresht bei jedem
+  Master-Loop UND direkt nach jedem Codemining-Scan. Frontend: Minute-Badge nur wenn vorhanden, sonst
+  „Codemining"-Chip. GETESTET: synthetischer ★9-Read → Bubble „Viktoria Plzen -1 (Handicap)" gepostet.
+- LOTTO-GATE (owner „wir spielen kein Lotto / keine Valerenga 1X"): Doppelte Chance in der
+  Consensus-BANKER-KOMBI, RISK-KOMBI und „System der Stunde" nur noch mit strengem Gate
+  _opp_win_practically_impossible (Favorit dominant + Sieg-Marge). Builder laufen weiter fehlerfrei.
+OFFEN (nächster Lotto-Schritt): Team-„Über 0.5"-Fallacy (ein Team, das nie trifft, trifft nicht plötzlich)
+per Torquote-Check filtern; „Unter 3.5/4.5"-Padding aus Same-Game-Buildern (Pfeffer) entfernen.
+HINWEIS: live erst nach „Save to GitHub → Deploy".

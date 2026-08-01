@@ -29,6 +29,7 @@ import SplashScreen from "./components/SplashScreen";
 import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
+import AdminResetBar from "./components/AdminResetBar";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -264,6 +265,7 @@ function Home() {
         newCounts={newCounts}
       />
       {user && !user.email_verified && <VerifyBanner />}
+      {user?.role === "admin" && <AdminResetBar />}
 
       {/* HERO */}
       <section className="relative overflow-hidden">
