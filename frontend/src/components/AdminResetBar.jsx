@@ -45,17 +45,17 @@ export default function AdminResetBar() {
             <span className="text-[10px] font-black uppercase tracking-widest text-[#E11D2A]">Admin</span>
             <span className="text-sm text-zinc-300 truncate">HQ- & Master-Pregames neu aufsetzen</span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto sm:shrink-0">
             <button
               data-testid="admin-clear-live-settled-btn"
               onClick={() => setClearOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-[#E11D2A]/60 text-[#E11D2A] font-bold px-4 py-2 text-sm hover:bg-[#E11D2A]/10 active:scale-95 transition-all">
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-[#E11D2A]/60 text-[#E11D2A] font-bold px-4 py-2 text-sm hover:bg-[#E11D2A]/10 active:scale-95 transition-all">
               <Trash2 size={15} /> Live & Abgerechnete löschen
             </button>
             <button
               data-testid="admin-reset-pregames-btn"
               onClick={() => setConfirmOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-[#E11D2A] text-white font-bold px-4 py-2 text-sm hover:bg-[#c4141f] active:scale-95 transition-all">
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full bg-[#E11D2A] text-white font-bold px-4 py-2 text-sm hover:bg-[#c4141f] active:scale-95 transition-all">
               <RotateCcw size={15} /> Runterfahren & aufstocken
             </button>
           </div>

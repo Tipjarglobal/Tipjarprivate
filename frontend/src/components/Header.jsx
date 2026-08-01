@@ -294,10 +294,10 @@ function QuickView({ onClick, icon: Icon, label, testId, count, newCount = 0, li
           )}
         </button>
         <button type="button" onClick={liveAction} data-testid={`${testId}-live`}
-          className="flex items-center gap-1.5 shrink-0 rounded-full bg-[#2563eb] text-white px-2.5 py-1.5 text-[11px] uppercase tracking-wide hover:bg-[#1d4fd8] active:scale-95 shadow-[0_0_12px_rgba(37,99,235,0.6)] transition-all">
-          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live
+          className="flex items-center gap-2 shrink-0 rounded-full bg-[#2563eb] text-white px-4 py-2 text-xs font-black uppercase tracking-wide hover:bg-[#1d4fd8] active:scale-95 shadow-[0_0_16px_rgba(37,99,235,0.65)] transition-all">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Live
           {liveCount > 0 && (
-            <span className="min-w-[16px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1">{liveCount}</span>
+            <span className="min-w-[18px] text-center text-[11px] font-mono font-black rounded-full bg-black/25 px-1.5">{liveCount}</span>
           )}
         </button>
       </div>
