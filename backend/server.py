@@ -8555,17 +8555,18 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "reason": f"Code deckelt {tgt} schon hoch (Unter {line}) — kein Gegenwert. No Bet."}
 
     # (Team-total OVER) Code needs a SPECIFIC team to score 2+/3+ ('Gesamtzahl 1 1.5 Über',
-    # 'Team 1 Über 1.5'). Owner-Regel (Falkirk): sichere Gegen-Deckelung → '<Team> Unter 2.5 Tore'
-    # (das Team läuft NICHT Amok). Niemals hier 'Über 0.5' spielen.
+    # 'Team 1 Über 1.5'). Owner 2026-08 (Raith Rovers, korrigiert): wir spielen NICHT "Team macht
+    # zuerst 2 Tore" / kein team-spezifischer Tipp (v.a. in Großbritannien selten) — stattdessen die
+    # sichere GESAMT-Linie: 'Asiatisch Über 2.0 Tore' (3+ Tore = gewonnen, genau 2 = Push).
     if team is not None and re.search(r"team\s*[12]|individual|einzel|gesamtzahl\s*[12]\b", m) \
             and any(k in m for k in ("über", "ueber", "over")):
         dm = re.search(r"(\d+\.\d+)", m)
         if dm and float(dm.group(1)) >= 1.5:
             return _code_apply_learn({
-                "read": "counter", "our_market": f"{team} Unter 2.5 Tore",
-                "alt_market": f"{team} Unter 1.5 Tore", "code": market, "pattern": "team_total_over_counter",
-                "reason": f"Code erwartet von {team} 2+ Tore (über {dm.group(1)}). Wir gehen sicher dagegen: {team} trifft nicht so oft → {team} Unter 2.5 Tore.",
-                "stars": 8})
+                "read": "counter", "our_market": "Asiatisch Über 2.0 Tore",
+                "alt_market": None, "code": market, "pattern": "match_over_asian2",
+                "reason": f"Code will, dass {team} allein 2+ Tore macht (über {dm.group(1)}) — so einen Team-Tor-Tipp spielen wir nicht, in Großbritannien schon gar nicht. Wir nehmen die sichere Gesamt-Linie: Asiatisch Über 2.0 Tore — bei 3+ Toren gewonnen, bei genau 2 Toren Einsatz zurück (Push). Bombensicher bei ~1.20.",
+                "stars": 9})
 
     # (a) SpinBetter: a team WON'T score (win + 'Über 0.5 – Nein' / clean sheet) → we take that
     #     team TO score / BTTS. "Nicht dass es 0:1 endet."
