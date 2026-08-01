@@ -1,5 +1,14 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Vierer-Live-Kombi jetzt VORMATCH (~25 Min vor Anstoß)
+- Owner: die 4-Bein-Live-Kombi soll spielbar sein → nicht mehr aus laufenden Spielen (Linie schon erfüllt = nicht mehr wettbar), sondern **vor Anstoß**.
+- Neu in `live_autopost()` (server.py): Kombi wird aus gespeicherten Forebet/Predictz-Vorhersagen (`match_predictions`, quota-frei) gebaut und gepostet, sobald das **früheste** gewählte Spiel ~25 Min vor Anstoß ist. Alle 4 Spiele liegen in einer **3h-Spanne** (Fenster ab dem Anchor).
+- **Gemischte Märkte** (nicht nur Über 0.5): goal-heavy → „Über 0.5 Tore 1. Halbzeit" (1.44, frühe Entscheidung, bevorzugt); over2.5/total≥2.6 → „Über 1.5 Tore" (1.40); total≥2.0 → „Über 0.5 Tore" (1.10). Reihenfolge bevorzugt 1.-Halbzeit-Tor-Spiele (kein Zittern bis zur letzten Minute).
+- Nur eine aktive Kombi gleichzeitig (`hqlive-kombi-*`); Abrechnung via `settle_multimatch_parlays` (HT-Over-Legs werden von `_grade_goal_leg`/`_grade_ht_selection` benotet).
+- Verifiziert (Logik-Unit-Test): Anchor-Trigger 0–25 Min, 3h-Fenster-Filter, gestartete/zu weit entfernte Spiele raus, 4-fold mit gemischten Märkten @ ~3.28. Backend startet sauber.
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — FIX (kritisch): Falsches Fixture beim Abrechnen (deutsche Torschützen auf SA-Spielen)
 - Symptom (Prod): Gimnasia y Esgrima–Union de Santa Fe zeigte „2-1, Dynamo Dresden 22',52' · Union Berlin 19'"; Everton VdM–Colo-Colo „1-2, Hamburger SV 49' · Everton 40',90'+4" — Endstände FREMDER (deutscher) Spiele, obwohl die Spiele noch liefen.
 - **Ursache:** `find_finished_fixture` (settlement.py) hatte einen Blind-Fallback „Team hat genau EIN beendetes Spiel am Tag → nimm es". Wenn `resolve_team_id` kollidiert (SA-Klub → deutscher Klub gleichen Namensteils), wurde dessen fremdes Spiel ohne Gegner-Check akzeptiert.

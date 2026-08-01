@@ -10427,75 +10427,90 @@ async def live_autopost() -> dict:
         posted += 1
         logger.info(f"LIVE banger: {home} vs {away} — {market} @ {odd} ({minute}', {gh}:{ag})")
 
-    # 5) LIVE SICHERHEITS-KOMBI (owner-style) — bundle 2-4 ALREADY-secured over-legs from
-    #    different in-play games into ONE ~1.5 combo (exactly the owner's winning slips). An
-    #    over-line, once met, can never be un-won (goals only go up) → every leg is locked
-    #    and the whole combo is a genuine banker. Rebuilt only when no active combo exists.
-    #    No stat calls needed → quota-free. Settles via settle_multimatch_parlays at FT.
+    # 5) VIERER-LIVE-KOMBI (owner 2026-08) — a PRE-MATCH 4-fold posted ~25 min before the
+    #    soonest leg's kickoff so it can ACTUALLY be placed (a live "already-secured" combo can't
+    #    be bet anymore). All 4 games start within a 3h span. Markets are MIXED and we PREFER
+    #    goal-heavy games with a high first-half-goal chance (early decision, no last-minute sweat).
+    #    Built quota-free from stored Forebet/Predictz predictions. Rebuilt only when none active.
     has_active_kombi = await db.tips.find_one(
         {"source": "hq-live", "is_parlay": True, "status": "live",
          "id": {"$regex": "^hqlive-kombi-"}}, {"_id": 1})
     if not has_active_kombi and posted < LIVE_MAX_TIPS:
-        cands, seen_fx = [], set()
-        for fx in live:
-            fid = str((fx.get("fixture") or {}).get("id") or "")
-            if not fid or fid in seen_fx:
+        preds = await db.match_predictions.find({"status": "pending"}, {"_id": 0}).to_list(2000)
+        _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
+        preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
+        cands, seen_k = [], set()
+        for p in preds:
+            if not _pred_whitelisted(p):
                 continue
-            minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
-            if minute < 25 or minute > 87:
+            ko = _parse_kickoff(p.get("kickoff"))
+            if ko is None or not (now_dt <= ko <= now_dt + timedelta(hours=4)):
                 continue
-            teams = fx.get("teams") or {}
-            home = ((teams.get("home") or {}).get("name")) or ""
-            away = ((teams.get("away") or {}).get("name")) or ""
-            if not home or not away or _team_or_league_blocked(home, away, ""):
+            home, away = p.get("home"), p.get("away")
+            ph, pa = p.get("ph"), p.get("pa")
+            if not home or not away or ph is None or pa is None:
                 continue
-            g = fx.get("goals") or {}
-            total = (g.get("home") or 0) + (g.get("away") or 0)
-            if total < 1:
-                continue  # only ALREADY-secured lines → the leg is locked
-            if total >= 3:
-                mk, odd = "Über 2.5 Tore", 1.22
-            elif total >= 2:
-                mk, odd = "Über 1.5 Tore", 1.18
+            if _team_or_league_blocked(home, away, p.get("league") or ""):
+                continue
+            k = _match_key(home, away)
+            if k in seen_k:
+                continue
+            total = float(ph) + float(pa)
+            btts, over25 = bool(p.get("btts")), bool(p.get("over25"))
+            # MIXED markets, preferring an EARLY (first-half) decision for goal-heavy games.
+            fh_goal = total >= 3 or (over25 and total >= 2.5)
+            if fh_goal:
+                mk, odd = "Über 0.5 Tore 1. Halbzeit", 1.44
+            elif over25 or total >= 2.6:
+                mk, odd = "Über 1.5 Tore", 1.40
+            elif total >= 2.0:
+                mk, odd = "Über 0.5 Tore", 1.10
             else:
-                mk, odd = "Über 0.5 Tore", 1.13
-            seen_fx.add(fid)
+                continue  # too low-scoring → skip
+            seen_k.add(k)
             cands.append({
-                "match": f"{home} \u2013 {away}",
-                "league": _fixture_league_label(fx),
-                "kickoff": ((fx.get("fixture") or {}).get("date") or ""),
-                "selections": [mk], "sel_odds": [f"{odd:.2f}"], "_odd": odd,
+                "match": f"{home} \u2013 {away}", "league": p.get("league") or "",
+                "kickoff": ko.isoformat(), "selections": [mk], "sel_odds": [f"{odd:.2f}"],
+                "_odd": odd, "_ko": ko, "_fh": fh_goal, "_total": total,
             })
-        cands.sort(key=lambda c: c["_odd"])  # safest first
-        chosen, prod = [], 1.0
-        for c in cands:
-            chosen.append(c)
-            prod *= c["_odd"]
-            if len(chosen) >= 4 or (len(chosen) >= 3 and prod >= 1.45):
-                break
-        if len(chosen) >= 2 and prod >= 1.28:
-            total_odds = round(prod, 2)
-            for c in chosen:
-                c.pop("_odd", None)
-            analysis = (
-                f"Live Sicherheits-Kombi ({len(chosen)} Legs): nahezu sichere Über-Wetten aus "
-                f"laufenden Spielen — jede Linie ist bereits erfüllt und kann nicht mehr verloren "
-                f"gehen. Gesamtquote {total_odds}. Am besten sofort spielen, solange die Spiele laufen."
-            )
-            await db.tips.insert_one({
-                "id": f"hqlive-kombi-{int(now_dt.timestamp())}",
-                "user_id": hq["id"], "username": "TipJarHQ",
-                "raw_text": "", "image_path": None, "image_paths": [],
-                "home_team": "", "away_team": "", "match_time": "Multibet",
-                "country": "", "league": "", "market": f"{len(chosen)}er Live-Kombi",
-                "odds": f"{total_odds:.2f}", "ai_rating": 9.0, "ai_analysis": analysis,
-                "legs": chosen, "is_parlay": True, "stake": "", "potential_return": "",
-                "status": "live", "category": "banker", "source": "hq-live",
-                "live_kombi": True, "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-                "created_at": now,
-            })
-            posted += 1
-            logger.info(f"LIVE Sicherheits-Kombi: {len(chosen)} legs @ {total_odds}")
+        if cands:
+            anchor = min(cands, key=lambda c: c["_ko"])
+            mins_to_ko = (anchor["_ko"] - now_dt).total_seconds() / 60.0
+            # only post once the soonest qualifying game is ~25 min from kickoff (and not started)
+            if 0 <= mins_to_ko <= 25:
+                window = [c for c in cands
+                          if 0 <= (c["_ko"] - anchor["_ko"]).total_seconds() <= 3 * 3600]
+                rest = [c for c in window if c is not anchor]
+                rest.sort(key=lambda c: (0 if c["_fh"] else 1, -c["_total"]))
+                chosen = ([anchor] + rest)[:4]
+                if len(chosen) >= 4:  # owner wants a FOUR-fold ("Vierer")
+                    prod = 1.0
+                    for c in chosen:
+                        prod *= c["_odd"]
+                    total_odds = round(prod, 2)
+                    fh_n = sum(1 for c in chosen if "Halbzeit" in c["selections"][0])
+                    for c in chosen:
+                        for kk in ("_odd", "_ko", "_fh", "_total"):
+                            c.pop(kk, None)
+                    analysis = (
+                        f"Vierer-Live-Kombi (Vormatch): 4 Spiele im 3h-Fenster, gepostet ~25 Min vor "
+                        f"Anstoß — jetzt in Ruhe platzieren und live mitverfolgen. Bevorzugt torreiche "
+                        f"Spiele mit früher Entscheidung ({fh_n}× Tor 1. Halbzeit). Gesamtquote {total_odds}."
+                    )
+                    await db.tips.insert_one({
+                        "id": f"hqlive-kombi-{int(now_dt.timestamp())}",
+                        "user_id": hq["id"], "username": "TipJarHQ",
+                        "raw_text": "", "image_path": None, "image_paths": [],
+                        "home_team": "", "away_team": "", "match_time": "Multibet",
+                        "country": "", "league": "", "market": "4er Live-Kombi",
+                        "odds": f"{total_odds:.2f}", "ai_rating": 9.0, "ai_analysis": analysis,
+                        "legs": chosen, "is_parlay": True, "stake": "", "potential_return": "",
+                        "status": "live", "category": "banker", "source": "hq-live",
+                        "live_kombi": True, "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                        "created_at": now,
+                    })
+                    posted += 1
+                    logger.info(f"Vierer-Live-Kombi (pre-match): 4 legs @ {total_odds}")
 
     return {"posted": posted, "closed": closed, "live": len(live)}
 
