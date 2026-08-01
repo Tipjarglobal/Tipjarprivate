@@ -8507,6 +8507,18 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "reason": f"Code sagt: {tgt} trifft NICHT. Wir gehen dagegen — {tgt} trifft (oder beide treffen). Nicht dass es 0:1 endet.",
                 "stars": 7})
 
+    # (a2) Code targets a goal in a SPECIFIC minute-window for a team ('Tor im Zeitabschnitt Team 1
+    #      46-60 Minuten', 'goal in interval 46-60'). Owner-Philosophie: NICHT das enge Fenster spielen —
+    #      die sichere LOGISCHE Version nehmen: das Team trifft ÜBERHAUPT im Spiel → '<Team> Über 0.5 Tore'.
+    if re.search(r"zeitabschnitt|zeitraum|time\s*(?:segment|interval|frame)|intervall", m) \
+            or (re.search(r"\btor\b|\bgoal\b|\btore\b", m) and re.search(r"\b\d{1,2}\s*[-–]\s*\d{1,2}\b", m)):
+        tgt = team or home
+        return _code_apply_learn({
+            "read": "counter", "our_market": f"{tgt} Über 0.5 Tore",
+            "alt_market": "Beide Teams treffen", "code": market, "pattern": "goal_window_broaden",
+            "reason": f"Code zielt auf ein Tor von {tgt} in einem engen Zeitfenster — viel zu speziell zum Nachspielen. Wir nehmen die sichere logische Version: {tgt} trifft im Spiel (Über 0.5 Tore).",
+            "stars": 8})
+
     # (b) SpinBetter: early draw / result at ~15. Minute → we expect a goal by then.
     if re.search(r"\b(15|20|30)(th)?\b", m) and any(k in m for k in
             ("unentschieden", "remis", "draw", "ergebnis", "result", "erstes tor", "1. tor", " x ")):
@@ -8524,12 +8536,17 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "reason": f"Code sieht {tgt} SPÄT treffen — wir sagen: bis zur 55.–60. Minute ist die Bude drin. Ziemlich sicher.",
                 "stars": 8})
 
+    # A bare goal-count digit (e.g. "1 oder weniger", "3.5 Über") can be mis-read as "Team 1/2" by
+    # _code_side → only treat these as a TEAM total when an EXPLICIT team token is present.
+    _explicit_team = bool(re.search(r"team\s*[12]\b|(?:^|\s)s[12]\b|gesamtzahl\s*[12]\b", m)) \
+        or (team is not None and _norm(team) and _norm(team) in _norm(market))
+
     # (c2) Code caps the WHOLE match at 'exact N goals or fewer – No' (genaue Zahl/Anzahl N oder
     #      weniger – Nein) = the match will have MORE than N goals → Über N.5. Owner: Über 1.5 ist die
     #      sauberste sichere Linie überhaupt → BEHALTEN. Über 2.5+ bleibt zu locker → No Bet.
     gm = re.search(r"(?:genaue\s*(?:zahl|anzahl)|exact\s*(?:number|total)?|exakte?\s*(?:zahl|anzahl))"
                    r"[^0-9]*(\d+)\s*(?:oder\s*weniger|or\s*(?:fewer|less)|or\s*under|und\s*weniger)", m)
-    if gm and team is None and any(k in m for k in ("nein", " no", "- no", "– no")):
+    if gm and not _explicit_team and any(k in m for k in ("nein", " no", "- no", "– no")):
         ln = int(gm.group(1)) + 0.5
         if ln <= 1.5:
             return _code_apply_learn({
@@ -8537,20 +8554,54 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
                 "code": market, "pattern": "match_over_clean",
                 "reason": f"Code sagt: NICHT {int(gm.group(1))} Tore oder weniger → im Spiel fallen mehr. Über {('%g' % ln)} Tore ist bombensicher — sauberer geht's nicht, wir behalten es.",
                 "stars": 8})
+        if ln >= 3.5:
+            return _code_apply_learn({
+                "read": "counter", "our_market": "Asiatisch Über 2.0 Tore",
+                "code": market, "pattern": "match_over_asian2",
+                "reason": f"Code erwartet ein Torfestival (mehr als {int(gm.group(1))} Tore). Wir gehen sicher runter: Asiatisch Über 2.0 Tore — bei 3+ Toren gewonnen, bei genau 2 Toren Einsatz zurück (Push). Bombensicher bei ~1.20.",
+                "stars": 10})
         return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
                 "reason": f"Code impliziert nur Über {('%g' % ln)} Tore — zu locker. No Bet."}
 
-    # (d) Whole-match total OVER: Über 1.5 = sauberste sichere Linie → BEHALTEN; Über 2.5+ → No Bet.
+    # (d) Whole-match total OVER: Über 1.5 = sauberste sichere Linie → BEHALTEN; ein Über 3.5+ (Code
+    #     erwartet ein Torfestival) → sichere Asiatisch Über 2.0 Tore (Push bei genau 2); Über 2.5 → No Bet.
     ou = _parse_over_under(market)
-    if ou and ou[0] == "over" and team is None:
+    if ou and ou[0] == "over" and not _explicit_team:
         if ou[1] <= 1.5:
             return _code_apply_learn({
                 "read": "counter", "our_market": f"Über {('%g' % ou[1])} Tore",
                 "code": market, "pattern": "match_over_clean",
                 "reason": f"Code gibt Über {('%g' % ou[1])} Tore — die sauberste sichere Linie überhaupt. Wir behalten Über {('%g' % ou[1])} Tore.",
                 "stars": 8})
+        if ou[1] >= 3.5:
+            return _code_apply_learn({
+                "read": "counter", "our_market": "Asiatisch Über 2.0 Tore",
+                "code": market, "pattern": "match_over_asian2",
+                "reason": f"Code erwartet ein Torfestival (Über {('%g' % ou[1])} Tore). Wir gehen sicher runter: Asiatisch Über 2.0 Tore — bei 3+ Toren gewonnen, bei genau 2 Toren Einsatz zurück (Push). Bombensicher bei ~1.20.",
+                "stars": 10})
         return {"read": "no_bet", "code": market, "pattern": "match_over_nobet",
                 "reason": f"Code gibt Über {('%g' % ou[1])} Tore — zu unsicher für uns. No Bet."}
+
+    # (d2) Trap 'underdog +1/+1.5 handicap' leg (e.g. 'Handicap 2 (+1.5)', 'Team 2 +1.5', '<Team> +1').
+    #      The team GETTING the plus is the underdog → the OTHER side is the clear favourite. Owner: the
+    #      slip is built to lose, so the real read is the favourite winning COMFORTABLY → we buy
+    #      '<Favourite> -1 (Handicap)' (~1.76): 2+ Tore Sieg = gewonnen, GENAU 1 Tor = void (Push). 9★.
+    plusm = re.search(r"\+\s*(1(?:[.,]5)?)\b", m)
+    if plusm and float(plusm.group(1).replace(",", ".")) in (1.0, 1.5) \
+            and ("handicap" in m or re.search(r"team\s*[12]|(?:^|[^0-9])s?[12]\b", m)):
+        if re.search(r"handicap\s*2|team\s*2|(?:^|[^0-9])s?2\b", m):
+            under_side = "away"
+        elif re.search(r"handicap\s*1|team\s*1|(?:^|[^0-9])s?1\b", m):
+            under_side = "home"
+        else:
+            under_side = _code_side(market, home, away)
+        fav = away if under_side == "home" else home if under_side == "away" else None
+        if fav:
+            return _code_apply_learn({
+                "read": "counter", "our_market": f"{fav} -1 (Handicap)",
+                "alt_market": f"{fav} Sieg", "code": market, "pattern": "underdog_plus15_fav_minus1",
+                "reason": f"Code gibt dem Außenseiter +{('%g' % float(plusm.group(1).replace(',', '.')))} — er sieht {fav} als klaren Favoriten. Wir kaufen {fav} -1 Handicap: Sieg mit 2+ Toren = gewonnen (~1.76), knapper 1-Tor-Sieg = Einsatz zurück (Push).",
+                "stars": 9})
 
     # (e) SpinBetter: straight win / double chance / handicap → NO BET ('nicht normal, 1X zu gehen').
     if any(k in m for k in ("sieg", "gewinnt", " win", "1x", "x2", "doppelte", "double chance",
@@ -8570,13 +8621,19 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "They are built to make the player LOSE. Extract EVERY football (soccer) game and, for each, decide OUR pick "
         "following this exact philosophy (owner's rules):\n"
         "1) Keep ONLY what is LOGICAL / clearly makes sense. Prefer one safe single over combos. If nothing looks logical → NO BET.\n"
+        "CORE IDEA: the code always HINTS at something real (a team will score, the game is open, a side is capped). "
+        "NEVER copy their narrow/exotic bet — take the SAFE, BROADER, LOGICAL version of that hint as ONE single.\n"
         "2) If they cap a TEAM low or back a team to just score (e.g. 'Team Total Under 1.5', 'Team Over 0.5', "
         "'Team total goals Over 0.5') → KEEP '<Team> Über 0.5 Tore' as our safe single — a team scoring at least once "
         "is usually the logical part. Only choose NO BET here if that team faces a very strong defensive favourite likely to shut them out.\n"
         "3) If they NEED a team to score 3+ (e.g. 'Team Total Under 2.5 – No') → the DIRECT counter is the SAME line un-negated: '<Team> Unter 2.5 Tore' (NOT Unter 3.5 — at exactly 3 both sides would win).\n"
         "4) WHOLE-MATCH total: if the code implies the match goes OVER 1.5 goals (e.g. 'Over 1.5', "
         "'exact number 1 or fewer – No', 'genaue Zahl 1 oder weniger – Nein') → KEEP 'Über 1.5 Tore' "
-        "as a very safe single (the cleanest line there is). Only 'Over 2.5'+ / 'Under 2.5' with no clear edge → NO BET.\n"
+        "as a very safe single (the cleanest line there is). "
+        "If the code implies a HIGH-scoring match (Over 3.5+, Over 4.5, 'exact 3 or fewer – No', "
+        "'genaue Zahl 3 oder weniger – Nein', 'über 3.5 Tore') → they expect a goal-fest, so take "
+        "'Asiatisch Über 2.0 Tore' (won at 3+ goals, stake back at EXACTLY 2 goals → push) as a near-lock at ~1.20. stars 10. "
+        "Only a bare 'Over 2.5' / 'Under 2.5' with no clear edge → NO BET.\n"
         "5) Straight win / 1X2 / double chance / handicap → NO BET (we NEVER buy a plain win/1X).\n"
         "6) ANY first-half / half-time goals bet (e.g. '1st half Over 0.5', '1. Halbzeit Über 0.5', 'HT Over 0.5'), "
         "OR an early draw/result at minute 15-30 → KEEP 'Über 0.5 Tore 1. Halbzeit' (they expect an early goal — usually a safe single). stars 8-10.\n"
@@ -8584,6 +8641,15 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "8) 'Team does NOT score' / 'Over 0.5 – No' → play against: '<Team> trifft (Über 0.5 Tore)'.\n"
         "8b) '<Team> won't score twice' / '<Team> nicht zweimal' / '<Team> to score 2+ – No' / "
         "'<Team> individual Over 1.5 – No' (they cap the team at max 1 goal) → '<Team> Unter 2.5 Tore'.\n"
+        "9) A goal in a NARROW minute-window for a team ('Tor im Zeitabschnitt Team 1 46-60 Minuten', "
+        "'goal in 46-60', 'Team 2 scores 61-75') → NEVER play the narrow window. Take the safe broad "
+        "version '<Team> Über 0.5 Tore' (that team simply scores at some point in the match). stars 8-10.\n"
+        "10) Trap 'underdog +1/+1.5 handicap' leg ('Handicap 2 (+1.5)', 'Team 2 +1.5', '<Team> +1'): the "
+        "team GETTING the plus is the underdog, so the OTHER side is the clear favourite. Buy "
+        "'<Favourite> -1 (Handicap)' (~1.76): favourite wins by 2+ = won, wins by exactly 1 = void/push. stars 9.\n"
+        "EUROPA-FAKTOR: If ONE team recently (a few days ago) played a EUROPEAN match (Champions League, "
+        "Europa League, Conference League), they are TIRED/rotated → the OTHER team scoring / the game "
+        "opening up is even safer. Say it explicitly in the reason and rate up to 10 stars.\n"
         "IMPORTANT: COMPLETELY OMIT any RUSSIAN game (Russian league or Russian club such as Zenit, "
         "CSKA/Spartak/Lokomotiv/Dynamo Moscow, Krasnodar, Rostov, Baltika, Akhmat, Rubin Kazan, Sochi, "
         "Krylia Sovetov, Orenburg, Fakel, Pari NN, Ural, Akron) — do NOT return it in legs at all.\n"
@@ -8634,6 +8700,49 @@ async def code_reading():
 _CR_SCAN_JOBS: dict = {}  # job_id -> {status, scanned, reads, note/error}
 
 
+_EURO_COMPS = ("champions league", "europa league", "conference league", "uefa champions",
+               "uefa europa", "uefa conference", "europa conference")
+
+
+async def _code_euro_fatigue(home: str, away: str, our_market: str):
+    """Owner-Faktor: hat eines der Teams in den letzten ~4-5 Tagen ein EUROPAPOKAL-Spiel gehabt →
+    müde/rotiert. Für team-spezifische Picks zählt die Erschöpfung des GEGNERS unseres Tipp-Teams;
+    für Match-Totals (Über 1.5 / Asiatisch Über 2.0) zählt die Müdigkeit BEIDER Teams (Spiel öffnet
+    sich). Gibt (note, tired_team_name) zurück, sonst ('', None). Faktenbasiert aus API-Football."""
+    try:
+        now = datetime.now(timezone.utc)
+        mm = _norm(our_market or "")
+        pick_home = bool(_norm(home)) and _norm(home) in mm
+        pick_away = bool(_norm(away)) and _norm(away) in mm
+        if pick_home and not pick_away:
+            to_check = [away]
+        elif pick_away and not pick_home:
+            to_check = [home]
+        else:
+            to_check = [home, away]
+        for name in to_check:
+            tid = await resolve_team_id(name)
+            if not tid:
+                continue
+            fx = await _apifootball_async("/fixtures", {"team": tid, "last": 3}) or []
+            for f in fx:
+                lg = ((f.get("league") or {}).get("name") or "").lower()
+                d = _parse_kickoff(((f.get("fixture") or {}).get("date") or ""))
+                if not d:
+                    continue
+                days = (now - d).total_seconds() / 86400.0
+                if 0 <= days <= 4.5 and any(c in lg for c in _EURO_COMPS):
+                    comp = (f.get("league") or {}).get("name") or "Europa"
+                    when = "gerade erst" if days < 1 else f"vor {round(days)} Tagen"
+                    return (f"{name} hat {when} in der {comp} gespielt — erschöpft/rotiert, "
+                            f"das macht unseren Tipp noch sicherer.", name)
+        return ("", None)
+    except Exception as e:
+        logger.warning(f"euro fatigue check failed ({home} v {away}): {e}")
+        return ("", None)
+
+
+
 async def _run_code_scan(job_id: str, images: list):
     """Background worker: OCR + interpret + store (kept off the 60s request path)."""
     try:
@@ -8678,6 +8787,14 @@ async def _run_code_scan(job_id: str, images: list):
                 if not market:
                     continue
                 interp = _code_read_interpret(market, home, away)
+            # owner 2026-08 EUROPA-FAKTOR: if a team just played a European game (tired/rotated),
+            # our counter gets even safer → boost to 10★ and say it in the reason (factual, from API).
+            if interp.get("read") == "counter":
+                note, _tired = await _code_euro_fatigue(home, away, interp.get("our_market") or "")
+                if note:
+                    base = (interp.get("reason") or "").rstrip(". ")
+                    interp["reason"] = f"{base}. {note}" if base and base != "—" else note
+                    interp["stars"] = 10
             doc = {
                 "id": f"cr-{uuid.uuid4().hex[:10]}", "day": day,
                 "home": home, "away": away, "league": lg.get("league") or "",

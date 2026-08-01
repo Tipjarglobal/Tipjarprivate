@@ -1242,3 +1242,28 @@ Owner: beendete Codemining-Spiele sollen sehr deutlich Endergebnis + Verdict zei
 GETESTET: settle (Dundee/Rangers 1-1 → code_outcome lost → blau CORRECT; LASK 3-0 → won → orange
 UNCORRECT; alle Counter grün) + Screenshot (7 Verdict-Chips, große Ergebnisse, Farben). HINWEIS: live
 erst nach "Save to GitHub → Deploy".
+
+## Update 2026-08 (23) — Codemining Interpretations-Regeln (Owner-Philosophie geschärft)
+KERNIDEE: Der Code HINTET immer auf etwas Reales — wir spielen NIE die enge/exotische Wette,
+sondern die SICHERE, BREITERE, LOGISCHE Version davon als Single. Umgesetzt in
+`_code_read_interpret` (Text-Fallback) UND im Vision-OCR-Prompt (`_code_read_scan_images`).
+Neue/geänderte Regeln (server.py):
+- "nicht zweimal treffen" / "won't score twice" / "2+ – Nein" → "<Team> Unter 2.5 Tore" (★7).
+- Ganzspiel-Total: "genaue Zahl 1 oder weniger – Nein" / "Über 1.5" → "Über 1.5 Tore" behalten (★8).
+  "Über 3.5+" / "genaue Zahl 3 oder weniger – Nein" (Torfestival) → "Asiatisch Über 2.0 Tore" (★10).
+  "Über 2.5" ohne Kante → No Bet.
+- Enges Zeitfenster-Tor ("Tor im Zeitabschnitt Team 1 46-60 Minuten") → "<Team> Über 0.5 Tore" (★8).
+- Underdog-Handicap +1/+1.5 ("Handicap 2 (+1.5)") → Favorit "-1 (Handicap)" (★9): 2+ Tore gewonnen,
+  genau 1 Tor = void/Push.
+- EUROPA-FAKTOR (`_code_euro_fatigue`, faktisch aus API-Football): spielte ein Team in den letzten
+  ~4-5 Tagen Champions/Europa/Conference League → müde/rotiert → Counter wird auf ★10 geboostet und
+  der Grund im Text ergänzt (bei Team-Picks zählt die Erschöpfung des Gegners, bei Totals beide).
+- Russische Spiele werden im Codemining-Ingest komplett gefiltert (`_team_or_league_blocked`) und der
+  Vision-Prompt lässt sie gar nicht erst zu.
+Fix: `_code_side` verwechselte den Tor-Zähler ("1 oder weniger") mit "Team 1" → `_explicit_team`-Guard
+für Ganzspiel-Total-Regeln (c2)/(d).
+GETESTET: `_code_read_interpret` für alle 10 Fälle (Falkirk/Salzburg/WSG Tirol/Slovácko/Aberdeen/
+Viktoria Plzen/Banik) liefert die erwarteten Märkte + Sterne. Backend hot-reload sauber, /api/code-reading 200.
+OFFEN (auf Owner-Antwort wartend): Straight-Win (1X2) → Teplice +1.5 Handicap-Alternative via H2H/Scraper
++ Europa-Rotations-Check des Favoriten (Schwelle für "+1.5 sicher" noch nicht bestätigt).
+HINWEIS: live erst nach "Save to GitHub → Deploy" + neuem Scan.
