@@ -8918,65 +8918,24 @@ async def _fav_euro_soon(fav_id: int):
 
 
 async def _code_straightwin_decision(home: str, away: str, market: str):
-    """Owner (Slovan Liberec – Teplice): a plain 1X2 code is NOT bought as a win. Instead check whether
-    the UNDERDOG '+1.5 Handicap' is safe (favourite rarely wins by 2+) — and flag if the favourite has a
-    European game soon (then the home win isn't worth buying). Returns an interp dict, or None."""
+    """Owner 2026-06: a plain 1X2 WIN code → we play THAT team Draw No Bet (DNB). The team the code
+    backs to win won't LOSE the game (a draw simply returns the stake), so it's a safe counter.
+    Example: Code 'Cobresal gewinnt' → 'Cobresal Draw No Bet (DNB)'. A pure Double-Chance / '<Team>
+    gewinnt nicht' code is NOT bought (gegen X2 zu gehen ist Risiko) → No Bet, handled elsewhere."""
     try:
         win_side = _code_win_side(market, home, away)
         if win_side not in ("home", "away"):
             return None
-        fav_name = home if win_side == "home" else away
-        dog_name = away if win_side == "home" else home
-        fav_id = await resolve_team_id(fav_name)
-        dog_id = await resolve_team_id(dog_name)
-        euro = await _fav_euro_soon(fav_id) if fav_id else None
-        big = n = 0
-        if fav_id and dog_id:
-            h2h = await match_stats.h2h_detailed(fav_id, dog_id, 8) or []
-            for mtg in h2h:
-                if mtg.get("home_id") == fav_id:
-                    fg, dg = mtg.get("gh"), mtg.get("ga")
-                elif mtg.get("away_id") == fav_id:
-                    fg, dg = mtg.get("ga"), mtg.get("gh")
-                else:
-                    continue
-                if fg is None or dg is None:
-                    continue
-                n += 1
-                if fg - dg >= 2:
-                    big += 1
-            recent = await match_stats.team_recent(fav_id, 14) or []
-            for g in match_stats.venue_split(recent, fav_id, win_side == "home", k=6):
-                n += 1
-                if g["gf"] - g["ga"] >= 2:
-                    big += 1
-        ratio = (big / n) if n else 1.0
-        euro_note = (f" {fav_name} hat in ~{euro[1]} Tagen ein {euro[0]}-Spiel — rotiert/fokussiert, "
-                     f"der Heimsieg lohnt sich hier nicht zu kaufen." if euro else "")
-        safe_15 = (n >= 4 and ratio <= 0.34) or (euro is not None and n >= 3 and ratio <= 0.5)
-        if safe_15:
-            stat = f"{fav_name} gewann nur {big}/{n} der relevanten Spiele mit 2+ Toren" if n else "wenig Blowout-Historie"
-            return _code_apply_learn({
-                "read": "counter", "our_market": f"{dog_name} +1.5 (Handicap)",
-                "alt_market": None, "code": market, "pattern": "straightwin_dog_plus15",
-                "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie. "
-                           f"Stattdessen {dog_name} +1.5: {stat} — verliert {dog_name} nur knapp mit 1 Tor, ist der "
-                           f"Einsatz zurück (Push), erst ab 2+ Toren verloren.{euro_note}"),
-                "stars": 8 if euro else 7})
-        if euro:
-            return {"read": "no_bet", "code": market, "pattern": "straightwin_euro_nobet",
-                    "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie.{euro_note} "
-                               f"Auch {dog_name} +1.5 ist bei {big}/{n} Blowout-Spielen nicht klar genug. No Bet.")}
-        if n:
-            return {"read": "no_bet", "code": market, "pattern": "straightwin_bigwin_nobet",
-                    "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie. "
-                               f"Und {fav_name} gewinnt zu oft deutlich ({big}/{n} mit 2+ Toren), daher ist auch "
-                               f"{dog_name} +1.5 zu riskant. No Bet.")}
-        return {"read": "no_bet", "code": market, "pattern": "straightwin_nodata_nobet",
-                "reason": (f"Wir verzichten darauf, auf einen {fav_name}-Sieg zu tippen — reine Siege spielen wir nie; "
-                           f"für eine sichere {dog_name} +1.5-Alternative fehlen belastbare H2H/Form-Daten. No Bet.")}
+        team = home if win_side == "home" else away
+        return _code_apply_learn({
+            "read": "counter", "our_market": f"{team} Draw No Bet (DNB)",
+            "alt_market": None, "code": market, "pattern": "straightwin_dnb",
+            "reason": (f"Der Code pickt {team} klar auf Sieg — {team} verliert dieses Spiel nicht. "
+                       f"Wir spielen {team} Draw No Bet (DNB): bei Unentschieden kommt der Einsatz "
+                       f"zurück, nur bei einer Niederlage von {team} ist es verloren. Kein Risiko."),
+            "stars": 8})
     except Exception as e:
-        logger.warning(f"straightwin decision failed ({home} v {away}): {e}")
+        logger.warning(f"straightwin DNB decision failed ({home} v {away}): {e}")
         return None
 
 
@@ -9105,6 +9064,14 @@ async def _grade_code_our_market(our_market: str, home: str, away: str, fx: dict
         gh, ga = ag, hg
     tg = gh if (_norm(home) and _norm(home) in mn) else (ga if (_norm(away) and _norm(away) in mn) else None)
     if tg is not None:
+        # Draw No Bet on OUR team: team wins → won · draw → push (stake back) · team loses → lost.
+        if "draw no bet" in m or "(dnb)" in m or " dnb" in m:
+            og = ga if (_norm(home) and _norm(home) in mn) else gh
+            if tg > og:
+                return "won"
+            if tg == og:
+                return "push"
+            return "lost"
         if "unter 3.5" in m or "1–3" in m or "1-3" in m:
             return "won" if tg <= 3 else "lost"
         if "über 0.5" in m or "uber 0.5" in m or "trifft" in m:
@@ -9242,7 +9209,7 @@ async def settle_code_reads() -> dict:
             continue
         if r.get("read") == "counter" and r.get("our_market"):
             outcome = await _grade_code_our_market(r["our_market"], home, away, fx)
-            if outcome not in ("won", "lost"):
+            if outcome not in ("won", "lost", "push"):
                 await db.code_reads.update_one({"id": r["id"]}, {"$inc": {"cr_settle_attempts": 1}})
                 continue
             await db.code_reads.update_one({"id": r["id"]}, {"$set": {

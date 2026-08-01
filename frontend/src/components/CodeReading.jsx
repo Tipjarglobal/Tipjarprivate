@@ -21,7 +21,7 @@ const L = {
       ["Porto – Benfica: 'X (Unentschieden) in der 30. Minute'", "Sie sagen, bis zur 30. bleibt es Remis → also fällt FRÜH ein Tor → wir spielen Über 0.5 Tore 1. Halbzeit."],
       ["Real – Sevilla: 'Real Gesamt Unter 1.5'", "Sie sagen, Real trifft kaum → dagegen: Real Über 0.5 Tore (Real trifft, vor allem zuhause)."],
       ["Ajax – PSV: 'PSV Gesamt Unter 2.5 – Nein' (also 3+)", "Sie brauchen von PSV 3+ Tore (selten) → wir deckeln: PSV Unter 3.5 Tore."],
-      ["Milan – Inter: 'Sieg Inter (1X2)'", "Glatter Sieg → NO BET. Es ist nicht normal, 1/1X zu kaufen."],
+      ["Milan – Inter: 'Sieg Inter (1X2)'", "Glatter Sieg → Inter Draw No Bet (DNB): Inter verliert nicht, bei Remis kommt der Einsatz zurück. (Reine Doppelte Chance / '<Team> gewinnt nicht' → NO BET.)"],
       ["Lazio – Roma: 'Roma trifft NICHT (Über 0.5 – Nein)'", "Dagegen: Roma trifft (oder beide treffen). Nicht dass es 0:1 endet."],
       ["Bodø – Molde: 'letztes Tor 55.–90. von Bodø'", "Sie sehen Bodø SPÄT treffen → wir sagen früher: Bodø trifft bis zur 60. Minute."],
       ["Chelsea – Arsenal: 'Über 2.5 Tore'", "Zu unsicher für uns → NO BET."],
@@ -85,7 +85,7 @@ const L = {
       ["Porto – Benfica: 'X (draw) at minute 30'", "They say it's still a draw at 30' → so there's an early goal → we play Over 0.5 goals 1st half."],
       ["Real – Sevilla: 'Real Total Under 1.5'", "They say Real barely scores → against it: Real Over 0.5 goals (they score, especially at home)."],
       ["Ajax – PSV: 'PSV Total Under 2.5 – No' (i.e. 3+)", "They need 3+ from PSV (rare) → we cap them: PSV Under 3.5 goals."],
-      ["Milan – Inter: 'Inter win (1X2)'", "Straight win → NO BET. We never buy a plain 1/1X."],
+      ["Milan – Inter: 'Inter win (1X2)'", "Straight win → Inter Draw No Bet (DNB): Inter won't lose, a draw returns your stake. (A pure Double Chance / '<team> won't win' code → NO BET.)"],
       ["Lazio – Roma: 'Roma does NOT score (Over 0.5 – No)'", "Against it: Roma to score (or BTTS). Not a 0-1 finish."],
       ["Bodø – Molde: 'last goal 55'–90' by Bodø'", "They see Bodø score LATE → we say earlier: Bodø to score by minute 60."],
       ["Chelsea – Arsenal: 'Over 2.5 goals'", "Too uncertain for us → NO BET."],
@@ -328,13 +328,14 @@ export function CodeReading() {
         <div className="grid gap-3 sm:grid-cols-2">
           {(crTab === "active" ? reads : finished).map((r) => {
             const noBet = r.read === "no_bet";
-            const settled = r.outcome === "won" || r.outcome === "lost";
+            const settled = r.outcome === "won" || r.outcome === "lost" || r.outcome === "push";
             // Owner 2026-06: colour the WHOLE finished card + a big CORRECT/UNCORRECT verdict.
-            //  counter won → green · counter lost → red
+            //  counter won → green · counter lost → red · DNB draw (push) → blue "EINSATZ ZURÜCK"
             //  no-bet that saved us (code did NOT come) → blue · no-bet that came anyway → orange
             let verdict = null;
             if (r.outcome === "won") verdict = { label: "CORRECT", card: "border-volt/70 bg-volt/15", chip: "bg-volt text-void" };
             else if (r.outcome === "lost") verdict = { label: "UNCORRECT", card: "border-red-500/70 bg-red-500/20", chip: "bg-red-500 text-white" };
+            else if (r.outcome === "push") verdict = { label: "EINSATZ ZURÜCK", card: "border-sky-400/70 bg-sky-400/15", chip: "bg-sky-400 text-void" };
             else if (noBet && r.code_outcome === "lost") verdict = { label: "CORRECT", card: "border-blue-500/70 bg-blue-500/20", chip: "bg-blue-500 text-white" };
             else if (noBet && r.code_outcome === "won") verdict = { label: "UNCORRECT", card: "border-orange-500/70 bg-orange-500/20", chip: "bg-orange-500 text-void" };
             // Owner 2026-08: on the FINISHED tab EVERY card must carry a verdict. When grading was
@@ -350,7 +351,7 @@ export function CodeReading() {
                     {verdict ? (
                       <span data-testid={`code-read-verdict-${r.id}`}
                         className={`inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wide rounded-full px-2.5 py-0.5 ${verdict.chip}`}>
-                        {verdict.label === "CORRECT" ? <Check size={12} /> : <X size={12} />}{verdict.label}
+                        {verdict.label === "UNCORRECT" ? <X size={12} /> : <Check size={12} />}{verdict.label}
                       </span>
                     ) : r.league ? (
                       <span className="text-[10px] text-zinc-500">{r.league}</span>
