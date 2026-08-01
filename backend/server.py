@@ -8830,6 +8830,45 @@ def _note_to_interp(note: dict) -> dict:
             "stars": int(note.get("stars") or 9)}
 
 
+# ── Code-Defaults (owner 2026-08) ────────────────────────────────────────────
+# Per CODE TEXT the owner keeps several EXPERIMENTAL ("temporary") pick options and switches the
+# active one while testing, plus ONE final ("permanent") default that, once set, is rooted into all
+# matching games and locks them. Individual per-game tweaks live on the read itself (ov_local) and
+# NEVER propagate to other games with the same code.
+async def _code_default_lookup(code_market: str):
+    key = _code_note_key(code_market)
+    if not key:
+        return None
+    return await db.code_defaults.find_one({"key": key}, {"_id": 0})
+
+
+def _default_to_interp(cd: dict):
+    """(interp, locked) from a code_default doc. Permanent wins & locks (rooted); else the active
+    temporary option applies without locking. Returns None when nothing is set."""
+    if not cd:
+        return None
+    perm = cd.get("permanent") or {}
+    if perm and (perm.get("our_market") or perm.get("no_bet") or perm.get("note")):
+        src, locked, pat = perm, True, "default_perm"
+    else:
+        aid = cd.get("active_id")
+        src = next((o for o in (cd.get("options") or []) if o.get("id") == aid), None)
+        locked, pat = False, "default_temp"
+        if not src:
+            return None
+    reason = (src.get("note") or "").strip()
+    if src.get("no_bet"):
+        interp = {"read": "no_bet", "our_market": None, "alt_market": None,
+                  "reason": reason or "Default: No Bet für diesen Code.", "pattern": pat, "stars": 0}
+    else:
+        om = (src.get("our_market") or "").strip() or None
+        interp = {"read": "counter" if om else "no_bet", "our_market": om, "alt_market": None,
+                  "reason": reason or "Default-Pick.", "pattern": pat,
+                  "stars": int(src.get("stars") or 9)}
+    return {"interp": interp, "locked": locked}
+
+
+
 _CODE_POLISH_SYSTEM = (
     "Du bist ein professioneller Wett-Analyst für TipJar. Du bekommst eine grobe, "
     "handgeschriebene Notiz des Owners zu EINEM Fußballspiel plus unseren Pick. "
@@ -8901,7 +8940,7 @@ async def _purge_and_refresh_code_reads() -> dict:
     now_dt = datetime.now(timezone.utc)
     cur = await db.code_reads.find(
         {}, {"_id": 0, "id": 1, "home": 1, "away": 1, "league": 1, "code_market": 1,
-             "our_market": 1, "read": 1, "outcome": 1, "rooted": 1,
+             "our_market": 1, "read": 1, "outcome": 1, "rooted": 1, "ov_local": 1,
              "kickoff": 1, "score": 1, "settled_at": 1}).to_list(500)
     for r in cur:
         home, away = r.get("home") or "", r.get("away") or ""
@@ -8926,7 +8965,25 @@ async def _purge_and_refresh_code_reads() -> dict:
             continue
         if r.get("rooted"):  # owner rooted the note into this read → locked, never re-interpret
             continue
+        if r.get("ov_local"):  # per-game local override (card note) → applies ONLY to this game
+            continue
         mkt = r.get("code_market") or ""
+        # Code-Default (temporary active option, or permanent → locks the read).
+        cd = await _code_default_lookup(mkt)
+        di = _default_to_interp(cd) if cd else None
+        if di:
+            interp, locked = di["interp"], di["locked"]
+            same = interp["read"] == r.get("read") and \
+                (interp.get("our_market") or None) == (r.get("our_market") or None)
+            if not same or locked:
+                setd = {"read": interp["read"], "our_market": interp.get("our_market"),
+                        "alt_market": None, "reason": interp["reason"],
+                        "pattern": interp["pattern"], "stars": interp.get("stars", 0)}
+                if locked:
+                    setd["rooted"] = True
+                await db.code_reads.update_one({"id": r["id"]}, {"$set": setd})
+                reinterp += 1
+            continue
         note = await _lookup_code_note(mkt)
         if note:
             ni = _note_to_interp(note)
@@ -9166,6 +9223,14 @@ async def _run_code_scan(job_id: str, images: list):
                     base = (interp.get("reason") or "").rstrip(". ")
                     interp["reason"] = f"{base}. {note}" if base and base != "—" else note
                     interp["stars"] = 10
+            # owner 2026-08: a fresh game adopts the code's active TEMPORARY default (or the PERMANENT
+            # one, which also locks it). Individual per-game tweaks happen later via ov_local.
+            locked_default = False
+            _cd = await _code_default_lookup(market) if market else None
+            _di = _default_to_interp(_cd) if _cd else None
+            if _di:
+                interp = {**interp, **_di["interp"]}
+                locked_default = _di["locked"]
             doc = {
                 "id": f"cr-{uuid.uuid4().hex[:10]}", "day": day,
                 "home": home, "away": away, "league": lg.get("league") or "",
@@ -9174,6 +9239,7 @@ async def _run_code_scan(job_id: str, images: list):
                 "read": interp["read"], "our_market": interp.get("our_market"),
                 "alt_market": interp.get("alt_market"), "reason": interp["reason"],
                 "pattern": interp.get("pattern"), "stars": interp.get("stars", 0),
+                "rooted": locked_default,
                 "created_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=30)).isoformat(),
             }
@@ -9529,6 +9595,147 @@ async def admin_code_reading_note(payload: dict, admin: dict = Depends(require_a
 async def admin_code_reading_notes(admin: dict = Depends(require_admin)):
     notes = await db.code_notes.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     return {"notes": notes}
+
+
+# ── Per-game local override (card note applies to THIS game only) ─────────────
+@api_router.post("/admin/code-reading/{read_id}/override")
+async def admin_code_reading_override(read_id: str, payload: dict, admin: dict = Depends(require_admin)):
+    """Owner: a note on a single card overrides ONLY that game (never propagates to other games with
+    the same code). Empty payload clears the local override and the code-default/auto read returns."""
+    read = await db.code_reads.find_one({"id": read_id}, {"_id": 0})
+    if not read:
+        raise HTTPException(status_code=404, detail="read not found")
+    note = (payload.get("note") or "").strip()
+    om = (payload.get("our_market") or "").strip()
+    no_bet = bool(payload.get("no_bet"))
+    if not note and not om and not no_bet:
+        await db.code_reads.update_one({"id": read_id}, {"$unset": {"ov_local": "", "ov": "", "rooted": ""}})
+        try:
+            await _purge_and_refresh_code_reads()
+        except Exception:
+            pass
+        return {"ok": True, "cleared": True}
+    if no_bet:
+        upd = {"read": "no_bet", "our_market": None, "alt_market": None,
+               "reason": note or "No Bet (nur dieses Spiel).", "pattern": "note_local",
+               "stars": 0, "ov_local": True, "ov": {"our_market": None, "no_bet": True, "note": note}}
+    else:
+        upd = {"read": "counter" if om else "no_bet", "our_market": om or None, "alt_market": None,
+               "reason": note or "Pick (nur dieses Spiel).", "pattern": "note_local",
+               "stars": 9, "ov_local": True, "ov": {"our_market": om or None, "no_bet": False, "note": note}}
+    await db.code_reads.update_one({"id": read_id}, {"$set": upd})
+    return {"ok": True}
+
+
+# ── Code-Defaults panel (temporary options + permanent default per code) ──────
+@api_router.get("/admin/code-reading/defaults")
+async def admin_cr_defaults_list(admin: dict = Depends(require_admin)):
+    defs = await db.code_defaults.find({}, {"_id": 0}).to_list(500)
+    by_key = {d["key"]: d for d in defs}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    reads = await db.code_reads.find(
+        {"expires_at": {"$gt": now_iso}}, {"_id": 0, "code_market": 1}).to_list(400)
+    counts: dict = {}
+    for r in reads:
+        mkt = (r.get("code_market") or "").strip()
+        k = _code_note_key(mkt)
+        if not k:
+            continue
+        c = counts.setdefault(k, {"key": k, "code_market": mkt, "count": 0})
+        c["count"] += 1
+    out = []
+    for k, c in counts.items():
+        d = by_key.pop(k, None) or {"key": k, "code_market": c["code_market"],
+                                    "options": [], "active_id": None, "permanent": None}
+        out.append({**d, "count": c["count"]})
+    for k, d in by_key.items():  # defaults with no live reads right now
+        out.append({**d, "count": 0})
+    out.sort(key=lambda x: (-x.get("count", 0), (x.get("code_market") or "").lower()))
+    return {"defaults": out}
+
+
+@api_router.post("/admin/code-reading/defaults/{key}/option")
+async def admin_cr_default_option(key: str, payload: dict, admin: dict = Depends(require_admin)):
+    cd = await db.code_defaults.find_one({"key": key}, {"_id": 0}) or {
+        "key": key, "code_market": payload.get("code_market") or key,
+        "options": [], "active_id": None, "permanent": None}
+    oid = (payload.get("id") or "").strip() or f"opt-{uuid.uuid4().hex[:8]}"
+    opt = {"id": oid, "our_market": (payload.get("our_market") or "").strip() or None,
+           "no_bet": bool(payload.get("no_bet")), "note": (payload.get("note") or "").strip()}
+    cd["options"] = [o for o in (cd.get("options") or []) if o.get("id") != oid] + [opt]
+    if payload.get("code_market"):
+        cd["code_market"] = payload["code_market"]
+    if payload.get("activate"):
+        cd["active_id"] = oid
+    cd["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.code_defaults.update_one({"key": key}, {"$set": cd}, upsert=True)
+    if payload.get("activate"):
+        await _purge_and_refresh_code_reads()
+    return {"ok": True, "option": opt, "active_id": cd.get("active_id")}
+
+
+@api_router.post("/admin/code-reading/defaults/{key}/activate")
+async def admin_cr_default_activate(key: str, payload: dict, admin: dict = Depends(require_admin)):
+    await db.code_defaults.update_one(
+        {"key": key}, {"$set": {"active_id": payload.get("option_id"),
+                                 "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await _purge_and_refresh_code_reads()
+    return {"ok": True, "active_id": payload.get("option_id")}
+
+
+@api_router.delete("/admin/code-reading/defaults/{key}/option/{oid}")
+async def admin_cr_default_option_del(key: str, oid: str, admin: dict = Depends(require_admin)):
+    cd = await db.code_defaults.find_one({"key": key}, {"_id": 0})
+    if not cd:
+        return {"ok": True, "deleted": 0}
+    opts = [o for o in (cd.get("options") or []) if o.get("id") != oid]
+    active = cd.get("active_id")
+    if active == oid:
+        active = None
+    await db.code_defaults.update_one({"key": key}, {"$set": {"options": opts, "active_id": active}})
+    await _purge_and_refresh_code_reads()
+    return {"ok": True, "deleted": 1}
+
+
+@api_router.post("/admin/code-reading/defaults/{key}/permanent")
+async def admin_cr_default_permanent(key: str, payload: dict, admin: dict = Depends(require_admin)):
+    """Root the PERMANENT default: from now on every game with this code gets it and is locked."""
+    perm = {"our_market": (payload.get("our_market") or "").strip() or None,
+            "no_bet": bool(payload.get("no_bet")), "note": (payload.get("note") or "").strip()}
+    await db.code_defaults.update_one(
+        {"key": key}, {"$set": {"permanent": perm, "code_market": payload.get("code_market") or key,
+                                "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    await _purge_and_refresh_code_reads()
+    return {"ok": True, "permanent": perm}
+
+
+@api_router.delete("/admin/code-reading/defaults/{key}/permanent")
+async def admin_cr_default_permanent_del(key: str, admin: dict = Depends(require_admin)):
+    await db.code_defaults.update_one({"key": key}, {"$set": {"permanent": None}})
+    # unlock reads that were locked by THIS permanent default so the temporary/auto read returns
+    cd = await db.code_defaults.find_one({"key": key}, {"_id": 0})
+    if cd:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async for r in db.code_reads.find(
+                {"expires_at": {"$gt": now_iso}, "pattern": "default_perm"},
+                {"_id": 0, "id": 1, "code_market": 1}):
+            if _code_note_key(r.get("code_market") or "") == key:
+                await db.code_reads.update_one({"id": r["id"]}, {"$unset": {"rooted": ""}})
+    await _purge_and_refresh_code_reads()
+    return {"ok": True}
+
+
+@api_router.delete("/admin/code-reading/defaults/{key}")
+async def admin_cr_default_del(key: str, admin: dict = Depends(require_admin)):
+    await db.code_defaults.delete_one({"key": key})
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async for r in db.code_reads.find(
+            {"expires_at": {"$gt": now_iso}, "pattern": {"$in": ["default_perm", "default_temp"]}},
+            {"_id": 0, "id": 1, "code_market": 1}):
+        if _code_note_key(r.get("code_market") or "") == key:
+            await db.code_reads.update_one({"id": r["id"]}, {"$unset": {"rooted": ""}})
+    await _purge_and_refresh_code_reads()
+    return {"ok": True}
 
 
 @api_router.post("/admin/code-reading/{read_id}/root-note")

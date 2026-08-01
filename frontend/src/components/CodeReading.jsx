@@ -5,6 +5,7 @@ import api from "../api";
 import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin } from "../i18n";
 import { useProseTranslations } from "../proseI18n";
 import { useAuth } from "../auth";
+import CodeDefaultsPanel from "./CodeDefaultsPanel";
 
 const L = {
   de: {
@@ -117,9 +118,9 @@ const PAT_LABEL = {
 const patLabel = (k) => PAT_LABEL[k] || (k.startsWith("cat_") ? k.slice(4) : k);
 
 const FL = {
-  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Ungeprüfte löschen", clearConfirm: "Alle AKTIVEN Codes OHNE Haken löschen? Abgehakte (geprüfte) und beendete bleiben erhalten.", cleared: "Ungeprüfte gelöscht", verified: "Geprüft", verifyBtn: "Als echt markieren", unverify: "Haken entfernen", resetBtn: "Haken zurücksetzen", resetConfirm: "Alle Häkchen entfernen? Danach hakst du nur die ab, die du zu 100% kennst.", resetDone: "Häkchen zurückgesetzt", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Notiz", noteTitle: "Notiz zu diesem Code", noteHint: "Gilt immer, wenn genau dieser Code auftaucht — bleibt gespeichert bis du ihn änderst.", notePick: "Unser Pick (z.B. Víkingur Unter 2.5 Team-Tore)", noteNobet: "Stattdessen No Bet", noteText: "Begründung / Notiz", noteSave: "Notiz speichern", noteDelete: "Notiz löschen", noteSaved: "Notiz gespeichert", hasNote: "Notiz", rootBtn: "Notiz einwurzeln", rootAll: "Notizen einwurzeln", rootConfirm: "Alle Notizen fest in die Codes einwurzeln? Die Notiz wird zum finalen Pick, die Beschreibung wird sauber neu geschrieben und das Notiz-Zeichen verschwindet.", rooted: "Eingewurzelt" },
-  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Delete unchecked", clearConfirm: "Delete all ACTIVE codes WITHOUT a checkmark? Checked (verified) and finished ones are kept.", cleared: "Unchecked deleted", verified: "Verified", verifyBtn: "Mark as real", unverify: "Remove check", resetBtn: "Reset checks", resetConfirm: "Remove ALL checkmarks? Then you re-check only the ones you're 100% sure of.", resetDone: "Checks reset", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Note", noteTitle: "Note for this code", noteHint: "Applies whenever exactly this code appears — stays saved until you change it.", notePick: "Our pick (e.g. Víkingur Under 2.5 team goals)", noteNobet: "No Bet instead", noteText: "Reason / note", noteSave: "Save note", noteDelete: "Delete note", noteSaved: "Note saved", hasNote: "Note", rootBtn: "Root note", rootAll: "Root notes", rootConfirm: "Root all notes permanently into the codes? The note becomes the final pick, the description is rewritten cleanly and the note badge disappears.", rooted: "Rooted" },
-  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Διαγραφή χωρίς σημάδι", clearConfirm: "Διαγραφή όλων των ΕΝΕΡΓΩΝ χωρίς σημάδι; Τα σημαδεμένα και τελειωμένα μένουν.", cleared: "Διαγράφηκαν", verified: "Επαλήθ.", verifyBtn: "Σήμανση ως πραγματικό", unverify: "Αφαίρεση", resetBtn: "Επαναφορά", resetConfirm: "Αφαίρεση ΟΛΩΝ των σημαδιών; Μετά τσεκάρεις μόνο όσα ξέρεις 100%.", resetDone: "Έγινε επαναφορά", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Σημείωση", noteTitle: "Σημείωση για αυτόν τον κωδικό", noteHint: "Ισχύει κάθε φορά που εμφανίζεται ακριβώς αυτός ο κωδικός — μένει αποθηκευμένη μέχρι να την αλλάξεις.", notePick: "Το pick μας (π.χ. Víkingur Under 2.5 team goals)", noteNobet: "No Bet αντ' αυτού", noteText: "Αιτιολογία / σημείωση", noteSave: "Αποθήκευση", noteDelete: "Διαγραφή σημείωσης", noteSaved: "Αποθηκεύτηκε", hasNote: "Σημείωση", rootBtn: "Ρίζωσε τη σημείωση", rootAll: "Ρίζωσε σημειώσεις", rootConfirm: "Να ριζώσουν όλες οι σημειώσεις μόνιμα στους κώδικες; Η σημείωση γίνεται το τελικό pick, η περιγραφή ξαναγράφεται καθαρά και το σημάδι σημείωσης εξαφανίζεται.", rooted: "Ρίζωσε" },
+  de: { add: "Manuell hinzufügen (Admin)", home: "Heim", away: "Gast", league: "Liga", kickoff: "Anstoß (Text)", code: "Buchmacher-Markt", read: "Lesart", counter: "Gegen-Pick", nobet: "NO BET", our: "Unser Markt", reason: "Begründung", stars: "Sterne", save: "Hinzufügen", del: "Löschen", alt: "Alt", clearBtn: "Ungeprüfte löschen", clearConfirm: "Alle AKTIVEN Codes OHNE Haken löschen? Abgehakte (geprüfte) und beendete bleiben erhalten.", cleared: "Ungeprüfte gelöscht", verified: "Geprüft", verifyBtn: "Als echt markieren", unverify: "Haken entfernen", resetBtn: "Haken zurücksetzen", resetConfirm: "Alle Häkchen entfernen? Danach hakst du nur die ab, die du zu 100% kennst.", resetDone: "Häkchen zurückgesetzt", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Notiz", noteTitle: "Notiz zu diesem Spiel", noteHint: "Gilt NUR für dieses Spiel — kein Übertrag auf andere Spiele mit demselben Code.", notePick: "Unser Pick (z.B. Víkingur Unter 2.5 Team-Tore)", noteNobet: "Stattdessen No Bet", noteText: "Begründung / Notiz", noteSave: "Notiz speichern", noteDelete: "Notiz löschen", noteSaved: "Notiz gespeichert", hasNote: "Notiz", defaultsBtn: "Code-Defaults", rootBtn: "Notiz einwurzeln", rootAll: "Notizen einwurzeln", rootConfirm: "Alle Notizen fest in die Codes einwurzeln? Die Notiz wird zum finalen Pick, die Beschreibung wird sauber neu geschrieben und das Notiz-Zeichen verschwindet.", rooted: "Eingewurzelt" },
+  en: { add: "Add manually (admin)", home: "Home", away: "Away", league: "League", kickoff: "Kickoff (text)", code: "Bookmaker market", read: "Read", counter: "Counter-pick", nobet: "NO BET", our: "Our market", reason: "Reason", stars: "Stars", save: "Add", del: "Delete", alt: "Alt", clearBtn: "Delete unchecked", clearConfirm: "Delete all ACTIVE codes WITHOUT a checkmark? Checked (verified) and finished ones are kept.", cleared: "Unchecked deleted", verified: "Verified", verifyBtn: "Mark as real", unverify: "Remove check", resetBtn: "Reset checks", resetConfirm: "Remove ALL checkmarks? Then you re-check only the ones you're 100% sure of.", resetDone: "Checks reset", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Note", noteTitle: "Note for this game", noteHint: "Applies to THIS game only — never transfers to other games with the same code.", notePick: "Our pick (e.g. Víkingur Under 2.5 team goals)", noteNobet: "No Bet instead", noteText: "Reason / note", noteSave: "Save note", noteDelete: "Delete note", noteSaved: "Note saved", hasNote: "Note", defaultsBtn: "Code defaults", rootBtn: "Root note", rootAll: "Root notes", rootConfirm: "Root all notes permanently into the codes? The note becomes the final pick, the description is rewritten cleanly and the note badge disappears.", rooted: "Rooted" },
+  el: { add: "Προσθήκη χειροκίνητα (admin)", home: "Έδρα", away: "Φιλοξ.", league: "Λίγκα", kickoff: "Έναρξη (κείμενο)", code: "Αγορά πράκτορα", read: "Ανάγνωση", counter: "Αντίθετο", nobet: "NO BET", our: "Η αγορά μας", reason: "Λόγος", stars: "Αστέρια", save: "Προσθήκη", del: "Διαγραφή", alt: "Εναλλ.", clearBtn: "Διαγραφή χωρίς σημάδι", clearConfirm: "Διαγραφή όλων των ΕΝΕΡΓΩΝ χωρίς σημάδι; Τα σημαδεμένα και τελειωμένα μένουν.", cleared: "Διαγράφηκαν", verified: "Επαλήθ.", verifyBtn: "Σήμανση ως πραγματικό", unverify: "Αφαίρεση", resetBtn: "Επαναφορά", resetConfirm: "Αφαίρεση ΟΛΩΝ των σημαδιών; Μετά τσεκάρεις μόνο όσα ξέρεις 100%.", resetDone: "Έγινε επαναφορά", demoBtn: "Demo", demoOn: "DEMO", noteBtn: "Σημείωση", noteTitle: "Σημείωση για αυτό το παιχνίδι", noteHint: "Ισχύει ΜΟΝΟ για αυτό το παιχνίδι — δεν μεταφέρεται σε άλλα με τον ίδιο κωδικό.", notePick: "Το pick μας (π.χ. Víkingur Under 2.5 team goals)", noteNobet: "No Bet αντ' αυτού", noteText: "Αιτιολογία / σημείωση", noteSave: "Αποθήκευση", noteDelete: "Διαγραφή σημείωσης", noteSaved: "Αποθηκεύτηκε", hasNote: "Σημείωση", defaultsBtn: "Code defaults", rootBtn: "Ρίζωσε τη σημείωση", rootAll: "Ρίζωσε σημειώσεις", rootConfirm: "Να ριζώσουν όλες οι σημειώσεις μόνιμα στους κώδικες; Η σημείωση γίνεται το τελικό pick, η περιγραφή ξαναγράφεται καθαρά και το σημάδι σημείωσης εξαφανίζεται.", rooted: "Ρίζωσε" },
 };
 
 const EMPTY_FORM = { home: "", away: "", league: "", kickoff: "", code_market: "", read: "counter", our_market: "", reason: "", stars: 7 };
@@ -141,7 +142,7 @@ export function CodeReading() {
   const [saving, setSaving] = useState(false);
   const [noteFor, setNoteFor] = useState(null);
   const [noteForm, setNoteForm] = useState({ our_market: "", no_bet: false, note: "" });
-  const [rooting, setRooting] = useState(false);
+  const [showDefaults, setShowDefaults] = useState(false);
   const fileRef = useRef(null);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const trReason = useProseTranslations(
@@ -211,37 +212,15 @@ export function CodeReading() {
   };
 
   const openNote = (r) => {
-    const n = r.note || {};
+    const n = r.ov || {};
     setNoteForm({ our_market: n.our_market || "", no_bet: !!n.no_bet, note: n.note || "" });
     setNoteFor(r);
-  };
-
-  const rootNote = async (id) => {
-    setRooting(true);
-    try {
-      await api.post(`/admin/code-reading/${id}/root-note`);
-      toast.success(fl.rooted + " ✓");
-      await load();
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Fehlgeschlagen");
-    } finally { setRooting(false); }
-  };
-
-  const rootAllNotes = async () => {
-    if (!window.confirm(fl.rootConfirm)) return;
-    setRooting(true);
-    try {
-      const { data } = await api.post("/admin/code-reading/root-notes");
-      toast.success(`${fl.rooted} (${data.rooted}) ✓`);
-      await load();
-    } catch { toast.error("Fehlgeschlagen"); } finally { setRooting(false); }
   };
 
   const saveNote = async () => {
     if (!noteFor) return;
     try {
-      await api.post("/admin/code-reading/note", {
-        code_market: noteFor.code_market, home: noteFor.home, away: noteFor.away,
+      await api.post(`/admin/code-reading/${noteFor.id}/override`, {
         our_market: noteForm.our_market, no_bet: noteForm.no_bet, note: noteForm.note,
       });
       toast.success(fl.noteSaved + " ✓");
@@ -406,11 +385,10 @@ export function CodeReading() {
             <BadgeCheck size={13} />{fl.resetBtn}
           </button>
         )}
-        {isAdmin && reads.filter((r) => r.note).length > 0 && (
-          <button onClick={rootAllNotes} disabled={rooting} data-testid="code-root-notes-btn"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border border-fuchsia-500/50 text-fuchsia-300 hover:bg-fuchsia-500/15 transition-colors disabled:opacity-50">
-            {rooting ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-            {fl.rootAll} ({reads.filter((r) => r.note).length})
+        {isAdmin && (
+          <button onClick={() => setShowDefaults(true)} data-testid="code-defaults-btn"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border border-fuchsia-500/50 text-fuchsia-300 hover:bg-fuchsia-500/15 transition-colors">
+            <Wand2 size={13} />{fl.defaultsBtn}
           </button>
         )}
       </div>
@@ -455,7 +433,7 @@ export function CodeReading() {
                         <FlaskConical size={12} />{fl.demoOn}
                       </span>
                     )}
-                    {r.note && (
+                    {r.ov_local && (
                       <span data-testid={`code-read-note-badge-${r.id}`} title={fl.hasNote}
                         className="inline-flex items-center text-amber-300"><StickyNote size={13} /></span>
                     )}
@@ -467,16 +445,9 @@ export function CodeReading() {
                     ) : null}
                     {isAdmin && (
                       <button onClick={() => openNote(r)} data-testid={`code-read-note-btn-${r.id}`}
-                        className={`transition-colors ${r.note ? "text-amber-300 hover:text-amber-200" : "text-zinc-500 hover:text-amber-300"}`}
+                        className={`transition-colors ${r.ov_local ? "text-amber-300 hover:text-amber-200" : "text-zinc-500 hover:text-amber-300"}`}
                         title={fl.noteBtn}>
                         <StickyNote size={15} />
-                      </button>
-                    )}
-                    {isAdmin && r.note && (
-                      <button onClick={() => rootNote(r.id)} disabled={rooting} data-testid={`code-read-root-btn-${r.id}`}
-                        className="text-fuchsia-300 hover:text-fuchsia-200 transition-colors disabled:opacity-50"
-                        title={fl.rootBtn}>
-                        <Wand2 size={15} />
                       </button>
                     )}
                     {isAdmin && (
@@ -579,9 +550,9 @@ export function CodeReading() {
             <div className="flex items-center gap-2">
               <button onClick={saveNote} data-testid="code-note-save"
                 className="flex-1 bg-volt text-void font-black text-sm rounded-lg py-2 hover:bg-volt/90 transition-colors">{fl.noteSave}</button>
-              {noteFor.note && (
+              {noteFor.ov_local && (
                 <button data-testid="code-note-delete"
-                  onClick={async () => { try { await api.post("/admin/code-reading/note", { code_market: noteFor.code_market }); toast.success("✓"); setNoteFor(null); load(); } catch { toast.error("Fehlgeschlagen"); } }}
+                  onClick={async () => { try { await api.post(`/admin/code-reading/${noteFor.id}/override`, {}); toast.success("✓"); setNoteFor(null); load(); } catch { toast.error("Fehlgeschlagen"); } }}
                   className="px-3 py-2 text-xs text-red-300 border border-red-500/40 rounded-lg hover:bg-red-500/15">{fl.noteDelete}</button>
               )}
               <button onClick={() => setNoteFor(null)} className="px-3 py-2 text-sm text-zinc-400 hover:text-white">✕</button>
@@ -589,6 +560,7 @@ export function CodeReading() {
           </div>
         </div>
       )}
+      {isAdmin && <CodeDefaultsPanel open={showDefaults} onClose={() => { setShowDefaults(false); load(); }} lang={lang} />}
     </div>
   );
 }

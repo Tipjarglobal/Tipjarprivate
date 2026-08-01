@@ -1,5 +1,17 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemining: Zwei-Stufen-Defaults + Karten-Notiz nur pro Spiel
+- **Karten-Notiz = nur dieses Spiel** (Wunsch A): Notiz auf einer Karte schreibt jetzt einen READ-LOKALEN Override (`ov_local`/`ov`) → KEIN Übertrag auf andere Spiele mit demselben Code. Endpoint `POST /admin/code-reading/{id}/override` (leer = Override löschen). Note-Badge/Editor lesen jetzt `r.ov_local`/`r.ov`.
+- **Neues Panel „Code-Defaults"** (`CodeDefaultsPanel.jsx`, Button in Codemining-Toolbar): pro Code
+  - **Temporär (experimentell):** mehrere gespeicherte Optionen (Pick/No-Bet/Notiz), eine ist aktiv → wird auf alle aktuellen & neuen Spiele mit dem Code angewendet (pattern `default_temp`, nicht gelockt), frei umschaltbar.
+  - **Permanent (final):** „Einwurzeln" → wird finaler Default, auf alle Spiele gewurzelt + gelockt (pattern `default_perm`, `rooted=True`), überschreibt temporär.
+  - Lokaler Karten-Override gewinnt über Defaults (bleibt pro Spiel).
+- Backend: Collection `code_defaults` (`options[]`, `active_id`, `permanent`), Helfer `_code_default_lookup`/`_default_to_interp`; angewandt in Scan-Insert + `_purge_and_refresh_code_reads`. Endpoints: GET defaults, POST option (activate), POST activate, DELETE option, POST/DELETE permanent, DELETE default.
+- Alte code_notes-Propagation (Root-Notiz/Bulk-Root) im UI durch das Panel ersetzt; Legacy-Endpoints bleiben unangetastet.
+- Getestet (curl e2e): 2 Reads gleicher Code → temp aktivieren propagiert auf beide (nicht gelockt); 1 Read lokal auf No-Bet überschrieben bleibt lokal; permanent einwurzeln lockt die übrigen (rooted), Override bleibt bestehen ✅. UI: Panel öffnet als Admin ✅. Kompiliert sauber.
+- ⚠️ Wirkt erst nach Deploy auf tipjarglobal.com.
+
+
 ## 2026-08-01 — FIX (Codemining): Noch-nicht-gestartete Spiele fälschlich "Beendet" mit falschem Endstand
 - Symptom: Gimnasia–Union (20:30) & Everton VdM–Colo-Colo (21:00) standen um 19:52 unter "Beendet" mit Endständen FREMDER Spiele (deutsche Torschützen: Dynamo Dresden, Union Berlin, HSV).
 - **Ursache:** In `settle_code_reads` diente `ref = ko or created_at` als "Spiel vorbei?"-Referenz. Bei UNPARSEBARER Anstoffzeit fiel es auf `created_at` zurück → ein vor Stunden erstellter Read wurde VOR Anpfiff bewertet und gegen ein falsches (bereits beendetes) Fixture gematcht.
