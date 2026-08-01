@@ -9021,7 +9021,6 @@ async def _run_code_scan(job_id: str, images: list):
                 "alt_market": interp.get("alt_market"), "reason": interp["reason"],
                 "pattern": interp.get("pattern"), "stars": interp.get("stars", 0),
                 "created_at": now.isoformat(),
-                "verified": True,
                 "expires_at": (now + timedelta(hours=30)).isoformat(),
             }
             await db.code_reads.insert_one({k: v for k, v in doc.items() if k != "_id"})
@@ -9322,6 +9321,14 @@ async def admin_code_reading_verify(read_id: str, payload: dict = None,
     verified = True if payload is None else bool(payload.get("verified", True))
     res = await db.code_reads.update_one({"id": read_id}, {"$set": {"verified": verified}})
     return {"ok": True, "verified": verified, "matched": res.matched_count}
+
+
+@api_router.post("/admin/code-reading/reset-verified")
+async def admin_code_reading_reset_verified(admin: dict = Depends(require_admin)):
+    """Owner: remove the 'verified' checkmark from ALL code-reads in one tap (clears the old
+    auto-verify mess). Afterwards the admin re-checks only the ones they trust 100%."""
+    res = await db.code_reads.update_many({"verified": True}, {"$set": {"verified": False}})
+    return {"ok": True, "reset": res.modified_count}
 
 
 @api_router.post("/admin/code-reading/clear-active")
