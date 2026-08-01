@@ -1,5 +1,15 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-01 — Codemining: "Ρίζωσε" (Root note) + Anstoßzeit auf Karten
+- **Root-Note-Knopf (Wand2):** Pro Karte (nur wenn eine Notiz existiert) + globaler Toolbar-Knopf "Notizen einwurzeln (n)". Backend: `POST /admin/code-reading/{id}/root-note` und `POST /admin/code-reading/root-notes` (bulk, alle aktiven Reads mit Notiz).
+  - Wurzelt die Owner-Notiz FEST in den Read ein: our_market/read werden final, `pattern="rooted"`, `rooted=True`, `verified=True`.
+  - **Beschreibung wird via LLM sauber neu geschrieben** (`_polish_code_reason`, Gemini, base German) — aus grober Handnotiz wird professionelle 1-2-Satz-Begründung. Fallback ohne LLM: bereinigte Notiz.
+  - Notiz-Record wird gelöscht → StickyNote-Badge verschwindet, sieht native aus.
+  - `_purge_and_refresh_code_reads` überspringt jetzt `rooted=True` Reads (Lock — nie mehr re-interpretiert).
+- **Anstoßzeit + Liga** werden jetzt auf jeder Codemining-Karte angezeigt (Clock-Icon + kickoff · league).
+- Getestet (curl e2e): manueller Read → grobe Notiz "…over 1.5 easy" → Root → sauberer DE-Text, note weg, rooted/verified True, our_market erhalten ✅. Frontend kompiliert & rendert ✅.
+
+
 ## 2026-08-01 — FIX: Black Screen im Code-Mining-Tab (P0)
 - **Ursache:** `CodeReading.jsx` nutzte die Icons `FlaskConical` (Demo) & `StickyNote` (Notiz), importierte sie aber nie → `ReferenceError: FlaskConical is not defined` beim Rendern der Karten → kompletter React-Crash, ausschließlich auf dem Code-Mining-Tab. (Regression aus dem Notiz/Demo-Feature, nicht Service-Worker.)
 - **Fix:** Beide Icons dem lucide-react-Import (Zeile 2) hinzugefügt.

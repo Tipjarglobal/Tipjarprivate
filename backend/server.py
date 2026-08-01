@@ -8830,6 +8830,68 @@ def _note_to_interp(note: dict) -> dict:
             "stars": int(note.get("stars") or 9)}
 
 
+_CODE_POLISH_SYSTEM = (
+    "Du bist ein professioneller Wett-Analyst für TipJar. Du bekommst eine grobe, "
+    "handgeschriebene Notiz des Owners zu EINEM Fußballspiel plus unseren Pick. "
+    "Formuliere daraus EINE saubere, selbstbewusste deutsche Begründung (1-2 kurze Sätze, "
+    "keine Emojis, keine Anführungszeichen, kein Marketing-Gelaber). Behalte den konkreten Pick "
+    "und die Kernlogik der Notiz. Bei NO BET: erkläre knapp, warum wir das Spiel auslassen."
+)
+
+
+def _clean_sentence(txt: str) -> str:
+    s = re.sub(r"\s+", " ", (txt or "").strip().strip('"„»«”'))
+    if not s:
+        return ""
+    s = s[0].upper() + s[1:]
+    if s[-1] not in ".!?":
+        s += "."
+    return s[:400]
+
+
+async def _polish_code_reason(ni: dict, read: dict, raw_note: str) -> str:
+    """Turn the owner's rough note into a clean, professional German reason (base language)."""
+    home, away = read.get("home") or "", read.get("away") or ""
+    pick = "NO BET" if ni.get("read") == "no_bet" else (ni.get("our_market") or "")
+    fallback = (raw_note or "").strip() or (ni.get("reason") or "")
+    if not EMERGENT_LLM_KEY:
+        return _clean_sentence(fallback) or (
+            f"Sicherer Gegen-Read: {pick}." if pick and pick != "NO BET"
+            else "Kein sinnvoller Gegen-Pick – NO BET.")
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"cpol-{uuid.uuid4()}",
+                       system_message=_CODE_POLISH_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
+        ctx = (f"Spiel: {home} – {away}\n"
+               f"Unser Pick: {pick or '—'}\n"
+               f"Grobe Notiz des Owners: {fallback or '(keine)'}\n\n"
+               "Schreibe die saubere Begründung.")
+        resp = await chat.send_message(UserMessage(text=ctx))
+        out = (resp if isinstance(resp, str) else str(resp)).strip().strip('"„»«”')
+        return _clean_sentence(out) or _clean_sentence(fallback)
+    except Exception as e:
+        logger.warning(f"code polish failed: {e}")
+        return _clean_sentence(fallback) or (f"Sicherer Gegen-Read: {pick}.")
+
+
+async def _root_one_note(read: dict):
+    """Bake the saved owner-note permanently into this read: it becomes the final pick, the
+    reason is rewritten cleanly, the read is locked (rooted=True, never re-interpreted) and the
+    note record is deleted so it looks like no note was ever written. Returns updated fields or None."""
+    code_market = read.get("code_market") or ""
+    note = await _lookup_code_note(code_market)
+    if not note:
+        return None
+    ni = _note_to_interp(note)
+    polished = await _polish_code_reason(ni, read, note.get("note") or "")
+    upd = {"read": ni["read"], "our_market": ni.get("our_market"), "alt_market": None,
+           "reason": polished, "pattern": "rooted", "stars": ni.get("stars", 0),
+           "rooted": True, "verified": True}
+    await db.code_reads.update_one({"id": read["id"]}, {"$set": upd})
+    await db.code_notes.delete_one({"key": note["key"]})
+    return upd
+
+
+
 async def _purge_and_refresh_code_reads() -> dict:
     """Owner 2026-08: (1) remove any BLACKLISTED (e.g. Russian) codemining entry that was stored
     BEFORE the ingest filter existed, and (2) re-apply the latest owner rules to still-open reads
@@ -8838,7 +8900,7 @@ async def _purge_and_refresh_code_reads() -> dict:
     removed = reinterp = 0
     cur = await db.code_reads.find(
         {}, {"_id": 0, "id": 1, "home": 1, "away": 1, "league": 1, "code_market": 1,
-             "our_market": 1, "read": 1, "outcome": 1}).to_list(500)
+             "our_market": 1, "read": 1, "outcome": 1, "rooted": 1}).to_list(500)
     for r in cur:
         home, away = r.get("home") or "", r.get("away") or ""
         if _team_or_league_blocked(home, away, r.get("league") or ""):
@@ -8846,6 +8908,8 @@ async def _purge_and_refresh_code_reads() -> dict:
             removed += 1
             continue
         if r.get("outcome"):  # settled → don't re-interpret, only blacklist-purge applies
+            continue
+        if r.get("rooted"):  # owner rooted the note into this read → locked, never re-interpret
             continue
         mkt = r.get("code_market") or ""
         note = await _lookup_code_note(mkt)
@@ -9439,6 +9503,38 @@ async def admin_code_reading_note(payload: dict, admin: dict = Depends(require_a
 async def admin_code_reading_notes(admin: dict = Depends(require_admin)):
     notes = await db.code_notes.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     return {"notes": notes}
+
+
+@api_router.post("/admin/code-reading/{read_id}/root-note")
+async def admin_code_reading_root_note(read_id: str, admin: dict = Depends(require_admin)):
+    """Owner: bake this read's saved note permanently into the read (final pick + clean rewritten
+    reason), lock it, and delete the note so it looks native. Rough hand-notes become polished."""
+    read = await db.code_reads.find_one({"id": read_id}, {"_id": 0})
+    if not read:
+        raise HTTPException(status_code=404, detail="read not found")
+    res = await _root_one_note(read)
+    if res is None:
+        raise HTTPException(status_code=400, detail="Keine Notiz für diesen Code vorhanden.")
+    return {"ok": True, "rooted": 1, "read": {**read, **res}}
+
+
+@api_router.post("/admin/code-reading/root-notes")
+async def admin_code_reading_root_notes(admin: dict = Depends(require_admin)):
+    """Owner: root ALL notes on active reads in one tap — each note becomes the final, cleanly
+    written pick and the note badges disappear."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    reads = await db.code_reads.find(
+        {"expires_at": {"$gt": now_iso}}, {"_id": 0}).to_list(300)
+    keys = {n["key"] for n in await db.code_notes.find({}, {"_id": 0, "key": 1}).to_list(500)}
+    count = 0
+    for r in reads:
+        if r.get("rooted"):
+            continue
+        if _code_note_key(r.get("code_market") or "") not in keys:
+            continue
+        if await _root_one_note(r) is not None:
+            count += 1
+    return {"ok": True, "rooted": count}
 
 
 @api_router.delete("/admin/code-reading/note/{key}")
