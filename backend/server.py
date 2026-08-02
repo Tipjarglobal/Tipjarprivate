@@ -10108,26 +10108,24 @@ async def _code_read_fixture_stats(r: dict) -> dict | None:
 
 
 _CR_SUGGEST_SYSTEM = (
-    "Du bist ein professioneller Fußball-Wett-Analyst für TipJar. Du hilfst dem Owner, eine "
-    "TEMPORÄRE OPTION (experimenteller Gegen-Pick) für einen bestimmten Buchmacher-'Code' zu wählen. "
-    "WICHTIG — so wählen WIR temporäre Optionen: Eine temporäre Option ist IMMER ein konkreter, "
-    "spielbarer PICK, den wir gegen den Fallen-Code setzen. Sie ist NIEMALS 'No Bet' — der Sinn der "
-    "temporären Option ist, eine echte Wette zu testen, nicht das Spiel auszulassen (No Bet gehört in "
-    "die normale Lesart, nicht hierher). Schlage deshalb IMMER genau EINEN konkreten Pick vor. "
-    "Du bekommst die HISTORIE aller beendeten Spiele mit demselben Code (Endergebnis, Torminuten und, "
-    "wenn vorhanden, echte Match-Statistiken getrennt für Heim/Gast: Torschüsse, Schüsse aufs Tor, "
-    "Ecken, Fouls, Paraden, Ballbesitz). Finde die STABILSTE wiederkehrende Linie über diese Spiele "
-    "und leite daraus die sicherste spielbare ÜBER-/Gegen-Option ab — bevorzugt eine Über-Linie mit "
-    "Sicherheitspuffer (z.B. 'Heimteam Über 5.5 Torschüsse', wenn die Historie 8/7/9 zeigt; "
-    "'Über 1.5 Tore', 'Beide Teams treffen', 'Heimteam Über 4.5 Ecken', 'Heimteam trifft'). "
-    "Wähle die Linie, die in möglichst VIELEN Spielen mit Abstand erfüllt war (setze die Linie unter "
-    "den kleinsten beobachteten Wert). Wenn nur Endergebnisse (keine Detail-Statistik) vorliegen, "
-    "leite die Option aus den Toren/Torminuten ab (z.B. immer über 1.5 Tore, immer beide getroffen, "
-    "Heimteam traf immer). Gib NIEMALS 'kein Muster' oder 'No Bet' zurück — nimm im Zweifel die "
-    "plausibelste sichere Über-Linie und setze die confidence entsprechend niedriger. "
-    "Antworte NUR als striktes JSON: {\"trend\": \"1-2 kurze deutsche Sätze mit den konkreten Zahlen "
-    "aus der Historie\", \"our_market\": \"konkreter, spielbarer Pick als kurzes deutsches Markt-Label "
-    "(PFLICHT, nie leer)\", \"confidence\": 1-10}."
+    "Du bist der TipJar-Codemining-Analyst ('Glaskugel'). Ein Buchmacher-'Code' ist die SICHERE Linie "
+    "des Buchmachers — TipJar spielt die UMKEHRUNG als Value-Pick. Umkehr-Logik (Beispiele): "
+    "'Molde Unter 2.5 Tore' → Code bedeutet: Molde trifft 3+ → also ÜBER 2.5. "
+    "'1. Halbzeit Unter 1.5 UND 2. Halbzeit Unter 0.5 – Nein' → Code bedeutet: 1. HZ ÜBER 1.5 und "
+    "2. HZ Unter 0.5. 'Over 2.5' als Code → gefährlich (evtl. fallen keine Tore), kein blinder Über-Pick. "
+    "Du bekommst die HISTORIE ALLER beendeten Spiele mit demselben Code (Endergebnisse, Torminuten und, "
+    "falls vorhanden, echte Match-Statistiken je Heim/Gast). Werte ALLE Spiele aus, nicht nur eines. "
+    "Liefere eine GLASKUGEL-Vorhersage: sage konkret, was im Spiel passieren wird (z.B. 'Unter 2.5 Tore', "
+    "'Favorit gewinnt nicht', 'Tor bis Minute 15'). Wenn du unsicher bist, liste stattdessen die "
+    "WAHRSCHEINLICHEN Endergebnisse (z.B. 4-0 / 3-0 / 2-0 / 0-2 / 0-3 / 0-4) und leite daraus die "
+    "sicherste Sammel-Option ab (z.B. 'Beide Teams treffen NEIN + Über 1.5 Tore'). Die TipJar-Option ist "
+    "IMMER ein konkreter, spielbarer Pick (Kombi erlaubt), NIEMALS 'No Bet'. "
+    "Antworte NUR als striktes JSON: "
+    "{\"code_meaning\": \"was der Code laut Umkehr bedeutet (1 kurzer deutscher Satz)\", "
+    "\"prediction\": [\"2-6 kurze konkrete Aussagen ODER mögliche Endergebnisse\"], "
+    "\"trend\": \"1 kurzer Satz mit den konkreten Zahlen aus der Historie\", "
+    "\"our_market\": \"konkreter spielbarer Pick oder Kombi als kurzes Markt-Label (PFLICHT, nie leer)\", "
+    "\"confidence\": 1-10}."
 )
 
 
@@ -10142,14 +10140,28 @@ def _fmt_side_stats(s: dict) -> str:
 
 @api_router.get("/admin/code-reading/defaults/{key}/ai-suggest")
 async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_admin)):
-    """Analyse the history of finished code-reads with the SAME code and suggest a data-driven
-    temporary option (owner 2026-06)."""
-    # All finished reads that map to this code key (any time, verified or not).
+    """Analyse the history of ALL finished code-reads with the SAME code and produce a
+    'Glaskugel' (crystal-ball) prediction + a concrete temporary/permanent option (owner 2026-08)."""
+    now_dt = datetime.now(timezone.utc)
+    # ALL reads for this code that are FINISHED (result in score OR live_score, or an outcome,
+    # or kickoff long past) — earlier we only looked at 'score' and missed 3 of 4 games.
     all_reads = await db.code_reads.find(
-        {"score": {"$nin": [None, ""]}},
-        {"_id": 0, "home": 1, "away": 1, "score": 1, "goal_minutes": 1,
-         "code_market": 1, "fixture_id": 1, "kickoff": 1, "our_market": 1}).to_list(400)
-    hist = [r for r in all_reads if _code_note_key(r.get("code_market") or "") == key]
+        {}, {"_id": 0, "home": 1, "away": 1, "score": 1, "live_score": 1, "outcome": 1,
+             "code_outcome": 1, "goal_minutes": 1, "code_market": 1, "fixture_id": 1,
+             "kickoff": 1, "our_market": 1}).to_list(1000)
+    hist = []
+    for r in all_reads:
+        if _code_note_key(r.get("code_market") or "") != key:
+            continue
+        result = (r.get("score") or r.get("live_score") or "").strip()
+        ko = _parse_kickoff(r.get("kickoff"))
+        finished = bool(result) or bool(r.get("outcome")) or bool(r.get("code_outcome")) \
+            or (ko is not None and ko < now_dt - timedelta(hours=2, minutes=15))
+        if not finished:
+            continue
+        if result and not r.get("score"):
+            r["score"] = result  # so stats + line rendering use the live/final result
+        hist.append(r)
     code_market = next((r.get("code_market") for r in hist if r.get("code_market")), key)
     if not hist:
         return {"ok": False, "games": 0,
@@ -10177,15 +10189,22 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"crsug-{uuid.uuid4()}",
                        system_message=_CR_SUGGEST_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(
-            text=f"{context}\n\nFinde die stabilste Linie und schlage GENAU EINEN konkreten, spielbaren Pick vor (JSON, niemals No Bet)."))
+            text=f"{context}\n\nErkläre kurz die Code-Bedeutung (Umkehr), gib eine Glaskugel-Vorhersage "
+                 f"ODER die möglichen Endergebnisse und schlage GENAU EINE konkrete, spielbare Option "
+                 f"vor (Kombi erlaubt). JSON, niemals No Bet."))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}
     except Exception as ex:
         logger.warning(f"code ai-suggest failed: {ex}")
         return {"ok": False, "games": len(hist), "message": "KI-Analyse fehlgeschlagen."}
+    pred = data.get("prediction")
+    if isinstance(pred, str):
+        pred = [pred]
     return {"ok": True, "games": len(hist), "with_stats": used,
             "code_market": code_market,
+            "code_meaning": (data.get("code_meaning") or "").strip(),
+            "prediction": [str(x).strip() for x in (pred or []) if str(x).strip()],
             "trend": (data.get("trend") or "").strip(),
             "our_market": (data.get("our_market") or "").strip(),
             "confidence": data.get("confidence")}

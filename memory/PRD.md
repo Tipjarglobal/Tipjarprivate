@@ -408,6 +408,25 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0 + Feature — 2026-08-02 (f) — Codemining KI-Vorschlag: Bug + „Glaskugel"
+Gemeldet (Produktion): KI wertet nur 1 beendetes Spiel aus, obwohl 4 beendet sind; Vorschlag soll
+„Glaskugel" sein (Code-Bedeutung → Vorhersage/mögliche Ergebnisse → konkrete TipJar-Option).
+- **Bug-Fix** (`admin_cr_default_ai_suggest`, `server.py`): Früher nur Reads mit gesetztem `score`.
+  Jetzt gelten ALLE beendeten Reads: Ergebnis in `score` ODER `live_score`, oder `outcome`/
+  `code_outcome` gesetzt, oder Anpfiff > 2h15 vorbei. Zukünftige Spiele ausgeschlossen. Ergebnis-
+  Fallback (`live_score`) wird in `score` gespiegelt für Stats/Zeilen.
+- **Glaskugel-Format**: `_CR_SUGGEST_SYSTEM` neu — erklärt die Code-Umkehr (z.B. „Molde Unter 2.5" →
+  „Molde trifft 3+" → Über 2.5), liefert konkrete Vorhersagen ODER mögliche Endergebnisse und EINE
+  spielbare Option (Kombi erlaubt, nie No Bet). Antwort-JSON um `code_meaning` + `prediction[]`
+  erweitert (Regeln aus der Historie abgeleitet, NICHT hartcodiert — Owner-Wunsch).
+- **Frontend** (`CodeDefaultsPanel.jsx`): AI-Box zeigt jetzt „Code bedeutet", „🔮 Glaskugel" (Liste)
+  und „TipJar-Option"; Labels in DE/EN/EL.
+- **Getestet** (echte LLM, synthetische Historie): 4 beendete Spiele analysiert (inkl. eines nur mit
+  `live_score` + eines nur anpfiff-vorbei), zukünftiges Spiel korrekt ausgeschlossen; Antwort enthält
+  code_meaning + prediction + Option „Gesamttore Über 3.5", confidence 8. Frontend baut fehlerfrei.
+- HINWEIS: live erst nach „Save to GitHub → Deploy".
+
+
 ## P0 — 2026-08-02 (e) — Griechische Homepage-Übersetzung + Regel „kein Über-0.5-Tore-Single"
 1) **i18n Griechisch fehlte** für den „SYSTEM MODE"-Block der Homepage (`App.js` `story-why-*`,
    Keys `story.why.label/title/body/advantage`, `story.not`, `story.cta`) → fiel auf Englisch zurück.

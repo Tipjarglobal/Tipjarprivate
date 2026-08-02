@@ -15,6 +15,7 @@ const T = {
     saved: "Gespeichert", done: "Erledigt", fail: "Fehlgeschlagen",
     aiBtn: "KI-Vorschlag holen", aiLoading: "Analysiere Historie…", aiApply: "Als Option übernehmen",
     aiGames: "beendete Spiele analysiert", aiNobet: "KI empfiehlt: No Bet", aiConf: "Sicherheit",
+    aiMeaning: "Code bedeutet", aiPredict: "Glaskugel", aiOption: "TipJar-Option",
   },
   en: {
     title: "Code defaults", sub: "Experiment per code, then root the true default.",
@@ -27,6 +28,7 @@ const T = {
     saved: "Saved", done: "Done", fail: "Failed",
     aiBtn: "Get AI suggestion", aiLoading: "Analysing history…", aiApply: "Use as option",
     aiGames: "finished games analysed", aiNobet: "AI suggests: No Bet", aiConf: "Confidence",
+    aiMeaning: "Code means", aiPredict: "Crystal ball", aiOption: "TipJar option",
   },
   el: {
     title: "Code defaults", sub: "Πειραματίσου ανά κωδικό, μετά ρίζωσε το αληθινό default.",
@@ -39,6 +41,7 @@ const T = {
     saved: "Αποθηκεύτηκε", done: "Έγινε", fail: "Απέτυχε",
     aiBtn: "Πρόταση από ΚΙ", aiLoading: "Ανάλυση ιστορικού…", aiApply: "Χρήση ως επιλογή",
     aiGames: "τελειωμένα παιχνίδια αναλύθηκαν", aiNobet: "Η ΚΙ προτείνει: No Bet", aiConf: "Σιγουριά",
+    aiMeaning: "Ο κωδικός σημαίνει", aiPredict: "Κρυστάλλινη σφαίρα", aiOption: "Επιλογή TipJar",
   },
 };
 
@@ -202,9 +205,30 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
                           <span className="text-[10px] text-sky-400 ml-auto">{fl.aiConf}: {ai[d.key].data.confidence}/10</span>
                         )}
                       </div>
-                      {ai[d.key].data.trend && <p className="text-[11px] text-zinc-200 leading-snug mb-1.5">{ai[d.key].data.trend}</p>}
+                      {ai[d.key].data.code_meaning && (
+                        <p className="text-[11px] text-amber-200/90 leading-snug mb-1.5">
+                          <span className="font-black text-amber-300 uppercase tracking-wide text-[9px] mr-1">{fl.aiMeaning}:</span>
+                          {ai[d.key].data.code_meaning}
+                        </p>
+                      )}
+                      {Array.isArray(ai[d.key].data.prediction) && ai[d.key].data.prediction.length > 0 && (
+                        <div className="mb-1.5" data-testid={`code-default-ai-predict-${d.key}`}>
+                          <span className="font-black text-sky-300 uppercase tracking-wide text-[9px]">🔮 {fl.aiPredict}:</span>
+                          <ul className="mt-0.5 space-y-0.5">
+                            {ai[d.key].data.prediction.map((pr, i) => (
+                              <li key={i} className="text-[11px] text-zinc-200 leading-snug flex gap-1.5">
+                                <span className="text-sky-400">›</span><span>{pr}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {ai[d.key].data.trend && <p className="text-[11px] text-zinc-400 leading-snug mb-1.5">{ai[d.key].data.trend}</p>}
                       {ai[d.key].data.our_market && (
-                        <p className="text-[12px] font-black text-white bg-sky-500/20 border border-sky-500/40 rounded px-2 py-1 inline-block mb-1.5">{ai[d.key].data.our_market}</p>
+                        <p className="text-[12px] font-black text-white bg-sky-500/20 border border-sky-500/40 rounded px-2 py-1 inline-block mb-1.5">
+                          <span className="text-[9px] font-black text-sky-300 uppercase tracking-wide mr-1">{fl.aiOption}:</span>
+                          {ai[d.key].data.our_market}
+                        </p>
                       )}
                       <button disabled={busy || hasPerm} onClick={() => applyAi(d)} data-testid={`code-default-ai-apply-${d.key}`}
                         className="block mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-200 border border-sky-500/50 rounded-full px-3 py-1 hover:bg-sky-500/20 disabled:opacity-40">
