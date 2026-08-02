@@ -521,11 +521,11 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="fixed left-4 right-4 top-20 w-auto max-w-xs mx-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-72 sm:max-w-none sm:mx-0 z-50 rounded-2xl bg-surface border border-bell/40 p-4 text-white shadow-2xl"
+            className="fixed left-4 right-4 top-20 w-auto mx-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-72 sm:max-w-none sm:mx-0 z-50 rounded-2xl bg-surface border border-bell/40 p-4 text-white shadow-2xl"
             data-testid="bell-settings-panel"
           >
-            <div className="flex items-center justify-between mb-3 gap-2">
-              <div className="flex items-center gap-1 bg-void/50 rounded-full p-0.5" data-testid="bell-tabs">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <div className="flex items-center gap-1 bg-void/50 rounded-full p-0.5 min-w-0" data-testid="bell-tabs">
                 <button
                   onClick={() => setTab("board")}
                   data-testid="bell-tab-board"
