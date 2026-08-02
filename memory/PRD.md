@@ -408,6 +408,23 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0-Bugfix — 2026-08-02 (d) — Benachrichtigungen führten ins Leere
+Symptom (Owner): „Community Picks – da kommt nichts rein" + „Benachrichtigungen die zu gar nichts
+gehen" (Screenshot: LA Galaxy, Cruz Azul, Colorado — Spiele über Nacht bereits beendet).
+Root Cause: Die Notification-Bell (`NotificationBell.jsx`) liest `/tips?sort=new` (ALLE Quellen, KEIN
+Playability-/Status-Filter). Frisch erzeugte Picks für Spiele, die bereits angepfiffen/beendet waren,
+tauchten kurz in diesem Feed auf → Bell alarmierte → `hide_unplayable_loop` versteckte sie 10 Min
+später → Benachrichtigung zeigte auf leeren Feed. (Der Web-Push hatte den Gate `_pick_still_playable`
+bereits, die In-App-Bell nicht.)
+Fix (chirurgisch): `list_tips` (`server.py`) bekommt Param `playable`; bei `playable=1` werden Picks
+über `_pick_still_playable` (aus background_tasks importiert) UND abgerechnete Status (won/lost/void/
+cashed_out) herausgefiltert. Bell ruft jetzt `/tips?limit=30&sort=new&playable=1`.
+Verifiziert (curl): default 30 → playable 18; die 11 gedroppten sind exakt die beendeten Spiele aus
+dem Screenshot (LA Galaxy/Cruz Azul/Colorado, Status won/lost/void), keine abgerechneten Picks mehr im
+Bell-Feed. App lädt sauber.
+Hinweis: „Community Picks = 0" morgens ist KORREKT (keine anstehenden Community-Spiele), kein Code-Bug.
+
+
 ## Changelog — 2026-08-02 (c) — Startelf-Torschützen-Kombi (Master, rollierend)
 Owner: „Der Master soll die Torschützen-Scheine IMMER posten." + „zwei/drei Spieler treffen reicht;
 mehrere Stürmer aus EINEM Spiel erlaubt (Ben Yedder + Minamino; Openda+Olmo+Guirassy); torreiche

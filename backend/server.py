@@ -2596,6 +2596,7 @@ async def i18n_translate(req: TranslateReq):
 async def list_tips(status: Optional[str] = None, sort: str = "new",
                     source: Optional[str] = None, window: Optional[str] = None,
                     category: Optional[str] = None, mcat: Optional[str] = None,
+                    playable: Optional[str] = None,
                     limit: int = 50):
     q = {}
     # Silent scrapers (e.g. Capella) feed the Master in the background but never surface
@@ -2692,6 +2693,15 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
     # Never surface a team-less ('Unknown') slip publicly — the poster is asked to fill
     # the teams first; until then it stays out of every feed (owner rule 2026-07-23).
     tips = [t for t in tips if _tip_has_known_teams(t)]
+    # Owner 2026-08 (P0): the notification bell reads this feed. Only alert about picks a user
+    # can STILL PLAY (game not yet kicked off / day not over) — mirrors the Web-Push gate — so
+    # a burst of stale community picks (overnight MLS games) can no longer fire notifications
+    # that then vanish when hide_unplayable_loop hides the finished games.
+    if playable and status != "live":
+        _now_play = datetime.now(timezone.utc)
+        _settled = {"won", "lost", "void", "cashed_out"}
+        tips = [t for t in tips
+                if t.get("status") not in _settled and _pick_still_playable(t, _now_play)]
     # A pick flagged 'in danger' live is ALWAYS shown as risk (never banker), regardless
     # of any write-path race that might leave a stale category on the document.
     for t in tips:
@@ -13824,7 +13834,7 @@ from scrapers_autopost import (
 from background_tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
     smart_loop, live_loop, member_live_loop, hide_unplayable_loop, api_burner_loop,
-    code_live_loop, lineup_player_loop,
+    code_live_loop, lineup_player_loop, _pick_still_playable,
 )
 
 

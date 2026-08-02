@@ -364,7 +364,7 @@ export default function NotificationBell() {
         if (mounted) setCount(stats.data.subscriber_count);
 
         // 1) New posts (AI / members) — detected by new tip ids
-        const { data } = await api.get("/tips?limit=30&sort=new");
+        const { data } = await api.get("/tips?limit=30&sort=new&playable=1");
         if (!mounted) return;
         if (seen.current === null) {
           seen.current = new Set(data.map((tp) => tp.id));
