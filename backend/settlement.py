@@ -1350,9 +1350,25 @@ async def void_stale_expert_slips() -> dict:
         {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "settle_attempts": 1,
          "market": 1, "created_at": 1}).to_list(5000)
     void_ids = []
+    bad_date_ids = []
     for d in docs:
         legs = d.get("legs") or []
         created = d.get("created_at") or ""
+        # Owner 2026-08 (b): a multi-leg expert slip must be date-consistent — every leg with a
+        # parseable kickoff has to sit within ±3 days of when the slip was cloned. Cloned accas
+        # sometimes bundle a STALE game (e.g. an international played a month ago, or a fixture
+        # dated months ahead like '22/11/2026') with today's games → discard the WHOLE slip.
+        if len(legs) >= 2:
+            base = _parse_kickoff(created) or now
+            mixed = False
+            for lg in legs:
+                kd = _cr_sort_dt(lg.get("kickoff") or "", created)
+                if kd and abs((kd - base).total_seconds()) > 3 * 86400:
+                    mixed = True
+                    break
+            if mixed:
+                bad_date_ids.append(d["id"])
+                continue
         # robust kickoff read: understands 'DD/MM HH:MM', 'HH:MM', 'DD.MM. HH:MM', ISO …
         kos = [k for k in (_cr_sort_dt(l.get("kickoff"), created) for l in legs) if k]
         latest = max(kos) if kos else _cr_sort_dt(d.get("match_time"), created)
@@ -1366,6 +1382,12 @@ async def void_stale_expert_slips() -> dict:
         win = _grade_window_min(d.get("market"), legs)
         if latest < now - timedelta(minutes=win) and (win <= 60 or attempts >= 1):
             void_ids.append(d["id"])
+    if bad_date_ids:
+        await db.tips.update_many(
+            {"id": {"$in": bad_date_ids}},
+            {"$set": {"status": "void", "settled_by": "inconsistent_date",
+                      "hidden": True, "settled_at": now.isoformat()}})
+        logger.info(f"Voided {len(bad_date_ids)} date-inconsistent expert slips (wrong games mixed)")
     if void_ids:
         await db.tips.update_many(
             {"id": {"$in": void_ids}},
@@ -1374,7 +1396,7 @@ async def void_stale_expert_slips() -> dict:
         logger.info(f"Voided {len(void_ids)} stale/timeless expert slips")
     if revived:
         logger.info(f"Revived {revived} wrongly-expired upcoming expert slips")
-    return {"voided": len(void_ids), "revived": revived}
+    return {"voided": len(void_ids), "bad_date": len(bad_date_ids), "revived": revived}
 
 
 

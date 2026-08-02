@@ -408,6 +408,23 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0 — 2026-08-02 (j) — Falsche Spiele in Experten-Kombis + Live-Kästchen pro Bein
+1) **Falsche/alte Spiele im Kombi** (Owner: „Spanien–Belgien war vor einem Monat"): Geklonte
+   Experten-Accas bündeln manchmal ein veraltetes/fern datiertes Spiel (z.B. Leg „22/11/2026" oder
+   „17/10/2026" gemischt mit heutigen Spielen). Fix (`void_stale_expert_slips`, `settlement.py`,
+   Owner-Wahl „Datums-Konsistenz ohne API"): Bei Mehrfach-Scheinen muss JEDES Bein mit parsebarem
+   Kickoff innerhalb ±3 Tagen zum Klon-Zeitpunkt (`created_at`) liegen — sonst wird der GANZE Schein
+   verworfen (status void + hidden, settled_by `inconsistent_date`). Getestet: inkonsistenter Schein
+   verworfen, konsistenter behalten; fing zusätzlich 2 echte inkonsistente Scheine in der Preview.
+2) **Rotes Live-Kästchen pro Bein**: War BEREITS vorhanden. Backend (`live_annotate_sync`) annotiert
+   jedes laufende Bein mit `live/live_score/live_minute` (auch bei Mehrspiel-Experten-Kombis), Frontend
+   `RateWall.jsx` (TipCard, Zeile 1264-1267) zeigt das rote „● live_score min'"-Kästchen pro Bein.
+   End-to-end verifiziert (gemocktes Live-Fixture): laufendes Bein → live=True, 1:1, 35'; zukünftiges
+   Bein inaktiv; Schein bleibt in seinem Bereich (kein Sprung zu Live). Im Screenshot fehlte es nur,
+   weil jene Spiele alt/nicht live waren.
+HINWEIS: Fix 1 live erst nach „Save to GitHub → Deploy".
+
+
 ## P0-Bugfix — 2026-08-02 (i) — Zu viele „aktive" Codemines (meiste schon fertig)
 Symptom (Owner): Der Codemining-Aktiv-Tab zeigt zu viele Einträge, obwohl die meisten Spiele beendet
 sind. Root Cause (wie beim Experten-Bug): Die Aktiv/Fertig-Trennung in `code_reading()` (`server.py`)
