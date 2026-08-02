@@ -408,6 +408,24 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0-Bugfix — 2026-08-02 (g) — Experten „verschwunden" (nur noch 1 sichtbar)
+Symptom (Owner): „Wo sind alle anderen Experten? Ich sehe nur 4 Scheine von Polaris."
+Root Cause: `void_stale_expert_slips()` (`settlement.py`) voidet jeden Experten-Schein mit nicht-
+parsbarem Kickoff als „timeless" (`latest is None`). Die Scraper posten Kickoffs als „DD/MM HH:MM"
+bzw. „HH:MM" — `_parse_kickoff`/`_kickoff_dt` können das NICHT lesen → gültige, noch KOMMENDE Spiele
+(z.B. Antares, Anpfiff 16:00) wurden sofort (~5 Min nach Erstellung, um 13:55) gevoidet. Dadurch
+schrumpften die Experten auf fast null.
+Fix: In `void_stale_expert_slips` den robusten Parser `_cr_sort_dt(kickoff, created_at)` verwenden
+(versteht „DD/MM HH:MM", „HH:MM", „DD.MM. HH:MM", ISO …) → Zukunfts-Scheine bleiben pending, echte
+zeitlose Scheine werden weiterhin gevoidet. Zusätzlich **Self-Heal**: fälschlich als „expired"
+gevoidete Experten-Scheine mit (neu geparstem) Kickoff in der ZUKUNFT werden wieder auf `pending`
+gesetzt (settled_by/settled_at entfernt) → verschwundene Experten kommen nach Deploy von selbst zurück.
+Verifiziert: sichtbare Experten in der Preview von 4 → 13 (Polaris 5, Antares 4, Orion 2, Nova 1,
+Sirius 1); Unit-Test: kommender Schein bleibt pending, gevoideter Zukunfts-Schein revived, echt-
+zeitloser Schein bleibt void. Backend /api 200.
+HINWEIS: live erst nach „Save to GitHub → Deploy"; danach heilt der Settlement-Loop die Experten auto.
+
+
 ## P0 + Feature — 2026-08-02 (f) — Codemining KI-Vorschlag: Bug + „Glaskugel"
 Gemeldet (Produktion): KI wertet nur 1 beendetes Spiel aus, obwohl 4 beendet sind; Vorschlag soll
 „Glaskugel" sein (Code-Bedeutung → Vorhersage/mögliche Ergebnisse → konkrete TipJar-Option).

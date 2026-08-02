@@ -34,6 +34,7 @@ from server import (
     _apifootball,
     _canonical_team_name,
     _corner_total_for_fixture,
+    _cr_sort_dt,
     _finished_eligible,
     _fmt_selection,
     _is_corner_market,
@@ -1324,15 +1325,37 @@ async def void_stale_expert_slips() -> dict:
     NOTE: feeds post LOCAL kickoff times read as UTC, so the real match is usually older."""
     now = datetime.now(timezone.utc)
     hard = now - timedelta(hours=12)
+    # Self-heal (owner 2026-08): the scraper posts kickoffs as 'DD/MM HH:MM' / 'HH:MM' which the
+    # plain parser can't read → a PREVIOUS run wrongly voided still-UPCOMING expert slips as
+    # 'timeless', so whole experts vanished. Revive any expert slip we voided-as-expired whose
+    # (robustly re-parsed) kickoff is still in the FUTURE — a game not yet kicked off is never void.
+    revived = 0
+    stale_void = await db.tips.find(
+        {"is_expert": True, "status": "void", "settled_by": "expired"},
+        {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "created_at": 1}).to_list(5000)
+    revive_ids = []
+    for d in stale_void:
+        created = d.get("created_at") or ""
+        kos = [k for k in (_cr_sort_dt(l.get("kickoff"), created) for l in (d.get("legs") or [])) if k]
+        latest = max(kos) if kos else _cr_sort_dt(d.get("match_time"), created)
+        if latest and latest > now + timedelta(minutes=10):
+            revive_ids.append(d["id"])
+    if revive_ids:
+        await db.tips.update_many(
+            {"id": {"$in": revive_ids}},
+            {"$set": {"status": "pending"}, "$unset": {"settled_by": "", "settled_at": ""}})
+        revived = len(revive_ids)
     docs = await db.tips.find(
         {"is_expert": True, "status": {"$in": ["pending", "live"]}},
         {"_id": 0, "id": 1, "match_time": 1, "legs": 1, "settle_attempts": 1,
-         "market": 1}).to_list(5000)
+         "market": 1, "created_at": 1}).to_list(5000)
     void_ids = []
     for d in docs:
         legs = d.get("legs") or []
-        kos = [k for k in (_kickoff_dt(l.get("kickoff")) for l in legs) if k]
-        latest = max(kos) if kos else _parse_kickoff(d.get("match_time"))
+        created = d.get("created_at") or ""
+        # robust kickoff read: understands 'DD/MM HH:MM', 'HH:MM', 'DD.MM. HH:MM', ISO …
+        kos = [k for k in (_cr_sort_dt(l.get("kickoff"), created) for l in legs) if k]
+        latest = max(kos) if kos else _cr_sort_dt(d.get("match_time"), created)
         attempts = d.get("settle_attempts", 0) or 0
         if latest is None:
             void_ids.append(d["id"])
@@ -1349,7 +1372,9 @@ async def void_stale_expert_slips() -> dict:
             {"$set": {"status": "void", "settled_by": "expired",
                       "settled_at": now.isoformat()}})
         logger.info(f"Voided {len(void_ids)} stale/timeless expert slips")
-    return {"voided": len(void_ids)}
+    if revived:
+        logger.info(f"Revived {revived} wrongly-expired upcoming expert slips")
+    return {"voided": len(void_ids), "revived": revived}
 
 
 
