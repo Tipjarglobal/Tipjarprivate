@@ -273,6 +273,7 @@ async def _regen_pregames_bg():
             await master_consensus()
             await master_doublepack()
             await master_build_packs()
+            await master_easy_build()
             await master_riskparade_build()
             await master_special_build()
             await master_avatar_calls()
@@ -5989,8 +5990,6 @@ async def build_systems() -> dict:
         logger.warning(f"favourite_teams track failed: {_e}")
 
     systems = [
-        _finalize_system(safe, len(safe), "lock", "Sicherheits-Kombi des Tages",
-                         "4 Banker · mind. 1 Tor pro Spiel — auf Gewinnen gebaut", "safe"),
         _finalize_system(bankers, len(bankers), "value", "Banker-Kombi des Tages",
                          "5 stärkste Favoriten · Doppelte Chance · echte Quoten", "value"),
         _finalize_system(vals, 2, "smartvalue", "Value-Kombi des Tages",
@@ -6000,10 +5999,9 @@ async def build_systems() -> dict:
         _finalize_system(gambles, 0, "gamble", "Jackpot-Kombi des Tages",
                          "Zocker-Jagd auf die große Quote (70x+)", "gamble"),
     ]
-    if len(tjlogic) >= 2:
-        systems.insert(0, _finalize_system(
-            tjlogic, len(tjlogic), "tjlogic", "TipJarLogic Sicherheits-Kombi",
-            "3 Mini-Quoten aus Top-Spielen · ~1,5 gesamt · gebaut zum Durchgehen", "safe"))
+    # Owner 2026-08: the "Sicherheits-Kombi" / "TipJarLogic Sicherheits-Kombi" safety systems were
+    # REMOVED from the System-Picks — that safety philosophy now lives (improved, 8 games, mixed
+    # markets + Codemining) in the Master "Einfach" area (master_easy_build).
     if hour:
         systems.insert(0, _finalize_system(
             hour, 0, "hour", "System der Stunde",
@@ -11777,7 +11775,6 @@ async def master_build_packs() -> dict:
             if len(parts) == 2:
                 used_fixkeys.add("|".join(sorted([_norm(parts[0]), _norm(parts[1])])))
     specs = [
-        ("einfach", 3.0, 2, 4, 1.25, 1.80),
         ("mittel", 7.0, 3, 5, 1.40, 2.40),
     ]
     # Owner 2026-07-30: on busy match days the Master should fill MORE slips. Allow up to
@@ -12183,6 +12180,169 @@ async def master_safe_bets_build() -> dict:
     }
     await db.tips.insert_one(tip)
     return {"posted": 1, "odds": prod, "legs": len(legs)}
+
+
+async def master_easy_build() -> dict:
+    """Owner 2026-08: the Master 'Einfach' area = an 8-game MIXED safety slip (replaces the old
+    2–4 game ~3.0 Einfach AND the removed System 'Sicherheits-Kombi'). Mixed safe markets — Tor 1./2.
+    Halbzeit, Team trifft, Doppelte Chance (ONLY when a result looks impossible — kein Lotto),
+    Bet-Builder 'Unter 2.5 1.HZ + Über 0.5', Value/Geschenk — and it ALWAYS pulls the Codemining
+    advice first. Never shares a game with another open Master pack. One open Einfach at a time."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    # Replace the old-style Einfach: drop any open Einfach pack that isn't the new mixed slip.
+    await db.tips.delete_many(
+        {"source": "hq-master", "master_category": "einfach",
+         "status": {"$in": ["pending"]}, "easy_mix": {"$ne": True}})
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "einfach", "easy_mix": True,
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "einfach", "easy_mix": True,
+             "master_day": day}) >= 2:
+        return {"skipped": "done-today"}
+
+    # fixtures already used by ANY open Master pack → never share a game
+    used_fixkeys = set()
+    for ep in await db.tips.find(
+            {"source": "hq-master", "is_parlay": True, "status": {"$in": ["pending", "live"]}},
+            {"_id": 0, "legs": 1}).to_list(80):
+        for lg in (ep.get("legs") or []):
+            parts = re.split(r"\s[–-]\s", lg.get("match") or "", maxsplit=1)
+            if len(parts) == 2:
+                used_fixkeys.add("|".join(sorted([_norm(parts[0]), _norm(parts[1])])))
+
+    legs = []
+
+    def _fk(h, a):
+        return "|".join(sorted([_norm(h or ""), _norm(a or "")]))
+
+    # 1) ALWAYS take the Codemining advice first (owner: "immer vom codemining Beratung nehmen").
+    now_iso = now.isoformat()
+    crs = await db.code_reads.find(
+        {"expires_at": {"$gt": now_iso}, "score": {"$in": [None, ""]},
+         "read": {"$ne": "no_bet"}, "our_market": {"$nin": [None, ""]}},
+        {"_id": 0, "home": 1, "away": 1, "our_market": 1, "kickoff": 1, "league": 1,
+         "created_at": 1, "stars": 1}).to_list(60)
+    crs.sort(key=lambda r: -(r.get("stars") or 0))
+    for cr in crs:
+        if len(legs) >= 3:  # cap codemine legs so the mix stays varied
+            break
+        h, a, mk = cr.get("home") or "", cr.get("away") or "", cr.get("our_market") or ""
+        if not h or not a or not mk:
+            continue
+        ko = _cr_sort_dt(cr.get("kickoff"), cr.get("created_at"))
+        if not ko or ko <= now + timedelta(minutes=10):
+            continue  # only upcoming, still placeable
+        fk = _fk(h, a)
+        if fk in used_fixkeys:
+            continue
+        used_fixkeys.add(fk)
+        legs.append({"match": f"{h} \u2013 {a}", "league": cr.get("league") or "Codemining",
+                     "kickoff": ko.isoformat(), "status": "pending",
+                     "selections": [mk], "sel_odds": ["1.30"], "_codemine": True})
+
+    # 2) fill the rest from predictions with MIXED safe markets
+    cutoff = (now - timedelta(hours=3)).isoformat()
+    raw = await db.match_predictions.find(
+        {"status": "pending", "updated_at": {"$gte": (now - timedelta(days=2)).isoformat()}},
+        {"_id": 0}).to_list(600)
+    preds = [p for p in raw if _pred_whitelisted(p)]
+    seen_k = {}
+    for p in preds:
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko or ko <= now + timedelta(minutes=20):
+            continue
+        if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league") or ""):
+            continue
+        k = _match_key(p.get("home"), p.get("away"))
+        if k not in seen_k:
+            p["_ko"] = ko
+            seen_k[k] = p
+    cand_preds = sorted(seen_k.values(), key=lambda p: -(p.get("fav_prob") or 0))
+
+    def _easy_leg_for(p, prefer):
+        fav = _fav_team(p)
+        total = p.get("total") or 0
+        btts = bool(p.get("btts"))
+        over25 = bool(p.get("over25")) or total >= 2.6
+        impossible = _opp_win_practically_impossible(p)
+        side = p.get("fav")
+        opts = {}
+        if total >= 2.4:
+            opts["half"] = (["Über 0.5 Tore 1. Halbzeit"], ["1.36"])
+        if fav:
+            opts["team"] = ([f"{fav} Über 0.5 Tore"], ["1.22"])
+        if total >= 2.2:
+            opts["builder"] = (["Unter 2.5 Tore 1. Halbzeit", "Über 0.5 Tore"], ["1.25", "1.06"])
+        if fav and impossible and side in ("home", "away"):
+            dc = "1X" if side == "home" else "X2"
+            opts["dc"] = ([f"{fav} Doppelte Chance {dc}"], ["1.20"])  # kein Lotto
+        if btts:
+            opts["value"] = (["Beide Teams treffen"], ["1.70"])
+        elif over25:
+            opts["value"] = (["Über 2.5 Tore"], ["1.55"])
+        for key in [prefer, "half", "team", "builder", "dc", "value"]:
+            if key in opts:
+                sels, ods = opts[key]
+                if all(learn_verdict("master", s)[0] != "veto" for s in sels):
+                    return sels, ods, key
+        return None
+
+    rotation = ["half", "team", "builder", "value", "dc"]
+    ri = 0
+    for p in cand_preds:
+        if len(legs) >= 8:
+            break
+        fk = _fk(p.get("home"), p.get("away"))
+        if fk in used_fixkeys:
+            continue
+        res = _easy_leg_for(p, rotation[ri % len(rotation)])
+        if not res:
+            continue
+        sels, ods, _kind = res
+        used_fixkeys.add(fk)
+        ri += 1
+        legs.append({"match": f"{p.get('home')} \u2013 {p.get('away')}",
+                     "league": p.get("league") or "", "kickoff": p["_ko"].isoformat(),
+                     "status": "pending", "selections": sels, "sel_odds": ods})
+
+    if len(legs) < 4:
+        return {"skipped": "not-enough", "legs": len(legs)}
+    legs = legs[:8]
+    prod = 1.0
+    for lg in legs:
+        for o in lg["sel_odds"]:
+            try:
+                prod *= float(str(o).replace(",", "."))
+            except Exception:
+                pass
+    prod = round(prod, 2)
+    n_cm = sum(1 for lg in legs if lg.get("_codemine"))
+    for lg in legs:
+        lg.pop("_codemine", None)
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min((_parse_kickoff(lg["kickoff"]) or now) for lg in legs)
+    analysis = (f"👑 TipJarMaster Einfach (Sicher-Mix): {len(legs)} Spiele, gemischte sichere Märkte "
+                f"(Tor 1./2. Halbzeit, Team trifft, Doppelte Chance nur wenn ein Ergebnis unmöglich, "
+                f"Bet-Builder, Value)"
+                + (f", inkl. {n_cm}× Codemining-Beratung" if n_cm else "")
+                + f". Kein Lotto. Gesamtquote {prod:.2f}.")
+    await db.tips.insert_one({
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"{len(legs)}er Sicher-Mix", "odds": f"{prod:.2f}",
+        "category": "banker", "master_category": "einfach", "master_day": day,
+        "easy_mix": True, "ai_rating": 8.5, "ai_analysis": analysis,
+        "legs": legs, "is_parlay": True, "stake": "", "potential_return": "",
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    })
+    return {"posted": 1, "odds": prod, "legs": len(legs), "codemine": n_cm}
+
 
 
 
@@ -12668,6 +12828,7 @@ async def master_loop():
                 con = await master_consensus()
                 dp = await master_doublepack()
                 packs = await master_build_packs()
+                easy = await master_easy_build()
                 risk = await master_riskparade_build()
                 chal = await master_challenge()
                 # Owner: the 8-leg "Safe Bets" slip fires at 00:30 Europe/Berlin.

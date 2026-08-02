@@ -1,5 +1,22 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-02 — Safety-Picks aus Systemen entfernt → Master „Einfach" = 8er Sicher-Mix + Codemining
+Owner: „Lösche die Safety-Picks aus den System-Picks (nie wieder anzeigen). Der Master soll solche
+Scheine im Easy-Bereich posten — aber 8 Spiele, nicht 4. Gemischt, kein Lotto, immer Codemining."
+- **Beide Safety-Systeme entfernt**: „Sicherheits-Kombi des Tages" (lock) UND „TipJarLogic
+  Sicherheits-Kombi" (tjlogic) werden in `build_systems` nicht mehr erzeugt; bestehende
+  `hqsys-lock-*`/`hqsys-tjlogic-*`-Tipps aus der DB gelöscht. `/systems` verifiziert ohne Safety.
+- **Master „Einfach" neu (`master_easy_build`)**: ersetzt den alten 2–4-Spiele-~3.0-Einfach durch
+  einen **8-Spiele-Sicher-Mix** mit gemischten sicheren Märkten: Tor 1./2. Halbzeit, Team trifft
+  (Über 0.5), **Doppelte Chance NUR wenn ein Ergebnis praktisch unmöglich** (kein Lotto — Basel-1X-
+  Lehre), Bet-Builder „Unter 2.5 1.HZ + Über 0.5", Value/Geschenk (BTTS/Über 2.5). **Zieht IMMER
+  zuerst die Codemining-Beratung** (aktive Codemines mit ★ zuerst). Teilt NIE ein Spiel mit einem
+  anderen offenen Master-Schein. Alte Einfach-Scheine werden beim Bau ersetzt. Im Scheduler +
+  Reset-Regen registriert.
+- Settlement: Mehrfach-Selektion-Beine (Bet-Builder) + HZ-Märkte werden von `settle_multimatch_parlays`
+  korrekt Bein-für-Bein abgerechnet. Verifiziert: 8-Bein-Mix inkl. 1× Codemine, Gesamtquote ~9.
+
+
 ## 2026-08-02 — Rescue-KOMBI: alle Rescues + Banger + Zehner in EINEM Schein
 Owner: „Besser zusammenfassen als jeden einzeln posten — gib mir alle Rescues + 1 Banger + 1 Zehner,
 dessen Spiel gleich anfängt." Umgesetzt in `code_live_autopost` / `_build_rescue_kombi`:
