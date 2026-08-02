@@ -1,5 +1,24 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-02 — Live-Codemine-Rescue: dynamische Sterne + Buzzer-Beater + Rote-Karte-Warnung
+Owner: „Wenn der live codemine ein Ergebnis unterstützt, soll die Live-KI einen neuen Pick generieren,
+der den Codemine mit einem Buzzer-Beater rettet." Nicht mehr statisch 8★ für alle.
+- Neue Engine `code_live_autopost()` + Loop `code_live_loop` (background_tasks, ~LIVE_POLL_SECONDS,
+  Leader/Quota/Reserve-Guards, Stat-Call-Cap). Für jeden aktiven, gerade LAUFENDEN Codemine:
+  - **Regel B — 10★ Lead-Rescue**: sobald EIN Team führt UND keine rote Karte im Spiel ist UND der
+    Codemine ein Tor vorhersagt → generiert 10★ Live-Pick (Favorit/Underdog aus 1X2-Quoten benannt).
+  - **Regel C — 2★ Buzzer-Beater**: ab der 75. Min, wenn der Counter GENAU noch EIN Tor braucht →
+    2★ Live-Pick mit hoher Quote (kleiner Einsatz), „rettet den Codemine".
+  - **Rote Karten** werden immer aus der Live-Statistik geprüft und im Pick vorgewarnt
+    („⚠ Rote Karte: {Team}"); eine rote Karte blockiert Regel B.
+- Generierte Picks sind echte `source:"hq-live"`-Tipps (`from_codemining:true`, `buzzer_beater`) →
+  erscheinen automatisch im Live-Kanal und werden GRATIS über `live_autopost` abgerechnet/geschlossen.
+- Codemine-Karte (`CodeReading.jsx`): zusätzlich zum roten Live-Ergebnis-Badge jetzt „🎯 RESCUE 10★" /
+  „🚨 BUZZER 2★" und „🟥 {Team}"-Warnung; Flags werden nach Spielende automatisch geleert.
+- Verifiziert mit gemocktem Live-Feed: Lead 0:1 → 10★ (Quote 1.56, Favorit benannt); 1:1 Über 2.5 @78'
+  → 2★ Buzzer (Quote 2.98) + Rote-Karte-Warnung.
+
+
 ## 2026-08-02 — KI-Vorschlag: IMMER ein spielbarer Pick, nie „No Bet"
 Owner: „Die Codemining-KI soll lernen wie WIR temporäre Optionen auswählen — wir tun das NICHT um
 No Bets auszuwählen." (No Bet ist in der normalen Lesart legitim, z.B. das nötige blaue Rangers-1-1.)

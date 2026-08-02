@@ -34,6 +34,7 @@ from server import (
     _system_cycle_day,
     build_qualifier_briefing,
     db,
+    code_live_autopost,
     enrich_member_picks,
     favourite_smart_autopost,
     gift_of_the_day,
@@ -499,6 +500,31 @@ async def live_loop():
                 logger.info(f"HQ loop D (Live): {await live_autopost()}")
         except Exception as e:
             logger.error(f"live_loop error: {e}")
+        await asyncio.sleep(LIVE_POLL_SECONDS)
+
+
+async def code_live_loop():
+    """Owner 2026-08: Live-Codemine-Rescue — generate a fresh live KI pick (10★ when a team leads,
+    2★ buzzer-beater from 75') for any currently in-play codemine. Same leader/quota guards as the
+    other live loops."""
+    await asyncio.sleep(230)  # after live_loop so the shared live feed is warm
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(45)
+            continue
+        if _api_quota_exhausted():
+            await asyncio.sleep(LIVE_POLL_SECONDS * 4)
+            continue
+        if _api_reserve_locked():
+            await asyncio.sleep(LIVE_POLL_SECONDS * 4)
+            continue
+        try:
+            if API_FOOTBALL_KEY:
+                res = await code_live_autopost()
+                if res.get("posted"):
+                    logger.info(f"Codemine-Rescue loop: {res}")
+        except Exception as e:
+            logger.error(f"code_live_loop error: {e}")
         await asyncio.sleep(LIVE_POLL_SECONDS)
 
 

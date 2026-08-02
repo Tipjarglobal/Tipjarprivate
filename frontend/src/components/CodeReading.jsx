@@ -445,6 +445,18 @@ export function CodeReading() {
                         <Radio size={11} /> {r.live_score}{r.live_minute ? ` · ${r.live_minute}'` : ""}
                       </span>
                     )}
+                    {r.live && r.live_rescue && (
+                      <span data-testid={`code-read-rescue-${r.id}`}
+                        className={`inline-flex items-center gap-1 text-[10px] font-black rounded-full px-2 py-0.5 ${r.live_rescue === "buzzer" ? "bg-amber-400 text-void" : "bg-sky-400 text-void"}`}>
+                        {r.live_rescue === "buzzer" ? "🚨 BUZZER" : "🎯 RESCUE"} {Math.round(r.live_rescue_stars || 0)}★
+                      </span>
+                    )}
+                    {r.live && r.live_red_team && (
+                      <span data-testid={`code-read-red-${r.id}`} title={r.live_red_team}
+                        className="inline-flex items-center gap-1 text-[10px] font-black rounded-sm px-1.5 py-0.5 bg-red-700 text-white">
+                        🟥 {r.live_red_team}
+                      </span>
+                    )}
                     {r.verified && (
                       <span data-testid={`code-read-verified-${r.id}`} title={fl.verified}
                         className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide rounded-full px-2 py-0.5 bg-emerald-500 text-void">

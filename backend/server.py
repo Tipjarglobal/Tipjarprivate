@@ -9137,6 +9137,14 @@ async def _cr_live_annotate(reads: list):
             r["live_minute"] = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed")
         else:
             r.pop("live", None); r.pop("live_score", None); r.pop("live_minute", None)
+            # game not live → drop any stale rescue / red-card flags (set by code_live_loop)
+            for k in ("live_rescue", "live_rescue_stars", "live_red_team", "live_rescue_at"):
+                r.pop(k, None)
+            if r.get("id"):
+                await db.code_reads.update_one(
+                    {"id": r["id"], "live_rescue": {"$exists": True}},
+                    {"$unset": {"live_rescue": "", "live_rescue_stars": "",
+                                "live_red_team": "", "live_rescue_at": ""}})
 
 
 
@@ -10830,6 +10838,187 @@ async def live_autopost() -> dict:
                     logger.info(f"Vierer-Live-Kombi (pre-match): 4 legs @ {total_odds}")
 
     return {"posted": posted, "closed": closed, "live": len(live)}
+
+
+# ── Live-Codemine-Rescue-Engine (owner 2026-08) ──────────────────────────────
+# Owner: die Live-KI soll für laufende Codemines EINEN NEUEN Live-KI-Pick generieren, der den
+# Codemine mit einem Buzzer-Beater rettet. Regeln:
+#   B) Sobald ein Team FÜHRT und KEINE rote Karte im Spiel ist und der Codemine ein Tor vorhersagt
+#      → 10★ Live-Pick (der Gegner/Favorit drückt → Tor sehr wahrscheinlich).
+#   C) Ab der 75. Minute, wenn der Counter GENAU noch EIN Tor braucht → 2★ Buzzer-Beater-Live-Pick
+#      (hohe Quote, kleiner Einsatz).
+# Rote Karten werden immer geprüft und im Pick vorgewarnt ("⚠ Rote Karte: X"). Favorit/Underdog
+# aus den 1X2-Quoten (1 Zusatzaufruf pro Kandidat, gecacht). Settlement/Schließen läuft GRATIS über
+# live_autopost (source == "hq-live"). Non-destruktiv: die Codemine-Karte wird nicht überschrieben.
+
+def _cr_one_goal_completes(market: str, hg, ag, home: str, away: str) -> bool:
+    """True when exactly ONE more relevant goal would make this codemine counter land."""
+    m = (market or "").lower()
+    hg, ag = hg or 0, ag or 0
+    total = hg + ag
+    side = _market_team_side(market, home, away)
+    if "beide teams treffen" in m or "btts" in m:
+        return (hg == 0) != (ag == 0)  # exactly one side still missing
+    gm = re.search(r"über\s+(\d+)\.5", m)
+    if gm and side is None and "über 0.5" not in m:
+        return total == int(gm.group(1))
+    if "über 1.5" in m:
+        g = hg if side == "home" else (ag if side == "away" else total)
+        return g == 1
+    if "über 0.5" in m:
+        g = hg if side == "home" else (ag if side == "away" else total)
+        return g == 0
+    return False
+
+
+def _cr_fav_side(fid: str, cache: dict):
+    """Favourite side ('home'/'away') from pre-match 1X2 odds, cached per fixture. None if unknown."""
+    if fid in cache:
+        return cache[fid]
+    fav = None
+    try:
+        data = _apifootball("/odds", {"fixture": fid, "bet": 1}) or []
+        vals = {}
+        for entry in data:
+            for bm in (entry.get("bookmakers") or []):
+                for bet in (bm.get("bets") or []):
+                    for v in (bet.get("values") or []):
+                        try:
+                            vals[v.get("value")] = float(v.get("odd") or 0)
+                        except Exception:
+                            pass
+                    break
+                break
+            break
+        h, a = vals.get("Home"), vals.get("Away")
+        if h and a:
+            fav = "home" if h < a else "away"
+    except Exception:
+        fav = None
+    cache[fid] = fav
+    return fav
+
+
+async def code_live_autopost() -> dict:
+    if not API_FOOTBALL_KEY:
+        return {"posted": 0, "reason": "no API-Football key"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ account missing"}
+    live = _apifootball("/fixtures", {"live": "all"}) or []
+    if not live:
+        return {"posted": 0, "live": 0}
+    now = datetime.now(timezone.utc).isoformat()
+    now_iso = now
+    reads = await db.code_reads.find(
+        {"expires_at": {"$gt": now_iso}, "score": {"$in": [None, ""]},
+         "read": {"$ne": "no_bet"}, "our_market": {"$nin": [None, ""]}},
+        {"_id": 0}).to_list(200)
+    posted = 0
+    stat_calls = 0
+    odds_cache: dict = {}
+    for cr in reads:
+        if stat_calls >= LIVE_STAT_CALL_CAP:
+            break
+        home, away = cr.get("home") or "", cr.get("away") or ""
+        market = cr.get("our_market") or ""
+        if not home or not away or not market:
+            continue
+        # only goal-progress markets (Über/BTTS/team-scores). Result markets → skip.
+        if _live_bet_landed(market, 0, 0, home, away) is None:
+            continue
+        fx = _find_live_fixture(live, home, away)
+        if not fx:
+            continue
+        short = ((fx.get("fixture") or {}).get("status") or {}).get("short")
+        if short not in LIVE_STATUSES:
+            continue
+        fid = str((fx.get("fixture") or {}).get("id") or "")
+        minute = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed") or 0
+        hg, ag = _align_goals(fx, home)
+        landed = _live_bet_landed(market, hg, ag, home, away)
+        if landed is True:
+            continue  # counter already safe → no rescue needed
+        # red cards from the live statistics (1 call, also used for pressure naming)
+        stats = _apifootball("/fixtures/statistics", {"fixture": fid})
+        stat_calls += 1
+        reds = _live_red_cards(stats)
+        red_team = ""
+        if reds:
+            for tname, _sc, _s, _c in _live_team_pressure(stats):
+                pass
+            # name the team(s) with a red card
+            for team in (stats or []):
+                for s in (team.get("statistics") or []):
+                    if "red card" in (s.get("type") or "").lower():
+                        v = s.get("value")
+                        if isinstance(v, str):
+                            v = int(re.sub(r"[^0-9]", "", v) or 0)
+                        if v:
+                            red_team = ((team.get("team") or {}).get("name")) or red_team
+        leading = hg != ag
+        rule = None
+        if leading and reds == 0:
+            rule, rating = "lead", 10.0
+        elif minute >= 75 and _cr_one_goal_completes(market, hg, ag, home, away):
+            rule, rating = "buzzer", 2.0
+        else:
+            continue
+        odd = _live_odd(market, minute, hg + ag)
+        red_warn = f" ⚠ Rote Karte: {red_team} (Vorsicht — kann den Torfluss bremsen)." if reds else ""
+        if rule == "lead":
+            fav = _cr_fav_side(fid, odds_cache)
+            leader = home if hg > ag else away
+            fav_txt = ""
+            if fav:
+                fav_name = home if fav == "home" else away
+                chaser = away if fav == "home" else home
+                if fav_name.lower() != leader.lower():
+                    fav_txt = f" Favorit {fav_name} liegt hinten und drückt auf den Ausgleich."
+                else:
+                    fav_txt = f" Favorit {fav_name} führt, aber {chaser} muss kommen."
+            analysis = (
+                f"🎯 CODEMINE-RESCUE ({minute}'): {leader} führt {hg}:{ag}.{fav_txt} "
+                f"Der Codemine sagt ein Tor voraus ({market}) — jetzt sehr wahrscheinlich. "
+                f"Kein Ausschluss durch rote Karte. Live zu {odd}.{red_warn}"
+            )
+            category = "banger" if odd >= 2.0 else "value"
+        else:  # buzzer
+            analysis = (
+                f"🚨 BUZZER-BEATER ({minute}'): {market} steht bei {hg}:{ag} und braucht nur noch "
+                f"EIN Tor. Letzte {max(90 - minute, 1)} Min. — kleiner Einsatz, hohe Quote {odd}. "
+                f"Rettet den Codemine {home} – {away}.{red_warn}"
+            )
+            category = "banger"
+        live_id = f"crlive-{fid}-{cr.get('id')}"
+        await db.tips.update_one({"id": live_id}, {
+            "$set": {
+                "market": market, "odds": f"{odd:.2f}", "ai_rating": rating,
+                "win_prob": min(0.95, 1.0 / max(odd, 1.05)), "category": category,
+                "ai_analysis": analysis, "status": "live",
+                "match_time": ((fx.get("fixture") or {}).get("date") or ""),
+                "league": _fixture_league_label(fx), "country": _fixture_country(fx),
+                "league_code": "", "live_minute": minute, "live_score": f"{hg}:{ag}",
+                "from_codemining": True, "code_read_id": cr.get("id"),
+                "buzzer_beater": (rule == "buzzer"), "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-live", "fixture_id": fid, "created_at": now,
+            },
+        }, upsert=True)
+        # non-destructive live flags on the codemine card (surfaced by _cr_live_annotate on GET)
+        await db.code_reads.update_one(
+            {"id": cr.get("id")},
+            {"$set": {"live_rescue": rule, "live_rescue_stars": rating,
+                      "live_red_team": red_team, "live_rescue_at": now}})
+        posted += 1
+        logger.info(f"CODEMINE-RESCUE [{rule} {rating}★]: {home} vs {away} — {market} @ {odd} ({minute}')")
+    return {"posted": posted, "live": len(live)}
+
 
 
 
@@ -12745,6 +12934,7 @@ from scrapers_autopost import (
 from background_tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
     smart_loop, live_loop, member_live_loop, hide_unplayable_loop, api_burner_loop,
+    code_live_loop,
 )
 
 
@@ -12998,6 +13188,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(totissports_loop()))
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
+    _BG_TASKS.append(asyncio.create_task(code_live_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
