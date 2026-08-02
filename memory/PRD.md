@@ -408,6 +408,18 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0-Bugfix — 2026-08-02 (i) — Zu viele „aktive" Codemines (meiste schon fertig)
+Symptom (Owner): Der Codemining-Aktiv-Tab zeigt zu viele Einträge, obwohl die meisten Spiele beendet
+sind. Root Cause (wie beim Experten-Bug): Die Aktiv/Fertig-Trennung in `code_reading()` (`server.py`)
+nutzte `_parse_kickoff`, das die Scraper-Kickoffs „DD/MM HH:MM" / „HH:MM" NICHT lesen kann → `ko=None`
+→ „ko+Grace < now"-Check greift nie → beendete Codemines blieben bis zu 10h (bis `stale`) im
+Aktiv-Tab. Fix: robusten Parser `_cr_sort_dt(kickoff, created_at)` verwenden → beendete Spiele
+(Anpfiff + 150 Min vorbei) wandern korrekt in „Beendet", In-Play & künftige bleiben aktiv.
+Verifiziert (Unit-Test): 3h vorbei→FINISHED, 40 Min in-play→ACTIVE, +3h→ACTIVE, time-only vorbei→
+FINISHED. Endpoint `/api/code-reading` fehlerfrei. Backend /api 200.
+HINWEIS: live erst nach „Save to GitHub → Deploy".
+
+
 ## P0-Bugfix — 2026-08-02 (h) — Lange Pregame-Scheine sprangen zu früh in „Live"
 Symptom (Owner): „Bewege lange Pregame-Scheine nicht rein zum Live, nur weil EIN Spiel gestartet hat."
 Root Cause: `live_annotate_sync` (`server.py`) setzte einen Mehrfach-Schein auf status `live`, sobald

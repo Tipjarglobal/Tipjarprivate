@@ -9374,7 +9374,9 @@ async def code_reading():
     grace = timedelta(minutes=150)
     active, finished = [], []
     for r in reads:
-        ko = _parse_kickoff(r.get("kickoff"))
+        # robust kickoff read (scrapers post 'DD/MM HH:MM' / 'HH:MM' which _parse_kickoff can't read
+        # → finished games used to hang in ACTIVE for up to 10h; owner 2026-08 'zu viele aktive').
+        ko = _cr_sort_dt(r.get("kickoff"), r.get("created_at"))
         created = _parse_kickoff(r.get("created_at"))
         stale = created is not None and (now_dt - created) > timedelta(hours=10)
         # A game that hasn't kicked off yet is ALWAYS active — never show a future match as finished.
