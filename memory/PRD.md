@@ -408,6 +408,27 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## Changelog — 2026-08-02 (c) — Startelf-Torschützen-Kombi (Master, rollierend)
+Owner: „Der Master soll die Torschützen-Scheine IMMER posten." + „zwei/drei Spieler treffen reicht;
+mehrere Stürmer aus EINEM Spiel erlaubt (Ben Yedder + Minamino; Openda+Olmo+Guirassy); torreiche
+Teams (4+) bevorzugen, keine 1-0-Spiele wie Porto; ab 6 Kandidaten → System."
+- `master_lineup_scorer_combo()` (`server.py`): ROLLIERENDER Tages-Kombi (id `master-lineup-{berlinday}`,
+  source hq-master, master_category **hotscorer** → erscheint automatisch im vorhandenen
+  „🔥 Torjäger-Kombi"-Tab, KEINE Frontend-Änderung nötig). Zieht die bestätigten Startelf-Singles
+  (`lineup_pick=True`) des Tages, baut je Spieler ein „{Spieler} trifft"-Bein (Quote aus dem
+  goal-Markt der Admin-Watchlist, Default 3.0). MEHRERE Beine pro Spiel erlaubt. Goal-Friendly-Filter
+  über `db.match_predictions` (`_zero_zero_assessment.over_safe` / over25 / btts / total≥3) — klar
+  torarme Spiele werden übersprungen. Merge-Upsert: bestehende (ggf. schon abgerechnete) Beine bleiben,
+  neu bestätigte Stürmer werden angehängt → Schein wächst über den Abend. ≥5 Beine ⇒ **System (N-1/N)**.
+- In `master_loop` eingebunden (alle 120 s, „immer posten"). Abrechnung Bein-für-Bein über die
+  bestehende `settle_multimatch_parlays` (Scorer-Grading via Spieler-Tore, System-Support vorhanden).
+- `master_dedupe_open_slips` unkritisch: Beine haben je 1 Selektion → kein Stripping, Quote = Produkt.
+- **Getestet** (python-Mock): 3-Bein-Kombi mit 2 Scorern aus EINEM Spiel (Benfica-Porto) + PAOK,
+  Quote 27.0; rollierend +1 Stürmer → 4 Beine, Quote 81.0; Frontend-Screenshot: Karte „PARLAY · 3 GAMES"
+  im Torjäger-Kombi-Tab korrekt gerendert (Pavlidis/Kelsy/Konstantelias „to score @3").
+- HINWEIS: live auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
+
+
 ## Changelog — 2026-08-02 (b) — Startelf-Watchlist: Admin-Panel + Bild-OCR + Mehr-Markt-Picks
 Owner: Startelf-Spieler selbst pflegen können — per Bild-Upload (Vision liest Spieler+Team) ODER
 manuell (Team+Spielername), inkl. Auswahl der Märkte (trifft / trifft 1.HZ / über X.5 Schüsse aufs

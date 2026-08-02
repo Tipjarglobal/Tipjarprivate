@@ -13357,6 +13357,121 @@ async def master_hotscorer_combo() -> dict:
     return {"posted": 1, "odds": combo, "players": len(picks)}
 
 
+async def master_lineup_scorer_combo() -> dict:
+    """Owner 2026-08 ('Der Master soll die Torschützen-Scheine IMMER posten'): a ROLLING
+    Startelf-Torschützen-Kombi. Whenever a watched Startelf player is CONFIRMED in the line-up
+    (~20 min pre-KO), a '{Spieler} trifft' leg is added to ONE combo for the Berlin day. Several
+    strikers from the SAME game are allowed (Ben Yedder + Minamino …). Only goal-friendly games
+    (teams that can score 4+) are included; low-scoring games (Porto 1-0) are skipped. ≥5 legs →
+    the slip becomes a SYSTEM (one striker may miss). Auto-settles leg-by-leg via player goals.
+    Rolling upsert: existing (possibly already-graded) legs are kept, new confirmed strikers appended."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    cid = f"master-lineup-{day}"
+    # confirmed Startelf singles today (posted by lineup_player_autopost) → unique striker/fixture
+    singles = await db.tips.find(
+        {"lineup_pick": True, "source": "hq-auto"}, {"_id": 0}).to_list(400)
+    confirmed = {}
+    for s in singles:
+        ko = _parse_kickoff(s.get("match_time"))
+        if not ko:
+            continue
+        if ko.tzinfo is None:
+            ko = ko.replace(tzinfo=timezone.utc)
+        try:
+            from zoneinfo import ZoneInfo
+            ko_day = ko.astimezone(ZoneInfo("Europe/Berlin")).date().isoformat()
+        except Exception:
+            ko_day = (ko + timedelta(hours=2)).date().isoformat()
+        if ko_day != day:
+            continue
+        key = (s.get("fixture_id"), _name_key(s.get("player_name", "")))
+        if key[1] and key not in confirmed:
+            confirmed[key] = {"player": s.get("player_name"), "home": s.get("home_team"),
+                              "away": s.get("away_team"), "league": s.get("league") or "",
+                              "kickoff": s.get("match_time"), "ko": ko,
+                              "fixture_id": s.get("fixture_id"), "pkey": key[1]}
+    if not confirmed:
+        return {"skipped": "none-confirmed"}
+    # per-player scorer odds from the admin watchlist (goal market), goal-friendliness from predictions
+    watch = {w["player_key"]: w for w in await db.lineup_watch.find({}, {"_id": 0}).to_list(200)}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(2000)
+    predmap = {_match_key(p.get("home"), p.get("away")): p for p in preds}
+
+    def _goal_friendly(home, away) -> bool:
+        p = predmap.get(_match_key(home, away))
+        if not p:
+            return True  # no data → trust the curated striker
+        za = _zero_zero_assessment(p)
+        return bool(za.get("over_safe") or p.get("over25") or p.get("btts")
+                    or (p.get("total") or 0) >= 3)
+
+    def _scorer_odds(pkey) -> float:
+        w = watch.get(pkey) or {}
+        for m in (w.get("markets") or []):
+            if m.get("id") == "goal":
+                try:
+                    return float(m.get("odds") or 3.0)
+                except (TypeError, ValueError):
+                    return 3.0
+        return 3.0
+
+    existing = await db.tips.find_one({"id": cid}, {"_id": 0})
+    legs = list(existing.get("legs") or []) if existing else []
+    have = {(l.get("fixture_id"), l.get("player_key")) for l in legs}
+    added = 0
+    for (fid, pkey), c in confirmed.items():
+        if (fid, pkey) in have:
+            continue
+        if not _goal_friendly(c["home"], c["away"]):
+            continue
+        legs.append({
+            "match": f"{c['home']} - {c['away']}", "league": c["league"],
+            "kickoff": c["kickoff"], "status": "pending",
+            "selections": [f"{c['player']} trifft"], "sel_odds": [round(_scorer_odds(pkey), 2)],
+            "player": c["player"], "player_key": pkey, "fixture_id": fid,
+        })
+        added += 1
+    if len(legs) < 2:
+        return {"skipped": "need-2", "have": len(legs)}
+    combo = 1.0
+    for l in legs:
+        combo *= float((l.get("sel_odds") or [1.0])[0])
+    combo = round(combo, 2)
+    kos = [k for k in (_parse_kickoff(l.get("kickoff")) for l in legs) if k]
+    first_ko = min(kos) if kos else now
+    names = ", ".join(l.get("player") for l in legs if l.get("player"))
+    is_system = len(legs) >= 5
+    sys_from = (len(legs) - 1) if is_system else 0
+    label = (f"🔥 Startelf-Torschützen-Kombi — System {sys_from}/{len(legs)}"
+             if is_system else f"🔥 Startelf-Torschützen-Kombi — {len(legs)} Stürmer")
+    analysis = (f"🔥 Bestätigte Startelf-Torjäger: {names} sollen JE treffen. "
+                + (f"System {sys_from}/{len(legs)} — EIN Stürmer darf leer ausgehen. "
+                   if is_system else "Alle müssen treffen. ")
+                + f"Gesamtquote {combo:.2f}. Wächst weiter, sobald mehr Startelfs bestätigt sind.")
+    bot = await _get_master_bot()
+    doc = {
+        "id": cid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": label, "odds": f"{combo:.2f}",
+        "category": "value", "master_category": "hotscorer", "master_day": day,
+        "lineup_combo": True, "ai_rating": 8.6, "ai_analysis": analysis,
+        "legs": legs, "is_parlay": True,
+        "bet_type": "system" if is_system else "",
+        "system_from": sys_from, "system_total": len(legs) if is_system else 0,
+        "source": "hq-master",
+    }
+    await db.tips.update_one(
+        {"id": cid},
+        {"$set": doc, "$setOnInsert": {"created_at": now.isoformat(),
+                                       "status": "pending", "sum_stars": 0,
+                                       "ratings_count": 0, "avg_rating": 0}},
+        upsert=True)
+    return {"posted": 1, "legs": len(legs), "added": added, "odds": combo, "system": is_system}
+
+
+
 
 
 async def master_loop():
@@ -13387,6 +13502,8 @@ async def master_loop():
                 await master_avatar_codemining()
                 # Owner "Torjäger-Kombi": daily hot-scorer Doppelpack parlay (Hall-of-Fame shot).
                 hotc = await master_hotscorer_combo()
+                # Owner 2026-08: Master postet die Startelf-Torschützen-Kombi IMMER (rollierend).
+                luc = await master_lineup_scorer_combo()
                 # Owner special GIFTS: half-time & first-2-goals gifts on clear favourites.
                 gifts2 = await gift_specials_autopost()
                 # Clean legacy slips of per-game redundant legs (BTTS ⇒ Über 1.5 etc.).
@@ -13395,7 +13512,7 @@ async def master_loop():
                         or safe.get("posted") or special.get("posted") or avatar.get("posted") \
                         or hotc.get("posted") or risk.get("posted") or gifts2.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; gifts2 {gifts2}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; scorer-kombi {luc}; gifts2 {gifts2}; challenge {chal}")
             # Owner 2026-08: exactly ONE single-game pick per match (Risk > Value > Banker) —
             # kills the Risk+Value+Banker triple-posting of the same fixture. DB-only, so it runs
             # every cycle regardless of the API-Football key.
