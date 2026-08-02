@@ -284,6 +284,7 @@ async def _regen_pregames_bg():
             await forebet_autopost()
             await predictz_autopost()
         await footballpredictions_autopost()
+        await topmatch_lookahead_autopost()
         logger.info("Reset regen: pregame HQ + Master slips refilled.")
     except Exception as e:
         logger.error(f"reset regen failed: {e}")
@@ -970,8 +971,28 @@ async def tips_counts():
     # days) so it matches the bundled red "new" count and the Banker/Value/Risk tabs.
     ai_docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending"}, {"match_time": 1}).to_list(1000)
-    ai = len(ai_docs)
+
+    def _upcoming(mt):
+        ko = _parse_kickoff(mt)
+        if not ko:
+            return True
+        return (ko - now).total_seconds() / 3600 >= -3  # not already finished/long in-play
+    ai = sum(1 for d in ai_docs if _upcoming(d.get("match_time")))
     ai_total = ai
+
+    # owner 2026-08: per-window counts for the three Single-KI tabs (jetzt / 24-48 / 48+)
+    ai_now = ai_24_48 = ai_48plus = 0
+    for d in ai_docs:
+        ko = _parse_kickoff(d.get("match_time"))
+        h = ((ko - now).total_seconds() / 3600) if ko else 0
+        if h < -3:
+            continue
+        if h < 24:
+            ai_now += 1
+        elif h < 48:
+            ai_24_48 += 1
+        else:
+            ai_48plus += 1
     members = await db.tips.count_documents({
         "source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master", *SILENT_SOURCE_SLUGS]},
         "username": {"$nin": ["TipJarHQ", "TipJarHQ System"]},
@@ -1036,6 +1057,7 @@ async def tips_counts():
             continue
         codereading += 1
     return {"ai": ai, "ai_total": ai_total, "members": members, "live": live,
+            "ai_now": ai_now, "ai_24_48": ai_24_48, "ai_48plus": ai_48plus,
             "community_live": community_live, "codereading": codereading,
             "systems": systems_n, "smart": smart, "settled": settled, "master": master,
             "won": won_n, "lost": lost_n, "cashed": cashed_n, "bestwon": bestwon_n,
@@ -4802,6 +4824,55 @@ async def _record_league_miss(code: str):
 
 
 
+# owner 2026-08: leagues where a -1.5 favourite handicap is allowed — top European divisions &
+# UEFA competitions ("teams we know & understand"). NOT MLS / South America / minor leagues.
+_MARQUEE_HCP_KEYWORDS = (
+    "champions league", "europa league", "conference league", "uefa", "premier league",
+    "bundesliga", "la liga", "laliga", "serie a", "ligue 1", "eredivisie", "primeira liga",
+    "liga portugal", "süper lig", "super lig", "championship",
+)
+
+
+def _is_marquee_handicap_league(league: str = "", league_code: str = "", country: str = "") -> bool:
+    hay = " ".join([(league or ""), (league_code or ""), (country or "")]).lower()
+    if any(b in hay for b in ("serie b", "ligue 2", "league one", "league two", "2. liga", "segunda")):
+        return False
+    return any(k in hay for k in _MARQUEE_HCP_KEYWORDS)
+
+
+# owner 2026-08: leagues allowed in the 24–72h LOOKAHEAD tabs — quality only, NO underground teams.
+# UEFA club competitions (incl. qualification) + top domestic leagues matched WITH the country so
+# 'Bhutan Premier League' / 'Cambodia' etc. never slip through a bare 'premier league' match.
+_LOOKAHEAD_UEFA = ("champions league", "europa league", "conference league",
+                   "uefa champions", "uefa europa", "uefa conference")
+_LOOKAHEAD_TOP_PAIRS = (
+    ("england", "premier league"), ("england", "championship"),
+    ("germany", "bundesliga"), ("spain", "la liga"), ("spain", "laliga"),
+    ("italy", "serie a"), ("france", "ligue 1"), ("netherlands", "eredivisie"),
+    ("portugal", "primeira"), ("portugal", "liga portugal"),
+    ("brazil", "serie a"), ("argentina", "liga profesional"), ("argentina", "primera"),
+    ("usa", "major league soccer"), ("usa", "mls"), ("mexico", "liga mx"), ("mexico", "liga bbva"),
+    ("saudi", "pro league"), ("turkey", "süper"), ("turkey", "super lig"),
+    ("scotland", "premiership"), ("belgium", "jupiler"), ("belgium", "pro league"),
+)
+_LOOKAHEAD_BLOCK = ("serie b", "ligue 2", "league one", "league two", "2. bundesliga",
+                    "segunda", "national league", "women", "u19", "u20", "u21", "u23",
+                    "reserve", "friendly", "youth")
+
+
+def _is_quality_lookahead_league(league: str = "", country: str = "") -> bool:
+    lg = f" {(league or '').lower()} "
+    co = (country or "").lower()
+    if any(b in lg for b in _LOOKAHEAD_BLOCK):
+        return False
+    if any(k in lg for k in _LOOKAHEAD_UEFA):  # UEFA comps incl. qualification — always quality
+        return True
+    for c, l in _LOOKAHEAD_TOP_PAIRS:  # top domestic league, verified against its country
+        if c in co and l in lg:
+            return True
+    return False
+
+
 SLIP_LEAGUE_KEYWORDS = (
     "champions league", "europa league", "conference league", "europa conference",
     "uefa", "world cup", "nations league", "qualif", "copa america",
@@ -5145,6 +5216,11 @@ async def purge_expired_autotips() -> int:
                if (ko := _parse_kickoff(p.get("kickoff"))) and ko < cutoff]
     if stale_p:
         await db.match_predictions.delete_many({"id": {"$in": stale_p}})
+    # owner 2026-08: enforce one-pick-per-game + drop non-marquee -1.5 handicaps on every refresh
+    try:
+        await _dedupe_hq_tips()
+    except Exception as e:
+        logger.warning(f"dedupe in purge failed: {e}")
     return len(stale) + len(sys_stale)
 
 
@@ -5157,8 +5233,9 @@ async def _dedupe_hq_tips() -> int:
     the bigger risk."""
     docs = await db.tips.find(
         {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1,
-         "pick_type": 1, "match_time": 1, "category": 1}
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1, "market": 1,
+         "pick_type": 1, "match_time": 1, "category": 1,
+         "league": 1, "league_code": 1, "country": 1}
     ).to_list(4000)
 
     def _odd(d):
@@ -5169,18 +5246,24 @@ async def _dedupe_hq_tips() -> int:
     survivors = {d["id"]: d for d in docs}
     to_delete: set = set()
 
+    # owner 2026-08: -1.5 handicap ONLY for teams we know & understand (top European leagues +
+    # UEFA). Drop it for lesser leagues (e.g. MLS 'Seattle Sounders') — there we keep a safer market.
+    for d in list(survivors.values()):
+        mk = (d.get("market") or "").lower()
+        if ("-1.5" in mk and "handicap" in mk) and not d.get("is_parlay"):
+            if not _is_marquee_handicap_league(d.get("league"), d.get("league_code"), d.get("country")):
+                to_delete.add(d["id"])
+
     # owner 2026-08: RISK is the biggest → keep it and drop Value/Banker for the SAME match.
     _KEEP_RANK = {"risk": 3, "value": 2, "banker": 1}
-    _SPECIAL = ("gift", "gifts", "mental", "banger", "avatar")
 
     def _cat_of(d):
         return (d.get("category") or d.get("pick_type") or "value").lower()
 
     def _grp(d):
-        # collapse risk/value/banker of one match into a single "core" pick; keep gifts/mental
-        # /banger as their own separate tabs (those are not the flooding the owner complained about).
-        c = _cat_of(d)
-        return c if c in _SPECIAL else "core"
+        # owner 2026-08: NEVER show the same game twice — collapse EVERY category (incl. gift/
+        # mental/banger/avatar) of one match into a single pick and keep the HIGHEST ODDS.
+        return "core"
 
     def dedup_by(keyfn):
         groups: dict = {}
@@ -5194,8 +5277,9 @@ async def _dedupe_hq_tips() -> int:
         for arr in groups.values():
             if len(arr) < 2:
                 continue
-            # keep the BIGGEST: Risk > Value > Banker, then highest odds
-            arr.sort(key=lambda d: (_KEEP_RANK.get(_cat_of(d), 0), _odd(d)), reverse=True)
+            # keep the BIGGEST QUOTE (owner 2026-08: "immer das höchste Risiko, die höchste Quote"),
+            # tie-break by category rank Risk > Value > Banker.
+            arr.sort(key=lambda d: (_odd(d), _KEEP_RANK.get(_cat_of(d), 0)), reverse=True)
             for d in arr[1:]:
                 to_delete.add(d["id"])
 
@@ -5212,6 +5296,84 @@ async def _dedupe_hq_tips() -> int:
         await db.tips.delete_many({"id": {"$in": list(to_delete)}})
         logger.info(f"Dedup: removed {len(to_delete)} duplicate HQ picks (one per match, highest risk kept)")
     return len(to_delete)
+
+
+async def topmatch_lookahead_autopost() -> dict:
+    """Owner 2026-08: fill the 24–48h and 48+ KI-Single tabs IN ADVANCE with quality games only —
+    UEFA Champions/Europa/Conference-League qualifiers PLUS top leagues (no underground teams).
+    One SAFE single per game, kickoff 24–72h out. Uses the stored match_predictions (populated for
+    +2 days by apifootball_predictions_autopost)."""
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0, "reason": "HQ missing"}
+    now = datetime.now(timezone.utc)
+    raw = await db.match_predictions.find({"status": "pending"}, {"_id": 0}).to_list(1500)
+    posted = 0
+
+    def _mk(p):
+        fav = _fav_team(p)
+        total = p.get("total") or 0
+        btts = bool(p.get("btts"))
+        over25 = bool(p.get("over25")) or total >= 2.6
+        side = p.get("fav")
+        if fav and _opp_win_practically_impossible(p) and side in ("home", "away"):
+            dc = "1X" if side == "home" else "X2"
+            return (f"{fav} Doppelte Chance {dc}", "1.20", 8.0, "banker")
+        if total >= 2.6 and over25:
+            return ("Über 1.5 Tore", "1.40", 7.5, "value")
+        if fav:
+            return (f"{fav} Über 0.5 Tore", "1.25", 7.5, "value")
+        if btts:
+            return ("Beide Teams treffen", "1.70", 7.0, "value")
+        return (None, None, None, None)
+
+    for p in raw:
+        if posted >= 40:
+            break
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        h = (ko - now).total_seconds() / 3600
+        if h < 24 or h > 72:  # only the far tabs the owner wants filled
+            continue
+        if not _pred_whitelisted(p):
+            continue
+        if not _is_quality_lookahead_league(p.get("league"), p.get("country")):
+            continue  # owner: NO underground teams in the lookahead tabs
+        home, away = p.get("home"), p.get("away")
+        if not home or not away:
+            continue
+        if await db.tips.find_one(
+                {"source": "hq-auto", "status": "pending", "home_team": home, "away_team": away},
+                {"_id": 1}):
+            continue
+        market, odd, rating, cat = _mk(p)
+        if not market:
+            continue
+        if learn_verdict("auto", market)[0] == "veto":
+            continue
+        tid = f"la-{hashlib.md5(_match_key(home, away).encode()).hexdigest()[:10]}"
+        if await db.tips.find_one({"id": tid}, {"_id": 1}):
+            continue
+        await db.tips.insert_one({
+            "id": tid, "user_id": hq["id"], "username": "TipJarHQ",
+            "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+            "match_time": ko.isoformat(), "country": p.get("country") or "",
+            "league": p.get("league") or "", "league_code": p.get("league_code") or "",
+            "market": market, "odds": odd, "category": cat, "ai_rating": rating,
+            "win_prob": 0.75, "ai_analysis": (
+                f"Vorschau ({int(h)}h): {home} – {away}. Sicherer Früh-Pick aus einem Top-Wettbewerb "
+                f"({p.get('league') or 'Top-Liga'}). {market}."),
+            "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+            "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+            "source": "hq-auto", "lookahead": True,
+            "created_at": now.isoformat(),
+        })
+        posted += 1
+    if posted:
+        await _dedupe_hq_tips()
+    return {"posted": posted}
+
 
 
 # ---------------------------------------------------------------------------
@@ -11085,6 +11247,130 @@ async def _build_rescue_kombi(hq: dict, rescue_legs: list, now: str) -> dict:
                 f"(rescues={n_res}, banger={has_banger}, zehner={has_zehner})")
     return {"posted": 1, "combo": combo_id, "legs": len(legs), "odds": total_odds,
             "rescues": n_res, "banger": has_banger, "zehner": has_zehner}
+
+
+# ── Start-Elf-Live-Spieler-Picks (owner 2026-08) ─────────────────────────────
+# Sobald ~40 Min vor Anpfiff die AUFSTELLUNG steht, erkennt die KI einen Stürmer in der Start-Elf
+# und postet einen Spieler-Pick "{Spieler} Über 0.5 Schüsse aufs Tor" (10★). Abrechnung nach dem
+# Spiel über /fixtures/players (Schüsse aufs Tor). Nur Qualitäts-Ligen (keine unterirdischen Teams).
+_LINEUP_FX_CACHE = {"ts": 0.0, "date": "", "fixtures": []}
+
+
+async def _upcoming_quality_fixtures(window_min: int = 45) -> list:
+    now = datetime.now(timezone.utc)
+    dstr = now.strftime("%Y-%m-%d")
+    if now.timestamp() - _LINEUP_FX_CACHE["ts"] > 900 or _LINEUP_FX_CACHE["date"] != dstr:
+        fx = await asyncio.to_thread(_apifootball, "/fixtures", {"date": dstr}) or []
+        _LINEUP_FX_CACHE.update({"ts": now.timestamp(), "date": dstr, "fixtures": fx})
+    out = []
+    for f in _LINEUP_FX_CACHE["fixtures"]:
+        if ((f.get("fixture") or {}).get("status") or {}).get("short") != "NS":
+            continue
+        ko = _parse_kickoff(((f.get("fixture") or {}).get("date") or ""))
+        if not ko:
+            continue
+        mins = (ko - now).total_seconds() / 60
+        if mins < 0 or mins > window_min:
+            continue
+        lg = f.get("league") or {}
+        if not _is_quality_lookahead_league(lg.get("name"), lg.get("country")):
+            continue
+        out.append(f)
+    return out
+
+
+async def lineup_player_autopost() -> dict:
+    """Post a 10★ '{striker} Über 0.5 Schüsse aufs Tor' as soon as the starting XI is published
+    (~40 min pre-kickoff), for the main forward of each side in a quality game."""
+    if not API_FOOTBALL_KEY or _api_quota_exhausted() or _api_reserve_locked():
+        return {"posted": 0, "reason": "guard"}
+    hq = await db.users.find_one({"email": "hq@tipjar.com"})
+    if not hq:
+        return {"posted": 0}
+    now = datetime.now(timezone.utc)
+    fixtures = await _upcoming_quality_fixtures(45)
+    posted, checked = 0, 0
+    for f in fixtures[:12]:
+        if posted >= 8:
+            break
+        fid = str((f.get("fixture") or {}).get("id") or "")
+        if not fid:
+            continue
+        # skip if we already posted a lineup prop for this fixture
+        if await db.tips.find_one(
+                {"source": "hq-auto", "player_prop": True, "fixture_id": fid}, {"_id": 1}):
+            continue
+        lineups = await asyncio.to_thread(_apifootball, "/fixtures/lineups", {"fixture": fid})
+        checked += 1
+        if not lineups:  # not published yet
+            continue
+        ko = _parse_kickoff(((f.get("fixture") or {}).get("date") or "")) or now
+        lg = f.get("league") or {}
+        for block in lineups[:2]:
+            tname = ((block.get("team") or {}).get("name")) or ""
+            fwds = [(e.get("player") or {}).get("name") for e in (block.get("startXI") or [])
+                    if ((e.get("player") or {}).get("pos") or "") == "F"
+                    and (e.get("player") or {}).get("name")]
+            if not fwds:
+                continue
+            player = fwds[0]  # main striker
+            pid = f"lineup-{fid}-{_name_key(player)}"
+            if await db.tips.find_one({"id": pid}, {"_id": 1}):
+                continue
+            if learn_verdict("auto", "sot")[0] == "veto":
+                continue
+            home = ((f.get("teams") or {}).get("home") or {}).get("name") or ""
+            away = ((f.get("teams") or {}).get("away") or {}).get("name") or ""
+            await db.tips.insert_one({
+                "id": pid, "user_id": hq["id"], "username": "TipJarHQ",
+                "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+                "match_time": ko.isoformat(), "country": lg.get("country") or "",
+                "league": lg.get("name") or "", "league_code": "",
+                "market": f"{player} Über 0.5 Schüsse aufs Tor", "odds": "1.40",
+                "category": "value", "ai_rating": 10.0, "win_prob": 0.72,
+                "ai_analysis": (f"👀 Aufstellung bestätigt: {player} startet für {tname}. "
+                                f"Als Stammstürmer bringt er fast immer mindestens einen Schuss "
+                                f"aufs Tor → Über 0.5 Schüsse aufs Tor. 10★."),
+                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                "source": "hq-auto", "player_prop": True, "prop_kind": "sot", "prop_line": 0.5,
+                "player_name": player, "fixture_id": fid, "lineup_pick": True,
+                "created_at": now.isoformat(),
+            })
+            posted += 1
+    return {"posted": posted, "checked": checked}
+
+
+async def settle_player_props() -> dict:
+    """Grade lineup player-props after full-time via /fixtures/players (shots on target)."""
+    now = datetime.now(timezone.utc)
+    props = await db.tips.find(
+        {"player_prop": True, "status": {"$in": ["pending", "live"]}}, {"_id": 0}).to_list(300)
+    settled = 0
+    for t in props:
+        ko = _parse_kickoff(t.get("match_time"))
+        if not ko or (now - ko).total_seconds() < 2 * 3600 + 600:  # wait ~FT
+            continue
+        fid = t.get("fixture_id")
+        pmap, _tc = await asyncio.to_thread(_player_stats_for_fixture, fid)
+        if not pmap:
+            continue
+        rec = pmap.get(f"full:{_norm(t.get('player_name', ''))}") or \
+            pmap.get(_name_key(t.get("player_name", "")))
+        upd = {"settled_at": now.isoformat()}
+        if rec is None:
+            upd["status"] = "void"
+            upd["result_note"] = f"{t.get('player_name')}: nicht eingesetzt / keine Statistik"
+        else:
+            kind = t.get("prop_kind", "sot")
+            val = rec.get("shots_on" if kind == "sot" else "shots_total", 0) or 0
+            won = val >= (t.get("prop_line", 0.5) + 0.5)
+            upd["status"] = "won" if won else "lost"
+            upd["result_note"] = f"{t.get('player_name')}: {val} Schüsse aufs Tor"
+        await db.tips.update_one({"id": t["id"]}, {"$set": upd})
+        settled += 1
+    return {"settled": settled}
+
 
 
 

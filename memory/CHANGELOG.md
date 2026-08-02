@@ -1,5 +1,24 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-02 — Single-KI: keine Klone, Handicap-Gate, richtiger Zähler, 24–72h auffüllen
+Owner (Live-Screenshots): „3× Cruz Azul / 2× Seattle geklont, Zähler sagt 26 statt 5, Felder 24–48
+& 48+ leer, -1.5 Handicap überall." Fixes:
+- **Ein Pick pro Spiel (`_dedupe_hq_tips`)**: ALLE Kategorien (auch Gift/Mental/Banger/Avatar) eines
+  Spiels werden zu EINEM Pick zusammengefasst — behalten wird die **höchste Quote** (Owner: „immer
+  das höchste Risiko, die höchste Quote"). Läuft jetzt bei jedem Refresh (purge). Bug behoben:
+  Projektion enthielt `market`/`league` nicht → Handicap-Regel lief nie.
+- **-1.5 Handicap nur für bekannte Top-Teams** (`_is_marquee_handicap_league`): erlaubt in Top-5-
+  Europa-Ligen + UEFA (Leverkusen ✓), entfernt in kleineren Ligen (Seattle/MLS ✗).
+- **Zähler korrigiert**: `/tips/counts` zählt nur noch KOMMENDE, platzierbare Picks (kickoff ≥ −3h),
+  nicht mehr angepfiffene/erledigte → passt zur Liste (26 → real).
+- **24–48h / 48+ auffüllen** (`topmatch_lookahead_autopost`, 24–72h Horizont): ein sicherer Früh-
+  Pick pro Spiel — NUR Qualität: UEFA Champions/Europa/Conference-League (inkl. Qualifikation) +
+  Top-Ligen, geprüft per Land+Liga-Paar → KEINE unterirdischen Teams (Bhutan/Kambodscha/2. Ligen
+  raus). Im Scheduler (HQ-Loop C) + Reset-Regen registriert.
+- Verifiziert: Cruz-Azul-Klone → 1 Pick (höchste Quote), Seattle-Handicap entfernt/Leverkusen behalten,
+  Lookahead lässt nur UEFA-Quali + Top-Ligen durch.
+
+
 ## 2026-08-02 — Safety-Picks aus Systemen entfernt → Master „Einfach" = 8er Sicher-Mix + Codemining
 Owner: „Lösche die Safety-Picks aus den System-Picks (nie wieder anzeigen). Der Master soll solche
 Scheine im Easy-Bereich posten — aber 8 Spiele, nicht 4. Gemischt, kein Lotto, immer Codemining."

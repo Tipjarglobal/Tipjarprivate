@@ -46,6 +46,7 @@ from server import (
     qualifier_autopost,
     smart_autopost,
     smart_h2h_autopost,
+    topmatch_lookahead_autopost,
     snapshot_systems,
 )
 
@@ -473,6 +474,7 @@ async def smart_loop():
                 logger.info(f"HQ loop C (K.o.-Duell): {await knockout_tie_autopost()}")
                 logger.info(f"HQ loop C (Mental): {await mental_autopost()}")
                 logger.info(f"HQ loop C (Qualifier): {await qualifier_autopost()}")
+                logger.info(f"HQ loop C (Vorschau 24-72h): {await topmatch_lookahead_autopost()}")
                 logger.info(f"HQ loop C (Briefing): {(await build_qualifier_briefing()).get('count')} ties")
         except Exception as e:
             logger.error(f"smart_loop error: {e}")

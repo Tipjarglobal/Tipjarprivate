@@ -83,6 +83,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   const [starSort, setStarSort] = useState(false);
   const [topOnly, setTopOnly] = useState(false);
   const [clCount, setClCount] = useState(0);
+  const [aiCounts, setAiCounts] = useState({});
 
   useEffect(() => {
     setStatus(view === "live" ? "live" : "pending");
@@ -95,6 +96,19 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
     api.get("/tips/counts").then(({ data }) => { if (!cancel) setClCount(data.community_live || 0); }).catch(() => {});
     return () => { cancel = true; };
   }, [view]);
+
+  // owner 2026-08: small per-window counters (jetzt / 24-48 / 48+) on the AI Anstoß tabs
+  useEffect(() => {
+    if (view !== "ai") return;
+    let cancel = false;
+    const fetchC = () => api.get("/tips/counts").then(({ data }) => {
+      if (!cancel) setAiCounts({ "24": data.ai_now || 0, "48": data.ai_24_48 || 0,
+        "48plus": data.ai_48plus || 0, "all": data.ai_total || 0 });
+    }).catch(() => {});
+    fetchC();
+    const iv = setInterval(fetchC, 20000);
+    return () => { cancel = true; clearInterval(iv); };
+  }, [view, refreshKey]);
 
   // Deep-link from a push notification carries a sub-tab (e.g. master "special"): select it
   // so the pick's list actually loads and jumpToPick can find & highlight the card.
@@ -608,8 +622,14 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
           <span className="flex items-center gap-1.5 text-xs uppercase tracking-widest text-zinc-500 mr-1 self-center"><Clock size={13} /> Anstoß</span>
           {[["24", "wall.win.24"], ["48", "wall.win.48"], ["48plus", "wall.win.48plus"], ["all", "wall.win.all"]].map(([v, lbl]) => (
             <button key={v} data-testid={`window-${v}`} onClick={() => setWin(v)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${win === v ? "bg-volt text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors inline-flex items-center gap-2 ${win === v ? "bg-volt text-void" : "bg-surface border border-elevated text-zinc-400 hover:text-white"}`}>
               {t(lbl)}
+              {aiCounts[v] != null && (
+                <span data-testid={`window-count-${v}`}
+                  className={`min-w-[18px] px-1.5 h-[18px] inline-flex items-center justify-center rounded-full text-[10px] font-black ${win === v ? "bg-void/25 text-void" : (aiCounts[v] > 0 ? "bg-volt/20 text-volt" : "bg-zinc-700/60 text-zinc-400")}`}>
+                  {aiCounts[v]}
+                </span>
+              )}
             </button>
           ))}
         </div>
