@@ -408,6 +408,22 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0-Bugfix — 2026-08-02 (h) — Lange Pregame-Scheine sprangen zu früh in „Live"
+Symptom (Owner): „Bewege lange Pregame-Scheine nicht rein zum Live, nur weil EIN Spiel gestartet hat."
+Root Cause: `live_annotate_sync` (`server.py`) setzte einen Mehrfach-Schein auf status `live`, sobald
+IRGENDEIN Bein live war (`_parlay_live_fixture` = beliebiges Bein) → ein 8er-Kombi wanderte in den
+Live-Bereich, obwohl 7 Spiele noch nicht angepfiffen waren.
+Fix: neue Helper `_slip_fully_kicked_off(t, now)` — ein Schein mit >1 Bein gilt erst als live, wenn
+KEIN Bein mehr in der Zukunft liegt (robuster Kickoff-Read via `_kickoff_dt` + `_cr_sort_dt`). Der
+Status-Flip Member→live passiert nur noch bei voll angepfiffenen Scheinen; zusätzlich Rück-Flip:
+bereits fälschlich `live` gesetzte Scheine mit noch kommendem Bein gehen zurück auf `pending`.
+Live-Scores PRO Bein werden weiterhin annotiert (der Nutzer sieht laufende Spiele im Schein), nur die
+Einsortierung bleibt Pregame. `created_at` in die Live-Projektion aufgenommen (für den Parser-Fallback).
+Verifiziert (Unit-Test, 5 Fälle): Single→live, „ein Bein live + ein Bein zukünftig"→bleibt Pregame,
+„alle angepfiffen"→live, unbekannte Kickoffs→live, 0 Beine→live. Backend /api 200, to_live=0.
+HINWEIS: live erst nach „Save to GitHub → Deploy".
+
+
 ## P0-Bugfix — 2026-08-02 (g) — Experten „verschwunden" (nur noch 1 sichtbar)
 Symptom (Owner): „Wo sind alle anderen Experten? Ich sehe nur 4 Scheine von Polaris."
 Root Cause: `void_stale_expert_slips()` (`settlement.py`) voidet jeden Experten-Schein mit nicht-

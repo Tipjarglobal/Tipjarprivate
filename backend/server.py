@@ -11821,6 +11821,23 @@ def _derate_fields(t: dict, danger: bool) -> dict:
     return upd
 
 
+def _slip_fully_kicked_off(t: dict, now: datetime) -> bool:
+    """A multi-game slip must NOT move into LIVE just because ONE leg kicked off (owner 2026-08:
+    'bewege lange Pregame-Scheine nicht rein zum Live, nur weil ein Spiel gestartet hat'). It only
+    counts as live once EVERY leg has kicked off (no known-future leg). Single-game slips (≤1 leg)
+    behave as before."""
+    legs = t.get("legs") or []
+    if len(legs) <= 1:
+        return True
+    created = t.get("created_at") or ""
+    for lg in legs:
+        ks = lg.get("kickoff") or ""
+        kd = _kickoff_dt(ks) or _cr_sort_dt(ks, created)
+        if kd and kd > now:
+            return False  # a leg is still in the future → slip stays pregame
+    return True
+
+
 async def live_annotate_sync() -> dict:
     if not API_FOOTBALL_KEY:
         return {"annotated": 0, "cleared": 0, "to_live": 0}
@@ -11829,7 +11846,7 @@ async def live_annotate_sync() -> dict:
                   "is_parlay": 1, "source": 1, "username": 1, "status": 1, "legs": 1,
                   "market": 1, "kind": 1, "category": 1, "ai_rating": 1,
                   "home_team_latin": 1, "away_team_latin": 1,
-                  "category_orig": 1, "ai_rating_orig": 1, "live_danger": 1}
+                  "category_orig": 1, "ai_rating_orig": 1, "live_danger": 1, "created_at": 1}
     tips = await db.tips.find(
         {"status": {"$in": ["pending", "live"]},
          "home_team": {"$nin": ["", None]}, "away_team": {"$nin": ["", None]}},
@@ -11871,9 +11888,15 @@ async def live_annotate_sync() -> dict:
             if t.get("live_state") != st:
                 upd["live_state"] = st
             # A live member pick belongs in the LIVE area, not Community → flip status.
-            if _is_member_tip(t) and t.get("status") != "live":
-                upd["status"] = "live"
-                to_live += 1
+            # But a long pregame parlay stays put until ALL its games have kicked off; and if one
+            # was already (wrongly) flipped while a leg is still upcoming, move it back to pregame.
+            if _is_member_tip(t):
+                fully = _slip_fully_kicked_off(t, now_utc)
+                if fully and t.get("status") != "live":
+                    upd["status"] = "live"
+                    to_live += 1
+                elif not fully and t.get("status") == "live":
+                    upd["status"] = "pending"
             # Master-correction: a single-match pick whose live state has turned against it
             # loses its 'banker' badge & star rating until (if) the game turns (owner).
             if home and away and not t.get("is_parlay"):
