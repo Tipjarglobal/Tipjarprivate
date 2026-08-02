@@ -407,6 +407,30 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Telegram outbound notifications.
 - P2: Stripe payments & PayPal payouts.
 
+
+## Changelog — 2026-08-02 (b) — Startelf-Watchlist: Admin-Panel + Bild-OCR + Mehr-Markt-Picks
+Owner: Startelf-Spieler selbst pflegen können — per Bild-Upload (Vision liest Spieler+Team) ODER
+manuell (Team+Spielername), inkl. Auswahl der Märkte (trifft / trifft 1.HZ / über X.5 Schüsse aufs
+Tor / über 2.5 Schüsse). 1 Pick pro gewähltem Markt · Quote+Sterne editierbar · alle auto-abgerechnet.
+- **DB-getriebene Watchlist** (`server.py`, `db.lineup_watch`): Marktkatalog `_LINEUP_MARKET_CATALOG`
+  (sot05/sot15/shots25/goal/goal1h mit Standard-Quote+Sternen). Seed `_seed_lineup_watch()` (Tzolis/
+  Konstantelias/Pavlidis/Kelsy, nur sot05 aktiv). `lineup_player_autopost` liest jetzt die Watchlist,
+  matcht Team via Token-Overlap (`_lineup_team_match`), postet PRO aktiviertem Markt einen Pick
+  (`_post_lineup_pick`, id `lineup-{fid}-{key}-{mid}`).
+- **Settlement erweitert** (`settle_player_props`): kind `goal` (Tore≥1), `goal_1h` (via
+  `_first_half_goal_keys` /fixtures/events, elapsed≤45, keine Eigentore), `shots` (Gesamtschüsse),
+  `sot` (Schüsse aufs Tor). Alle vier voll automatisch.
+- **Admin-Endpoints**: GET/POST/PATCH/DELETE `/api/admin/lineup-watch` + `/ocr` (Bild → Vision
+  `_ocr_player_team` → direkt speichern) + `/run` (Sofort-Prüfung). `_normalize_lineup_markets`
+  (nicht gesendete Märkte = deaktiviert).
+- **Frontend**: `LineupWatchPanel.jsx` (Add-Form + „Bild hochladen" + „Jetzt prüfen"; pro Spieler
+  5 Markt-Checkboxen + Quote/Sterne-Inputs + Speichern/Löschen). Button „Startelf-Watchlist" in
+  `AdminResetBar.jsx` (admin-only). data-testids durchgängig.
+- **Getestet**: CRUD (curl), Auto-Post 1-Pick-pro-Markt + Abrechnung aller 4 Kinds (python-Mock),
+  OCR gegen ECHTEN Kevin-Kelsy-Sofascore-Screenshot (Vision las „Kevin Kelsy"/„Portland Timbers"),
+  Panel-Screenshot (4 Seed-Spieler + Märkte rendern). Backend gesund, /api 200.
+- HINWEIS: greift live auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
+
 ## Changelog — 2026-08-02 — Startelf-Feature (Value-Spieler „Über 0.5 Schüsse aufs Tor")
 Owner: ~20 Min vor Anpfiff die Aufstellung prüfen; steht ein BEOBACHTETER Value-Spieler (KEINE
 Superstars wie Mbappé/Kane — deren Quote zu niedrig, sondern Spieler mit echter Quote wie

@@ -11250,20 +11250,64 @@ async def _build_rescue_kombi(hq: dict, rescue_legs: list, now: str) -> dict:
 
 
 # ── Start-Elf-Live-Spieler-Picks (owner 2026-08) ─────────────────────────────
-# ~20 Min vor Anpfiff wird die AUFSTELLUNG geprüft. Steht ein BEOBACHTETER Value-Spieler in der
-# Start-Elf (KEIN Superstar wie Mbappé/Kane — deren "Über 0.5 Schüsse"-Quote ist zu niedrig, sondern
-# Spieler mit echten Quoten wie Tzolis/Konstantelias/Pavlidis/Kelsy), wird ein 10★-Pick
-# "{Spieler} Über 0.5 Schüsse aufs Tor" gepostet. Abrechnung nach dem Spiel via /fixtures/players.
-# Watchlist erweiterbar: {key = Nachname (klein), name = Anzeigename, team = Team-Hinweis (klein)}.
-_LINEUP_WATCH_PLAYERS = [
-    {"key": "tzolis", "name": "Christos Tzolis", "team": "arsenal"},
-    {"key": "konstantelias", "name": "Giannis Konstantelias", "team": "paok"},
-    {"key": "pavlidis", "name": "Vangelis Pavlidis", "team": "benfica"},
-    {"key": "kelsy", "name": "Kevin Kelsy", "team": "portland"},
+# ~20 Min vor Anpfiff wird die AUFSTELLUNG geprüft. Steht ein BEOBACHTETER Value-Spieler
+# (kuratierte Watchlist in db.lineup_watch, admin-gepflegt — KEINE Superstars wie Mbappé/Kane,
+# deren Quoten zu niedrig sind) in der Start-Elf, wird PRO aktiviertem Markt ein Auto-Pick gepostet
+# ("trifft", "trifft 1. HZ", "über X.5 Schüsse aufs Tor", "über X.5 Schüsse"). Abrechnung nach dem
+# Spiel via /fixtures/players (+ /fixtures/events für 1.-HZ-Treffer).
+# Marktkatalog: id, kind, line, label (Standard-Quote/Sterne — pro Spieler überschreibbar).
+_LINEUP_MARKET_CATALOG = [
+    {"id": "sot05",   "kind": "sot",     "line": 0.5, "label": "über 0.5 Schüsse aufs Tor", "odds": "1.40", "stars": 10},
+    {"id": "sot15",   "kind": "sot",     "line": 1.5, "label": "über 1.5 Schüsse aufs Tor", "odds": "2.20", "stars": 7},
+    {"id": "shots25", "kind": "shots",   "line": 2.5, "label": "über 2.5 Schüsse",          "odds": "2.00", "stars": 7},
+    {"id": "goal",    "kind": "goal",    "line": 0.5, "label": "trifft",                    "odds": "3.00", "stars": 8},
+    {"id": "goal1h",  "kind": "goal_1h", "line": 0.5, "label": "trifft in der 1. Halbzeit", "odds": "6.00", "stars": 6},
 ]
-_LINEUP_WATCH_TEAMS = {p["team"] for p in _LINEUP_WATCH_PLAYERS}
-_LINEUP_WATCH_KEYS = {p["key"]: p["name"] for p in _LINEUP_WATCH_PLAYERS}
+_LINEUP_MARKET_BY_ID = {m["id"]: m for m in _LINEUP_MARKET_CATALOG}
 _LINEUP_FX_CACHE = {"ts": 0.0, "date": "", "fixtures": []}
+
+
+def _default_lineup_markets() -> list:
+    """A fresh copy of the catalog; only the flagship SOT 0.5 (10★) is enabled by default."""
+    out = []
+    for m in _LINEUP_MARKET_CATALOG:
+        out.append({**m, "enabled": (m["id"] == "sot05")})
+    return out
+
+
+async def _seed_lineup_watch():
+    """Idempotently seed the default value players into db.lineup_watch (admin can edit/delete)."""
+    defaults = [
+        ("Christos Tzolis", "Club Brugge", "club brugge"),
+        ("Giannis Konstantelias", "PAOK", "paok"),
+        ("Vangelis Pavlidis", "Benfica", "benfica"),
+        ("Kevin Kelsy", "Portland Timbers", "portland timbers"),
+    ]
+    for name, team_disp, team_hint in defaults:
+        key = _name_key(name)
+        exists = await db.lineup_watch.find_one({"player_key": key}, {"_id": 1})
+        if exists:
+            continue
+        await db.lineup_watch.insert_one({
+            "id": str(uuid.uuid4()), "player_name": name, "player_key": key,
+            "team_display": team_disp, "team_hint": _norm(team_hint),
+            "markets": _default_lineup_markets(), "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+
+async def _lineup_watchlist() -> list:
+    return await db.lineup_watch.find({"active": True}, {"_id": 0}).to_list(200)
+
+
+def _lineup_team_match(hint_norm: str, team_norm: str) -> bool:
+    if not hint_norm or not team_norm:
+        return False
+    if hint_norm in team_norm or team_norm in hint_norm:
+        return True
+    htoks = {t for t in hint_norm.split() if len(t) >= 4}
+    ttoks = set(team_norm.split())
+    return bool(htoks & ttoks)
 
 
 async def _upcoming_quality_fixtures(window_min: int = 45, quality_only: bool = True) -> list:
@@ -11290,29 +11334,31 @@ async def _upcoming_quality_fixtures(window_min: int = 45, quality_only: bool = 
     return out
 
 
-def _lineup_fixture_watched(f: dict) -> bool:
-    """True if either team of the fixture matches a watched player's team hint (quota-safe
+def _fixture_watched_hints(f: dict, hints: list) -> bool:
+    """True if either team of the fixture matches one of the watched team hints (quota-safe
     pre-filter → we only spend a /fixtures/lineups call on games that could carry a watched player)."""
     home = _norm(((f.get("teams") or {}).get("home") or {}).get("name") or "")
     away = _norm(((f.get("teams") or {}).get("away") or {}).get("name") or "")
-    for team in _LINEUP_WATCH_TEAMS:
-        if team and (team in home or team in away):
-            return True
-    return False
+    return any(_lineup_team_match(h, home) or _lineup_team_match(h, away) for h in hints)
 
 
 async def lineup_player_autopost() -> dict:
-    """Post a 10★ '{player} Über 0.5 Schüsse aufs Tor' as soon as the starting XI is published
-    (~20 min pre-kickoff) for a WATCHED value player (see _LINEUP_WATCH_PLAYERS)."""
+    """As soon as the starting XI is published (~20 min pre-kickoff) post one pick per ENABLED
+    market for every watched player (db.lineup_watch) found in the line-up."""
     if not API_FOOTBALL_KEY or _api_quota_exhausted():
         return {"posted": 0, "reason": "guard"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0}
+    watch = await _lineup_watchlist()
+    if not watch:
+        return {"posted": 0, "reason": "empty"}
+    by_key = {w["player_key"]: w for w in watch}
+    hints = [w.get("team_hint") or "" for w in watch]
     now = datetime.now(timezone.utc)
     # only fixtures kicking off within ~25 min AND involving a watched team (quota-safe)
     fixtures = [f for f in await _upcoming_quality_fixtures(25, quality_only=False)
-                if _lineup_fixture_watched(f)]
+                if _fixture_watched_hints(f, hints)]
     posted, checked = 0, 0
     for f in fixtures[:12]:
         fid = str((f.get("fixture") or {}).get("id") or "")
@@ -11333,40 +11379,72 @@ async def lineup_player_autopost() -> dict:
                 if not pname:
                     continue
                 nk = _name_key(pname)
-                player = _LINEUP_WATCH_KEYS.get(nk)  # canonical display name if watched
-                if not player:
+                w = by_key.get(nk)
+                if not w:
                     continue
-                pid = f"lineup-{fid}-{nk}"
-                if await db.tips.find_one({"id": pid}, {"_id": 1}):
-                    continue
-                if learn_verdict("auto", "sot")[0] == "veto":
-                    continue
-                await db.tips.insert_one({
-                    "id": pid, "user_id": hq["id"], "username": "TipJarHQ",
-                    "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
-                    "match_time": ko.isoformat(), "country": lg.get("country") or "",
-                    "league": lg.get("name") or "", "league_code": "",
-                    "market": f"{player} Über 0.5 Schüsse aufs Tor", "odds": "1.40",
-                    "category": "value", "ai_rating": 10.0, "win_prob": 0.72,
-                    "ai_analysis": (f"👀 Aufstellung bestätigt: {player} startet für {tname}. "
-                                    f"Als torgefährlicher Stammspieler bringt er fast immer "
-                                    f"mindestens einen Schuss aufs Tor → Über 0.5 Schüsse aufs Tor. 10★."),
-                    "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
-                    "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-                    "source": "hq-auto", "player_prop": True, "prop_kind": "sot", "prop_line": 0.5,
-                    "player_name": player, "fixture_id": fid, "lineup_pick": True,
-                    "created_at": now.isoformat(),
-                })
-                posted += 1
+                player = w.get("player_name") or pname
+                for m in (w.get("markets") or []):
+                    if not m.get("enabled"):
+                        continue
+                    posted += await _post_lineup_pick(hq, fid, player, tname, home, away, ko, lg, m, now)
     return {"posted": posted, "checked": checked}
 
 
+async def _post_lineup_pick(hq, fid, player, tname, home, away, ko, lg, m, now) -> int:
+    mid = m.get("id") or f"{m.get('kind')}{m.get('line')}"
+    pid = f"lineup-{fid}-{_name_key(player)}-{mid}"
+    if await db.tips.find_one({"id": pid}, {"_id": 1}):
+        return 0
+    kind = m.get("kind") or "sot"
+    line = float(m.get("line") or 0.5)
+    label = m.get("label") or "über 0.5 Schüsse aufs Tor"
+    stars = int(m.get("stars") or 8)
+    market = f"{player} {label}"
+    analysis = (f"👀 Aufstellung bestätigt: {player} startet für {tname}. "
+                f"Markt: {label}. {stars}★.")
+    await db.tips.insert_one({
+        "id": pid, "user_id": hq["id"], "username": "TipJarHQ",
+        "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+        "match_time": ko.isoformat(), "country": lg.get("country") or "",
+        "league": lg.get("name") or "", "league_code": "",
+        "market": market, "odds": str(m.get("odds") or "1.40"),
+        "category": "value", "ai_rating": float(stars), "win_prob": 0.6,
+        "ai_analysis": analysis,
+        "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-auto", "player_prop": True, "prop_kind": kind, "prop_line": line,
+        "player_name": player, "fixture_id": fid, "lineup_pick": True,
+        "created_at": now.isoformat(),
+    })
+    return 1
+
+
+def _first_half_goal_keys(fixture_id) -> set:
+    """name_keys of players who scored (not own goal) in the 1st half (elapsed ≤ 45)."""
+    resp = _apifootball("/fixtures/events", {"fixture": fixture_id}) or []
+    out = set()
+    for ev in resp:
+        if (ev.get("type") or "") != "Goal":
+            continue
+        if (ev.get("detail") or "") == "Own Goal":
+            continue
+        el = ((ev.get("time") or {}).get("elapsed"))
+        if el is None or el > 45:
+            continue
+        k = _name_key((ev.get("player") or {}).get("name") or "")
+        if k:
+            out.add(k)
+    return out
+
+
 async def settle_player_props() -> dict:
-    """Grade lineup player-props after full-time via /fixtures/players (shots on target)."""
+    """Grade lineup player-props after full-time. Shots/SOT/Tore via /fixtures/players, 1.-HZ-Treffer
+    zusätzlich via /fixtures/events."""
     now = datetime.now(timezone.utc)
     props = await db.tips.find(
         {"player_prop": True, "status": {"$in": ["pending", "live"]}}, {"_id": 0}).to_list(300)
     settled = 0
+    fh_cache: dict = {}  # fixture_id → set of 1st-half scorer keys
     for t in props:
         ko = _parse_kickoff(t.get("match_time"))
         if not ko or (now - ko).total_seconds() < 2 * 3600 + 600:  # wait ~FT
@@ -11375,21 +11453,180 @@ async def settle_player_props() -> dict:
         pmap, _tc = await asyncio.to_thread(_player_stats_for_fixture, fid)
         if not pmap:
             continue
-        rec = pmap.get(f"full:{_norm(t.get('player_name', ''))}") or \
-            pmap.get(_name_key(t.get("player_name", "")))
+        pkey = _name_key(t.get("player_name", ""))
+        rec = pmap.get(f"full:{_norm(t.get('player_name', ''))}") or pmap.get(pkey)
         upd = {"settled_at": now.isoformat()}
         if rec is None:
             upd["status"] = "void"
             upd["result_note"] = f"{t.get('player_name')}: nicht eingesetzt / keine Statistik"
         else:
             kind = t.get("prop_kind", "sot")
-            val = rec.get("shots_on" if kind == "sot" else "shots_total", 0) or 0
-            won = val >= (t.get("prop_line", 0.5) + 0.5)
+            line = float(t.get("prop_line", 0.5) or 0.5)
+            if kind == "goal":
+                val = rec.get("goals", 0) or 0
+                won = val >= 1
+                upd["result_note"] = f"{t.get('player_name')}: {val} Tor(e)"
+            elif kind == "goal_1h":
+                if fid not in fh_cache:
+                    fh_cache[fid] = await asyncio.to_thread(_first_half_goal_keys, fid)
+                won = pkey in fh_cache[fid]
+                upd["result_note"] = (f"{t.get('player_name')}: "
+                                      f"{'Tor in 1. HZ' if won else 'kein Tor in 1. HZ'}")
+            elif kind == "shots":
+                val = rec.get("shots_total", 0) or 0
+                won = val >= (line + 0.5)
+                upd["result_note"] = f"{t.get('player_name')}: {val} Schüsse"
+            else:  # sot
+                val = rec.get("shots_on", 0) or 0
+                won = val >= (line + 0.5)
+                upd["result_note"] = f"{t.get('player_name')}: {val} Schüsse aufs Tor"
             upd["status"] = "won" if won else "lost"
-            upd["result_note"] = f"{t.get('player_name')}: {val} Schüsse aufs Tor"
         await db.tips.update_one({"id": t["id"]}, {"$set": upd})
         settled += 1
     return {"settled": settled}
+
+
+# ── Admin: Startelf-Watchlist pflegen ────────────────────────────────────────
+_LINEUP_OCR_SYSTEM = (
+    "You read a football (soccer) player screenshot. Extract ONLY the player's full name and the "
+    "club/team they currently play for. Respond with STRICT JSON: "
+    '{"player_name": "...", "team": "..."}. If unclear, use an empty string. No extra text.'
+)
+
+
+async def _ocr_player_team(image_b64: str) -> dict:
+    """Vision-extract {player_name, team} from a player screenshot."""
+    if not EMERGENT_LLM_KEY or not image_b64:
+        return {"player_name": "", "team": ""}
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"lu-{uuid.uuid4()}",
+                       system_message=_LINEUP_OCR_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        resp = await chat.send_message(UserMessage(
+            text="Extract the player's full name and current club.",
+            file_contents=[ImageContent(image_base64=image_b64)]))
+        raw = (resp if isinstance(resp, str) else str(resp)).strip()
+        s, e = raw.find("{"), raw.rfind("}")
+        data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}
+        return {"player_name": str(data.get("player_name", "") or "").strip(),
+                "team": str(data.get("team", "") or "").strip()}
+    except Exception as ex:
+        logger.error(f"lineup OCR failed: {ex}")
+        return {"player_name": "", "team": ""}
+
+
+def _normalize_lineup_markets(markets) -> list:
+    """Coerce an incoming markets payload to catalog-shaped entries (id/kind/line/label from the
+    catalog; enabled/odds/stars from the payload). Unknown ids dropped; missing ids appended disabled."""
+    seen = {}
+    for m in (markets or []):
+        mid = (m or {}).get("id")
+        cat = _LINEUP_MARKET_BY_ID.get(mid)
+        if not cat:
+            continue
+        seen[mid] = {**cat, "enabled": bool(m.get("enabled", False)),
+                     "odds": str(m.get("odds") or cat["odds"]),
+                     "stars": int(m.get("stars") or cat["stars"])}
+    out = []
+    for cat in _LINEUP_MARKET_CATALOG:
+        out.append(seen.get(cat["id"], {**cat, "enabled": False}))
+    return out
+
+
+@api_router.get("/admin/lineup-watch")
+async def admin_lineup_watch_list(admin: dict = Depends(require_admin)):
+    players = await db.lineup_watch.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"catalog": _LINEUP_MARKET_CATALOG, "players": players}
+
+
+@api_router.post("/admin/lineup-watch")
+async def admin_lineup_watch_add(body: dict = Body(...), admin: dict = Depends(require_admin)):
+    name = str(body.get("player_name", "") or "").strip()
+    team = str(body.get("team_display", "") or "").strip()
+    if not name or not team:
+        raise HTTPException(400, "player_name and team_display required")
+    key = _name_key(name)
+    markets = _normalize_lineup_markets(body.get("markets")) if body.get("markets") \
+        else _default_lineup_markets()
+    doc = {
+        "id": str(uuid.uuid4()), "player_name": name, "player_key": key,
+        "team_display": team, "team_hint": _norm(team), "markets": markets,
+        "active": True, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    existing = await db.lineup_watch.find_one({"player_key": key}, {"_id": 0, "id": 1})
+    if existing:
+        await db.lineup_watch.update_one({"player_key": key}, {"$set": {
+            "player_name": name, "team_display": team, "team_hint": _norm(team),
+            "markets": markets, "active": True}})
+        doc["id"] = existing["id"]
+    else:
+        await db.lineup_watch.insert_one(doc)
+    return {"ok": True, "player": {k: v for k, v in doc.items() if k != "_id"}}
+
+
+@api_router.patch("/admin/lineup-watch/{wid}")
+async def admin_lineup_watch_update(wid: str, body: dict = Body(...),
+                                    admin: dict = Depends(require_admin)):
+    upd = {}
+    if "markets" in body:
+        upd["markets"] = _normalize_lineup_markets(body.get("markets"))
+    if "active" in body:
+        upd["active"] = bool(body.get("active"))
+    if body.get("player_name"):
+        upd["player_name"] = str(body["player_name"]).strip()
+        upd["player_key"] = _name_key(upd["player_name"])
+    if body.get("team_display"):
+        upd["team_display"] = str(body["team_display"]).strip()
+        upd["team_hint"] = _norm(upd["team_display"])
+    if not upd:
+        raise HTTPException(400, "nothing to update")
+    r = await db.lineup_watch.update_one({"id": wid}, {"$set": upd})
+    if not r.matched_count:
+        raise HTTPException(404, "not found")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/lineup-watch/{wid}")
+async def admin_lineup_watch_delete(wid: str, admin: dict = Depends(require_admin)):
+    r = await db.lineup_watch.delete_one({"id": wid})
+    if not r.deleted_count:
+        raise HTTPException(404, "not found")
+    return {"ok": True}
+
+
+@api_router.post("/admin/lineup-watch/ocr")
+async def admin_lineup_watch_ocr(file: Optional[UploadFile] = File(default=None),
+                                 files: List[UploadFile] = File(default=[]),
+                                 admin: dict = Depends(require_admin)):
+    uploads = [f for f in ([file] if file else []) + (files or []) if f]
+    if not uploads:
+        raise HTTPException(400, "image required")
+    b64 = base64.b64encode(await uploads[0].read()).decode("utf-8")
+    out = await _ocr_player_team(b64)
+    name, team = out.get("player_name", ""), out.get("team", "")
+    if not name or not team:
+        return {"ok": False, "player_name": name, "team": team,
+                "error": "Konnte Spieler/Team nicht sicher lesen"}
+    key = _name_key(name)
+    markets = _default_lineup_markets()
+    now = datetime.now(timezone.utc).isoformat()
+    existing = await db.lineup_watch.find_one({"player_key": key}, {"_id": 0, "id": 1})
+    if existing:
+        await db.lineup_watch.update_one({"player_key": key}, {"$set": {
+            "player_name": name, "team_display": team, "team_hint": _norm(team), "active": True}})
+        wid = existing["id"]
+    else:
+        wid = str(uuid.uuid4())
+        await db.lineup_watch.insert_one({
+            "id": wid, "player_name": name, "player_key": key, "team_display": team,
+            "team_hint": _norm(team), "markets": markets, "active": True, "created_at": now})
+    doc = await db.lineup_watch.find_one({"id": wid}, {"_id": 0})
+    return {"ok": True, "player": doc}
+
+
+@api_router.post("/admin/lineup-watch/run")
+async def admin_lineup_watch_run(admin: dict = Depends(require_admin)):
+    return await lineup_player_autopost()
+
 
 
 
@@ -14037,6 +14274,7 @@ async def _startup_seed():
         await purge_demo_tips()
         await _delete_stuck_makara_pick()
         await _delete_owner_flagged_tips()
+        await _seed_lineup_watch()
         admin_email = os.environ.get("ADMIN_EMAIL", "admin@tipjar.com").lower()
         admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
         existing = await db.users.find_one({"email": admin_email})

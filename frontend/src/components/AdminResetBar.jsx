@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { RotateCcw, AlertTriangle, Trash2 } from "lucide-react";
+import { RotateCcw, AlertTriangle, Trash2, Users } from "lucide-react";
 import Modal from "./Modal";
+import LineupWatchPanel from "./LineupWatchPanel";
 import api, { apiErr } from "../api";
 import { toast } from "sonner";
 
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 export default function AdminResetBar() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [lineupOpen, setLineupOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const doReset = async () => {
@@ -46,6 +48,12 @@ export default function AdminResetBar() {
             <span className="text-sm text-zinc-300 truncate">HQ- & Master-Pregames neu aufsetzen</span>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto sm:shrink-0">
+            <button
+              data-testid="admin-lineup-watch-btn"
+              onClick={() => setLineupOpen(true)}
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-emerald-500/60 text-emerald-300 font-bold px-4 py-2 text-sm hover:bg-emerald-500/10 active:scale-95 transition-all">
+              <Users size={15} /> Startelf-Watchlist
+            </button>
             <button
               data-testid="admin-clear-live-settled-btn"
               onClick={() => setClearOpen(true)}
@@ -106,6 +114,8 @@ export default function AdminResetBar() {
           </div>
         </div>
       </Modal>
+
+      <LineupWatchPanel open={lineupOpen} onClose={() => setLineupOpen(false)} />
     </>
   );
 }
