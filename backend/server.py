@@ -9894,18 +9894,26 @@ async def _code_read_fixture_stats(r: dict) -> dict | None:
 
 
 _CR_SUGGEST_SYSTEM = (
-    "Du bist ein professioneller Fußball-Wett-Analyst für TipJar. Du bekommst die HISTORIE aller "
-    "beendeten Spiele, die bei einem Buchmacher denselben 'Code' (dieselbe Wett-Vorlage) hatten, "
-    "inklusive echter Match-Statistiken pro Spiel (getrennt für Heim- und Auswärtsteam: Torschüsse, "
-    "Schüsse aufs Tor, Ecken, Fouls, Paraden, Ballbesitz, Endergebnis, Torminuten). "
-    "Deine Aufgabe: finde ein WIEDERKEHRENDES, datengetriebenes Muster über diese Spiele hinweg "
-    "(z.B. 'in 4 von 5 Spielen hatte das Heimteam über 5.5 Torschüsse' oder 'Auswärtsteam bekam "
-    "immer über 4.5 Ecken'). Leite daraus EINE konkrete, bei jedem Buchmacher spielbare temporäre "
-    "Gegen-Option ab (Über/Unter-Linie auf Torschüsse/Ecken/Tore/Paraden, Team-Tor, Doppelte Chance "
-    "usw.). Sei ehrlich: wenn die Daten KEIN klares Muster zeigen, sage das. "
-    "Antworte NUR als striktes JSON: {\"trend\": \"1-2 kurze deutsche Sätze mit den konkreten Zahlen\", "
-    "\"our_market\": \"konkreter Pick als kurzes deutsches Markt-Label, oder leer wenn kein Muster\", "
-    "\"no_bet\": true/false, \"confidence\": 1-10}."
+    "Du bist ein professioneller Fußball-Wett-Analyst für TipJar. Du hilfst dem Owner, eine "
+    "TEMPORÄRE OPTION (experimenteller Gegen-Pick) für einen bestimmten Buchmacher-'Code' zu wählen. "
+    "WICHTIG — so wählen WIR temporäre Optionen: Eine temporäre Option ist IMMER ein konkreter, "
+    "spielbarer PICK, den wir gegen den Fallen-Code setzen. Sie ist NIEMALS 'No Bet' — der Sinn der "
+    "temporären Option ist, eine echte Wette zu testen, nicht das Spiel auszulassen (No Bet gehört in "
+    "die normale Lesart, nicht hierher). Schlage deshalb IMMER genau EINEN konkreten Pick vor. "
+    "Du bekommst die HISTORIE aller beendeten Spiele mit demselben Code (Endergebnis, Torminuten und, "
+    "wenn vorhanden, echte Match-Statistiken getrennt für Heim/Gast: Torschüsse, Schüsse aufs Tor, "
+    "Ecken, Fouls, Paraden, Ballbesitz). Finde die STABILSTE wiederkehrende Linie über diese Spiele "
+    "und leite daraus die sicherste spielbare ÜBER-/Gegen-Option ab — bevorzugt eine Über-Linie mit "
+    "Sicherheitspuffer (z.B. 'Heimteam Über 5.5 Torschüsse', wenn die Historie 8/7/9 zeigt; "
+    "'Über 1.5 Tore', 'Beide Teams treffen', 'Heimteam Über 4.5 Ecken', 'Heimteam trifft'). "
+    "Wähle die Linie, die in möglichst VIELEN Spielen mit Abstand erfüllt war (setze die Linie unter "
+    "den kleinsten beobachteten Wert). Wenn nur Endergebnisse (keine Detail-Statistik) vorliegen, "
+    "leite die Option aus den Toren/Torminuten ab (z.B. immer über 1.5 Tore, immer beide getroffen, "
+    "Heimteam traf immer). Gib NIEMALS 'kein Muster' oder 'No Bet' zurück — nimm im Zweifel die "
+    "plausibelste sichere Über-Linie und setze die confidence entsprechend niedriger. "
+    "Antworte NUR als striktes JSON: {\"trend\": \"1-2 kurze deutsche Sätze mit den konkreten Zahlen "
+    "aus der Historie\", \"our_market\": \"konkreter, spielbarer Pick als kurzes deutsches Markt-Label "
+    "(PFLICHT, nie leer)\", \"confidence\": 1-10}."
 )
 
 
@@ -9955,7 +9963,7 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"crsug-{uuid.uuid4()}",
                        system_message=_CR_SUGGEST_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(
-            text=f"{context}\n\nFinde das Muster und schlage die temporäre Option vor (JSON)."))
+            text=f"{context}\n\nFinde die stabilste Linie und schlage GENAU EINEN konkreten, spielbaren Pick vor (JSON, niemals No Bet)."))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}
@@ -9966,7 +9974,6 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
             "code_market": code_market,
             "trend": (data.get("trend") or "").strip(),
             "our_market": (data.get("our_market") or "").strip(),
-            "no_bet": bool(data.get("no_bet")),
             "confidence": data.get("confidence")}
 
 

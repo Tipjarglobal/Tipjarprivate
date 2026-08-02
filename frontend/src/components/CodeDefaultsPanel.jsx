@@ -144,8 +144,8 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
 
   const applyAi = (d) => {
     const data = ai[d.key]?.data;
-    if (!data) return;
-    setF(d.key, { our_market: data.no_bet ? "" : (data.our_market || ""), no_bet: !!data.no_bet,
+    if (!data || !data.our_market) return;
+    setF(d.key, { our_market: data.our_market, no_bet: false,
       note: (data.trend || "").slice(0, 200) });
     toast.success(fl.aiApply + " ✓");
   };
@@ -203,11 +203,9 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
                         )}
                       </div>
                       {ai[d.key].data.trend && <p className="text-[11px] text-zinc-200 leading-snug mb-1.5">{ai[d.key].data.trend}</p>}
-                      {ai[d.key].data.no_bet ? (
-                        <p className="text-[11px] font-bold text-red-300 mb-1.5">{fl.aiNobet}</p>
-                      ) : ai[d.key].data.our_market ? (
+                      {ai[d.key].data.our_market && (
                         <p className="text-[12px] font-black text-white bg-sky-500/20 border border-sky-500/40 rounded px-2 py-1 inline-block mb-1.5">{ai[d.key].data.our_market}</p>
-                      ) : null}
+                      )}
                       <button disabled={busy || hasPerm} onClick={() => applyAi(d)} data-testid={`code-default-ai-apply-${d.key}`}
                         className="block mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-200 border border-sky-500/50 rounded-full px-3 py-1 hover:bg-sky-500/20 disabled:opacity-40">
                         <Check size={12} />{fl.aiApply}

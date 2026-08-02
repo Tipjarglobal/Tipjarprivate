@@ -1,5 +1,17 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-02 — KI-Vorschlag: IMMER ein spielbarer Pick, nie „No Bet"
+Owner: „Die Codemining-KI soll lernen wie WIR temporäre Optionen auswählen — wir tun das NICHT um
+No Bets auszuwählen." (No Bet ist in der normalen Lesart legitim, z.B. das nötige blaue Rangers-1-1.)
+- `_CR_SUGGEST_SYSTEM` neu geschrieben: eine temporäre Option ist IMMER genau EIN konkreter, spielbarer
+  Gegen-Pick — niemals „No Bet"/„kein Muster". Die KI wählt die stabilste wiederkehrende ÜBER-/Gegen-
+  Linie mit Sicherheitspuffer (Linie unter den kleinsten beobachteten Wert), bevorzugt Über-Torschüsse/
+  Ecken/Tore/BTTS/Team-trifft. Wenn nur Endergebnisse (keine Detail-Statistik) vorliegen, wird die
+  Option aus Toren/Torminuten abgeleitet; im Zweifel die plausibelste sichere Linie mit niedrigerer
+  confidence. `no_bet` aus Endpoint-Antwort + Frontend entfernt (Pick wird immer angezeigt/übernommen).
+  Verifiziert: Historie ohne Detail-Statistik (3-1/2-1/2-2) → Pick „Beide Teams treffen" statt No Bet.
+
+
 ## 2026-08-02 — Codemining: zwei Fallen-Muster korrigiert (Halbzeit-Nein + Gewinnspanne-Nein)
 Owner (Live-Screenshots, Spinbetter-Scheine): die KI las zwei Fallen-Codes falsch herum.
 - **„Tor in beiden Halbzeiten – Team X: Nein"**: Fallen-Logik → Team X trifft sehr wohl in BEIDEN
