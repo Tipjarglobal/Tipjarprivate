@@ -8614,6 +8614,37 @@ def _code_read_interpret(market: str, home: str, away: str) -> dict:
             "reason": f"Code sagt: {tgt} trifft nicht zweimal (höchstens 1 Tor). Wir gehen sicher dagegen ab: {tgt} Unter 2.5 Tore.",
             "stars": 7})
 
+    # (owner 2026-08) Code: 'Tor in beiden Halbzeiten – Team X: Nein' = the team does NOT score in
+    # BOTH halves. Trap slip is built to lose → the OPPOSITE happens: Team X DOES score in both
+    # halves → at least 2 goals. Main (safe, every bookie): '<Team> Über 1.5 Tore'. Alt (bolder,
+    # exact mirror): '<Team> trifft in beiden Halbzeiten'.
+    if re.search(r"beide[nr]?\s+halbzeit|both\s+halves|in\s+jeder\s+halbzeit", m) and \
+            any(k in m for k in ("nein", " no", "- no", "– no", "nicht", "kein", "won't", "wont")):
+        tgt = team or home
+        return _code_apply_learn({
+            "read": "counter", "our_market": f"{tgt} Über 1.5 Tore",
+            "alt_market": f"{tgt} trifft in beiden Halbzeiten", "code": market,
+            "pattern": "both_halves_counter",
+            "reason": (f"Der Code wettet, dass {tgt} NICHT in beiden Halbzeiten trifft — die Falle. "
+                       f"Das Gegenteil passiert: {tgt} trifft in beiden Halbzeiten, also mindestens 2 Tore. "
+                       f"Sicher und überall spielbar: {tgt} Über 1.5 Tore."),
+            "stars": 9})
+
+    # (owner 2026-08) Code: 'Ein Team Gewinnspanne mit 2 (oder mehr) Toren – Nein' = NO team wins by
+    # a 2+ goal margin. Trap loses → a team DOES win clearly (margin ≥2) → decisive result, so a draw
+    # is impossible. Safe counter = Doppelte Chance 12 (kein Unentschieden) — wins on ANY non-draw.
+    if re.search(r"gewinnspanne|winning\s+margin|margin\s+of\s+victory|gewinnt\s+mit|sieg\s*mit", m) and \
+            re.search(r"\b2\b|zwei", m) and \
+            any(k in m for k in ("nein", " no", "- no", "– no", "nicht", "kein")):
+        return _code_apply_learn({
+            "read": "counter", "our_market": "Doppelte Chance 12 (kein Unentschieden)",
+            "alt_market": None, "code": market, "pattern": "margin_no_draw",
+            "reason": ("Der Code wettet, dass KEIN Team mit 2+ Toren Vorsprung gewinnt — die Falle. "
+                       "Also gewinnt eine Mannschaft klar (2+ Tore Abstand); ein Unentschieden ist damit "
+                       "ausgeschlossen. Sicher dagegen: Doppelte Chance 12 (kein Remis) — gewinnt bei "
+                       "jedem Sieg einer der beiden Mannschaften."),
+            "stars": 8})
+
     # (Team-total) SpinBetter bets a TEAM stays low / goes 3+ → owner counter-reads.
     tt = _code_team_total_under(market)
     if tt is not None:
@@ -8867,7 +8898,12 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
 
 _REINTERP_RULES = {"team_not_twice", "match_over_clean", "match_over_asian2",
                    "goal_window_broaden", "underdog_plus15_fav_minus1",
-                   "team_total_under_low", "team_total_over_cap", "team_total_over_counter"}
+                   "team_total_under_low", "team_total_over_cap", "team_total_over_counter",
+                   "both_halves_counter", "margin_no_draw"}
+
+# High-confidence TRAP patterns where the deterministic rule ALWAYS wins over the vision LLM
+# (the LLM mis-read them — e.g. 'beide Halbzeiten – Nein' → wrongly 'Under 2.5').
+_CODE_FORCE_RULES = {"both_halves_counter", "margin_no_draw"}
 
 
 def _code_note_key(code_market: str) -> str:
@@ -9312,6 +9348,13 @@ async def _run_code_scan(job_id: str, images: list):
                 if not market:
                     continue
                 interp = _code_read_interpret(market, home, away)
+            # Owner 2026-08: for a few high-confidence TRAP patterns the deterministic rule ALWAYS
+            # overrides the vision LLM (which mis-read them, e.g. 'Tor in beiden Halbzeiten – Nein'
+            # → wrongly 'Under 2.5', 'Gewinnspanne 2+ – Nein' → wrongly NO BET).
+            if market:
+                _forced = _code_read_interpret(market, home, away)
+                if _forced.get("pattern") in _CODE_FORCE_RULES:
+                    interp = _forced
             # owner 2026-08 (Slovan Liberec – Teplice): a plain 1X2 code → decide via H2H/Form + Europa-Check
             # ob '<Underdog> +1.5 Handicap' sicher ist, sonst spezifisches No Bet (kein Standardtext).
             if _is_straightwin_code(market):

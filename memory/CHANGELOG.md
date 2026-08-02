@@ -1,25 +1,32 @@
 # TipJar Global — CHANGELOG
 
-## 2026-08-01 — Codemines nach Startzeit sortiert + KI-Vorschlag für Code-Defaults + Tablet-3-Reihen
-- **Aktive Codemines chronologisch sortiert** (`server.py` `code_reading`): die aktive Liste wird
-  jetzt aufsteigend nach Anstoß (`kickoff`) sortiert — nächstes Spiel oben; Spiele ohne parsebaren
-  Anstoß ganz ans Ende. Beendete Spiele bleiben nach Datum (neueste zuerst).
-- **KI-Vorschlag im Code-Defaults-Panel** (neuer Endpoint `GET /admin/code-reading/defaults/{key}/ai-suggest`):
-  sucht ALLE beendeten Codemines mit demselben Code-Key in der Historie, zieht pro Spiel die echten
-  Match-Statistiken getrennt für Heim/Gast (Torschüsse, Schüsse aufs Tor, Ecken, Fouls, Paraden,
-  Ballbesitz) via API-Football `/fixtures/statistics` + Endergebnis/Torminuten, cached sie DAUERHAFT
-  in `db.code_fixture_stats` (spart Credits), und lässt das Emergent-LLM ein wiederkehrendes Muster
-  finden → JSON {trend, our_market, no_bet, confidence}. Kein Mindest-Spielzahl-Filter (versucht es
-  immer). Frontend `CodeDefaultsPanel.jsx`: Button „KI-Vorschlag holen" pro Code + Ergebnis-Box
-  (Trend, Pick, Sicherheit) + „Als Option übernehmen" (füllt das Temporär-Formular vor).
-  Verifiziert E2E mit geseedeten Daten: 3 Spiele → Trend „Heimteam immer über 6.5 Ecken (9,7,8)" →
-  Pick „Heimteam: Über 6.5 Ecken", confidence 9. Ohne Detail-Statistik meldet die KI ehrlich „kein
-  Muster / No Bet".
-- **Tablet-Layout der 9 Homepage-Bereich-Knöpfe** (`Header.jsx`): `md:grid-cols-3 xl:grid-cols-9` →
-  auf Tablets (bis 1279px) 3 Reihen à 3, passend zur Farbgruppierung (Reihe 1 grün: AI/Smart/System;
-  Reihe 2 rot-gelb-blau: Master/Members/Live; Reihe 3 weiß-rosa-grau: Settled/Statistics/Codemining);
-  auf Desktop (≥1280) weiter alle 9 in einer Reihe. Verifiziert per Messung @820px.
+## 2026-08-02 — Codemining: zwei Fallen-Muster korrigiert (Halbzeit-Nein + Gewinnspanne-Nein)
+Owner (Live-Screenshots, Spinbetter-Scheine): die KI las zwei Fallen-Codes falsch herum.
+- **„Tor in beiden Halbzeiten – Team X: Nein"**: Fallen-Logik → Team X trifft sehr wohl in BEIDEN
+  Halbzeiten (≥2 Tore). Neuer Regel-Pick (`_code_read_interpret` pattern `both_halves_counter`):
+  Haupt **„{Team} Über 1.5 Tore" ★9** + Alt **„{Team} trifft in beiden Halbzeiten"**. Vorher gab die
+  Vision-KI fälschlich „{Team} Under 2.5" (widerspricht der Prämisse).
+- **„Ein Team Gewinnspanne mit 2 (oder mehr) Toren – Nein"**: Fallen-Logik → eine Mannschaft gewinnt
+  klar (2+ Abstand) → Unentschieden ausgeschlossen. Neuer Pick (pattern `margin_no_draw`):
+  **„Doppelte Chance 12 (kein Unentschieden)" ★8**. Vorher fälschlich NO BET.
+- Beide Muster sind (a) in `_REINTERP_RULES` → bestehende offene Reads werden bei jedem
+  `/code-reading`-Refresh automatisch korrigiert (fixt die Live-Karten nach dem Deploy von selbst),
+  und (b) in `_CODE_FORCE_RULES` → bei NEUEN Scans überschreibt die deterministische Regel die
+  Vision-KI. E2E verifiziert: geseedete Philadelphia- & Chicago-Karten wurden über den echten
+  Endpoint korrekt umgeschrieben. Settlement geprüft: „{Team} Über 1.5 Tore" (deterministisch),
+  „Doppelte Chance 12" (dc_12 / judge_market) sind gradebar.
+
+## 2026-08-01 — Codemines nach Startzeit + KI-Vorschlag + Live-Badge + Tablet-3-Reihen
+- **Codemine-Sortierung repariert**: neuer robuster Parser `_cr_sort_dt` versteht die Scanner-Formate
+  (`DD/MM HH:MM` ohne Jahr, `DD.MM. HH:MM`, nur `HH:MM`, ISO) → aktive Codemines jetzt wirklich
+  chronologisch nach Anstoß. (Vorher scheiterte `_parse_kickoff` an diesen Formaten → keine Sortierung.)
+- **Rote Live-Anzeige**: aktive Codemines mit laufendem Spiel bekommen ein kleines rot-pulsierendes
+  Badge (Ergebnis + Minute), 1 gecachter `/fixtures?live=all`-Aufruf (60s), keine DB-Schreibvorgänge.
+- **KI-Vorschlag im Code-Defaults-Panel** (Endpoint `/admin/code-reading/defaults/{key}/ai-suggest`):
+  Historie gleicher Codes + echte Match-Statistiken (Heim/Gast getrennt, gecacht) → LLM findet Muster.
+- **Tablet-Layout**: 9 Homepage-Knöpfe `md:grid-cols-3 xl:grid-cols-9` → 3 Reihen à 3 auf Tablets.
 HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
+
 
 
 ## 2026-08-01 — Codemining: „Fertige abrechnen"-Knopf + Einzel-Settle
