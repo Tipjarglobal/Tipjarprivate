@@ -1,22 +1,23 @@
 # TipJar Global — CHANGELOG
 
-## 2026-08-02 — Live-Codemine-Rescue: dynamische Sterne + Buzzer-Beater + Rote-Karte-Warnung
-Owner: „Wenn der live codemine ein Ergebnis unterstützt, soll die Live-KI einen neuen Pick generieren,
-der den Codemine mit einem Buzzer-Beater rettet." Nicht mehr statisch 8★ für alle.
-- Neue Engine `code_live_autopost()` + Loop `code_live_loop` (background_tasks, ~LIVE_POLL_SECONDS,
-  Leader/Quota/Reserve-Guards, Stat-Call-Cap). Für jeden aktiven, gerade LAUFENDEN Codemine:
-  - **Regel B — 10★ Lead-Rescue**: sobald EIN Team führt UND keine rote Karte im Spiel ist UND der
-    Codemine ein Tor vorhersagt → generiert 10★ Live-Pick (Favorit/Underdog aus 1X2-Quoten benannt).
-  - **Regel C — 2★ Buzzer-Beater**: ab der 75. Min, wenn der Counter GENAU noch EIN Tor braucht →
-    2★ Live-Pick mit hoher Quote (kleiner Einsatz), „rettet den Codemine".
-  - **Rote Karten** werden immer aus der Live-Statistik geprüft und im Pick vorgewarnt
-    („⚠ Rote Karte: {Team}"); eine rote Karte blockiert Regel B.
-- Generierte Picks sind echte `source:"hq-live"`-Tipps (`from_codemining:true`, `buzzer_beater`) →
-  erscheinen automatisch im Live-Kanal und werden GRATIS über `live_autopost` abgerechnet/geschlossen.
-- Codemine-Karte (`CodeReading.jsx`): zusätzlich zum roten Live-Ergebnis-Badge jetzt „🎯 RESCUE 10★" /
-  „🚨 BUZZER 2★" und „🟥 {Team}"-Warnung; Flags werden nach Spielende automatisch geleert.
-- Verifiziert mit gemocktem Live-Feed: Lead 0:1 → 10★ (Quote 1.56, Favorit benannt); 1:1 Über 2.5 @78'
-  → 2★ Buzzer (Quote 2.98) + Rote-Karte-Warnung.
+## 2026-08-02 — Rescue-KOMBI: alle Rescues + Banger + Zehner in EINEM Schein
+Owner: „Besser zusammenfassen als jeden einzeln posten — gib mir alle Rescues + 1 Banger + 1 Zehner,
+dessen Spiel gleich anfängt." Umgesetzt in `code_live_autopost` / `_build_rescue_kombi`:
+- Rescues werden NICHT mehr einzeln gepostet, sondern als LEGS gesammelt und in EINEN Live-Parlay
+  gebündelt: **alle aktuellen Rescues (10★ Lead + 2★ Buzzer) + der beste Live-Banger + ein imminenter
+  10★ Vor-Spiel-Pick (Anpfiff ≤ 60 Min)**.
+- Nur EINE aktive Rescue-Kombi gleichzeitig (läuft bis zur Abrechnung, wie die Vierer-Live-Kombi);
+  Settlement leg-für-leg über `settle_multimatch_parlays`. Alte Einzel-`crlive-*`-Tipps werden entfernt.
+- Codemine-Karte behält die „🎯 RESCUE 10★ / 🚨 BUZZER 2★ / 🟥 {Team}"-Badges, damit sichtbar bleibt,
+  welche Spiele in der Kombi stecken.
+- Verifiziert (gemockt): 2 Rescues + 1 Banger + 1 Zehner (Anpfiff in 29 Min) → 4-Bein-Parlay,
+  Gesamtquote 22.53, 10★, keine Einzel-Tipps.
+
+## 2026-08-02 — Live-Codemine-Rescue-Engine (Basis)
+- `code_live_autopost()` + Loop `code_live_loop`: 10★ Lead-Rescue (Team führt, keine rote Karte,
+  Codemine sagt Tor voraus), 2★ Buzzer-Beater ab 75. Min (Counter braucht genau 1 Tor), Rote-Karte-
+  Warnung aus Live-Statistik, Favorit/Underdog aus 1X2-Quoten. (Jetzt gebündelt, s.o.)
+
 
 
 ## 2026-08-02 — KI-Vorschlag: IMMER ein spielbarer Pick, nie „No Bet"

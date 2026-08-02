@@ -10915,6 +10915,7 @@ async def code_live_autopost() -> dict:
          "read": {"$ne": "no_bet"}, "our_market": {"$nin": [None, ""]}},
         {"_id": 0}).to_list(200)
     posted = 0
+    rescue_legs = []
     stat_calls = 0
     odds_cache: dict = {}
     for cr in reads:
@@ -10990,34 +10991,102 @@ async def code_live_autopost() -> dict:
                 f"Rettet den Codemine {home} – {away}.{red_warn}"
             )
             category = "banger"
-        live_id = f"crlive-{fid}-{cr.get('id')}"
-        await db.tips.update_one({"id": live_id}, {
-            "$set": {
-                "market": market, "odds": f"{odd:.2f}", "ai_rating": rating,
-                "win_prob": min(0.95, 1.0 / max(odd, 1.05)), "category": category,
-                "ai_analysis": analysis, "status": "live",
-                "match_time": ((fx.get("fixture") or {}).get("date") or ""),
-                "league": _fixture_league_label(fx), "country": _fixture_country(fx),
-                "league_code": "", "live_minute": minute, "live_score": f"{hg}:{ag}",
-                "from_codemining": True, "code_read_id": cr.get("id"),
-                "buzzer_beater": (rule == "buzzer"), "updated_at": now,
-            },
-            "$setOnInsert": {
-                "id": live_id, "user_id": hq["id"], "username": "TipJarHQ",
-                "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
-                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
-                "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-                "source": "hq-live", "fixture_id": fid, "created_at": now,
-            },
-        }, upsert=True)
-        # non-destructive live flags on the codemine card (surfaced by _cr_live_annotate on GET)
+        # Collect as a LEG for the combined Rescue-Kombi (owner 2026-08: never post rescues
+        # individually — bundle them). Keep the codemine's live badge flags for the card.
+        rescue_legs.append({
+            "match": f"{home} \u2013 {away}",
+            "league": _fixture_league_label(fx),
+            "kickoff": ((fx.get("fixture") or {}).get("date") or ""),
+            "selections": [market], "sel_odds": [f"{odd:.2f}"],
+            "_odd": odd, "_stars": rating, "_rule": rule, "_red": bool(reds),
+        })
         await db.code_reads.update_one(
             {"id": cr.get("id")},
             {"$set": {"live_rescue": rule, "live_rescue_stars": rating,
                       "live_red_team": red_team, "live_rescue_at": now}})
-        posted += 1
-        logger.info(f"CODEMINE-RESCUE [{rule} {rating}★]: {home} vs {away} — {market} @ {odd} ({minute}')")
-    return {"posted": posted, "live": len(live)}
+        logger.info(f"CODEMINE-RESCUE-LEG [{rule} {rating}★]: {home} vs {away} — {market} @ {odd} ({minute}')")
+    # Fold all current rescues + 1 banger + 1 imminent 10★ into ONE Rescue-Kombi.
+    return await _build_rescue_kombi(hq, rescue_legs, now)
+
+
+async def _build_rescue_kombi(hq: dict, rescue_legs: list, now: str) -> dict:
+    """Owner 2026-08: bundle ALL current codemine rescues + the best live Banger + one imminent
+    10★ pre-match pick (kickoff ≤ 60 min) into a SINGLE live parlay. Never post rescues one-by-one.
+    One active rescue-combo at a time (it rides to settlement via settle_multimatch_parlays, exactly
+    like the Vierer-Live-Kombi)."""
+    now_dt = datetime.now(timezone.utc)
+    # remove any leftover individual rescue tips from the earlier one-by-one behaviour
+    await db.tips.delete_many({"id": {"$regex": "^crlive-"}, "source": "hq-live"})
+    # only one live rescue-combo at a time — let the active one ride & settle first
+    if await db.tips.find_one(
+            {"id": {"$regex": "^hqlive-rescue-kombi-"}, "status": "live"}, {"_id": 1}):
+        return {"posted": 0, "combo": "active-exists", "rescues": len(rescue_legs)}
+    if not rescue_legs:
+        return {"posted": 0, "combo": "no-rescues"}
+    legs = [{k: rl[k] for k in ("match", "league", "kickoff", "selections", "sel_odds")}
+            for rl in rescue_legs]
+
+    # + best current live Banger
+    banger = await db.tips.find_one(
+        {"source": "hq-live", "status": "live", "category": "banger",
+         "is_parlay": {"$ne": True}}, {"_id": 0}, sort=[("ai_rating", -1)])
+    has_banger = bool(banger and banger.get("home_team") and banger.get("market"))
+    if has_banger:
+        legs.append({
+            "match": f"{banger['home_team']} \u2013 {banger.get('away_team', '')}",
+            "league": banger.get("league") or "", "kickoff": banger.get("match_time") or "",
+            "selections": [banger["market"]], "sel_odds": [str(banger.get("odds") or "1.50")]})
+
+    # + one imminent 10★ pre-match pick (kickoff within the next 60 min)
+    zehner, best_ko = None, None
+    for t in await db.tips.find(
+            {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True},
+             "ai_rating": {"$gte": 9.5}}, {"_id": 0}).to_list(300):
+        ko = _parse_kickoff(t.get("match_time"))
+        if ko and now_dt <= ko <= now_dt + timedelta(minutes=60) and (best_ko is None or ko < best_ko):
+            best_ko, zehner = ko, t
+    has_zehner = bool(zehner and zehner.get("home_team") and zehner.get("market"))
+    if has_zehner:
+        legs.append({
+            "match": f"{zehner['home_team']} \u2013 {zehner.get('away_team', '')}",
+            "league": zehner.get("league") or "", "kickoff": zehner.get("match_time") or "",
+            "selections": [zehner["market"]], "sel_odds": [str(zehner.get("odds") or "1.50")]})
+
+    if len(legs) < 2:
+        return {"posted": 0, "combo": "need-2-legs", "rescues": len(rescue_legs)}
+
+    prod = 1.0
+    for lg in legs:
+        try:
+            prod *= float(str(lg["sel_odds"][0]).replace(",", "."))
+        except Exception:
+            pass
+    total_odds = round(prod, 2)
+    n_res = len(rescue_legs)
+    n_buzz = sum(1 for rl in rescue_legs if rl["_rule"] == "buzzer")
+    parts = [f"{n_res}× Rescue" + (f" (davon {n_buzz}× Buzzer-Beater)" if n_buzz else "")]
+    if has_banger:
+        parts.append("1× Banger")
+    if has_zehner:
+        parts.append(f"1× Zehner (Anpfiff in {int((best_ko - now_dt).total_seconds() // 60)} Min)")
+    analysis = ("🎯 RESCUE-KOMBI (live gebündelt): " + " + ".join(parts) +
+                f". Alle Rescues in EINEM Schein statt einzeln. Gesamtquote {total_odds}.")
+    combo_id = f"hqlive-rescue-kombi-{int(now_dt.timestamp())}"
+    await db.tips.insert_one({
+        "id": combo_id, "user_id": hq["id"], "username": "TipJarHQ",
+        "raw_text": "", "image_path": None, "image_paths": [],
+        "home_team": "", "away_team": "", "match_time": "Multibet",
+        "country": "", "league": "", "market": "Rescue-Kombi",
+        "odds": f"{total_odds:.2f}", "ai_rating": 10.0 if has_zehner else 9.0,
+        "ai_analysis": analysis, "legs": legs, "is_parlay": True,
+        "stake": "", "potential_return": "", "status": "live",
+        "category": "banger", "source": "hq-live", "live_kombi": True,
+        "from_codemining": True, "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "created_at": now})
+    logger.info(f"RESCUE-KOMBI {combo_id}: {len(legs)} legs @ {total_odds} "
+                f"(rescues={n_res}, banger={has_banger}, zehner={has_zehner})")
+    return {"posted": 1, "combo": combo_id, "legs": len(legs), "odds": total_odds,
+            "rescues": n_res, "banger": has_banger, "zehner": has_zehner}
 
 
 
