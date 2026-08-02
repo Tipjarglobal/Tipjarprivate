@@ -39,6 +39,8 @@ from server import (
     favourite_smart_autopost,
     gift_of_the_day,
     knockout_tie_autopost,
+    lineup_player_autopost,
+    settle_player_props,
     live_annotate_sync,
     live_autopost,
     logger,
@@ -528,6 +530,27 @@ async def code_live_loop():
         except Exception as e:
             logger.error(f"code_live_loop error: {e}")
         await asyncio.sleep(LIVE_POLL_SECONDS)
+
+
+async def lineup_player_loop():
+    """Owner 2026-08: ~20 Min vor Anpfiff die Aufstellung prüfen — steht ein beobachteter
+    Value-Spieler (Tzolis, Konstantelias, Pavlidis, Kelsy …) in der Start-Elf, poste einen
+    10★ '{Spieler} Über 0.5 Schüsse aufs Tor'-Pick. Danach fällige Props abrechnen.
+    Läuft alle 5 Min → fängt jedes Spiel im ~20-Min-Fenster (Dedup pro Spieler)."""
+    await asyncio.sleep(150)
+    while True:
+        if not _is_leader():
+            await asyncio.sleep(60)
+            continue
+        try:
+            if API_FOOTBALL_KEY and not _api_quota_exhausted():
+                res = await lineup_player_autopost()
+                if res.get("posted"):
+                    logger.info(f"Startelf-Loop: {res}")
+                await settle_player_props()
+        except Exception as e:
+            logger.error(f"lineup_player_loop error: {e}")
+        await asyncio.sleep(300)
 
 
 async def member_live_loop():

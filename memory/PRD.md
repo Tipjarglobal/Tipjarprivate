@@ -407,6 +407,27 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Telegram outbound notifications.
 - P2: Stripe payments & PayPal payouts.
 
+## Changelog — 2026-08-02 — Startelf-Feature (Value-Spieler „Über 0.5 Schüsse aufs Tor")
+Owner: ~20 Min vor Anpfiff die Aufstellung prüfen; steht ein BEOBACHTETER Value-Spieler (KEINE
+Superstars wie Mbappé/Kane — deren Quote zu niedrig, sondern Spieler mit echter Quote wie
+Tzolis/Konstantelias/Pavlidis/Kelsy) in der Start-Elf → 10★-Pick „{Spieler} Über 0.5 Schüsse
+aufs Tor" posten. „Einmal reicht, 20 Min vor Spielbeginn."
+- `server.py`: kuratierte Watchlist `_LINEUP_WATCH_PLAYERS` [{key=Nachname, name, team=Hinweis}]
+  (tzolis/arsenal, konstantelias/paok, pavlidis/benfica, kelsy/portland — leicht erweiterbar).
+  `_lineup_fixture_watched()` = quota-sichere Vorfilterung (nur Spiele mit einem Watchlist-Team
+  kosten einen /fixtures/lineups-Call). `lineup_player_autopost()` umgebaut: Fenster jetzt ~25 Min
+  (statt 45), KEIN Positions-Filter mehr (Konstantelias ist Mittelfeld/AM), Spieler-Match via
+  `_name_key` (Nachname, robust gegen „C. Tzolis"), Dedup pro fixture+Spieler (`lineup-{fid}-{key}`),
+  `_api_reserve_locked`-Guard entfernt (zeitkritisch). `settle_player_props()` unverändert (Abrechnung
+  nach FT via /fixtures/players, Schüsse aufs Tor).
+- `background_tasks.py`: neuer `lineup_player_loop()` (alle 5 Min, leader+quota-gated) → autopost +
+  settle. In `server.py` importiert & im startup registriert.
+- Getestet (python-Skript, gemockte API-Football-Antwort): PAOK→watched=True, Ajax/PSV→False;
+  Konstantelias (pos M) → 10★ SOT-Pick korrekt erstellt (source hq-auto, player_prop, rating 10);
+  nicht-gelistete Spieler ignoriert; Rerun idempotent (posted 0). Backend startet fehlerfrei, /api 200.
+- HINWEIS: greift live auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
+
+
 ## Changelog — 2026-07-29 (9-point batch, all tested: BE 13/13, FE 4/4)
 NOTE: recent user communication is in GERMAN (respond in German).
 1. Russia boycott: all Russian football blocked (COUNTRY_BLACKLIST/CODE_BLACKLIST + RUSSIA_KEYWORDS

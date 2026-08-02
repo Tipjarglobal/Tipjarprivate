@@ -11250,13 +11250,23 @@ async def _build_rescue_kombi(hq: dict, rescue_legs: list, now: str) -> dict:
 
 
 # ── Start-Elf-Live-Spieler-Picks (owner 2026-08) ─────────────────────────────
-# Sobald ~40 Min vor Anpfiff die AUFSTELLUNG steht, erkennt die KI einen Stürmer in der Start-Elf
-# und postet einen Spieler-Pick "{Spieler} Über 0.5 Schüsse aufs Tor" (10★). Abrechnung nach dem
-# Spiel über /fixtures/players (Schüsse aufs Tor). Nur Qualitäts-Ligen (keine unterirdischen Teams).
+# ~20 Min vor Anpfiff wird die AUFSTELLUNG geprüft. Steht ein BEOBACHTETER Value-Spieler in der
+# Start-Elf (KEIN Superstar wie Mbappé/Kane — deren "Über 0.5 Schüsse"-Quote ist zu niedrig, sondern
+# Spieler mit echten Quoten wie Tzolis/Konstantelias/Pavlidis/Kelsy), wird ein 10★-Pick
+# "{Spieler} Über 0.5 Schüsse aufs Tor" gepostet. Abrechnung nach dem Spiel via /fixtures/players.
+# Watchlist erweiterbar: {key = Nachname (klein), name = Anzeigename, team = Team-Hinweis (klein)}.
+_LINEUP_WATCH_PLAYERS = [
+    {"key": "tzolis", "name": "Christos Tzolis", "team": "arsenal"},
+    {"key": "konstantelias", "name": "Giannis Konstantelias", "team": "paok"},
+    {"key": "pavlidis", "name": "Vangelis Pavlidis", "team": "benfica"},
+    {"key": "kelsy", "name": "Kevin Kelsy", "team": "portland"},
+]
+_LINEUP_WATCH_TEAMS = {p["team"] for p in _LINEUP_WATCH_PLAYERS}
+_LINEUP_WATCH_KEYS = {p["key"]: p["name"] for p in _LINEUP_WATCH_PLAYERS}
 _LINEUP_FX_CACHE = {"ts": 0.0, "date": "", "fixtures": []}
 
 
-async def _upcoming_quality_fixtures(window_min: int = 45) -> list:
+async def _upcoming_quality_fixtures(window_min: int = 45, quality_only: bool = True) -> list:
     now = datetime.now(timezone.utc)
     dstr = now.strftime("%Y-%m-%d")
     if now.timestamp() - _LINEUP_FX_CACHE["ts"] > 900 or _LINEUP_FX_CACHE["date"] != dstr:
@@ -11272,33 +11282,41 @@ async def _upcoming_quality_fixtures(window_min: int = 45) -> list:
         mins = (ko - now).total_seconds() / 60
         if mins < 0 or mins > window_min:
             continue
-        lg = f.get("league") or {}
-        if not _is_quality_lookahead_league(lg.get("name"), lg.get("country")):
-            continue
+        if quality_only:
+            lg = f.get("league") or {}
+            if not _is_quality_lookahead_league(lg.get("name"), lg.get("country")):
+                continue
         out.append(f)
     return out
 
 
+def _lineup_fixture_watched(f: dict) -> bool:
+    """True if either team of the fixture matches a watched player's team hint (quota-safe
+    pre-filter → we only spend a /fixtures/lineups call on games that could carry a watched player)."""
+    home = _norm(((f.get("teams") or {}).get("home") or {}).get("name") or "")
+    away = _norm(((f.get("teams") or {}).get("away") or {}).get("name") or "")
+    for team in _LINEUP_WATCH_TEAMS:
+        if team and (team in home or team in away):
+            return True
+    return False
+
+
 async def lineup_player_autopost() -> dict:
-    """Post a 10★ '{striker} Über 0.5 Schüsse aufs Tor' as soon as the starting XI is published
-    (~40 min pre-kickoff), for the main forward of each side in a quality game."""
-    if not API_FOOTBALL_KEY or _api_quota_exhausted() or _api_reserve_locked():
+    """Post a 10★ '{player} Über 0.5 Schüsse aufs Tor' as soon as the starting XI is published
+    (~20 min pre-kickoff) for a WATCHED value player (see _LINEUP_WATCH_PLAYERS)."""
+    if not API_FOOTBALL_KEY or _api_quota_exhausted():
         return {"posted": 0, "reason": "guard"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0}
     now = datetime.now(timezone.utc)
-    fixtures = await _upcoming_quality_fixtures(45)
+    # only fixtures kicking off within ~25 min AND involving a watched team (quota-safe)
+    fixtures = [f for f in await _upcoming_quality_fixtures(25, quality_only=False)
+                if _lineup_fixture_watched(f)]
     posted, checked = 0, 0
     for f in fixtures[:12]:
-        if posted >= 8:
-            break
         fid = str((f.get("fixture") or {}).get("id") or "")
         if not fid:
-            continue
-        # skip if we already posted a lineup prop for this fixture
-        if await db.tips.find_one(
-                {"source": "hq-auto", "player_prop": True, "fixture_id": fid}, {"_id": 1}):
             continue
         lineups = await asyncio.to_thread(_apifootball, "/fixtures/lineups", {"fixture": fid})
         checked += 1
@@ -11306,38 +11324,40 @@ async def lineup_player_autopost() -> dict:
             continue
         ko = _parse_kickoff(((f.get("fixture") or {}).get("date") or "")) or now
         lg = f.get("league") or {}
+        home = ((f.get("teams") or {}).get("home") or {}).get("name") or ""
+        away = ((f.get("teams") or {}).get("away") or {}).get("name") or ""
         for block in lineups[:2]:
             tname = ((block.get("team") or {}).get("name")) or ""
-            fwds = [(e.get("player") or {}).get("name") for e in (block.get("startXI") or [])
-                    if ((e.get("player") or {}).get("pos") or "") == "F"
-                    and (e.get("player") or {}).get("name")]
-            if not fwds:
-                continue
-            player = fwds[0]  # main striker
-            pid = f"lineup-{fid}-{_name_key(player)}"
-            if await db.tips.find_one({"id": pid}, {"_id": 1}):
-                continue
-            if learn_verdict("auto", "sot")[0] == "veto":
-                continue
-            home = ((f.get("teams") or {}).get("home") or {}).get("name") or ""
-            away = ((f.get("teams") or {}).get("away") or {}).get("name") or ""
-            await db.tips.insert_one({
-                "id": pid, "user_id": hq["id"], "username": "TipJarHQ",
-                "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
-                "match_time": ko.isoformat(), "country": lg.get("country") or "",
-                "league": lg.get("name") or "", "league_code": "",
-                "market": f"{player} Über 0.5 Schüsse aufs Tor", "odds": "1.40",
-                "category": "value", "ai_rating": 10.0, "win_prob": 0.72,
-                "ai_analysis": (f"👀 Aufstellung bestätigt: {player} startet für {tname}. "
-                                f"Als Stammstürmer bringt er fast immer mindestens einen Schuss "
-                                f"aufs Tor → Über 0.5 Schüsse aufs Tor. 10★."),
-                "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
-                "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
-                "source": "hq-auto", "player_prop": True, "prop_kind": "sot", "prop_line": 0.5,
-                "player_name": player, "fixture_id": fid, "lineup_pick": True,
-                "created_at": now.isoformat(),
-            })
-            posted += 1
+            for e in (block.get("startXI") or []):
+                pname = (e.get("player") or {}).get("name") or ""
+                if not pname:
+                    continue
+                nk = _name_key(pname)
+                player = _LINEUP_WATCH_KEYS.get(nk)  # canonical display name if watched
+                if not player:
+                    continue
+                pid = f"lineup-{fid}-{nk}"
+                if await db.tips.find_one({"id": pid}, {"_id": 1}):
+                    continue
+                if learn_verdict("auto", "sot")[0] == "veto":
+                    continue
+                await db.tips.insert_one({
+                    "id": pid, "user_id": hq["id"], "username": "TipJarHQ",
+                    "raw_text": "", "image_path": None, "home_team": home, "away_team": away,
+                    "match_time": ko.isoformat(), "country": lg.get("country") or "",
+                    "league": lg.get("name") or "", "league_code": "",
+                    "market": f"{player} Über 0.5 Schüsse aufs Tor", "odds": "1.40",
+                    "category": "value", "ai_rating": 10.0, "win_prob": 0.72,
+                    "ai_analysis": (f"👀 Aufstellung bestätigt: {player} startet für {tname}. "
+                                    f"Als torgefährlicher Stammspieler bringt er fast immer "
+                                    f"mindestens einen Schuss aufs Tor → Über 0.5 Schüsse aufs Tor. 10★."),
+                    "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
+                    "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+                    "source": "hq-auto", "player_prop": True, "prop_kind": "sot", "prop_line": 0.5,
+                    "player_name": player, "fixture_id": fid, "lineup_pick": True,
+                    "created_at": now.isoformat(),
+                })
+                posted += 1
     return {"posted": posted, "checked": checked}
 
 
@@ -13450,7 +13470,7 @@ from scrapers_autopost import (
 from background_tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
     smart_loop, live_loop, member_live_loop, hide_unplayable_loop, api_burner_loop,
-    code_live_loop,
+    code_live_loop, lineup_player_loop,
 )
 
 
@@ -13705,6 +13725,7 @@ async def startup():
     _BG_TASKS.append(asyncio.create_task(smart_loop()))
     _BG_TASKS.append(asyncio.create_task(live_loop()))
     _BG_TASKS.append(asyncio.create_task(code_live_loop()))
+    _BG_TASKS.append(asyncio.create_task(lineup_player_loop()))
     _BG_TASKS.append(asyncio.create_task(member_live_loop()))
     _BG_TASKS.append(asyncio.create_task(push_watch_loop()))
     _BG_TASKS.append(asyncio.create_task(backfill_leg_odds_once()))
