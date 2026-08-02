@@ -408,6 +408,19 @@ Emergent Auth & Storage, API-Football (user key, rate-limited), Gemini 3.1 Pro /
 - P2: Stripe payments & PayPal payouts.
 
 
+## P0 — 2026-08-02 (e) — Griechische Homepage-Übersetzung + Regel „kein Über-0.5-Tore-Single"
+1) **i18n Griechisch fehlte** für den „SYSTEM MODE"-Block der Homepage (`App.js` `story-why-*`,
+   Keys `story.why.label/title/body/advantage`, `story.not`, `story.cta`) → fiel auf Englisch zurück.
+   Fix: griechische Übersetzungen im `el`-Block von `i18n.js` ergänzt. Verifiziert (Screenshot, lang=el):
+   „ΛΕΙΤΟΥΡΓΙΑ ΣΥΣΤΗΜΑΤΟΣ" + „Γιατί οι χρήστες επιλέγουν το TipJar …" rendern korrekt.
+2) **Neue Owner-Regel (griechisch)**: Master & HQ dürfen KEIN „Über 0.5 Tore" als EINZELWETTE geben —
+   nur innerhalb eines 2+ leg Kombis. Fix (`server.py`): `_is_bare_over05_goals_single()` (erkennt
+   „Über 0.5 Tore", team-spezifisch & HZ; erlaubt Über 1.5/2.5, Schuss-Props, „+"-Bet-Builder, Parlays,
+   ≥2 legs) + `_enforce_no_bare_over05_goals()` (void+hidden), im `master_loop` jede Runde (self-heal
+   auch auf Prod). Getestet: 9 Fälle korrekt; 4 bestehende Single-„Über 0.5 Tore" sofort entfernt.
+- HINWEIS: live erst nach „Save to GitHub → Deploy".
+
+
 ## P0-Bugfix — 2026-08-02 (d) — Benachrichtigungen führten ins Leere
 Symptom (Owner): „Community Picks – da kommt nichts rein" + „Benachrichtigungen die zu gar nichts
 gehen" (Screenshot: LA Galaxy, Cruz Azul, Colorado — Spiele über Nacht bereits beendet).

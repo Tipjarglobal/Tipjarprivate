@@ -5234,6 +5234,42 @@ async def purge_expired_autotips() -> int:
     return len(stale) + len(sys_stale)
 
 
+_OVER05_GOALS_RE = re.compile(r"[Üü]ber\s*0[.,]5\s*Tore", re.IGNORECASE)
+
+
+def _is_bare_over05_goals_single(t: dict) -> bool:
+    """Owner rule (Greek, 2026-08): the Master & HQ may NOT give a plain 'Über 0.5 Tore'
+    (over 0.5 GOALS) as a SINGLE pick — it's a near-lock worth nothing on its own. It may
+    only appear inside a 2+ leg combo (bet-builder / parlay). Shots-on-target props
+    ('Über 0.5 Schüsse aufs Tor') are a different market and stay allowed."""
+    if t.get("is_parlay") or len(t.get("legs") or []) >= 2:
+        return False
+    m = (t.get("market") or "")
+    if "+" in m:  # already a combined bet-builder ('… + …') → allowed
+        return False
+    ml = m.lower()
+    if "schüsse" in ml or "schuss" in ml or "shots" in ml:  # player shot prop, not goals
+        return False
+    return bool(_OVER05_GOALS_RE.search(m))
+
+
+async def _enforce_no_bare_over05_goals() -> int:
+    """Void + hide any standalone 'Über 0.5 Tore' single from HQ / the Master so it never
+    surfaces (feeds AND badges). Runs every master cycle → also self-heals on production."""
+    docs = await db.tips.find(
+        {"source": {"$in": ["hq-auto", "hq-master"]}, "status": "pending",
+         "market": {"$regex": "0[.,]5 Tore"}},
+        {"_id": 0, "id": 1, "market": 1, "is_parlay": 1, "legs": 1}).to_list(1000)
+    ban = [d["id"] for d in docs if _is_bare_over05_goals_single(d)]
+    if ban:
+        await db.tips.update_many(
+            {"id": {"$in": ban}},
+            {"$set": {"hidden": True, "hidden_reason": "over05_single_banned", "status": "void"}})
+        logger.info(f"Rule: voided {len(ban)} standalone 'Über 0.5 Tore' single(s) (HQ/Master)")
+    return len(ban)
+
+
+
 async def _dedupe_hq_tips() -> int:
     """One pick per match across ALL pending HQ auto-tips (forebet + predictz).
     When a game surfaces twice (e.g. Über 0.5 AND Über 1.5, or the same fixture with
@@ -13529,6 +13565,10 @@ async def master_loop():
             deduped = await _dedupe_hq_tips()
             if deduped:
                 logger.info(f"Master: deduped {deduped} redundant single picks (one per match)")
+            # Owner rule (2026-08): HQ/Master never give a standalone 'Über 0.5 Tore' single.
+            banned05 = await _enforce_no_bare_over05_goals()
+            if banned05:
+                logger.info(f"Master: removed {banned05} standalone 'Über 0.5 Tore' single(s)")
         except Exception as e:
             logger.error(f"master_loop error: {e}")
         await asyncio.sleep(120)
