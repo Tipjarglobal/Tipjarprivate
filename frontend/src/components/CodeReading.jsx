@@ -439,6 +439,12 @@ export function CodeReading() {
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="font-bold text-white text-sm truncate">{r.home} – {r.away}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {r.live && r.live_score && (
+                      <span data-testid={`code-read-live-${r.id}`}
+                        className="inline-flex items-center gap-1 text-[11px] font-black rounded-full px-2 py-0.5 bg-[#F0443C] text-white animate-pulse">
+                        <Radio size={11} /> {r.live_score}{r.live_minute ? ` · ${r.live_minute}'` : ""}
+                      </span>
+                    )}
                     {r.verified && (
                       <span data-testid={`code-read-verified-${r.id}`} title={fl.verified}
                         className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide rounded-full px-2 py-0.5 bg-emerald-500 text-void">

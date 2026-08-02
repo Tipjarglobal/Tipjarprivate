@@ -5040,6 +5040,46 @@ def _parse_kickoff(mt: str):
     return None
 
 
+def _cr_sort_dt(kickoff: str, created_iso: str = ""):
+    """Robust kickoff→datetime for CODEMINE sorting only. The Vision scanner returns kickoffs in
+    many slip formats (e.g. 'DD/MM HH:MM' WITHOUT a year, 'DD.MM. HH:MM', time-only 'HH:MM', ISO)
+    that plain _parse_kickoff can't read → sorting was a no-op. Uses created_at to fill in the
+    missing year/date. Returns None only when truly unparseable."""
+    s = (kickoff or "").strip()
+    if not s:
+        return None
+    exact = _parse_kickoff(s)
+    if exact is not None:
+        return exact
+    base = _parse_kickoff(created_iso) or datetime.now(timezone.utc)
+    hm = re.search(r"(\d{1,2}):(\d{2})", s)
+    m = re.search(r"(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?", s)
+    if m:
+        d, mo = int(m.group(1)), int(m.group(2))
+        h, mi = (int(hm.group(1)), int(hm.group(2))) if hm else (12, 0)
+        if m.group(3):
+            y = int(m.group(3)); y = 2000 + y if y < 100 else y
+        else:
+            y = base.year
+        try:
+            cand = datetime(y, mo, d, h, mi, tzinfo=timezone.utc)
+        except Exception:
+            return None
+        if not m.group(3):
+            if cand < base - timedelta(days=120):
+                cand = cand.replace(year=y + 1)
+            elif cand > base + timedelta(days=300):
+                cand = cand.replace(year=y - 1)
+        return cand
+    if hm:
+        try:
+            return base.replace(hour=int(hm.group(1)), minute=int(hm.group(2)),
+                                second=0, microsecond=0)
+        except Exception:
+            return None
+    return None
+
+
 def _kickoff_is_date_only(mt: str) -> bool:
     """A kickoff string with a DATE but NO time (e.g. '9. Jul 2026'). _parse_kickoff
     assigns these 23:59, which wrongly makes an evening UEFA game that's already over
@@ -9035,6 +9075,35 @@ async def _purge_and_refresh_code_reads() -> dict:
     return {"removed": removed, "reinterpreted": reinterp, "healed": healed}
 
 
+_CR_LIVE_CACHE = {"ts": 0.0, "data": []}
+
+
+async def _cr_live_annotate(reads: list):
+    """Owner 2026-08: attach a small LIVE score to active codemines whose game is currently in-play.
+    One cheap /fixtures?live=all call (all live games at once), cached 60s. Annotations are added to
+    the response objects only (not persisted) → sets live/live_score/live_minute, clears them when a
+    game is no longer live."""
+    if not API_FOOTBALL_KEY or not reads:
+        return
+    nowts = datetime.now(timezone.utc).timestamp()
+    if nowts - _CR_LIVE_CACHE["ts"] > 60 and not _api_quota_exhausted():
+        live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+        _CR_LIVE_CACHE["data"] = live
+        _CR_LIVE_CACHE["ts"] = nowts
+    else:
+        live = _CR_LIVE_CACHE["data"]
+    for r in reads:
+        fx = _find_live_fixture(live, r.get("home"), r.get("away")) if live else None
+        if fx:
+            g = fx.get("goals") or {}
+            r["live"] = True
+            r["live_score"] = f"{g.get('home') if g.get('home') is not None else 0}-{g.get('away') if g.get('away') is not None else 0}"
+            r["live_minute"] = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed")
+        else:
+            r.pop("live", None); r.pop("live_score", None); r.pop("live_minute", None)
+
+
+
 @api_router.get("/code-reading")
 async def code_reading():
     """The Code-Reading channel: our counter-reads of the bookies' accumulator of the day.
@@ -9068,7 +9137,11 @@ async def code_reading():
     # Owner 2026-06: active codemines sorted chronologically by kickoff (next game first);
     # games without a parseable kickoff go last. Finished stays newest-first (query order).
     _far = datetime.max.replace(tzinfo=timezone.utc)
-    active.sort(key=lambda r: _parse_kickoff(r.get("kickoff")) or _far)
+    active.sort(key=lambda r: _cr_sort_dt(r.get("kickoff"), r.get("created_at")) or _far)
+    try:
+        await _cr_live_annotate(active)
+    except Exception as e:
+        logger.warning(f"cr live annotate failed: {e}")
     return {"count": len(active), "reads": active, "finished": finished}
 
 
