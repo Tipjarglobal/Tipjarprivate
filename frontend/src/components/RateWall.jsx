@@ -12,7 +12,7 @@ import AdminSlipEditor from "./AdminSlipEditor";
 import api, { apiErr, fileUrl } from "../api";
 import { useProseTranslations } from "../proseI18n";
 import { shareSlip } from "../shareSlip";
-import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, kickoffTs, kickoffInfo, isKickoffLive, flamesActive } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, displayTeam, formatKickoff, formatKickoffText, kickoffTs, kickoffInfo, isKickoffLive, flamesActive } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
 
@@ -1091,14 +1091,14 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           onClick={() => onUserClick?.(tip.username)}
           data-testid={`gift-user-btn-${tip.id}`}
           title={t("wall.giftUser")}
-          className="flex items-center gap-2 group"
+          className="flex items-center gap-2 group min-w-0 shrink"
         >
           <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center text-xs font-bold text-white shrink-0 group-hover:bg-volt group-hover:text-void transition-colors">
             {tip.username?.[0]?.toUpperCase() || "?"}
           </div>
           <span className="text-sm text-zinc-400">{t("wall.by")} <span className="text-white font-semibold group-hover:text-volt underline decoration-dotted underline-offset-2 transition-colors break-words">{toLatin(tip.username)}</span></span>
         </button>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+        <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
           {isMaster && (
             <span data-testid="master-badge" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-[#E11D2A]/20 text-[#E11D2A] border border-[#E11D2A]/45">
               <Crown size={10} /> Master
@@ -1197,7 +1197,9 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         const hasLiveState = tip.live_state || tip.live_minute != null || tip.live_score;
         const mt = tip.match_time || (tip.legs || []).map((l) => l.kickoff).find(Boolean) || "";
         const ko = formatKickoff(tip.match_time, t)
-          || (tip.legs || []).map((l) => formatKickoff(l.kickoff, t)).find(Boolean) || "";
+          || (tip.legs || []).map((l) => formatKickoff(l.kickoff, t)).find(Boolean)
+          || formatKickoffText(tip.match_time)
+          || (tip.legs || []).map((l) => formatKickoffText(l.kickoff)).find(Boolean) || "";
         const live = !hasLiveState && isKickoffLive(mt);
         if (live) {
           return (

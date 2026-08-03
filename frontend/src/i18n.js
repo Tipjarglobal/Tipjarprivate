@@ -102,6 +102,7 @@ function _tzOffsetMin(tz, ms) {
 
 // ── Kickoff date/time parsing + prominent formatting (shared by RateWall / Systems) ──
 const _KO_MONTHS = { jan: 0, feb: 1, "mär": 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
+const _KO_MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Parse any stored kickoff string → { ts (ms, for sorting), y, mo, da, time }.
 // Handles ISO (2026-07-23T17:00:00+00:00), dd/mm/yyyy HH:MM, "23. Jul 2026", bare HH:MM.
@@ -163,10 +164,31 @@ export function formatKickoff(mt, t) {
     const td2 = { y: tmr.getFullYear(), mo: tmr.getMonth() + 1, da: tmr.getDate() };
     if (info.y === td.y && info.mo === td.mo && info.da === td.da) dayLabel = tr("date.today");
     else if (info.y === td2.y && info.mo === td2.mo && info.da === td2.da) dayLabel = tr("date.tomorrow");
-    else dayLabel = `${String(info.da).padStart(2, "0")}.${String(info.mo).padStart(2, "0")}.`;
+    else dayLabel = `${_KO_MON3[(info.mo || 1) - 1]} ${info.da}`;
   }
   return [dayLabel, info.time].filter(Boolean).join(" ");
 }
+
+// Format a FREE-TEXT kickoff (scraper strings like "02.08. 14:00", "02/08/2026 GMT (13:00)")
+// into the compact owner style "Aug 2 · 14:00" — never the year (owner 2026-08).
+export function formatKickoffText(mt) {
+  if (!mt) return "";
+  const s = String(mt).trim();
+  const info = kickoffInfo(s);
+  if (info.mo && info.da) {
+    return [`${_KO_MON3[info.mo - 1]} ${info.da}`, info.time].filter(Boolean).join(" · ");
+  }
+  const dm = s.match(/(\d{1,2})[.\/](\d{1,2})(?:[.\/]\d{2,4})?/);
+  const tm = s.match(/(\d{1,2}):(\d{2})/);
+  let out = "";
+  if (dm) {
+    const da = +dm[1], mo = +dm[2];
+    if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) out = `${_KO_MON3[mo - 1]} ${da}`;
+  }
+  const time = tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : "";
+  return [out, time].filter(Boolean).join(" · ") || s;
+}
+
 
 // True while a match is (likely) IN PLAY: it kicked off 0..3h ago. Used to show a
 // "Läuft/Live" badge so a just-started game doesn't just vanish from the feed but is

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ScanLine, Ban, Target, Upload, Loader2, Star, Check, X, Plus, Trash2, BadgeCheck, FlaskConical, StickyNote, Wand2, Clock, Radio } from "lucide-react";
 import { toast } from "sonner";
 import api from "../api";
-import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin } from "../i18n";
+import { useI18n, localizeMarket, localizeProse, formatSelection, toLatin, formatKickoffText } from "../i18n";
 import { useProseTranslations } from "../proseI18n";
 import { useAuth } from "../auth";
 import CodeDefaultsPanel from "./CodeDefaultsPanel";
@@ -512,7 +512,7 @@ export function CodeReading() {
                   <p className="text-[11px] text-zinc-400 mb-1.5 flex items-center gap-1.5 flex-wrap" data-testid={`code-read-meta-${r.id}`}>
                     {r.kickoff && (
                       <span className="inline-flex items-center gap-1 font-semibold text-white">
-                        <Clock size={11} className="text-volt" />{r.kickoff}
+                        <Clock size={11} className="text-volt" />{formatKickoffText(r.kickoff)}
                       </span>
                     )}
                     {r.kickoff && r.league && <span className="opacity-30">·</span>}

@@ -290,3 +290,10 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - betting_logic.precise_label(): Anzeige-Normalisierung. Team-Total -> "<Team> Team-Tore Ueber/Unter X.5"; Match-Total -> "Gesamt-Tore Ueber/Unter X.5". DC/BTTS/Sieg/1.HZ/Asian/Handicap/Ecken/Composite-Bet-Builder-Header bleiben unveraendert. Idempotent, Mindest-Teamlaenge>=3 (kein Fehlmatch in "ueber").
 - server.py list_tips: wendet precise_label auf market + legs[].selections an (Anzeige-only, gespeicherte Strings unberuehrt -> Settlement-Grading unveraendert). Gilt fuer alle Feeds (ai+master).
 - Verifiziert im UI: "LNZ Cherkasy Team-Tore Ueber 0.5", "Gesamt-Tore Ueber 1.5"; Composite-Header nicht zerstoert; Geschenk-Badge + Merge korrekt.
+
+### 2026-08-03 — Datum-Format + Badge-Overflow + Community/Codemining-Datum [P0]
+- Task1 Datum: nie Jahr, Format "Aug 2" (3-Buchstaben-Monat + Tag). i18n.formatKickoff (Hauptfeed) + neue i18n.formatKickoffText fuer Freitext-Scrape-Daten ("02.08. 14:00","02/08/2026" -> "Aug 2 · 14:00"). Verifiziert: keine 2026 mehr im Feed.
+- Task4 Badge: RateWall Header rechte Badge-Gruppe shrink-0 entfernt + min-w-0 -> GEWONNEN-Badge quillt nicht mehr rechts raus, bricht sauber um.
+- Task2 Community-Picks Datum/Zeit: Kickoff-Badge zeigte nichts wenn formatKickoff Freitext nicht parsen konnte (return null). Fallback auf formatKickoffText ergaenzt -> Community-Picks zeigen jetzt Datum+Uhrzeit. Live/End-Score werden gerendert wenn Daten da (fixture-abhaengig).
+- Task3 beendetes Codemining End-Ergebnis: Frontend rendert r.score bereits, Backend settle_code_reads setzt es. Aktuell 0 beendete Reads zum Live-Test; Rendering+Backend vorhanden.
+- Codemining-Datum nutzt jetzt formatKickoffText (CodeReading.jsx).
