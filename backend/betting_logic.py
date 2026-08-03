@@ -204,3 +204,43 @@ def scoreline_to_combo(ph, pa, home, away):
 
     kept, _ = dedupe_implied_legs([{"market": x} for x in legs], home, away)
     return [k["market"] for k in kept]
+
+
+def precise_label(label, home, away):
+    """Display-only: make a market label unambiguous (WZ-style). A team total becomes
+    '<Team> Team-Tore Über 0.5', a match total becomes 'Gesamt-Tore Über 1.5'. Everything
+    else (DC, BTTS, win, 1st-half, asian, handicap, props) is returned unchanged. Idempotent.
+    NEVER changes the stored string used for grading — call it only when serialising."""
+    m = (label or "").strip()
+    low = m.lower()
+    if not m or "team-tore" in low or "gesamt-tore" in low:
+        return m
+    # composite / Bet-Builder labels ('A + B (Bet-Builder)') are handled leg-by-leg, never here
+    if " + " in m or "bet-builder" in low or "bet builder" in low:
+        return m
+    tot = re.search(r'(über|ueber|over|unter|under)\s*(\d+)\.5', low)
+    if not tot:
+        return m
+    # leave distinct-scope / special markets alone
+    if any(k in low for k in ("halbzeit", "1. hz", "2. hz", " hz", "1st half", "2nd half",
+                              "asiat", "asian", "handicap", "ecken", "corner", "karten",
+                              "card", "schütze", "scorer", "spieler", "player")):
+        return m
+    ud = "Über" if tot.group(1) in ("über", "ueber", "over") else "Unter"
+    line = tot.group(2)
+    ht, at = _norm(home), _norm(away)
+    if len(ht) >= 3 and ht in low and not (len(at) >= 3 and at in low):
+        return f"{home} Team-Tore {ud} {line}.5"
+    if len(at) >= 3 and at in low and not (len(ht) >= 3 and ht in low):
+        return f"{away} Team-Tore {ud} {line}.5"
+    return f"Gesamt-Tore {ud} {line}.5"
+
+
+def split_match(s):
+    """'Home – Away' → ('Home','Away'). Handles –, —, -, vs, v separators."""
+    s = (s or "").strip()
+    for sep in (" – ", " — ", " - ", " vs. ", " vs ", " v "):
+        if sep in s:
+            a, b = s.split(sep, 1)
+            return a.strip(), b.strip()
+    return "", ""

@@ -33,7 +33,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
-from betting_logic import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID
+from betting_logic import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID, precise_label, split_match
 import match_stats
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
@@ -2717,6 +2717,19 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             h, a = t.get("home_team"), t.get("away_team")
             if h and a and _match_key(h, a) in gift_keys:
                 t["gift_covered"] = True
+    # Display-only: WZ-style precise market labels (team totals name the team + 'Team-Tore',
+    # match totals become 'Gesamt-Tore'). Stored strings stay untouched → grading unaffected.
+    for t in tips:
+        th, ta = t.get("home_team") or "", t.get("away_team") or ""
+        if t.get("market"):
+            t["market"] = precise_label(t["market"], th, ta)
+        for lg in (t.get("legs") or []):
+            lh, la = split_match(lg.get("match"))
+            if not lh:
+                lh, la = th, ta
+            sels = lg.get("selections")
+            if isinstance(sels, list):
+                lg["selections"] = [precise_label(s, lh, la) for s in sels]
     return await _tag_expert(tips[:limit])
 
 

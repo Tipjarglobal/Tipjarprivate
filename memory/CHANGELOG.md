@@ -285,3 +285,8 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - betting_logic.py market_constraint: neue Regel "<team> schiesst die ersten N Tore / first N goals" -> Team>=N (Scoreline-Constraint). Damit erkennt dedupe_implied_legs, dass z.B. "Shakhtar Ueber 0.5" von "Shakhtar ersten 2 Tore" impliziert wird -> die schwaechere Leg wird gedroppt.
 - server.py _dedupe_hq_tips: (a) Widerspruchs-Fallback bevorzugt jetzt das Geschenk (gift or max-odd). (b) neuer Praezisions-Durchlauf ueber JEDEN Ein-Spiel-Bet-Builder (auch ohne Kollision): redundante Legs raus, Quote/Label neu.
 - Getestet: Kudrivka-Builder [X2, ersten 2 Tore] (Ueber 0.5 entfernt), Quote 2.56, is_gift bleibt True. Feed 1 Pick/Spiel, 0 Duplikate.
+
+### 2026-08-03 — Praezise Markt-Labels (WZ-Stil) [P1]
+- betting_logic.precise_label(): Anzeige-Normalisierung. Team-Total -> "<Team> Team-Tore Ueber/Unter X.5"; Match-Total -> "Gesamt-Tore Ueber/Unter X.5". DC/BTTS/Sieg/1.HZ/Asian/Handicap/Ecken/Composite-Bet-Builder-Header bleiben unveraendert. Idempotent, Mindest-Teamlaenge>=3 (kein Fehlmatch in "ueber").
+- server.py list_tips: wendet precise_label auf market + legs[].selections an (Anzeige-only, gespeicherte Strings unberuehrt -> Settlement-Grading unveraendert). Gilt fuer alle Feeds (ai+master).
+- Verifiziert im UI: "LNZ Cherkasy Team-Tore Ueber 0.5", "Gesamt-Tore Ueber 1.5"; Composite-Header nicht zerstoert; Geschenk-Badge + Merge korrekt.
