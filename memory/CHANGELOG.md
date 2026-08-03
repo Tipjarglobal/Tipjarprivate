@@ -1,5 +1,14 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: „Annulliert 164" obwohl Liste leer (Zähler ≠ Liste)
+Owner-Screenshot: Badge „Annulliert" zeigte 164, die Karte war aber leer. Ursache: `/tips/counts`
+zählte void-Tips ohne die Filter, die die Liste anwendet (`hidden`, Silent-Sources, team-lose Slips).
+Fix (`server.py` counts-Endpoint): `void_n` nutzt jetzt exakt die Listen-Filter — `hidden!=True`,
+`_exclude_silent_sources`, kein `seed-`, plus `_tip_has_known_teams` in Python → Badge == Liste.
+Ebenso `lost_n`, `cashed_n`, `bestwon_n`, `won_normal_n` um Silent-Sources bereinigt.
+Verifiziert (API): void-Badge 11 = void-Liste 11; lost-Badge 3 = lost-Liste 3.
+
+
 ## 2026-08-03 — Admin-Knopf „Smart Picks löschen"
 - Backend: neuer Endpoint `POST /api/admin/smart/clear` (require_admin) → löscht ALLE offenen
   Smart Picks (pending+live) OHNE Regenerierung; abgerechnete Historie bleibt. Getestet: `{"deleted":1}`.

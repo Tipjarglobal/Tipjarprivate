@@ -1020,10 +1020,21 @@ async def tips_counts():
     smart = await db.tips.count_documents({"source": "smart", "status": "pending"})
     settled = await db.tips.count_documents({"status": {"$in": ["won", "lost", "cashed_out"]}, "hidden": {"$ne": True}})
     won_n = await db.tips.count_documents({"status": "won", "hidden": {"$ne": True}})
-    lost_n = await db.tips.count_documents({"status": "lost", "hidden": {"$ne": True}})
-    cashed_n = await db.tips.count_documents({"status": "cashed_out", "hidden": {"$ne": True}})
-    void_n = await db.tips.count_documents({"status": "void", "id": {"$not": {"$regex": "^seed-"}}})
-    bestwon_n = await db.tips.count_documents({
+    _lost_q = {"status": "lost", "hidden": {"$ne": True}}
+    _exclude_silent_sources(_lost_q)
+    lost_n = await db.tips.count_documents(_lost_q)
+    _cashed_q = {"status": "cashed_out", "hidden": {"$ne": True}}
+    _exclude_silent_sources(_cashed_q)
+    cashed_n = await db.tips.count_documents(_cashed_q)
+    # The 'Annulliert' badge MUST match its list: exclude hidden + silent-source + seed voids,
+    # otherwise the badge shows a big number (e.g. 164) while the card is empty (owner 2026-08 P0).
+    # The list also drops team-less ('Unknown') slips, so mirror that here exactly.
+    _void_q = {"status": "void", "id": {"$not": {"$regex": "^seed-"}}, "hidden": {"$ne": True}}
+    _exclude_silent_sources(_void_q)
+    _void_docs = await db.tips.find(
+        _void_q, {"_id": 0, "home_team": 1, "away_team": 1, "legs": 1}).to_list(3000)
+    void_n = sum(1 for _t in _void_docs if _tip_has_known_teams(_t))
+    _bestwon_q = {
         "status": "won",
         "id": {"$not": {"$regex": "^seed-"}},
         "hidden": {"$ne": True},
@@ -1033,8 +1044,10 @@ async def tips_counts():
             {"source": "hq-auto", "category": "risk"},
             {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}},
         ],
-    })
-    won_normal_n = await db.tips.count_documents({
+    }
+    _exclude_silent_sources(_bestwon_q)
+    bestwon_n = await db.tips.count_documents(_bestwon_q)
+    _won_normal_q = {
         "status": "won",
         "id": {"$not": {"$regex": "^seed-"}},
         "hidden": {"$ne": True},
@@ -1042,7 +1055,9 @@ async def tips_counts():
             {"source": "hq-live"},
             {"source": "hq-auto", "category": {"$ne": "risk"}},
         ],
-    })
+    }
+    _exclude_silent_sources(_won_normal_q)
+    won_normal_n = await db.tips.count_documents(_won_normal_q)
     try:
         sysdata = await build_systems()
         systems_n = sum(1 for s in sysdata["systems"] if len(s["selections"]) >= 2)
