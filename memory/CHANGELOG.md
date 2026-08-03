@@ -1,5 +1,19 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Durst-Kanal: mehr Teams melden
+Owner: „Melde bitte mehr Teams im Durst-Kanal." Engpass war nicht der Cap, sondern der Form-Cache:
+~153 Kandidaten, aber nur ~54 im `team_form_cache` → 99 „unbekannt" → übersprungen (pro Seitenaufruf
+nur 12 API-Checks).
+- `server.py` `goal_thirst`: Ausgabe-Cap 40→80, Kandidaten 200→300, API-Budget pro Aufruf 12→28.
+- NEU `warm_goal_thirst_cache(cap=20)` (im `settlement_loop`, alle 15 Min, rate-capped): füllt den
+  Form-Cache für kommende Durst-Kandidaten vor → der Kanal zeigt ALLE echten Durst-Teams, nicht nur
+  die pro Seitenaufruf API-prüfbaren. 12h-Cache begrenzt die API-Kosten.
+- Verifiziert: nach Warmen stieg der Durst-Kanal von 3 → 9 Teams (wächst weiter, während der Cache
+  über die Loop-Zyklen warm wird). Endpoint 200.
+Hinweis: Vom Nutzer hochgeladener „TipJar Logic"-Schein liegt in der PROD-DB (tipjarglobal.com) —
+aus der Preview nicht einsehbar.
+
+
 ## 2026-08-03 — Echte Anstoßzeit auch in der Statistik (API-Football)
 Folgeauftrag: date-only Statistik-Spiele (Sentinel) sollen die echte Zeit bekommen, nicht nur das Datum.
 - Neuer `resolve_prediction_kickoffs(cap=12)` in `server.py`: löst `match_predictions` mit unbekannter

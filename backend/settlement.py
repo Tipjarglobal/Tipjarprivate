@@ -55,6 +55,7 @@ from server import (
     resolve_team_id,
     resolve_unparseable_kickoffs,
     resolve_prediction_kickoffs,
+    warm_goal_thirst_cache,
     snapshot_systems,
 )
 from poster_tz import record_offset
@@ -1446,6 +1447,7 @@ async def settlement_loop():
                 try:
                     await resolve_unparseable_kickoffs()
                     await resolve_prediction_kickoffs()
+                    await warm_goal_thirst_cache()
                 except Exception as _e:
                     logger.error(f"kickoff fallback error: {_e}")
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "

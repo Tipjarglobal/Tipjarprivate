@@ -787,10 +787,12 @@ async def goal_thirst():
                           "opp_concede": opp_conc, "btts": btts, "over25": over25,
                           "confidence": c})
     cands.sort(key=lambda x: (x["kickoff"] or "z", -x["confidence"]))
-    cands = cands[:200]
-    out, budget, allow_api = [], 12, True
+    cands = cands[:300]
+    # owner 2026-08: report MORE thirsty teams. Higher output cap + more drought checks per load;
+    # the 12h team_form_cache keeps the API cost bounded as the cache warms across loads.
+    out, budget, allow_api = [], 28, True
     for cand in cands:
-        if len(out) >= 40:
+        if len(out) >= 80:
             break
         scored, used, ok = await _team_last_scored(cand["team"], allow_api and budget > 0)
         if used:
@@ -802,7 +804,53 @@ async def goal_thirst():
         opp_lvl = "high" if cand["opp_concede"] >= 2 else ("mid" if cand["opp_concede"] >= 1 else "low")
         out.append({**cand, "last_scored": scored, "opp_level": opp_lvl})
     out.sort(key=lambda x: (-x["confidence"], x["kickoff"] or "z"))
-    return {"count": len(out), "teams": out[:40], "generated_at": now.isoformat()}
+    return {"count": len(out), "teams": out[:80], "generated_at": now.isoformat()}
+
+
+async def warm_goal_thirst_cache(cap: int = 20) -> dict:
+    """Background (owner 2026-08: 'melde mehr Teams im Durst-Kanal'): pre-fill team_form_cache for
+    the UPCOMING thirst candidates so the /goal-thirst endpoint can surface EVERY genuine drought
+    team, not just the ~12 it can API-check per page load. Rate-capped; only stale/missing teams."""
+    if not API_FOOTBALL_KEY or _api_quota_exhausted():
+        return {"warmed": 0}
+    now = datetime.now(timezone.utc)
+    preds = await db.match_predictions.find(
+        {"status": "pending"},
+        {"_id": 0, "home": 1, "away": 1, "ph": 1, "pa": 1, "btts": 1, "kickoff": 1,
+         "league_code": 1, "league": 1, "source": 1}).to_list(3000)
+    teams, seen = [], set()
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if ko is None or not (now - timedelta(hours=2) <= ko <= now + timedelta(days=7)):
+            continue
+        ph, pa, btts = p.get("ph"), p.get("pa"), bool(p.get("btts"))
+        if ph is None or pa is None:
+            continue
+        for team, pg in ((p.get("home"), ph), (p.get("away"), pa)):
+            if team and team not in seen and (pg >= 1 or btts):
+                seen.add(team)
+                teams.append(team)
+    warmed = 0
+    for team in teams:
+        if warmed >= cap:
+            break
+        doc = await db.team_form_cache.find_one({"team": team}, {"_id": 0, "checked_at": 1})
+        if doc:
+            try:
+                if (now - datetime.fromisoformat(doc["checked_at"])).total_seconds() < 12 * 3600:
+                    continue  # already fresh
+            except Exception:
+                pass
+        _, used, ok = await _team_last_scored(team, True)
+        if used:
+            warmed += 1
+        if not ok:
+            break
+    if warmed:
+        logger.info(f"Goal-thirst cache warm: {warmed} thirst candidates cached")
+    return {"warmed": warmed}
 
 
 
