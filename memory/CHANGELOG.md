@@ -268,3 +268,8 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Fix (server.py _dedupe_hq_tips): Query holt jetzt alle hq-auto pending; MULTI-Spiel-Parlays (>1 distinct match in legs) bleiben ausgenommen; Ein-Spiel-Bet-Builder nehmen am Dedup teil. Ranking: Geschenk geschuetzt > hoechste Quote > Kategorie (Risk>Value>Banker). Guard: Tips ohne Home+Away werden NIE kollabiert (match_key(None,None)= "|" haette sonst alle in einen Bucket gelegt).
 - Getestet: 4 kollidierende Spiele -> je 1 Pick behalten; Feed 7 Spiele / 0 Duplikate; erneuter Dedup-Lauf entfernt 0.
 - Hinweis: bei Kollision Einzel vs Bet-Builder ueberlebt der hoehere-Quoten-Pick (Owner-Regel). Bei Geschenk vs anderer Pick ueberlebt das Geschenk.
+
+### 2026-08-03 — Telegram-Pick Fehl-Jahr (3026) [P0]
+- Bug: footballinsight-Telegram-Post mit Tippfehler "02/08/3026" -> Pick mit Jahr 3026 (ferne Zukunft) haengt ewig im Feed, wird nie abgerechnet.
+- Fix (scrapers_autopost.py _fi_parse): unplausibles Jahr (>cur+1 oder <cur-1) wird auf aktuelles Jahr geklemmt. Getestet: 3026->2026, gueltige 2026-Daten bleiben.
+- Altlast: den einen haengenden Pick (hqtip-fi-tg-footballinsight01-39768, vergangenes Datum, nicht abrechenbar) direkt geloescht. Feed sauber.

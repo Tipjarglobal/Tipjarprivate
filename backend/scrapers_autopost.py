@@ -1290,6 +1290,11 @@ def _fi_parse(text: str):
     match_time = ""
     if dm:
         d, mo, y, h, mi = map(int, dm.groups())
+        # Channel sometimes mistypes the year (e.g. '3026' → 2026). Clamp any implausible
+        # year to the current year so the pick settles normally instead of hanging forever.
+        cur_y = datetime.now(timezone.utc).year
+        if y > cur_y + 1 or y < cur_y - 1:
+            y = cur_y
         try:
             match_time = datetime(y, mo, d, h, mi,
                                   tzinfo=timezone(timedelta(hours=1))).isoformat()
