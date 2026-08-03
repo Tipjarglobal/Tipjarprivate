@@ -1,5 +1,15 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Smart: alle Zyklus-Picks gelöscht + Owner-Referenzpick eingefügt
+Owner: „Lösche alle Zyklus-Picks aus dem Smart, füge diesen ein, und lerne: Smart Picks sind kein Lotto."
+- Alle 3 vorhandenen Smart-Tips waren Zyklus-Picks → per Script gelöscht (jeder Status).
+- Eingefügt (Owner-Referenz, `source=smart`, `id=smart-6b3de011-ure`): **„Anytime Goalscorer o.
+  Ersatzspieler — Robbie Ure" @ 1.41**, Halmstad vs. Sirius, Anstoß 03.08.2026 19:00. `kind=player`
+  (settelt nicht automatisch, bleibt pending bis Admin). Per API verifiziert (erscheint in Smart Picks).
+- Prinzip dokumentiert in `/app/memory/smart_picks_principle.md`: Smart Picks = sichere, logische
+  Value-Singles; „Zyklus/fällig"-Lotto ist verboten und deaktiviert.
+
+
 ## 2026-08-03 — P0: Smart-Picks "Zyklus" deaktiviert (Lotto raus)
 Owner: „Teams, die nie 3 Tore treffen, machen nicht plötzlich 3 Tore. Das ist Lotto — mach den
 Code inaktiv und ungültig (nicht löschen), poste keine solchen Smart Picks mehr."
