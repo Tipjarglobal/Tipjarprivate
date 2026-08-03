@@ -15,7 +15,7 @@ const T = {
     saved: "Gespeichert", done: "Erledigt", fail: "Fehlgeschlagen",
     aiBtn: "KI-Vorschlag holen", aiLoading: "Analysiere Historie…", aiApply: "Als Option übernehmen",
     aiGames: "beendete Spiele analysiert", aiNobet: "KI empfiehlt: No Bet", aiConf: "Sicherheit",
-    aiMeaning: "Code bedeutet", aiPredict: "Glaskugel", aiOption: "TipJar-Option",
+    aiMeaning: "Code bedeutet", aiPredict: "Glaskugel", aiOption: "TipJar-Option", aiRoot: "Permanent verankern",
   },
   en: {
     title: "Code defaults", sub: "Experiment per code, then root the true default.",
@@ -28,7 +28,7 @@ const T = {
     saved: "Saved", done: "Done", fail: "Failed",
     aiBtn: "Get AI suggestion", aiLoading: "Analysing history…", aiApply: "Use as option",
     aiGames: "finished games analysed", aiNobet: "AI suggests: No Bet", aiConf: "Confidence",
-    aiMeaning: "Code means", aiPredict: "Crystal ball", aiOption: "TipJar option",
+    aiMeaning: "Code means", aiPredict: "Crystal ball", aiOption: "TipJar option", aiRoot: "Root permanent",
   },
   el: {
     title: "Code defaults", sub: "Πειραματίσου ανά κωδικό, μετά ρίζωσε το αληθινό default.",
@@ -41,7 +41,7 @@ const T = {
     saved: "Αποθηκεύτηκε", done: "Έγινε", fail: "Απέτυχε",
     aiBtn: "Πρόταση από ΚΙ", aiLoading: "Ανάλυση ιστορικού…", aiApply: "Χρήση ως επιλογή",
     aiGames: "τελειωμένα παιχνίδια αναλύθηκαν", aiNobet: "Η ΚΙ προτείνει: No Bet", aiConf: "Σιγουριά",
-    aiMeaning: "Ο κωδικός σημαίνει", aiPredict: "Κρυστάλλινη σφαίρα", aiOption: "Επιλογή TipJar",
+    aiMeaning: "Ο κωδικός σημαίνει", aiPredict: "Κρυστάλλινη σφαίρα", aiOption: "Επιλογή TipJar", aiRoot: "Ρίζωσε μόνιμα",
   },
 };
 
@@ -120,6 +120,21 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
     try {
       await api.post(`/admin/code-reading/defaults/${encodeURIComponent(d.key)}/permanent`, {
         code_market: d.code_market, our_market: p.our_market, no_bet: p.no_bet, note: p.note,
+      });
+      toast.success(fl.locked + " ✓"); await load();
+    } catch { toast.error(fl.fail); } finally { setBusy(false); }
+  };
+
+  const rootPermFromAi = async (d) => {
+    const data = ai[d.key]?.data;
+    if (!data) return;
+    if (!data.no_bet && !(data.our_market || "").trim()) return;
+    const note = (data.trend || (Array.isArray(data.prediction) ? data.prediction[0] : "") || "").slice(0, 200);
+    setBusy(true);
+    try {
+      await api.post(`/admin/code-reading/defaults/${encodeURIComponent(d.key)}/permanent`, {
+        code_market: d.code_market, our_market: data.no_bet ? "" : data.our_market,
+        no_bet: !!data.no_bet, note,
       });
       toast.success(fl.locked + " ✓"); await load();
     } catch { toast.error(fl.fail); } finally { setBusy(false); }
@@ -241,10 +256,16 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
                           {ai[d.key].data.our_market}
                         </p>
                       )}
-                      <button disabled={busy || hasPerm} onClick={() => applyAi(d)} data-testid={`code-default-ai-apply-${d.key}`}
-                        className="block mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-sky-200 border border-sky-500/50 rounded-full px-3 py-1 hover:bg-sky-500/20 disabled:opacity-40">
-                        <Check size={12} />{fl.aiApply}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <button disabled={busy || hasPerm} onClick={() => applyAi(d)} data-testid={`code-default-ai-apply-${d.key}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-200 border border-sky-500/50 rounded-full px-3 py-1 hover:bg-sky-500/20 disabled:opacity-40">
+                          <Check size={12} />{fl.aiApply}
+                        </button>
+                        <button disabled={busy || hasPerm} onClick={() => rootPermFromAi(d)} data-testid={`code-default-ai-root-${d.key}`}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-200 border border-emerald-500/50 rounded-full px-3 py-1 hover:bg-emerald-500/20 disabled:opacity-40">
+                          <Lock size={12} />{fl.aiRoot}
+                        </button>
+                      </div>
                     </div>
                   )}
                   <div className="space-y-1.5 mb-2">

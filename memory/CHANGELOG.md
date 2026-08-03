@@ -258,3 +258,7 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Owner: 1X/X2 zu riskant. Bei glatten SIEG/1X2-Codes -> TipJar-Option = No Bet, aber Glaskugel gibt weiter Vorwarnung aus, WELCHES Team nicht gewinnt (Position 1/2 erkannt).
 - Backend: _CR_SUGGEST_SYSTEM Sonderregel + ai-suggest liefert no_bet-Flag (our_market leer bei no_bet). Frontend CodeDefaultsPanel: No-Bet-Chip + applyAi setzt no_bet-Schalter.
 - Getestet: Sirius(Pos2)->no_bet+Warnung, Heim(Pos1)->no_bet+Warnung, Cracovia->echter Tipp. Frontend compiled OK.
+
+### Glaskugel: 1-Klick Permanent verankern
+- CodeDefaultsPanel.jsx: neuer Button "Permanent verankern" (Lock) in der Glaskugel-Box neben "Als Option uebernehmen". Ruft /permanent mit dem Glaskugel-Vorschlag (our_market oder no_bet + trend-note) auf -> wird sofort in alle Spiele mit diesem Code eingewurzelt & gelockt.
+- rootPermFromAi() + Labels aiRoot (DE/EN/EL). Getestet: /permanent akzeptiert no_bet=true + leeren Markt (curl ok); Frontend compiled.
