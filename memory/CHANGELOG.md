@@ -1,5 +1,17 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Geteiltes Ticket: Land, Teamnamen, Stürmername
+Owner-Screenshot: geteiltes Ticket ohne Land, Teamnamen zu blass, Markt abgeschnitten (Robbie Ure fehlte).
+- `ticket_render.py`: Render-Legs tragen jetzt `country`; Meta-Zeile zeigt „Land · Liga · Datum · Zeit".
+  Markt-Schrift wird per `fit()` auf 36→22 verkleinert, um den vollen Text (inkl. Spielername) zu zeigen
+  statt hart abzuschneiden. Teamtitel etwas größer (44→46/34).
+- `server.py` `_enrich_legs_country`: füllt fehlendes Land/Liga der Legs quota-frei aus
+  `match_predictions` (Token-Overlap-Match), aufgerufen vor jedem Ticket-Render. `_pretty_country`
+  wandelt ISO-Codes um (dk→Denmark …).
+- Verifiziert per gerendertem Ticket (Halmstad–Sirius … Djurgården): Teamnamen groß, „Sweden ·
+  Allsvenskan · 03.08 · 17:00", und „Anytime Goalscorer o. Ersatzspieler — Robbie Ure" komplett sichtbar.
+
+
 ## 2026-08-03 — Durst-Kanal: ALLE durstigen Teams im 7-Tage-Fenster
 Owner: „Ich will in der Statistik ALLE durstigen Teams im 7-Tage-Fenster gelistet."
 - `server.py` `goal_thirst`: Ausgabe-Truncation entfernt (kein `[:80]`/`>=80`-Break mehr) → liefert

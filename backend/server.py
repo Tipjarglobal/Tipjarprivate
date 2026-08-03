@@ -3290,6 +3290,60 @@ from ticket_render import (  # noqa: E402  (extracted ticket renderer)
 )
 
 
+async def _enrich_legs_country(tip: dict):
+    """Fill missing country/league on a tip's legs (or the single) from match_predictions — pure
+    DB lookup, NO API cost — so the share ticket shows Land + Liga (owner 2026-08)."""
+    legs = tip.get("legs") or []
+    targets = legs if legs else [tip]
+    need = [x for x in targets if not (x.get("country") or "").strip()]
+    if not need:
+        return
+    preds = await db.match_predictions.find(
+        {"country": {"$nin": ["", None]}},
+        {"_id": 0, "home": 1, "away": 1, "country": 1, "league": 1}).to_list(3000)
+    if not preds:
+        return
+    idx = [((_sig_tokens(p.get("home", "")) | _sig_tokens(p.get("away", "")), p)) for p in preds]
+    for x in need:
+        if legs:
+            h, a = split_match(x.get("match") or "")
+        else:
+            h, a = tip.get("home_team"), tip.get("away_team")
+        toks = _sig_tokens(h or "") | _sig_tokens(a or "")
+        if not toks:
+            continue
+        best, bp = 0, None
+        for ptoks, p in idx:
+            ov = len(toks & ptoks)
+            if ov > best:
+                best, bp = ov, p
+        if bp and best >= 2:
+            if bp.get("country"):
+                x["country"] = _pretty_country(bp["country"])
+            if not (x.get("league") or "").strip() and bp.get("league"):
+                x["league"] = bp["league"]
+
+
+_COUNTRY_CODES = {
+    "dk": "Denmark", "se": "Sweden", "no": "Norway", "fi": "Finland", "pl": "Poland",
+    "de": "Germany", "gb": "England", "en": "England", "es": "Spain", "it": "Italy",
+    "fr": "France", "nl": "Netherlands", "pt": "Portugal", "be": "Belgium", "at": "Austria",
+    "ch": "Switzerland", "gr": "Greece", "tr": "Turkey", "cz": "Czech Republic", "sk": "Slovakia",
+    "hu": "Hungary", "ro": "Romania", "hr": "Croatia", "rs": "Serbia", "ua": "Ukraine",
+    "ie": "Ireland", "sc": "Scotland", "us": "USA", "br": "Brazil", "ar": "Argentina",
+    "mx": "Mexico", "jp": "Japan", "kr": "South Korea", "au": "Australia", "is": "Iceland",
+}
+
+
+def _pretty_country(c: str) -> str:
+    """Map ISO-ish 2-letter codes (e.g. 'dk') to a readable country; title-case bare lowercase."""
+    s = (c or "").strip()
+    if len(s) == 2 and s.isalpha():
+        return _COUNTRY_CODES.get(s.lower(), s.upper())
+    return s[:1].upper() + s[1:] if s and s.islower() else s
+
+
+
 @api_router.post("/wins/claim")
 async def claim_win(file: Optional[UploadFile] = File(None),
                     files: Optional[List[UploadFile]] = File(None),
@@ -3989,6 +4043,7 @@ async def tip_share_image(tip_id: str, lang: str = "de"):
                              "score": f"{g.get('home') or 0}:{g.get('away') or 0}"}
         except Exception:
             pass
+    await _enrich_legs_country(tip)
     rlegs = _tip_to_render_legs(tip)
     _disguise_stakes(tip)  # $ + expert 12x / TipJarLogic x2 must match the card
     # offload the CPU-heavy PIL render + the storage upload so we never block the event loop
@@ -14519,6 +14574,7 @@ async def daily_hof_autofill(max_new: int = 6) -> int:
         if await db.win_claims.find_one({"source_tip_id": tp["id"]}, {"_id": 1}):
             continue
         try:
+            await _enrich_legs_country(tp)
             rlegs = _tip_to_render_legs(tp)
             if not rlegs:
                 continue

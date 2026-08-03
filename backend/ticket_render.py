@@ -54,14 +54,16 @@ def _tip_to_render_legs(tip: dict) -> list:
             od = _to_float(sodds[i]) if i < len(sodds) else 0.0
             rlegs.append({"home": home, "away": away, "market": _fmt_selection(sel),
                           "odds": od, "result": "open", "combo_odds": combo,
-                          "league": lg.get("league", ""), "date": "", "time": lg.get("kickoff", ""),
+                          "league": lg.get("league", ""), "country": lg.get("country", ""),
+                          "date": "", "time": lg.get("kickoff", ""),
                           "banker": bool(lg.get("banker")),
                           "live": bool(lg.get("live")), "live_score": lg.get("live_score") or "",
                           "live_min": lg.get("live_minute")})
     if not rlegs:
         rlegs.append({"home": tip.get("home_team", ""), "away": tip.get("away_team", ""),
                       "market": _fmt_selection(tip.get("market", "")), "odds": _to_float(tip.get("odds")),
-                      "result": "open", "league": tip.get("league", ""), "date": "",
+                      "result": "open", "league": tip.get("league", ""),
+                      "country": tip.get("country", ""), "date": "",
                       "time": tip.get("match_time", "")})
     return rlegs
 
@@ -229,7 +231,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         if k not in gidx:
             gidx[k] = len(groups)
             groups.append({"home": l.get("home", "?") or "?", "away": l.get("away", "?") or "",
-                           "league": l.get("league", ""), "date": l.get("date", ""),
+                           "league": l.get("league", ""), "country": l.get("country", ""),
+                           "date": l.get("date", ""),
                            "time": l.get("time", ""), "result": "", "mkts": [], "combo_odds": None,
                            "banker": False, "live": False, "live_score": "", "live_min": None})
         if l.get("combo_odds") and not groups[gidx[k]]["combo_odds"]:
@@ -255,7 +258,8 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     META_H = 34
     G_GAP = 16
     for g in groups:
-        meta = " · ".join(x for x in (g.get("league", ""), _clean(g.get("date", "")),
+        meta = " · ".join(x for x in (g.get("country", ""), g.get("league", ""),
+                                      _clean(g.get("date", "")),
                                       _clean(g.get("time", "")) if not g.get("date") else "") if x)
         g["meta"] = meta
         h = G_PAD + TITLE_H + len(g["mkts"]) * MKT_H
@@ -404,7 +408,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             title_max = chip_x1 - scw - 30 - ix - 18
         else:
             title_max = chip_x1 - ix
-        mf = fit(title, famfor(HEAD, title), 44, 30, title_max)
+        mf = fit(title, famfor(HEAD, title), 46, 34, title_max)
         d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
         ty += TITLE_H
         # ONE combined quote per GAME, shown right-aligned & vertically centred — a
@@ -429,7 +433,9 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
         for l in g["mkts"]:
             check_badge(ix + 12, ty + 25, 14, STATUS)
             raw_mkt = l.get("market", "") or ""
-            mkfont = font(famfor(BODY_M, raw_mkt), 36)
+            # Shrink the market font to FIT the full text (down to 22px) before truncating, so a long
+            # market like 'Anytime Goalscorer o. Ersatzspieler — Robbie Ure' never loses the player.
+            mkfont = fit(raw_mkt, famfor(BODY_M, raw_mkt), 36, 22, cw - 130 - gow)
             mtxt = trunc(raw_mkt, mkfont, cw - 130 - gow)
             d.text((ix + 40, ty + 6), mtxt, font=mkfont, fill=SOFT)
             ty += MKT_H
