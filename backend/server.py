@@ -4005,7 +4005,7 @@ async def inbox_expert_decline(user: dict = Depends(get_current_user)):
 
 
 # Bump this whenever _render_slip_image output changes, so cached share images regenerate.
-SHARE_RENDER_VER = 6
+SHARE_RENDER_VER = 7
 
 
 @api_router.post("/tips/{tip_id}/share-image")
