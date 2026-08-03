@@ -279,3 +279,9 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - server.py _dedupe_hq_tips komplett umgebaut: Union-Find gruppiert alle Picks eines Spiels (3 Identitaets-Strategien); pro Gruppe werden Selektionen via dedupe_implied_legs zusammengefuehrt, Gesamtquote via _correlated_combo_odds (Tor-Cluster-Daempfung), Geschenk-Flag bleibt erhalten. Import erweitert: market_constraint,_sat,GRID.
 - Widerspruchs-Schutz: unmoegliche Kombi (z.B. Ueber3.5 + Unter1.5) wird NICHT gemergt -> hoechste Quote bleibt. Getestet: Merge (2->1 Bet-Builder, 3 Selektionen, Quote 1.61) + Contra-Fallback (behaelt 3.10).
 - scrapers_autopost.py _fi_clean_team: extrahiert bei einzeiligen Telegram-Posts nur den echten Teamnamen (schneidet Pick/Datum/Liga/Disclaimer ab, strippt Free-pick-Label). Getestet: Midtjylland/Horsens, Real Madrid/Barcelona, Bodo/Glimt korrekt.
+
+### 2026-08-03 — Praezise Bet-Builder-Legs + Geschenk-Vorzug [P0]
+- Owner: kein Leg-Limit; Geschenke bevorzugen; praezise Legs (keine redundanten Selektionen), Vorbild = gewonnener WZ-Slip.
+- betting_logic.py market_constraint: neue Regel "<team> schiesst die ersten N Tore / first N goals" -> Team>=N (Scoreline-Constraint). Damit erkennt dedupe_implied_legs, dass z.B. "Shakhtar Ueber 0.5" von "Shakhtar ersten 2 Tore" impliziert wird -> die schwaechere Leg wird gedroppt.
+- server.py _dedupe_hq_tips: (a) Widerspruchs-Fallback bevorzugt jetzt das Geschenk (gift or max-odd). (b) neuer Praezisions-Durchlauf ueber JEDEN Ein-Spiel-Bet-Builder (auch ohne Kollision): redundante Legs raus, Quote/Label neu.
+- Getestet: Kudrivka-Builder [X2, ersten 2 Tore] (Ueber 0.5 entfernt), Quote 2.56, is_gift bleibt True. Feed 1 Pick/Spiel, 0 Duplikate.

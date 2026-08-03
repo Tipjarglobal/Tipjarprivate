@@ -5409,9 +5409,10 @@ async def _dedupe_hq_tips() -> int:
         except Exception:
             kept = rows
         labels = [r["market"] for r in kept]
-        # impossible combination → don't merge; keep the single highest-quote pick, delete the rest.
+        # impossible combination → don't merge; owner: PREFER the Geschenk, else keep the
+        # single highest-quote pick, delete the rest.
         if not _compatible(labels):
-            keep = max(members, key=_odd)
+            keep = gift or max(members, key=_odd)
             for d in members:
                 if d["id"] != keep["id"]:
                     to_delete.add(d["id"])
@@ -5445,6 +5446,53 @@ async def _dedupe_hq_tips() -> int:
         for d in members:
             if d["id"] != base["id"]:
                 to_delete.add(d["id"])
+
+    # ── precision pass: drop redundant/implied legs from EVERY one-match Bet-Builder (even
+    # without a collision), so a leg like "<team> Über 0.5" is removed when a stronger leg
+    # ("<team> schießt die ersten 2 Tore") already entails it. Keeps Bet-Builders precise. ──
+    for d in survivors.values():
+        if d["id"] in to_delete or d["id"] in to_update:
+            continue
+        legs = d.get("legs") or []
+        if not (d.get("is_parlay") and legs):
+            continue
+        l0 = legs[0]
+        sels = l0.get("selections") or []
+        if len(sels) < 2:
+            continue
+        sods = l0.get("sel_odds") or []
+        rows = [{"market": s, "odds": (sods[i] if i < len(sods) else d.get("odds"))}
+                for i, s in enumerate(sels)]
+        ht = (d.get("home_team") or "").strip()
+        at = (d.get("away_team") or "").strip()
+        try:
+            kept, dropped = dedupe_implied_legs(rows, ht, at)
+        except Exception:
+            continue
+        if not dropped or not kept:
+            continue
+        labels = [r["market"] for r in kept]
+        if len(kept) == 1:
+            to_update[d["id"]] = {"is_parlay": False, "legs": [],
+                                  "market": labels[0], "odds": str(kept[0]["odds"])}
+        else:
+            combined = _correlated_combo_odds([{"market": r["market"], "odds": r["odds"]} for r in kept])
+            if not combined or combined <= 1:
+                prod = 1.0
+                for r in kept:
+                    try:
+                        prod *= float(str(r["odds"]).replace(",", "."))
+                    except Exception:
+                        pass
+                combined = round(prod, 2)
+            to_update[d["id"]] = {
+                "is_parlay": True,
+                "legs": [{"match": l0.get("match"), "league": l0.get("league"),
+                          "kickoff": l0.get("kickoff"), "selections": labels,
+                          "sel_odds": [str(r["odds"]) for r in kept]}],
+                "odds": str(combined),
+                "market": " + ".join(labels) + " (Bet-Builder)",
+            }
 
     for tid, upd in to_update.items():
         if tid in to_delete:

@@ -41,6 +41,18 @@ def market_constraint(market: str, home: str, away: str):
                             "abseits", "elfmeter", "penalty", "eckball")):
         return None
 
+    # "<team> schießt die ersten N Tore" / "first N goals" → that team scores at least N
+    # (necessary condition; lets us drop a weaker implied leg like "<team> Über 0.5" so the
+    # Bet-Builder stays PRECISE with no redundant legs).
+    fg = re.search(r'(?:ersten?|first)\s*(\d+)\s*(?:tore?|goals?)', m)
+    if fg:
+        n = int(fg.group(1))
+        if _team_in(market, home) and not _team_in(market, away):
+            return lambda h, a, n=n: h >= n
+        if _team_in(market, away) and not _team_in(market, home):
+            return lambda h, a, n=n: a >= n
+        return lambda h, a, n=n: (h + a) >= n
+
     # Correct score
     cs = re.search(r'(\d+)\s*[:\-]\s*(\d+)', m)
     if "genaues ergebnis" in m or "correct score" in m or (cs and "handicap" not in m and "über" not in m and "unter" not in m):
