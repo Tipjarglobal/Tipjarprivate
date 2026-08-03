@@ -34,6 +34,7 @@ from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
 from betting_logic import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID, precise_label, split_match
+from poster_tz import get_offsets
 import match_stats
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
@@ -2717,6 +2718,17 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             h, a = t.get("home_team"), t.get("away_team")
             if h and a and _match_key(h, a) in gift_keys:
                 t["gift_covered"] = True
+    # Poster timezone: shift member-typed kickoffs to the Berlin base so the viewer-timezone
+    # conversion shows everyone the correct local time (owner=Berlin, Polaris=Athens −1h, …).
+    _offs = await get_offsets([t.get("username") for t in tips])
+    for t in tips:
+        off = _offs.get(t.get("username"), 0)
+        if off:
+            if t.get("match_time"):
+                t["match_time"] = _shift_typed_kickoff(t["match_time"], off)
+            for lg in (t.get("legs") or []):
+                if lg.get("kickoff"):
+                    lg["kickoff"] = _shift_typed_kickoff(lg["kickoff"], off)
     # Display-only: WZ-style precise market labels (team totals name the team + 'Team-Tore',
     # match totals become 'Gesamt-Tore'). Stored strings stay untouched → grading unaffected.
     for t in tips:
@@ -5133,6 +5145,26 @@ def _parse_kickoff(mt: str):
             except Exception:
                 return None
     return None
+
+
+def _shift_typed_kickoff(raw, minutes):
+    """Shift a MEMBER-TYPED wall-clock kickoff ('DD/MM/YYYY HH:MM') by -minutes so a poster's
+    local time becomes the Berlin base the feed renders from. Absolute ISO instants (with a
+    real +HH:MM / Z offset) are already timezone-correct and are left untouched."""
+    if not raw or not minutes:
+        return raw
+    s = str(raw).strip()
+    if s.endswith("Z") or re.search(r"[+\-]\d{2}:\d{2}$", s):
+        return raw
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})\s+(\d{1,2}):(\d{2})", s)
+    if not m:
+        return raw
+    try:
+        dt = datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)),
+                      int(m.group(4)), int(m.group(5))) - timedelta(minutes=minutes)
+    except Exception:
+        return raw
+    return dt.strftime("%d/%m/%Y %H:%M")
 
 
 def _cr_sort_dt(kickoff: str, created_iso: str = ""):

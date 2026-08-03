@@ -55,6 +55,7 @@ from server import (
     resolve_team_id,
     snapshot_systems,
 )
+from poster_tz import record_offset
 
 
 def _special_gift_kind(market: str):
@@ -595,6 +596,7 @@ def _datescan_fixture(home_name: str, away_name: str, dates: list, cache: dict =
                 return {
                     "home_name": th, "away_name": ta,
                     "fixture_id": fx.get("fixture", {}).get("id"),
+                    "kickoff_utc": fx.get("fixture", {}).get("date"),
                     "home_goals": _rhg,
                     "away_goals": _rag,
                     "ht_home": ht.get("home"), "ht_away": ht.get("away"),
@@ -661,6 +663,7 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
                 return {
                     "home_name": th, "away_name": ta,
                     "fixture_id": chosen.get("fixture", {}).get("id"),
+                    "kickoff_utc": chosen.get("fixture", {}).get("date"),
                     "home_goals": _rhg,
                     "away_goals": _rag,
                     "ht_home": ht.get("home"), "ht_away": ht.get("away"),
@@ -760,6 +763,17 @@ async def settle_pending_tips() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         outcome_market = tip.get("market", "")
+        # learn this poster's kickoff timezone: the wall-clock they typed vs the real UTC kickoff.
+        # Only for MEMBER/expert posts (not the HQ scrapers, whose times are handled separately).
+        try:
+            _mtr = tip.get("match_time") or ""
+            if (tip.get("source") not in ("hq-auto", "hq-live")
+                    and re.match(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}", _mtr) and fx.get("kickoff_utc")):
+                _pw = _parse_kickoff(_mtr)
+                if _pw:
+                    await record_offset(tip.get("username"), _pw.replace(tzinfo=None), fx.get("kickoff_utc"))
+        except Exception:
+            pass
         # Player-prop SINGLE (member or HQ): grade from the finished match's per-player
         # stats (scorer / shots / shots on target / fouls / cards / saves) instead of the
         # score-only judge. The grading logic already exists (used for combos) — reuse it

@@ -297,3 +297,10 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Task2 Community-Picks Datum/Zeit: Kickoff-Badge zeigte nichts wenn formatKickoff Freitext nicht parsen konnte (return null). Fallback auf formatKickoffText ergaenzt -> Community-Picks zeigen jetzt Datum+Uhrzeit. Live/End-Score werden gerendert wenn Daten da (fixture-abhaengig).
 - Task3 beendetes Codemining End-Ergebnis: Frontend rendert r.score bereits, Backend settle_code_reads setzt es. Aktuell 0 beendete Reads zum Live-Test; Rendering+Backend vorhanden.
 - Codemining-Datum nutzt jetzt formatKickoffText (CodeReading.jsx).
+
+### 2026-08-03 — Poster-Zeitzone lernen + Kickoff-Korrektur [P0]
+- Neu poster_tz.py: lernt pro Poster den Offset (Poster-Lokalzeit minus Berlin) durch Vergleich der GETIPPTEN Wanduhrzeit vs echter API-Football-UTC-Kickoff. Rolling window (8 samples), Modus-basiert -> vacation-aware (temporaere Korrektur bei neuem, wiederholtem Offset). Speicher: db.poster_tz {username, offset_min, samples}.
+- settlement.py: fixture-Resolver liefert jetzt kickoff_utc; settle_pending_tips lernt daraus record_offset() — NUR fuer Member/Experten (nicht hq-auto/hq-live).
+- server.py list_tips: _shift_typed_kickoff verschiebt GETIPPTE naive Kickoffs (DD/MM/YYYY HH:MM) um -offset auf Berlin-Basis; absolute ISO-Zeiten (mit +HH:MM/Z) bleiben unberuehrt. Danach greift die bestehende Viewer-Zeitzonen-Umrechnung. Ergebnis: Owner(Berlin) sieht Polaris(Athen) -1h; Athen-Betrachter sieht Polaris original + Owner +1h.
+- Getestet: Polaris lernt +60; 20:00 -> 19:00 Berlin; absolute ISO unberuehrt. Backend gesund.
+- OFFEN (naechster Schritt): API-Fallback fuer UNPARSEBARE Kickoffs kommender Member-Picks (echten Anstoss live von API holen) — Lernen laeuft bereits, wenn Spiele abgerechnet werden.
