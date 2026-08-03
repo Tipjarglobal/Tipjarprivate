@@ -249,3 +249,7 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - **Fix:** `_CR_SUGGEST_SYSTEM`-Prompt + User-Message in `server.py` neu mit expliziter "durchgestrichen = passiert NIE"-Framing und 3 Pflicht-Beispielen (Sieg→X2, frühes Tor→Über 0.5 bis Min15, Spätor→Unter 0.5 letzte 10 Min). JSON-Ausgabeformat unverändert (Frontend rendert bereits prediction über our_market).
 - **Getestet:** Direkter LLM-Lauf gegen alle 3 Fälle → alle jetzt richtige Richtung (Sirius "gewinnt nicht"→X2; Cracovia "Tor bis Min15"→Über 0.5; Celtic "nach Min80 nichts"→kein Tor letzte 10 Min). Backend /api/code-reading = 200.
 - Datei: `/app/backend/server.py` (`_CR_SUGGEST_SYSTEM`, `admin_cr_default_ai_suggest`).
+
+### Korrektur (Sieg-Doppelchance-Richtung)
+- Owner-Hinweis: Sirius steht auf Position 2 (Gast). Durchgestrichener Sieger darf NIE in unserer Doppelten Chance vorkommen.
+- Regel im Glaskugel-Prompt fixiert: S1 durchgestrichen -> X2; S2 durchgestrichen -> 1X. Getestet: Sirius(2)->1X, Heim(1)->X2. Beide korrekt.
