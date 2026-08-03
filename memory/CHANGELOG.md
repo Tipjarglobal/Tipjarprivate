@@ -1,5 +1,18 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: Codemining Straight-Win = No Bet + Beispiele richtig gestellt
+Owner (Live-Screenshot Halmstad–Sirius): durchgestrichener „1X2 S2" wurde fälschlich zu
+„IK Sirius Draw No Bet (DNB)" — eine Wette FÜR Sirius, obwohl der durchgestrichene S2 heißt
+„Sirius gewinnt NICHT". Fixes:
+- **Backend (`server.py` `_run_code_scan`, ~Z. 9830)**: glatter Sieg/1X2-Code (`_is_straightwin_code`)
+  → IMMER `read=no_bet` mit Glaskugel-Warnung „{Team} gewinnt NICHT" (via `_code_win_side`).
+  Kein DNB / keine Doppelte Chance mehr. Alte `_code_straightwin_decision`-DNB-Regel ersetzt.
+  Verifiziert: `1X2 S2` (Halmstad–Sirius) → win_side=away=IK Sirius → „IK Sirius gewinnt NICHT" + No Bet.
+- **Frontend (`CodeReading.jsx`)**: Upload-Beispiele in de/el/en auf die 3 echten Schritte umgebaut —
+  **Code → Glaskugel (was NICHT passiert) → Mining (was gespielt wird)**. Milan–Inter jetzt korrekt
+  NO BET statt DNB. Render zeigt 3 beschriftete Zeilen.
+
+
 ## 2026-08-03 — P0: Halbzeit-Totals werden korrekt gewertet (kein VOID mehr)
 Owner (Live-Screenshots): „Über 0.5 Tore 1. Halbzeit" wurde fälschlich VOID gesetzt statt Gewonnen/
 Verloren. Fix in `settlement.py` `_grade_goal_leg` (Z. 437-449): 1./2.-Halbzeit-Totallinien

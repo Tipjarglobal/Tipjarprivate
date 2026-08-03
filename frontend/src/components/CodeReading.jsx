@@ -18,15 +18,16 @@ const L = {
       "Nur das Logische bleibt. Ist nichts Logisches erkennbar → NO BET.",
     ],
     examplesTitle: "Beispiele (mit fiktiven Teams)",
+    exCode: "Code", exGlass: "Glaskugel", exMining: "Mining",
     examples: [
-      ["Porto – Benfica: 'X (Unentschieden) in der 30. Minute'", "Sie sagen, bis zur 30. bleibt es Remis → also fällt FRÜH ein Tor → wir spielen Über 0.5 Tore 1. Halbzeit."],
-      ["Real – Sevilla: 'Real Gesamt Unter 1.5'", "Sie sagen, Real trifft kaum → dagegen: Real Über 0.5 Tore (Real trifft, vor allem zuhause)."],
-      ["Ajax – PSV: 'PSV Gesamt Unter 2.5 – Nein' (also 3+)", "Sie brauchen von PSV 3+ Tore (selten) → wir deckeln: PSV Unter 3.5 Tore."],
-      ["Milan – Inter: 'Sieg Inter (1X2)'", "Glatter Sieg → Inter Draw No Bet (DNB): Inter verliert nicht, bei Remis kommt der Einsatz zurück. (Reine Doppelte Chance / '<Team> gewinnt nicht' → NO BET.)"],
-      ["Lazio – Roma: 'Roma trifft NICHT (Über 0.5 – Nein)'", "Dagegen: Roma trifft (oder beide treffen). Nicht dass es 0:1 endet."],
-      ["Bodø – Molde: 'letztes Tor 55.–90. von Bodø'", "Sie sehen Bodø SPÄT treffen → wir sagen früher: Bodø trifft bis zur 60. Minute."],
-      ["Chelsea – Arsenal: 'Über 2.5 Tore'", "Zu unsicher für uns → NO BET."],
-      ["Napoli – Juve: 'Handicap -1.5 Napoli'", "Handicap/Sieg → NO BET."],
+      ["Porto – Benfica: 'X (Unentschieden) in der 30. Minute'", "In der 30. steht es NICHT mehr 0:0 — vorher fällt ein Tor.", "Über 0.5 Tore 1. Halbzeit."],
+      ["Real – Sevilla: 'Real Gesamt Unter 1.5'", "Real bleibt NICHT unter 1.5 Toren — Real trifft, vor allem zuhause.", "Real Über 0.5 Tore."],
+      ["Ajax – PSV: 'PSV Gesamt Unter 2.5 – Nein' (also 3+)", "PSV macht NICHT 3+ Tore — das schaffen sie hier selten.", "PSV Unter 3.5 Tore."],
+      ["Milan – Inter: 'Sieg Inter (1X2)'", "Inter gewinnt dieses Spiel NICHT.", "NO BET — bei glattem Sieg/1X2 spielen wir nie DNB oder Doppelte Chance, nur die Warnung."],
+      ["Lazio – Roma: 'Roma trifft NICHT (Über 0.5 – Nein)'", "Roma bleibt NICHT ohne Tor — Roma trifft.", "Roma trifft (Über 0.5 Tore) — oder beide treffen."],
+      ["Bodø – Molde: 'letztes Tor 55.–90. von Bodø'", "Bodø trifft NICHT erst spät — die Bude fällt früher.", "Bodø trifft bis zur 60. Minute."],
+      ["Chelsea – Arsenal: 'Über 2.5 Tore'", "Ob wirklich 3+ Tore fallen, ist NICHT klar genug.", "NO BET."],
+      ["Napoli – Juve: 'Handicap -1.5 Napoli'", "Ob Napoli mit 2+ Toren gewinnt, ist NICHT sicher lesbar.", "NO BET — Handicap/Sieg-Codes spielen wir nicht."],
     ],
     empty: "Noch keine Reads. Lade einen Buchmacher-Screenshot (Akku des Tages / Boost) hoch.",
     nobet: "NO BET", counter: "UNSER GEGEN-PICK", code: "Code sagt",
@@ -50,15 +51,16 @@ const L = {
       "Κρατάμε ΜΟΝΟ αυτό που βγάζει νόημα. Αν δεν φαίνεται κάτι λογικό → NO BET.",
     ],
     examplesTitle: "Παραδείγματα (με υποθετικές ομάδες)",
+    exCode: "Κωδικός", exGlass: "Κρυστάλλινη σφαίρα", exMining: "Mining",
     examples: [
-      ["Porto – Benfica: «Χ (ισοπαλία) στο 30'»", "Λένε ότι στο 30' θα είναι ακόμη ισοπαλία → άρα υπάρχει γκολ νωρίς → παίζουμε Over 0.5 γκολ στο ημίχρονο."],
-      ["Real – Sevilla: «Real Σύνολο Under 1.5»", "Λένε ότι η Real δύσκολα σκοράρει → αντίθετα: Real Over 0.5 γκολ (σκοράρει, ειδικά εντός)."],
-      ["Ajax – PSV: «PSV Σύνολο Under 2.5 – Όχι» (δηλ. 3+)", "Θέλουν 3+ γκολ από PSV (σπάνιο) → τη «δένουμε»: PSV Under 3.5 γκολ."],
-      ["Milan – Inter: «Νίκη Inter (1X2)»", "Καθαρή νίκη → NO BET. Δεν αγοράζουμε ποτέ σκέτο 1/1Χ."],
-      ["Lazio – Roma: «Η Roma ΔΕΝ σκοράρει (Over 0.5 – Όχι)»", "Αντίθετα: η Roma σκοράρει (ή σκοράρουν και οι δύο). Να μην τελειώσει 0-1."],
-      ["Bodø – Molde: «τελευταίο γκολ 55'–90' από Bodø»", "Τη βλέπουν να σκοράρει ΑΡΓΑ → εμείς λέμε νωρίτερα: Bodø σκοράρει μέχρι το 60'."],
-      ["Chelsea – Arsenal: «Over 2.5 γκολ»", "Πολύ αβέβαιο για εμάς → NO BET."],
-      ["Napoli – Juve: «Χάντικαπ -1.5 Napoli»", "Χάντικαπ/νίκη → NO BET."],
+      ["Porto – Benfica: «Χ (ισοπαλία) στο 30'»", "ΔΕΝ θα είναι ακόμη 0-0 στο 30' — μπαίνει γκολ πιο νωρίς.", "Over 0.5 γκολ στο ημίχρονο."],
+      ["Real – Sevilla: «Real Σύνολο Under 1.5»", "Η Real ΔΕΝ θα μείνει κάτω από 1.5 — σκοράρει, ειδικά εντός.", "Real Over 0.5 γκολ."],
+      ["Ajax – PSV: «PSV Σύνολο Under 2.5 – Όχι» (δηλ. 3+)", "Η PSV ΔΕΝ θα βάλει 3+ — σπάνια το καταφέρνει εδώ.", "PSV Under 3.5 γκολ."],
+      ["Milan – Inter: «Νίκη Inter (1X2)»", "Η Inter ΔΕΝ θα κερδίσει αυτό το ματς.", "NO BET — σε σκέτη νίκη/1X2 δεν παίζουμε ποτέ DNB ή διπλή ευκαιρία, μόνο την προειδοποίηση."],
+      ["Lazio – Roma: «Η Roma ΔΕΝ σκοράρει (Over 0.5 – Όχι)»", "Η Roma ΔΕΝ θα μείνει χωρίς γκολ — σκοράρει.", "Roma να σκοράρει (Over 0.5) — ή BTTS."],
+      ["Bodø – Molde: «τελευταίο γκολ 55'–90' από Bodø»", "Η Bodø ΔΕΝ θα σκοράρει μόνο αργά — το γκολ έρχεται νωρίτερα.", "Bodø σκοράρει μέχρι το 60'."],
+      ["Chelsea – Arsenal: «Over 2.5 γκολ»", "Το αν θα μπουν 3+ γκολ ΔΕΝ είναι αρκετά ξεκάθαρο.", "NO BET."],
+      ["Napoli – Juve: «Χάντικαπ -1.5 Napoli»", "Το αν κερδίζει η Napoli με 2+ ΔΕΝ διαβάζεται με σιγουριά.", "NO BET — δεν παίζουμε κωδικούς χάντικαπ/νίκης."],
     ],
     empty: "Καμία ανάγνωση ακόμη. Ανέβασε ένα screenshot «Παρολί της ημέρας» / ενισχυμένης προσφοράς.",
     nobet: "NO BET", counter: "ΤΟ ΑΝΤΙΘΕΤΟ ΜΑΣ", code: "Ο κώδικας λέει",
@@ -82,15 +84,16 @@ const L = {
       "Only the LOGICAL thing stays. If nothing looks logical → NO BET.",
     ],
     examplesTitle: "Examples (with hypothetical teams)",
+    exCode: "Code", exGlass: "Crystal ball", exMining: "Mining",
     examples: [
-      ["Porto – Benfica: 'X (draw) at minute 30'", "They say it's still a draw at 30' → so there's an early goal → we play Over 0.5 goals 1st half."],
-      ["Real – Sevilla: 'Real Total Under 1.5'", "They say Real barely scores → against it: Real Over 0.5 goals (they score, especially at home)."],
-      ["Ajax – PSV: 'PSV Total Under 2.5 – No' (i.e. 3+)", "They need 3+ from PSV (rare) → we cap them: PSV Under 3.5 goals."],
-      ["Milan – Inter: 'Inter win (1X2)'", "Straight win → Inter Draw No Bet (DNB): Inter won't lose, a draw returns your stake. (A pure Double Chance / '<team> won't win' code → NO BET.)"],
-      ["Lazio – Roma: 'Roma does NOT score (Over 0.5 – No)'", "Against it: Roma to score (or BTTS). Not a 0-1 finish."],
-      ["Bodø – Molde: 'last goal 55'–90' by Bodø'", "They see Bodø score LATE → we say earlier: Bodø to score by minute 60."],
-      ["Chelsea – Arsenal: 'Over 2.5 goals'", "Too uncertain for us → NO BET."],
-      ["Napoli – Juve: 'Handicap -1.5 Napoli'", "Handicap/win → NO BET."],
+      ["Porto – Benfica: 'X (draw) at minute 30'", "It will NOT still be 0-0 at 30' — a goal falls before then.", "Over 0.5 goals 1st half."],
+      ["Real – Sevilla: 'Real Total Under 1.5'", "Real will NOT stay under 1.5 — Real scores, especially at home.", "Real Over 0.5 goals."],
+      ["Ajax – PSV: 'PSV Total Under 2.5 – No' (i.e. 3+)", "PSV will NOT score 3+ — they rarely manage that here.", "PSV Under 3.5 goals."],
+      ["Milan – Inter: 'Inter win (1X2)'", "Inter will NOT win this match.", "NO BET — on a straight win/1X2 we never play DNB or Double Chance, only the warning."],
+      ["Lazio – Roma: 'Roma does NOT score (Over 0.5 – No)'", "Roma will NOT stay scoreless — Roma scores.", "Roma to score (Over 0.5) — or BTTS."],
+      ["Bodø – Molde: 'last goal 55'–90' by Bodø'", "Bodø will NOT score only late — the goal comes earlier.", "Bodø to score by minute 60."],
+      ["Chelsea – Arsenal: 'Over 2.5 goals'", "Whether 3+ goals really fall is NOT clear enough.", "NO BET."],
+      ["Napoli – Juve: 'Handicap -1.5 Napoli'", "Whether Napoli win by 2+ is NOT reliably readable.", "NO BET — we don't play handicap/win codes."],
     ],
     empty: "No reads yet. Upload a bookmaker 'Accumulator of the day' / boosted-offer screenshot.",
     nobet: "NO BET", counter: "OUR COUNTER-PICK", code: "Code says",
@@ -319,9 +322,10 @@ export function CodeReading() {
         <p className="text-xs font-bold text-zinc-300 mb-3">{t.examplesTitle}</p>
         <ul className="space-y-2.5">
           {t.examples.map((ex, i) => (
-            <li key={i} className="text-[12px] leading-snug flex flex-col gap-0.5 border-l-2 border-zinc-700 pl-3" data-testid={`code-example-${i}`}>
-              <span className="text-zinc-500">🎰 {ex[0]}</span>
-              <span className="text-volt font-semibold">↳ {ex[1]}</span>
+            <li key={i} className="text-[12px] leading-snug flex flex-col gap-1 border-l-2 border-zinc-700 pl-3 py-1.5" data-testid={`code-example-${i}`}>
+              <span className="text-zinc-400"><span className="text-zinc-500 font-bold uppercase tracking-wide text-[10px] mr-1">{t.exCode}</span>{ex[0]}</span>
+              <span className="text-sky-300"><span className="font-bold uppercase tracking-wide text-[10px] mr-1">{t.exGlass}</span>{ex[1]}</span>
+              <span className="text-volt font-semibold"><span className="font-bold uppercase tracking-wide text-[10px] mr-1">{t.exMining}</span>{ex[2]}</span>
             </li>
           ))}
         </ul>
