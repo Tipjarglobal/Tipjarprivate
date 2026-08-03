@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Droplets, RefreshCw, Clock, Target, ShieldAlert } from "lucide-react";
 import api from "../api";
-import { useI18n, toLatin } from "../i18n";
+import { useI18n, toLatin, isKickoffTimeUnknown } from "../i18n";
 
 const confStyle = (c) => {
   if (c >= 85) return { chip: "bg-[#2ECC57] text-black", txt: "text-[#2ECC57]" };
@@ -14,8 +14,10 @@ const fmtWhen = (iso) => {
   if (!iso) return "";
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
-      + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const day = d.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" });
+    // Unknown kickoff time (23:59 sentinel) → show the DATE only, never a bogus ~01:59 night time.
+    if (isKickoffTimeUnknown(iso)) return day;
+    return day + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }

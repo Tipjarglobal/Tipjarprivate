@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Target, Flame, RefreshCw, Clock, Table2, ShieldCheck } from "lucide-react";
 import api from "../api";
-import { useI18n, toLatin } from "../i18n";
+import { useI18n, toLatin, isKickoffTimeUnknown } from "../i18n";
 import { useProseTranslations } from "../proseI18n";
 
 const confStyle = (c) => {
@@ -13,6 +13,8 @@ const confStyle = (c) => {
 
 const fmtTime = (iso) => {
   if (!iso) return "";
+  // Unknown kickoff time (23:59 sentinel) → don't show a bogus ~01:59 night time at all.
+  if (isKickoffTimeUnknown(iso)) return "";
   try {
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {

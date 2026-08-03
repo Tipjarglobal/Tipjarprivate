@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
-import { toLatin } from "../i18n";
+import { toLatin, isKickoffTimeUnknown } from "../i18n";
 
 // PRIVATE analytics — only reachable at /insights and only for the admin account.
 // Regular visitors never see this; there is no link to it anywhere in the UI.
@@ -284,7 +284,7 @@ const PickManager = () => {
                         {t.status === "live" ? "LIVE" : "OFFEN"}
                       </span>
                       {t.odds ? <span>Quote {t.odds}</span> : null}
-                      {t.match_time ? <span>{new Date(t.match_time).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span> : null}
+                      {t.match_time ? <span>{new Date(t.match_time).toLocaleString("de-DE", isKickoffTimeUnknown(t.match_time) ? { day: "2-digit", month: "2-digit" } : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span> : null}
                     </div>
                   </div>
                 </div>

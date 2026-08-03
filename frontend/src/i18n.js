@@ -106,6 +106,16 @@ const _KO_MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
 
 // Parse any stored kickoff string → { ts (ms, for sorting), y, mo, da, time }.
 // Handles ISO (2026-07-23T17:00:00+00:00), dd/mm/yyyy HH:MM, "23. Jul 2026", bare HH:MM.
+export function isKickoffTimeUnknown(iso) {
+  // 23:59 UTC is the backend's "date known, TIME unknown" sentinel — never a real kickoff.
+  // Local conversion turns it into a bogus ~01:59 night time, so callers must hide the time.
+  if (!iso) return false;
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) return false;
+  const d = new Date(ms);
+  return d.getUTCHours() === 23 && d.getUTCMinutes() === 59;
+}
+
 export function kickoffInfo(mt) {
   const empty = { ts: null, y: null, mo: null, da: null, time: "" };
   if (!mt) return empty;

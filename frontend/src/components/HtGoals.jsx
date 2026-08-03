@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Timer, RefreshCw, Clock, Zap } from "lucide-react";
 import api from "../api";
-import { useI18n, toLatin } from "../i18n";
+import { useI18n, toLatin, isKickoffTimeUnknown } from "../i18n";
 import { useProseTranslations } from "../proseI18n";
 
 const confStyle = (c) => {
@@ -15,8 +15,9 @@ const fmtWhen = (iso) => {
   if (!iso) return "";
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
-      + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const day = d.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" });
+    if (isKickoffTimeUnknown(iso)) return day;
+    return day + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }

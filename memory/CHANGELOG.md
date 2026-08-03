@@ -1,5 +1,16 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: 01:59-Sentinel auch in den Statistik-Karten behoben
+Owner: „In der Statistik fangen viele Spiele um 01:59 nachts an — heißt das, du kennst die Kickoff-Zeit
+nicht und schreibst immer die Standard-Uhrzeit?" → Genau: 23:59 UTC ist der „Zeit unbekannt"-Sentinel,
+lokal = 01:59. Der frühere `kickoffInfo`-Fix deckte nur die Tip-Karten ab; die Statistik-Karten haben
+eigene lokale Formatter.
+Fix: neuer Helper `isKickoffTimeUnknown(iso)` in `i18n.js` (erkennt 23:59-UTC). Angewandt in
+`GoalThirst.jsx`, `HtGoals.jsx`, `ScorerRadar.jsx`, `SecretInsights.jsx` → bei unbekannter Zeit wird
+nur das Datum (bzw. gar keine Zeit) gezeigt, nie mehr die falsche ~01:59-Nachtzeit. Echte Zeiten
+(z.B. 19:30) unverändert. Per Node verifiziert, Frontend kompiliert.
+
+
 ## 2026-08-03 — Legs zeigen Land, Liga, Live-Ergebnis & echte Teamnamen
 Owner (Live-Screenshot Melbourne/Atlet): fehlendes Live-Ergebnis + kryptische Namen „Atlet – Rebel".
 Anforderung: jede Karte/jedes Leg muss Land, Liga, Datum, Kickoff, Live-Ergebnis, echte Teamnamen
