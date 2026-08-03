@@ -5699,12 +5699,73 @@ async def store_match_prediction(source, matchid, home, away, kickoff, ph, pa, f
     doc = {
         "id": pid, "source": source, "home": home, "away": away,
         "league": league, "league_code": (league_code or "").strip().lower(),
-        "country": country, "kickoff": kickoff or "",
         "ph": ph, "pa": pa, "total": total, "fav": fav, "fav_prob": fav_prob,
         "btts": bool(btts), "over25": bool(over25), "conf": conf, "status": "pending",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Don't let a re-scrape clobber an already API-resolved absolute kickoff / country with the
+    # scraper's date-only value (owner: echte Anstoßzeit muss in der Statistik erhalten bleiben).
+    new_ko = kickoff or ""
+    existing = await db.match_predictions.find_one({"id": pid}, {"_id": 0, "ko_fixed": 1})
+    resolved = bool(existing and existing.get("ko_fixed"))
+    if not (resolved and _kickoff_time_unknown(new_ko)):
+        doc["kickoff"] = new_ko
+    if not (resolved and not (country or "").strip()):
+        doc["country"] = country
     await db.match_predictions.update_one({"id": pid}, {"$set": doc}, upsert=True)
+
+
+async def resolve_prediction_kickoffs(cap: int = 12) -> dict:
+    """API-Fallback (owner 2026-08): the Statistik/prediction cards come from scraped feeds that
+    often give only a DATE → stored as the 23:59 sentinel and shown as a bogus ~01:59. Fetch the
+    REAL kickoff (+ country/league + canonical names) from API-Football and store it in-place so
+    every stats endpoint shows the correct time. Rate-capped; each pred retried at most every 6h.
+    `ko_fixed` protects the resolved time from being overwritten on the next scrape."""
+    if not API_FOOTBALL_KEY or _api_quota_exhausted():
+        return {"tried": 0, "resolved": 0}
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=6)).isoformat()
+    docs = await db.match_predictions.find(
+        {"status": "pending",
+         "$or": [{"ko_resolve_at": {"$exists": False}}, {"ko_resolve_at": {"$lt": cutoff}}]},
+        {"_id": 0, "id": 1, "home": 1, "away": 1, "kickoff": 1}
+    ).to_list(1500)
+    tried = resolved = 0
+    for d in docs:
+        if tried >= cap:
+            break
+        if not _kickoff_time_unknown(d.get("kickoff") or ""):
+            continue
+        # Only resolve UPCOMING games. A past date-only prediction (e.g. '1. Aug') must NEVER be
+        # mapped to a future rematch of the same teams — that would show a wrong October date.
+        _ko = _parse_kickoff(d.get("kickoff") or "")
+        if _ko is not None and _ko.date() < now.date():
+            continue
+        home = (d.get("home") or "").strip()
+        away = (d.get("away") or "").strip()
+        if not (home and away):
+            continue
+        tried += 1
+        await db.match_predictions.update_one({"id": d["id"]}, {"$set": {"ko_resolve_at": now.isoformat()}})
+        try:
+            tid = await resolve_team_id(home)
+            fx = await asyncio.to_thread(find_upcoming_fixture, tid, away) if tid else None
+            if not (fx and fx.get("date_iso")):
+                tid2 = await resolve_team_id(away)
+                fx = await asyncio.to_thread(find_upcoming_fixture, tid2, home) if tid2 else None
+            if fx and fx.get("date_iso"):
+                upd = {"kickoff": fx["date_iso"], "ko_fixed": True}
+                if fx.get("country"):
+                    upd["country"] = fx["country"]
+                if fx.get("league"):
+                    upd["league"] = fx["league"]
+                await db.match_predictions.update_one({"id": d["id"]}, {"$set": upd})
+                resolved += 1
+        except Exception:
+            pass
+    if tried:
+        logger.info(f"Prediction kickoff resolve: {resolved}/{tried} date-only stats games")
+    return {"tried": tried, "resolved": resolved}
 
 
 def _dc_odds(fav_prob):

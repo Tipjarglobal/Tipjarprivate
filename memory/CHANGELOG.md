@@ -1,5 +1,19 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Echte Anstoßzeit auch in der Statistik (API-Football)
+Folgeauftrag: date-only Statistik-Spiele (Sentinel) sollen die echte Zeit bekommen, nicht nur das Datum.
+- Neuer `resolve_prediction_kickoffs(cap=12)` in `server.py`: löst `match_predictions` mit unbekannter
+  Zeit über API-Football auf (echte Kickoff-Zeit + Land + Liga), in-place → alle Statistik-Endpoints
+  zeigen sofort die echte Zeit. Rate-capped, je Vorhersage max. alle 6h (`ko_resolve_at`).
+- Guard: NUR heute/zukünftige Spiele werden aufgelöst (`_ko.date() < now.date()` → skip), damit ein
+  vergangenes date-only Spiel NICHT auf ein zukünftiges Rückspiel gemappt wird.
+- `store_match_prediction`: aufgelöste Zeit/Land (`ko_fixed`) wird beim nächsten Scrape NICHT mehr mit
+  dem date-only-Wert überschrieben.
+- Aufruf im `settlement_loop` neben `resolve_unparseable_kickoffs`.
+- Verifiziert: echte Preds bekamen echte Zeit+Land+Liga (z.B. Scotland Championship); Guard-Test:
+  vergangenes „1. Aug"-Spiel übersprungen, Backend/Frontend gesund.
+
+
 ## 2026-08-03 — P0: 01:59-Sentinel auch in den Statistik-Karten behoben
 Owner: „In der Statistik fangen viele Spiele um 01:59 nachts an — heißt das, du kennst die Kickoff-Zeit
 nicht und schreibst immer die Standard-Uhrzeit?" → Genau: 23:59 UTC ist der „Zeit unbekannt"-Sentinel,

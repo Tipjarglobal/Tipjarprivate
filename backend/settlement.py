@@ -54,6 +54,7 @@ from server import (
     logger,
     resolve_team_id,
     resolve_unparseable_kickoffs,
+    resolve_prediction_kickoffs,
     snapshot_systems,
 )
 from poster_tz import record_offset
@@ -1444,6 +1445,7 @@ async def settlement_loop():
                 purged = await purge_settled_tips()
                 try:
                     await resolve_unparseable_kickoffs()
+                    await resolve_prediction_kickoffs()
                 except Exception as _e:
                     logger.error(f"kickoff fallback error: {_e}")
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
