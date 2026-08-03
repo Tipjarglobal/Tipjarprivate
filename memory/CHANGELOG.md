@@ -1,5 +1,14 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: Halbzeit-Totals werden korrekt gewertet (kein VOID mehr)
+Owner (Live-Screenshots): „Über 0.5 Tore 1. Halbzeit" wurde fälschlich VOID gesetzt statt Gewonnen/
+Verloren. Fix in `settlement.py` `_grade_goal_leg` (Z. 437-449): 1./2.-Halbzeit-Totallinien
+(`Über/Unter X.5 ... Halbzeit/HZ/Hälfte/first-half/second-half`) werden jetzt aus dem HZ-Score
+(`ht_home`/`ht_away`, 2. HZ = FT-Total − HZ-Total) gewertet → Gewonnen/Verloren. Bei fehlenden
+HZ-Daten sauber `None` (nie geraten/VOID). Per Simulation bestätigt (Über/Unter 1./2. HZ ✓).
+Owner-Entscheid: nur Fix behalten, KEINE Rück-Abrechnung bestehender VOID-Tickets.
+
+
 ## 2026-08-02 — Single-KI: keine Klone, Handicap-Gate, richtiger Zähler, 24–72h auffüllen
 Owner (Live-Screenshots): „3× Cruz Azul / 2× Seattle geklont, Zähler sagt 26 statt 5, Felder 24–48
 & 48+ leer, -1.5 Handicap überall." Fixes:
