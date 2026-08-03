@@ -1,5 +1,17 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: Smart-Picks "Zyklus" deaktiviert (Lotto raus)
+Owner: „Teams, die nie 3 Tore treffen, machen nicht plötzlich 3 Tore. Das ist Lotto — mach den
+Code inaktiv und ungültig (nicht löschen), poste keine solchen Smart Picks mehr."
+- `server.py` `smart_h2h_autopost` (der „H2H-Zyklus", Aufruf background_tasks.py:474 + `/admin/smart/run`):
+  früher `return` direkt nach dem Docstring → postet NIE mehr Zyklus-Picks. Code bleibt vollständig
+  erhalten (nur unerreichbar), wie vom Owner gewünscht.
+- Self-heal: bei jedem Lauf werden vorhandene OFFENE Zyklus-Picks entfernt
+  (`source=smart & h2h_cycle=True` bzw. `id ^smarth2h-`, nur pending/live) → auch Produktion
+  bereinigt sich nach dem Deploy selbst. Abgerechnete/History bleiben unberührt.
+- Verifiziert: Funktion gibt `{posted:0, purged:N, reason:'cycle disabled ...'}` zurück; Backend importiert & läuft (200).
+
+
 ## 2026-08-03 — P0: Codemining Straight-Win = No Bet + Beispiele richtig gestellt
 Owner (Live-Screenshot Halmstad–Sirius): durchgestrichener „1X2 S2" wurde fälschlich zu
 „IK Sirius Draw No Bet (DNB)" — eine Wette FÜR Sirius, obwohl der durchgestrichene S2 heißt

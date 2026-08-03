@@ -8172,6 +8172,19 @@ async def smart_h2h_autopost() -> dict:
     which team is DUE to finally score or win (cycles return), and post it into Smart Picks —
     the detected story in the analysis, the concrete pick right below. Only settlement-safe
     markets ('{team} Über 0.5 Tore', '{team} Sieg'). API-quota-gated + 12h-cached."""
+    # owner 2026-08: DEAKTIVIERT & UNGÜLTIG (Code NICHT gelöscht). Der "Zyklus" postet Lotto-Picks —
+    # Teams, die nie 3 Tore treffen, sollen plötzlich treffen. Das ist Lotto. Owner-Regel: hier NIE
+    # solche Smart Picks posten. Die Funktion bleibt erhalten, wird aber nie mehr ausgeführt.
+    # Self-heal (auch in Produktion nach Deploy): vorhandene OFFENE Zyklus-Picks entfernen.
+    try:
+        purged = (await db.tips.delete_many({
+            "status": {"$in": ["pending", "live"]},
+            "$or": [{"source": "smart", "h2h_cycle": True},
+                    {"id": {"$regex": "^smarth2h-"}}]})).deleted_count
+    except Exception:
+        purged = 0
+    return {"posted": 0, "purged": purged,
+            "reason": "cycle disabled by owner (lotto — no such smart picks)"}
     if not API_FOOTBALL_KEY:
         return {"posted": 0, "reason": "API_FOOTBALL_KEY not configured"}
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
