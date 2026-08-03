@@ -434,6 +434,19 @@ def _grade_goal_leg(kind, market, team, fx):
         line = int(cm.group(1))
         over = ("über" in m) or (k == "corner_o")
         return ctot >= line + 1 if over else ctot <= line
+    # 1st / 2nd-half total goals line, e.g. "Über 0.5 Tore 1. Halbzeit", "Unter 1.5 2. Halbzeit".
+    # (Owner P0 2026-08-03: these must be GRADED from the half score, never blindly voided.)
+    _hm = re.search(r"(über|ueber|over|unter|under)\s+(\d+)\.5", m)
+    if _hm and ("halbzeit" in m or " hz" in m or "hälfte" in m or "halfte" in m
+                or "first half" in m or "1st half" in m or "second half" in m or "2nd half" in m):
+        if not ht_known:
+            return None                       # no half score available → can't grade yet
+        line = int(_hm.group(2))
+        over = _hm.group(1) in ("über", "ueber", "over")
+        second = any(x in m for x in ("2. halb", "2.halb", "zweite halb", "2. hz", "2.hz",
+                                      "2. hälfte", "2.hälfte", "second half", "2nd half"))
+        hgoals = sh_total if second else ht_total
+        return (hgoals >= line + 1) if over else (hgoals <= line)
     # full-time total goals line, e.g. "Über 2.5 Tore" — but if the market NAMES a team
     # (e.g. "Crvena Zvezda Über 1.5 Tore"), grade that team's goals instead of the match.
     gm = re.search(r"über\s+(\d+)\.5", m)
