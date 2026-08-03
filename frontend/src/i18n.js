@@ -120,6 +120,13 @@ export function kickoffInfo(mt) {
     const hasTz = /(?:Z|[+-]\d{2}:?\d{2})$/.test(s);
     const realMs = Date.parse(s);
     if (hasTz && !isNaN(realMs)) {
+      // 23:59 UTC is the backend's "date known, TIME UNKNOWN" sentinel (date-only kickoff).
+      // It is NEVER a real kickoff — do not shift it into the next day as a bogus ~02:00 time.
+      // Show the intended match DATE (UTC) with no time (owner: "Europa spielt nie um 2 Uhr nachts").
+      const du = new Date(realMs);
+      if (du.getUTCHours() === 23 && du.getUTCMinutes() === 59) {
+        return { ts: realMs, y: du.getUTCFullYear(), mo: du.getUTCMonth() + 1, da: du.getUTCDate(), time: "", dateOnly: true };
+      }
       const b = _tzParts(KICKOFF_BASE_TZ, realMs);
       return { ts: Date.UTC(b.y, b.mo - 1, b.da, +b.hh, +b.mm), y: b.y, mo: b.mo, da: b.da, time: `${b.hh}:${b.mm}` };
     }
@@ -145,6 +152,7 @@ export function kickoffInfo(mt) {
 // Convert a parsed kickoffInfo (Europe/Berlin wall-clock) to the viewer's timezone.
 function _toViewer(info) {
   if (!info || info.ts == null) return info; // bare time / unknown date → leave as-is
+  if (info.dateOnly) return info;            // date-only sentinel → never shift into a bogus time/day
   const berlinOff = _tzOffsetMin(KICKOFF_BASE_TZ, info.ts);
   const realMs = info.ts - berlinOff * 60000; // true instant behind the Berlin wall-clock
   const v = _tzParts(getViewerTz(), realMs);

@@ -1,5 +1,15 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — P0: Falsche Anstoßzeiten (Sentinel 23:59 → "02:00 nachts") behoben
+Owner (Screenshot): Sparta Prague – Lyon (UCL) stand auf „Aug 5 01:59". „Europa spielt nie um 2 Uhr
+nachts." Ursache: date-only Kickoffs bekommen intern 23:59 UTC als Sentinel (`_parse_kickoff` Z.5144,
+für Ablauf-Logik nötig). Als ISO gespeichert + nach Europe/Berlin (+2) konvertiert → 01:59 nächster Tag.
+Fix (`frontend/src/i18n.js`): `kickoffInfo` erkennt den 23:59-UTC-Sentinel und behandelt ihn als
+„Datum bekannt, Uhrzeit unbekannt" → zeigt das Spieldatum (UTC) OHNE Uhrzeit, `_toViewer` verschiebt
+ihn nicht mehr in den Folgetag. Echte Zeiten (z.B. 18:00 UTC) unverändert. Per Node verifiziert.
+Gilt für alle Picks; wirkt auf Produktion nach „Save to Github → Deploy".
+
+
 ## 2026-08-03 — Smart: alle Zyklus-Picks gelöscht + Owner-Referenzpick eingefügt
 Owner: „Lösche alle Zyklus-Picks aus dem Smart, füge diesen ein, und lerne: Smart Picks sind kein Lotto."
 - Alle 3 vorhandenen Smart-Tips waren Zyklus-Picks → per Script gelöscht (jeder Status).
