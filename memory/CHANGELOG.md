@@ -1,5 +1,12 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Admin-Knopf „Smart Picks löschen"
+- Backend: neuer Endpoint `POST /api/admin/smart/clear` (require_admin) → löscht ALLE offenen
+  Smart Picks (pending+live) OHNE Regenerierung; abgerechnete Historie bleibt. Getestet: `{"deleted":1}`.
+- Frontend (`RateWall.jsx`): roter Button „Smart Picks löschen" (`data-testid=clear-smart-btn`) im
+  Smart-Picks-View, nur für `role==admin`. Confirm-Dialog, danach Feed-Reload.
+- i18n: `wall.smartClear/Confirm/Cleared` in EN (Fallback) + DE ergänzt.
+
 ## 2026-08-03 — Echte Anstoßzeit nachladen + Duplikate zusammenführen
 Folgeauftrag zum Zeit-Fix. `server.py` `resolve_unparseable_kickoffs` erweitert:
 - Neuer Helper `_kickoff_time_unknown`: erkennt unparsebare UND 23:59-UTC-Sentinel-Kickoffs

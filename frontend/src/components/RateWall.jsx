@@ -312,6 +312,15 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
     } catch (err) { toast.error(apiErr(err)); }
   };
 
+  const clearSmart = async () => {
+    if (!window.confirm(t("wall.smartClearConfirm"))) return;
+    try {
+      const { data } = await api.post("/admin/smart/clear");
+      toast.success(`${t("wall.smartCleared")} (${data.deleted})`);
+      load(true);
+    } catch (err) { toast.error(apiErr(err)); }
+  };
+
   const syncNow = async () => {
     setSyncing(true);
     try {
@@ -341,6 +350,13 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
                 className="flex items-center gap-2 rounded-2xl border border-volt/40 text-volt font-semibold px-4 py-3 hover:bg-volt/10 active:scale-95 transition-all disabled:opacity-50">
                 <RefreshCw size={18} className={syncing ? "animate-spin" : ""} />
                 <span className="text-sm">{syncing ? t("wall.syncing") : t("wall.sync")}</span>
+              </button>
+            )}
+            {user.role === "admin" && view === "smart" && (
+              <button data-testid="clear-smart-btn" onClick={clearSmart}
+                className="flex items-center gap-2 rounded-2xl border border-red-500/40 text-red-400 font-semibold px-4 py-3 hover:bg-red-500/10 active:scale-95 transition-all">
+                <Trash2 size={18} />
+                <span className="text-sm">{t("wall.smartClear")}</span>
               </button>
             )}
             {user && !user.apex_flame && (

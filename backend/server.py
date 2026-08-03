@@ -266,6 +266,15 @@ async def admin_smart_reset(admin: dict = Depends(require_admin)):
     return {"deleted": deleted, **res}
 
 
+@api_router.post("/admin/smart/clear")
+async def admin_smart_clear(admin: dict = Depends(require_admin)):
+    """Owner button: delete ALL open Smart Picks (pending + live) WITHOUT regenerating.
+    Settled history is kept."""
+    deleted = (await db.tips.delete_many(
+        {"source": "smart", "status": {"$in": ["pending", "live"]}})).deleted_count
+    return {"deleted": deleted}
+
+
 async def _regen_pregames_bg():
     """Kick a fresh regeneration after the owner's 'shut down & refill' reset (owner 2026-08)."""
     try:
