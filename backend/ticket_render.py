@@ -253,7 +253,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
 
     # per-group geometry ----------------------------------------------------
     G_PAD = 24          # inner pad of a leg panel
-    TITLE_H = 52
+    TITLE_H = 66
     MKT_H = 54
     META_H = 34
     G_GAP = 16
@@ -408,7 +408,7 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
             title_max = chip_x1 - scw - 30 - ix - 18
         else:
             title_max = chip_x1 - ix
-        mf = fit(title, famfor(HEAD, title), 46, 34, title_max)
+        mf = fit(title, famfor(HEAD, title), 60, 44, title_max)
         d.text((ix, ty), trunc(title, mf, title_max), font=mf, fill=INK)
         ty += TITLE_H
         # ONE combined quote per GAME, shown right-aligned & vertically centred — a
