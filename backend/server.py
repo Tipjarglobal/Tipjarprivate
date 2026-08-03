@@ -5215,6 +5215,18 @@ def _kickoff_is_date_only(mt: str) -> bool:
     return bool(s) and ":" not in s and _parse_kickoff(s) is not None
 
 
+def _kickoff_time_unknown(mt: str) -> bool:
+    """Kickoff has NO usable clock time: either unparseable, OR it resolves to the 23:59-UTC
+    'date known, time unknown' sentinel (from _parse_kickoff on a date-only string, incl. a
+    date-only value already stored back as an ISO 'T23:59:00+00:00'). Such picks should get a
+    REAL kickoff from API-Football so the feed never shows a bogus ~02:00 night time."""
+    ko = _parse_kickoff(mt or "")
+    if ko is None:
+        return True
+    ko = ko.astimezone(timezone.utc)
+    return ko.hour == 23 and ko.minute == 59
+
+
 def _finished_eligible(mt: str, ko, now) -> bool:
     """Should we ATTEMPT to settle this pick now? find_finished_fixture only ever
     returns FT games, so attempting early is always safe (no premature settlement).
@@ -8855,20 +8867,23 @@ async def resolve_unparseable_kickoffs(cap: int = 12) -> dict:
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=1)).isoformat()
     docs = await db.tips.find(
-        {"status": "pending", "source": {"$nin": ["hq-auto", "hq-live"]},
+        {"status": "pending", "source": {"$ne": "hq-live"},
          "$or": [{"ko_resolve_at": {"$exists": False}}, {"ko_resolve_at": {"$lt": cutoff}}]},
-        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "match_time": 1, "legs": 1}
-    ).to_list(400)
-    tried = resolved = 0
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "match_time": 1, "legs": 1, "source": 1}
+    ).to_list(500)
+    tried = resolved = hq_auto_hit = 0
     for d in docs:
         if tried >= cap:
             break
-        if _parse_kickoff(d.get("match_time") or "") is not None:
-            continue  # already has a usable kickoff
+        if not _kickoff_time_unknown(d.get("match_time") or ""):
+            continue  # already has a real clock time (not the 23:59 date-only sentinel)
         home = (d.get("home_team") or "").strip()
         away = (d.get("away_team") or "").strip()
+        legs = d.get("legs") or []
+        distinct = {(l.get("match") or "").strip() for l in legs if (l.get("match") or "").strip()}
+        if len(distinct) > 1:
+            continue  # multi-game parlay → no single kickoff to resolve (frontend shows date-only)
         if not (home and away):
-            legs = d.get("legs") or []
             if legs and legs[0].get("match"):
                 home, away = split_match(legs[0]["match"])
         if not (home and away):
@@ -8889,10 +8904,21 @@ async def resolve_unparseable_kickoffs(cap: int = 12) -> dict:
                     upd["away_team"] = fx["away_name"]
                 await db.tips.update_one({"id": d["id"]}, {"$set": upd})
                 resolved += 1
+                if d.get("source") == "hq-auto":
+                    hq_auto_hit += 1
         except Exception:
             pass
+    # A resolved hq-auto pick now carries the API's canonical team names + absolute kickoff, so a
+    # duplicate that earlier escaped dedup (e.g. 'Sparta Praha 18:00' vs 'Sparta Prague'+sentinel)
+    # can finally be merged into ONE pick per match.
+    if hq_auto_hit:
+        try:
+            await _dedupe_hq_tips()
+        except Exception as _e:
+            logger.error(f"dedupe after kickoff resolve failed: {_e}")
     if tried:
-        logger.info(f"Kickoff API-fallback: resolved {resolved}/{tried} unparseable member kickoffs")
+        logger.info(f"Kickoff API-fallback: resolved {resolved}/{tried} unknown-time kickoffs "
+                    f"(hq-auto merged: {hq_auto_hit})")
     return {"tried": tried, "resolved": resolved}
 
 

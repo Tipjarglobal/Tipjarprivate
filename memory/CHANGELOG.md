@@ -1,5 +1,18 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Echte Anstoßzeit nachladen + Duplikate zusammenführen
+Folgeauftrag zum Zeit-Fix. `server.py` `resolve_unparseable_kickoffs` erweitert:
+- Neuer Helper `_kickoff_time_unknown`: erkennt unparsebare UND 23:59-UTC-Sentinel-Kickoffs
+  (date-only). Resolver bezieht jetzt auch `hq-auto` ein (vorher ausgeschlossen), holt die echte
+  Anstoßzeit + kanonische Teamnamen via API-Football (`find_upcoming_fixture`), speichert absolute UTC.
+- Multi-Spiel-Kombis werden übersprungen (kein Einzel-Kickoff auflösbar).
+- Nach Auflösen von hq-auto-Tips läuft `_dedupe_hq_tips` → Duplikate, die vorher wegen abweichender
+  Schreibweise/Zeit (z.B. „Sparta Praha 18:00" vs „Sparta Prague"+Sentinel) durchrutschten, werden
+  jetzt zu EINEM Pick zusammengeführt.
+- Läuft im `settlement_loop` (rate-capped 12/Lauf, stündlicher Retry) → Produktion heilt sich nach Deploy.
+- Verifiziert (Preview): Sparta–Lyon → nur noch 1 Pick, 04.08. 18:00, Sentinel-Duplikat entfernt.
+
+
 ## 2026-08-03 — P0: Falsche Anstoßzeiten (Sentinel 23:59 → "02:00 nachts") behoben
 Owner (Screenshot): Sparta Prague – Lyon (UCL) stand auf „Aug 5 01:59". „Europa spielt nie um 2 Uhr
 nachts." Ursache: date-only Kickoffs bekommen intern 23:59 UTC als Sentinel (`_parse_kickoff` Z.5144,
