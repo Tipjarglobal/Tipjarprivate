@@ -8835,6 +8835,55 @@ def find_upcoming_fixture(team_id: int, opponent_name: str):
     return None
 
 
+async def resolve_unparseable_kickoffs(cap: int = 12) -> dict:
+    """API-Fallback (owner P0): for pending MEMBER/expert picks whose posted kickoff can't be
+    parsed, fetch the REAL kickoff from API-Football and store the absolute UTC time — correct
+    for every viewer timezone. Rate-capped; each pick retried at most hourly (ko_resolve_at)."""
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=1)).isoformat()
+    docs = await db.tips.find(
+        {"status": "pending", "source": {"$nin": ["hq-auto", "hq-live"]},
+         "$or": [{"ko_resolve_at": {"$exists": False}}, {"ko_resolve_at": {"$lt": cutoff}}]},
+        {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "match_time": 1, "legs": 1}
+    ).to_list(400)
+    tried = resolved = 0
+    for d in docs:
+        if tried >= cap:
+            break
+        if _parse_kickoff(d.get("match_time") or "") is not None:
+            continue  # already has a usable kickoff
+        home = (d.get("home_team") or "").strip()
+        away = (d.get("away_team") or "").strip()
+        if not (home and away):
+            legs = d.get("legs") or []
+            if legs and legs[0].get("match"):
+                home, away = split_match(legs[0]["match"])
+        if not (home and away):
+            continue
+        tried += 1
+        await db.tips.update_one({"id": d["id"]}, {"$set": {"ko_resolve_at": now.isoformat()}})
+        try:
+            tid = await resolve_team_id(home)
+            fx = await asyncio.to_thread(find_upcoming_fixture, tid, away) if tid else None
+            if not (fx and fx.get("date_iso")):
+                tid2 = await resolve_team_id(away)
+                fx = await asyncio.to_thread(find_upcoming_fixture, tid2, home) if tid2 else None
+            if fx and fx.get("date_iso"):
+                upd = {"match_time": fx["date_iso"], "kickoff_resolved": True}
+                if fx.get("home_name"):
+                    upd["home_team"] = fx["home_name"]
+                if fx.get("away_name"):
+                    upd["away_team"] = fx["away_name"]
+                await db.tips.update_one({"id": d["id"]}, {"$set": upd})
+                resolved += 1
+        except Exception:
+            pass
+    if tried:
+        logger.info(f"Kickoff API-fallback: resolved {resolved}/{tried} unparseable member kickoffs")
+    return {"tried": tried, "resolved": resolved}
+
+
+
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,7 @@ from server import (
     db,
     logger,
     resolve_team_id,
+    resolve_unparseable_kickoffs,
     snapshot_systems,
 )
 from poster_tz import record_offset
@@ -1428,6 +1429,10 @@ async def settlement_loop():
                 expired = await expire_stale_pending()
                 voided_exp = await void_stale_expert_slips()
                 purged = await purge_settled_tips()
+                try:
+                    await resolve_unparseable_kickoffs()
+                except Exception as _e:
+                    logger.error(f"kickoff fallback error: {_e}")
                 logger.info(f"Auto-settlement run: {result.get('settled')} settled / {result.get('checked')} checked; "
                             f"combos {combos.get('settled')}; parlays {parlays.get('settled')}; systems snap {snap}; "
                             f"expired {expired}; voided_exp {voided_exp}; purged24h {purged}")

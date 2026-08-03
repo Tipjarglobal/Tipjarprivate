@@ -304,3 +304,8 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - server.py list_tips: _shift_typed_kickoff verschiebt GETIPPTE naive Kickoffs (DD/MM/YYYY HH:MM) um -offset auf Berlin-Basis; absolute ISO-Zeiten (mit +HH:MM/Z) bleiben unberuehrt. Danach greift die bestehende Viewer-Zeitzonen-Umrechnung. Ergebnis: Owner(Berlin) sieht Polaris(Athen) -1h; Athen-Betrachter sieht Polaris original + Owner +1h.
 - Getestet: Polaris lernt +60; 20:00 -> 19:00 Berlin; absolute ISO unberuehrt. Backend gesund.
 - OFFEN (naechster Schritt): API-Fallback fuer UNPARSEBARE Kickoffs kommender Member-Picks (echten Anstoss live von API holen) — Lernen laeuft bereits, wenn Spiele abgerechnet werden.
+
+### 2026-08-03 — API-Fallback fuer unlesbare Kickoffs [P0 erledigt]
+- server.py resolve_unparseable_kickoffs(): fuer pending MEMBER/expert-Picks mit nicht-parsebarem Kickoff wird der echte Anstoss von API-Football geholt (find_upcoming_fixture -> date_iso) und als absolute UTC-Zeit gespeichert -> korrekt fuer jede Betrachter-Zeitzone. Rate-cap 12/Lauf, pro Pick max. stuendlich (ko_resolve_at). Aktualisiert auch home/away aus API. HQ-Scraper ausgenommen.
+- settlement.py settlement_loop ruft es periodisch auf; Import ergaenzt; fixture-Resolver liefert kickoff_utc.
+- Getestet live: 3/3 unlesbare aufgeloest (z.B. Dortmund-Bayern -> 2026-08-22T18:30:00+00:00). Backend clean, /api/tips 200.
