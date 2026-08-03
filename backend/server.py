@@ -5272,17 +5272,24 @@ async def _enforce_no_bare_over05_goals() -> int:
 
 async def _dedupe_hq_tips() -> int:
     """One pick per match across ALL pending HQ auto-tips (forebet + predictz).
-    When a game surfaces twice (e.g. Über 0.5 AND Über 1.5, or the same fixture with
-    a slightly different team spelling like 'Orange County SC' vs 'Orange County
-    Blues'), keep the single HIGHEST-RISK pick (VALUE preferred, then highest odds)
-    and delete the rest — owner rule: never show the same match twice, always take
-    the bigger risk."""
+    When a game surfaces twice (e.g. Über 0.5 AND Über 1.5, a single AND a one-match
+    Bet-Builder, or the same fixture with a slightly different team spelling), keep ONE
+    pick and delete the rest — owner rule: never show the same match twice, always take
+    the bigger risk/quote (but never delete the daily Geschenk). MULTI-game parlays span
+    several matches and are left untouched."""
     docs = await db.tips.find(
-        {"source": "hq-auto", "status": "pending", "is_parlay": {"$ne": True}},
+        {"source": "hq-auto", "status": "pending"},
         {"_id": 0, "id": 1, "home_team": 1, "away_team": 1, "odds": 1, "market": 1,
-         "pick_type": 1, "match_time": 1, "category": 1,
-         "league": 1, "league_code": 1, "country": 1}
+         "pick_type": 1, "match_time": 1, "category": 1, "is_parlay": 1, "is_gift": 1,
+         "legs": 1, "league": 1, "league_code": 1, "country": 1}
     ).to_list(4000)
+
+    def _distinct_matches(d):
+        return {(l.get("match") or "").strip() for l in (d.get("legs") or []) if (l.get("match") or "").strip()}
+
+    # A MULTI-game parlay (2+ distinct matches in its legs) belongs to a different feed —
+    # never dedupe it against single-match picks. One-match Bet-Builders DO take part.
+    docs = [d for d in docs if not (d.get("is_parlay") and len(_distinct_matches(d)) > 1)]
 
     def _odd(d):
         try:
@@ -5308,7 +5315,7 @@ async def _dedupe_hq_tips() -> int:
 
     def _grp(d):
         # owner 2026-08: NEVER show the same game twice — collapse EVERY category (incl. gift/
-        # mental/banger/avatar) of one match into a single pick and keep the HIGHEST ODDS.
+        # mental/banger/avatar) AND one-match Bet-Builders of one match into a single pick.
         return "core"
 
     def dedup_by(keyfn):
@@ -5323,18 +5330,23 @@ async def _dedupe_hq_tips() -> int:
         for arr in groups.values():
             if len(arr) < 2:
                 continue
-            # keep the BIGGEST QUOTE (owner 2026-08: "immer das höchste Risiko, die höchste Quote"),
-            # tie-break by category rank Risk > Value > Banker.
-            arr.sort(key=lambda d: (_odd(d), _KEEP_RANK.get(_cat_of(d), 0)), reverse=True)
+            # owner: keep ONE per match — protect the daily Geschenk first, then the BIGGEST
+            # QUOTE ("immer das höchste Risiko, die höchste Quote"), tie-break Risk>Value>Banker.
+            arr.sort(key=lambda d: (bool(d.get("is_gift")), _odd(d), _KEEP_RANK.get(_cat_of(d), 0)), reverse=True)
             for d in arr[1:]:
                 to_delete.add(d["id"])
 
     def _mt(d):
         return (d.get("match_time") or "").strip()
 
-    # ONE core pick per match (Risk beats Value beats Banker). Gifts/mental/banger stay separate.
+    def _both_teams(d):
+        return (d.get("home_team") or "").strip() and (d.get("away_team") or "").strip()
+
+    # ONE pick per match (Geschenk protected, else biggest quote). Single-match Bet-Builders
+    # count too. A pick WITHOUT a real match identity (no home+away) is NEVER collapsed —
+    # otherwise every metadata-less pick would fold into one bucket and get mass-deleted.
     # 1) exact both-team key  2) same kickoff + same home  3) same kickoff + same away
-    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_grp(d)}")
+    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_grp(d)}" if _both_teams(d) else None)
     dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}|{_grp(d)}" if _mt(d) and d.get("home_team") else None)
     dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}|{_grp(d)}" if _mt(d) and d.get("away_team") else None)
 

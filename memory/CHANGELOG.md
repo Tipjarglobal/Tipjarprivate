@@ -262,3 +262,9 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 ### Glaskugel: 1-Klick Permanent verankern
 - CodeDefaultsPanel.jsx: neuer Button "Permanent verankern" (Lock) in der Glaskugel-Box neben "Als Option uebernehmen". Ruft /permanent mit dem Glaskugel-Vorschlag (our_market oder no_bet + trend-note) auf -> wird sofort in alle Spiele mit diesem Code eingewurzelt & gelockt.
 - rootPermFromAi() + Labels aiRoot (DE/EN/EL). Getestet: /permanent akzeptiert no_bet=true + leeren Markt (curl ok); Frontend compiled.
+
+### 2026-08-03 — Dedup: ein Pick pro Spiel (inkl. Ein-Spiel-Bet-Builder) [P0]
+- Bug: KI Single-Game-Picks zeigte dasselbe Spiel doppelt (Einzel-Wette + Ein-Spiel-Bet-Builder favdc). Ursache: _dedupe_hq_tips filterte is_parlay:{ne:True} -> Bet-Builder (is_parlay=true, 1 Leg) entkam dem Dedup.
+- Fix (server.py _dedupe_hq_tips): Query holt jetzt alle hq-auto pending; MULTI-Spiel-Parlays (>1 distinct match in legs) bleiben ausgenommen; Ein-Spiel-Bet-Builder nehmen am Dedup teil. Ranking: Geschenk geschuetzt > hoechste Quote > Kategorie (Risk>Value>Banker). Guard: Tips ohne Home+Away werden NIE kollabiert (match_key(None,None)= "|" haette sonst alle in einen Bucket gelegt).
+- Getestet: 4 kollidierende Spiele -> je 1 Pick behalten; Feed 7 Spiele / 0 Duplikate; erneuter Dedup-Lauf entfernt 0.
+- Hinweis: bei Kollision Einzel vs Bet-Builder ueberlebt der hoehere-Quoten-Pick (Owner-Regel). Bei Geschenk vs anderer Pick ueberlebt das Geschenk.
