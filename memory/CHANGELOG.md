@@ -1,5 +1,21 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Legs zeigen Land, Liga, Live-Ergebnis & echte Teamnamen
+Owner (Live-Screenshot Melbourne/Atlet): fehlendes Live-Ergebnis + kryptische Namen „Atlet – Rebel".
+Anforderung: jede Karte/jedes Leg muss Land, Liga, Datum, Kickoff, Live-Ergebnis, echte Teamnamen
+zeigen — keine Duplikate.
+- Backend (`server.py`): neue `_live_annotate_tips` (in `list_tips`) — ein gecachter
+  `/fixtures?live=all`-Call (geteilter 60s-Cache mit den Codemines). Reichert JEDES Feed-Pick + jedes
+  Parlay-Leg, dessen Spiel gerade live ist, an: `live_score`/`live_minute` (Orientierung via
+  `_align_goals`), Backfill von `country` + `league`, kanonische Teamnamen (behebt „Atlet – Rebel"),
+  Orientierung beibehalten. Response-only (volatiler Live-Score wird nicht persistiert).
+- Frontend (`RateWall.jsx`): Leg zeigt jetzt „Land · Liga" statt nur Liga. Kickoff/Datum-Badge und
+  Live-Badge waren bereits vorhanden und greifen nun mit den angereicherten Daten.
+- Verifiziert: synthetisches Parlay mit echtem Live-Fixture → Leg bekam live 0:0 15', Australia,
+  „Victoria NPL 2", voller Name. Nicht-Live-Legs unberührt.
+- Duplikate: für hq-auto via Kickoff-Resolver + `_dedupe_hq_tips` bereits abgedeckt.
+
+
 ## 2026-08-03 — P0: „Annulliert 164" obwohl Liste leer (Zähler ≠ Liste)
 Owner-Screenshot: Badge „Annulliert" zeigte 164, die Karte war aber leer. Ursache: `/tips/counts`
 zählte void-Tips ohne die Filter, die die Liste anwendet (`hidden`, Silent-Sources, team-lose Slips).

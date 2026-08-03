@@ -1290,7 +1290,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   ) : null}
                 </div>
               </div>
-              {leg.league && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{toLatin(leg.league)}</span>}
+              {(leg.country || leg.league) && <span className="text-[10px] text-volt/80 font-semibold uppercase tracking-wider">{[toLatin(leg.country), toLatin(leg.league)].filter(Boolean).join(" · ")}</span>}
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {(() => {
                   const chip = leg.status === "won" ? "bg-won/15 text-won"

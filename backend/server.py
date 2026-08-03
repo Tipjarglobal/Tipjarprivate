@@ -2766,6 +2766,10 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             sels = lg.get("selections")
             if isinstance(sels, list):
                 lg["selections"] = [precise_label(s, lh, la) for s in sels]
+    try:
+        await _live_annotate_tips(tips)
+    except Exception as _e:
+        logger.warning(f"live annotate failed: {_e}")
     return await _tag_expert(tips[:limit])
 
 
@@ -9670,6 +9674,57 @@ async def _cr_live_annotate(reads: list):
                     {"id": r["id"], "live_rescue": {"$exists": True}},
                     {"$unset": {"live_rescue": "", "live_rescue_stars": "",
                                 "live_red_team": "", "live_rescue_at": ""}})
+
+
+async def _live_annotate_tips(tips: list):
+    """Owner 2026-08: every feed pick / parlay leg whose game is in-play MUST show a LIVE score,
+    plus Land + Liga + echte Teamnamen. One cheap cached /fixtures?live=all call (shared 60s cache),
+    response-only — never persists the volatile live score."""
+    if not API_FOOTBALL_KEY or not tips:
+        return
+    nowts = datetime.now(timezone.utc).timestamp()
+    if nowts - _CR_LIVE_CACHE["ts"] > 60 and not _api_quota_exhausted():
+        live = await asyncio.to_thread(_apifootball, "/fixtures", {"live": "all"}) or []
+        _CR_LIVE_CACHE["data"] = live
+        _CR_LIVE_CACHE["ts"] = nowts
+    else:
+        live = _CR_LIVE_CACHE["data"]
+    if not live:
+        return
+
+    def _annotate(home, away, obj, is_leg):
+        if not (home and away):
+            return
+        fx = _find_live_fixture(live, home, away)
+        if not fx:
+            return
+        gh, ga = _align_goals(fx, home)
+        obj["live"] = True
+        obj["live_score"] = f"{gh}:{ga}"
+        obj["live_minute"] = ((fx.get("fixture") or {}).get("status") or {}).get("elapsed")
+        if not (obj.get("country") or "").strip():
+            c = _fixture_country(fx)
+            if c:
+                obj["country"] = c
+        if not (obj.get("league") or "").strip():
+            obj["league"] = _fixture_league_label(fx)
+        # Canonical full team names (fixes cryptic 'Atlet – Rebel'), keeping OUR home/away orientation.
+        teams = fx.get("teams") or {}
+        th = ((teams.get("home") or {}).get("name") or "").strip()
+        ta = ((teams.get("away") or {}).get("name") or "").strip()
+        if is_leg and th and ta:
+            ho = _sig_tokens(home)
+            keep = len(_sig_tokens(th) & ho) >= len(_sig_tokens(ta) & ho)
+            obj["match"] = f"{th} – {ta}" if keep else f"{ta} – {th}"
+
+    for t in tips:
+        legs = t.get("legs") or []
+        if legs:
+            for lg in legs:
+                h, a = split_match(lg.get("match"))
+                _annotate(h, a, lg, True)
+        else:
+            _annotate(t.get("home_team"), t.get("away_team"), t, False)
 
 
 
