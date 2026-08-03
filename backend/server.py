@@ -10110,21 +10110,33 @@ async def _code_read_fixture_stats(r: dict) -> dict | None:
 
 
 _CR_SUGGEST_SYSTEM = (
-    "Du bist der TipJar-Codemining-Analyst ('Glaskugel'). Ein Buchmacher-'Code' ist die SICHERE Linie "
-    "des Buchmachers — TipJar spielt die UMKEHRUNG als Value-Pick. Umkehr-Logik (Beispiele): "
-    "'Molde Unter 2.5 Tore' → Code bedeutet: Molde trifft 3+ → also ÜBER 2.5. "
-    "'1. Halbzeit Unter 1.5 UND 2. Halbzeit Unter 0.5 – Nein' → Code bedeutet: 1. HZ ÜBER 1.5 und "
-    "2. HZ Unter 0.5. 'Over 2.5' als Code → gefährlich (evtl. fallen keine Tore), kein blinder Über-Pick. "
+    "Du bist der TipJar-Codemining-Analyst ('Glaskugel'). SO FUNKTIONIERT DAS SYSTEM — halte dich EXAKT daran:\n"
+    "1) Auf dem Buchmacher-Screenshot ist die Auswahl DURCHGESTRICHEN / weggestrichen. Diese durchgestrichene "
+    "Auswahl passiert NIEMALS — sie ist das, was NICHT eintritt.\n"
+    "2) Der 'Code' (der Text, den du als code_market bekommst) IST diese durchgestrichene Auswahl bzw. nennt "
+    "genau das Ergebnis, das das Durchgestrichene VERLIEREN lässt.\n"
+    "3) Deine GLASKUGEL sagt deshalb IMMER das GEGENTEIL der durchgestrichenen Auswahl — also das, was WIRKLICH "
+    "passieren wird. Wiederhole NIEMALS die durchgestrichene Richtung als Vorhersage. Drehe sie IMMER um.\n"
+    "4) Darunter kommt die TipJar-Option: der konkrete, spielbare Markt, der genau diese Vorhersage abbildet.\n\n"
+    "PFLICHT-BEISPIELE (Richtung niemals verwechseln):\n"
+    "• Durchgestrichen 'Sirius gewinnt' / 'S1 Sieg' → Glaskugel: 'Sirius wird NICHT gewinnen' → Option: "
+    "Doppelte Chance gegen Sirius (X2, also Unentschieden oder Gegner).\n"
+    "• Durchgestrichen 'Cracovia KEIN Tor bis Minute 15' / 'Über 0.5 bis Min 15 – NEIN' → Glaskugel: "
+    "'Cracovia trifft bis zur 14./15. Minute' → Option: Cracovia Über 0.5 Tore bis Minute 15 (oder 1. Halbzeit Über 0.5).\n"
+    "• Durchgestrichen 'Celtic Tor in den letzten 10 Minuten' / 'Tor nach Min 80' → Glaskugel: "
+    "'Nach der 80. Minute passiert bei Celtic nichts mehr' → Option: Unter 0.5 Tore in den letzten 10 Minuten.\n"
+    "• Durchgestrichen 'Molde Unter 2.5 Tore' → Glaskugel: 'Molde trifft 3+ / es fallen viele Tore' → Option: Über 2.5 Tore.\n"
+    "• Durchgestrichen '1. Halbzeit Unter 1.5 UND 2. Halbzeit Unter 0.5' → Glaskugel: '1. HZ fällt Über 1.5, "
+    "2. HZ bleibt Unter 0.5'.\n\n"
     "Du bekommst die HISTORIE ALLER beendeten Spiele mit demselben Code (Endergebnisse, Torminuten und, "
     "falls vorhanden, echte Match-Statistiken je Heim/Gast). Werte ALLE Spiele aus, nicht nur eines. "
-    "Liefere eine GLASKUGEL-Vorhersage: sage konkret, was im Spiel passieren wird (z.B. 'Unter 2.5 Tore', "
-    "'Favorit gewinnt nicht', 'Tor bis Minute 15'). Wenn du unsicher bist, liste stattdessen die "
-    "WAHRSCHEINLICHEN Endergebnisse (z.B. 4-0 / 3-0 / 2-0 / 0-2 / 0-3 / 0-4) und leite daraus die "
-    "sicherste Sammel-Option ab (z.B. 'Beide Teams treffen NEIN + Über 1.5 Tore'). Die TipJar-Option ist "
-    "IMMER ein konkreter, spielbarer Pick (Kombi erlaubt), NIEMALS 'No Bet'. "
+    "Wenn du unsicher über das exakte Endergebnis bist, liste die WAHRSCHEINLICHEN Endergebnisse "
+    "(z.B. 4-0 / 3-0 / 2-0 / 0-2 / 0-3 / 0-4) und leite daraus die sicherste Sammel-Option ab — aber die "
+    "Vorhersage bleibt IMMER die Umkehrung des Durchgestrichenen. Die TipJar-Option ist IMMER ein konkreter, "
+    "spielbarer Pick (Kombi erlaubt), NIEMALS 'No Bet'.\n"
     "Antworte NUR als striktes JSON: "
-    "{\"code_meaning\": \"was der Code laut Umkehr bedeutet (1 kurzer deutscher Satz)\", "
-    "\"prediction\": [\"2-6 kurze konkrete Aussagen ODER mögliche Endergebnisse\"], "
+    "{\"code_meaning\": \"was durchgestrichen ist und deshalb NICHT passiert (1 kurzer deutscher Satz)\", "
+    "\"prediction\": [\"2-6 kurze konkrete Aussagen: was WIRKLICH passiert (= Gegenteil des Durchgestrichenen) ODER mögliche Endergebnisse\"], "
     "\"trend\": \"1 kurzer Satz mit den konkreten Zahlen aus der Historie\", "
     "\"our_market\": \"konkreter spielbarer Pick oder Kombi als kurzes Markt-Label (PFLICHT, nie leer)\", "
     "\"confidence\": 1-10}."
@@ -10191,9 +10203,9 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"crsug-{uuid.uuid4()}",
                        system_message=_CR_SUGGEST_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(
-            text=f"{context}\n\nErkläre kurz die Code-Bedeutung (Umkehr), gib eine Glaskugel-Vorhersage "
-                 f"ODER die möglichen Endergebnisse und schlage GENAU EINE konkrete, spielbare Option "
-                 f"vor (Kombi erlaubt). JSON, niemals No Bet."))
+            text=f"{context}\n\nDenke daran: der Code = die DURCHGESTRICHENE Auswahl (passiert NIE). "
+                 f"Sage in der Glaskugel das GEGENTEIL (was wirklich passiert) und schlage GENAU EINE "
+                 f"konkrete, spielbare Option vor, die genau das abbildet (Kombi erlaubt). JSON, niemals No Bet."))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}

@@ -242,3 +242,10 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - The **7 finished (Beendet)** code_reads from yesterday were **NOT touched** (they have `outcome` set → skipped by settler & sweep). No demo data is seeded into the active feed.
 - Files: `/app/backend/server.py` (`_code_straightwin_decision`, `_grade_code_our_market`, `settle_code_reads`), `/app/frontend/src/components/CodeReading.jsx`.
 - Tested: Python unit tests (interpret + grading won/push/lost) all pass; DC→NoBet confirmed; frontend compiles & Codemining page renders.
+
+## 2026-08-03 — Glaskugel-Richtungsfix (P0)
+- **Problem (seit ~1 Woche):** Die Codemining-"Glaskugel" (`ai-suggest`) drehte bei Sieg-, Zeitfenster- und Spätor-Märkten die Richtung falsch und sagte das Durchgestrichene als Vorhersage voraus. User-Beispiele Sirius / Cracovia / Celtic gingen alle verkehrt.
+- **Owner-Logik (bestätigt):** Auf dem Buchmacher-Screenshot durchgestrichene Auswahl = passiert NIE. Der Code nennt das Ergebnis, das das Durchgestrichene verlieren lässt = was wirklich passiert. Glaskugel sagt IMMER das Gegenteil des Durchgestrichenen; darunter unser Tipp.
+- **Fix:** `_CR_SUGGEST_SYSTEM`-Prompt + User-Message in `server.py` neu mit expliziter "durchgestrichen = passiert NIE"-Framing und 3 Pflicht-Beispielen (Sieg→X2, frühes Tor→Über 0.5 bis Min15, Spätor→Unter 0.5 letzte 10 Min). JSON-Ausgabeformat unverändert (Frontend rendert bereits prediction über our_market).
+- **Getestet:** Direkter LLM-Lauf gegen alle 3 Fälle → alle jetzt richtige Richtung (Sirius "gewinnt nicht"→X2; Cracovia "Tor bis Min15"→Über 0.5; Celtic "nach Min80 nichts"→kein Tor letzte 10 Min). Backend /api/code-reading = 200.
+- Datei: `/app/backend/server.py` (`_CR_SUGGEST_SYSTEM`, `admin_cr_default_ai_suggest`).
