@@ -147,7 +147,13 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
 
   const applyAi = (d) => {
     const data = ai[d.key]?.data;
-    if (!data || !data.our_market) return;
+    if (!data) return;
+    if (data.no_bet) {
+      setF(d.key, { our_market: "", no_bet: true, note: (data.trend || "").slice(0, 200) });
+      toast.success(fl.aiApply + " ✓");
+      return;
+    }
+    if (!data.our_market) return;
     setF(d.key, { our_market: data.our_market, no_bet: false,
       note: (data.trend || "").slice(0, 200) });
     toast.success(fl.aiApply + " ✓");
@@ -224,7 +230,12 @@ export default function CodeDefaultsPanel({ open, onClose, lang = "de" }) {
                         </div>
                       )}
                       {ai[d.key].data.trend && <p className="text-[11px] text-zinc-400 leading-snug mb-1.5">{ai[d.key].data.trend}</p>}
-                      {ai[d.key].data.our_market && (
+                      {ai[d.key].data.no_bet ? (
+                        <p className="text-[12px] font-black text-amber-200 bg-amber-500/15 border border-amber-500/40 rounded px-2 py-1 inline-block mb-1.5" data-testid={`code-default-ai-nobet-${d.key}`}>
+                          <span className="text-[9px] font-black text-amber-300 uppercase tracking-wide mr-1">{fl.aiOption}:</span>
+                          {fl.nobet}
+                        </p>
+                      ) : ai[d.key].data.our_market && (
                         <p className="text-[12px] font-black text-white bg-sky-500/20 border border-sky-500/40 rounded px-2 py-1 inline-block mb-1.5">
                           <span className="text-[9px] font-black text-sky-300 uppercase tracking-wide mr-1">{fl.aiOption}:</span>
                           {ai[d.key].data.our_market}

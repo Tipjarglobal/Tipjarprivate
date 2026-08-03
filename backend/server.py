@@ -10119,12 +10119,12 @@ _CR_SUGGEST_SYSTEM = (
     "passieren wird. Wiederhole NIEMALS die durchgestrichene Richtung als Vorhersage. Drehe sie IMMER um.\n"
     "4) Darunter kommt die TipJar-Option: der konkrete, spielbare Markt, der genau diese Vorhersage abbildet.\n\n"
     "PFLICHT-BEISPIELE (Richtung niemals verwechseln):\n"
-    "• SIEG/1X2 durchgestrichen: der durchgestrichene SIEGER gewinnt NIE. Spiele die Doppelte Chance, die "
-    "diesen Sieger AUSSCHLIESST — die durchgestrichene Ziffer darf NIE in unserer Doppelten Chance vorkommen:\n"
-    "   – Durchgestrichen 'S1' / 'Heimsieg' (Team auf Position 1) → 'Team 1 gewinnt NICHT' → Doppelte Chance X2 "
-    "(Unentschieden oder Team 2). NIEMALS 1X.\n"
-    "   – Durchgestrichen 'S2' / 'Auswärtssieg' (Team auf Position 2, z.B. Sirius als Gast) → 'Sirius gewinnt "
-    "NICHT' → Doppelte Chance 1X (Team 1 oder Unentschieden). NIEMALS X2 (die '2' passiert ja nicht!).\n"
+    "• SIEG/1X2 durchgestrichen (glatter Sieg S1/S2/Heimsieg/Auswärtssieg): der durchgestrichene SIEGER "
+    "gewinnt NIE. Hier gilt eine SONDERREGEL: die TipJar-Option ist IMMER **No Bet** (setze our_market='' und "
+    "no_bet=true). Wir spielen KEINE Doppelte Chance, weil 1X/X2 zu riskant ist. Die Glaskugel gibt aber "
+    "trotzdem die klare VORWARNUNG aus, WELCHES Team nicht gewinnt (z.B. 'Sirius gewinnt NICHT'). Erkenne "
+    "die Position: durchgestrichen 'S1'/Heim = Team auf Position 1 gewinnt nicht; durchgestrichen 'S2'/Auswärts "
+    "(z.B. Sirius als Gast) = Team auf Position 2 gewinnt nicht. Nur Warnung, KEIN Tipp.\n"
     "• Durchgestrichen 'Cracovia KEIN Tor bis Minute 15' / 'Über 0.5 bis Min 15 – NEIN' → Glaskugel: "
     "'Cracovia trifft bis zur 14./15. Minute' → Option: Cracovia Über 0.5 Tore bis Minute 15 (oder 1. Halbzeit Über 0.5).\n"
     "• Durchgestrichen 'Celtic Tor in den letzten 10 Minuten' / 'Tor nach Min 80' → Glaskugel: "
@@ -10136,13 +10136,14 @@ _CR_SUGGEST_SYSTEM = (
     "falls vorhanden, echte Match-Statistiken je Heim/Gast). Werte ALLE Spiele aus, nicht nur eines. "
     "Wenn du unsicher über das exakte Endergebnis bist, liste die WAHRSCHEINLICHEN Endergebnisse "
     "(z.B. 4-0 / 3-0 / 2-0 / 0-2 / 0-3 / 0-4) und leite daraus die sicherste Sammel-Option ab — aber die "
-    "Vorhersage bleibt IMMER die Umkehrung des Durchgestrichenen. Die TipJar-Option ist IMMER ein konkreter, "
-    "spielbarer Pick (Kombi erlaubt), NIEMALS 'No Bet'.\n"
+    "Vorhersage bleibt IMMER die Umkehrung des Durchgestrichenen. Die TipJar-Option ist ein konkreter, "
+    "spielbarer Pick (Kombi erlaubt) — AUSSER bei glatten SIEG/1X2-Codes: dort IMMER No Bet (nur Glaskugel-Warnung).\n"
     "Antworte NUR als striktes JSON: "
     "{\"code_meaning\": \"was durchgestrichen ist und deshalb NICHT passiert (1 kurzer deutscher Satz)\", "
     "\"prediction\": [\"2-6 kurze konkrete Aussagen: was WIRKLICH passiert (= Gegenteil des Durchgestrichenen) ODER mögliche Endergebnisse\"], "
     "\"trend\": \"1 kurzer Satz mit den konkreten Zahlen aus der Historie\", "
-    "\"our_market\": \"konkreter spielbarer Pick oder Kombi als kurzes Markt-Label (PFLICHT, nie leer)\", "
+    "\"our_market\": \"konkreter spielbarer Pick oder Kombi als kurzes Markt-Label; bei SIEG/1X2-Codes LEER lassen\", "
+    "\"no_bet\": true/false (true NUR bei glatten SIEG/1X2-Codes), "
     "\"confidence\": 1-10}."
 )
 
@@ -10208,8 +10209,9 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
                        system_message=_CR_SUGGEST_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_TEXT_MODEL)
         resp = await chat.send_message(UserMessage(
             text=f"{context}\n\nDenke daran: der Code = die DURCHGESTRICHENE Auswahl (passiert NIE). "
-                 f"Sage in der Glaskugel das GEGENTEIL (was wirklich passiert) und schlage GENAU EINE "
-                 f"konkrete, spielbare Option vor, die genau das abbildet (Kombi erlaubt). JSON, niemals No Bet."))
+                 f"Sage in der Glaskugel das GEGENTEIL (was wirklich passiert). Bei glatten SIEG/1X2-Codes: "
+                 f"NUR die Vorwarnung, welches Team NICHT gewinnt, und setze no_bet=true (kein Tipp). "
+                 f"Bei allen anderen Codes: schlage GENAU EINE konkrete, spielbare Option vor (Kombi erlaubt). JSON."))
         raw = (resp if isinstance(resp, str) else str(resp)).strip()
         s, e = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[s:e + 1]) if s != -1 and e != -1 else {}
@@ -10219,12 +10221,16 @@ async def admin_cr_default_ai_suggest(key: str, admin: dict = Depends(require_ad
     pred = data.get("prediction")
     if isinstance(pred, str):
         pred = [pred]
+    no_bet = bool(data.get("no_bet"))
+    our_mkt = (data.get("our_market") or "").strip()
+    if no_bet:
+        our_mkt = ""
     return {"ok": True, "games": len(hist), "with_stats": used,
             "code_market": code_market,
             "code_meaning": (data.get("code_meaning") or "").strip(),
             "prediction": [str(x).strip() for x in (pred or []) if str(x).strip()],
             "trend": (data.get("trend") or "").strip(),
-            "our_market": (data.get("our_market") or "").strip(),
+            "our_market": our_mkt, "no_bet": no_bet,
             "confidence": data.get("confidence")}
 
 

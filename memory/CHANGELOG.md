@@ -253,3 +253,8 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 ### Korrektur (Sieg-Doppelchance-Richtung)
 - Owner-Hinweis: Sirius steht auf Position 2 (Gast). Durchgestrichener Sieger darf NIE in unserer Doppelten Chance vorkommen.
 - Regel im Glaskugel-Prompt fixiert: S1 durchgestrichen -> X2; S2 durchgestrichen -> 1X. Getestet: Sirius(2)->1X, Heim(1)->X2. Beide korrekt.
+
+### Korrektur 2 (Sieg-Codes = No Bet + Vorwarnung)
+- Owner: 1X/X2 zu riskant. Bei glatten SIEG/1X2-Codes -> TipJar-Option = No Bet, aber Glaskugel gibt weiter Vorwarnung aus, WELCHES Team nicht gewinnt (Position 1/2 erkannt).
+- Backend: _CR_SUGGEST_SYSTEM Sonderregel + ai-suggest liefert no_bet-Flag (our_market leer bei no_bet). Frontend CodeDefaultsPanel: No-Bet-Chip + applyAi setzt no_bet-Schalter.
+- Getestet: Sirius(Pos2)->no_bet+Warnung, Heim(Pos1)->no_bet+Warnung, Cracovia->echter Tipp. Frontend compiled OK.
