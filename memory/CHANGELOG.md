@@ -1,5 +1,16 @@
 # TipJar Global — CHANGELOG
 
+## 2026-08-03 — Durst-Kanal: ALLE durstigen Teams im 7-Tage-Fenster
+Owner: „Ich will in der Statistik ALLE durstigen Teams im 7-Tage-Fenster gelistet."
+- `server.py` `goal_thirst`: Ausgabe-Truncation entfernt (kein `[:80]`/`>=80`-Break mehr) → liefert
+  ALLE gefundenen Durst-Teams; Kandidaten-Pool auf 600 erhöht; Sortierung jetzt chronologisch nach
+  Kickoff (frühestes zuerst). 7-Tage-Fenster (`now-2h … now+7d`) unverändert.
+- `warm_goal_thirst_cache`: Standard-Cap 20→40; bricht NICHT mehr bei einem einzelnen API-Leerergebnis
+  ab (nur `_api_quota_exhausted` stoppt) → füllt den Form-Cache pro 15-Min-Zyklus deutlich schneller.
+- Verifiziert: Warmer 40/Lauf, `team_form_cache` 54→102, Durst-Kanal 3→20 Teams (wächst weiter bis alle
+  7-Tage-Durst-Teams gecacht sind). Frontend `GoalThirst.jsx` listet ohne Client-Cap.
+
+
 ## 2026-08-03 — Durst-Kanal: mehr Teams melden
 Owner: „Melde bitte mehr Teams im Durst-Kanal." Engpass war nicht der Cap, sondern der Form-Cache:
 ~153 Kandidaten, aber nur ~54 im `team_form_cache` → 99 „unbekannt" → übersprungen (pro Seitenaufruf

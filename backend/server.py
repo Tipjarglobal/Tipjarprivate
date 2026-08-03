@@ -787,13 +787,11 @@ async def goal_thirst():
                           "opp_concede": opp_conc, "btts": btts, "over25": over25,
                           "confidence": c})
     cands.sort(key=lambda x: (x["kickoff"] or "z", -x["confidence"]))
-    cands = cands[:300]
-    # owner 2026-08: report MORE thirsty teams. Higher output cap + more drought checks per load;
-    # the 12h team_form_cache keeps the API cost bounded as the cache warms across loads.
+    cands = cands[:600]
+    # owner 2026-08: list ALL thirsty teams in the 7-day window — no truncation. Uncached teams are
+    # filled by warm_goal_thirst_cache in the background so nothing is silently dropped.
     out, budget, allow_api = [], 28, True
     for cand in cands:
-        if len(out) >= 80:
-            break
         scored, used, ok = await _team_last_scored(cand["team"], allow_api and budget > 0)
         if used:
             budget -= 1
@@ -803,11 +801,11 @@ async def goal_thirst():
             continue  # unknown or scored last match → no 90' drought
         opp_lvl = "high" if cand["opp_concede"] >= 2 else ("mid" if cand["opp_concede"] >= 1 else "low")
         out.append({**cand, "last_scored": scored, "opp_level": opp_lvl})
-    out.sort(key=lambda x: (-x["confidence"], x["kickoff"] or "z"))
-    return {"count": len(out), "teams": out[:80], "generated_at": now.isoformat()}
+    out.sort(key=lambda x: (x["kickoff"] or "z", -x["confidence"]))
+    return {"count": len(out), "teams": out, "generated_at": now.isoformat()}
 
 
-async def warm_goal_thirst_cache(cap: int = 20) -> dict:
+async def warm_goal_thirst_cache(cap: int = 40) -> dict:
     """Background (owner 2026-08: 'melde mehr Teams im Durst-Kanal'): pre-fill team_form_cache for
     the UPCOMING thirst candidates so the /goal-thirst endpoint can surface EVERY genuine drought
     team, not just the ~12 it can API-check per page load. Rate-capped; only stale/missing teams."""
@@ -846,8 +844,8 @@ async def warm_goal_thirst_cache(cap: int = 20) -> dict:
         _, used, ok = await _team_last_scored(team, True)
         if used:
             warmed += 1
-        if not ok:
-            break
+        # A single team with no API fixtures (ok=False) must NOT abort the whole warm batch —
+        # just move on. Hard quota is already guarded at the top via _api_quota_exhausted().
     if warmed:
         logger.info(f"Goal-thirst cache warm: {warmed} thirst candidates cached")
     return {"warmed": warmed}
