@@ -33,7 +33,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from forebet import scrape_forebet_today
 from predictz import scrape_predictz, parse_pred_score
 from statarea import scrape_statarea
-from betting_logic import dedupe_implied_legs, scoreline_to_combo
+from betting_logic import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID
 import match_stats
 from models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
@@ -5314,27 +5314,10 @@ async def _dedupe_hq_tips() -> int:
         return (d.get("category") or d.get("pick_type") or "value").lower()
 
     def _grp(d):
-        # owner 2026-08: NEVER show the same game twice — collapse EVERY category (incl. gift/
-        # mental/banger/avatar) AND one-match Bet-Builders of one match into a single pick.
+        # owner 2026-08: NEVER show the same game twice. Owner 2026-08-03: instead of deleting
+        # the extra picks, MERGE all selections of one match into ONE Bet-Builder (higher combined
+        # quote). Every category (incl. gift/mental/banger) of a match folds into that one pick.
         return "core"
-
-    def dedup_by(keyfn):
-        groups: dict = {}
-        for d in survivors.values():
-            if d["id"] in to_delete:
-                continue
-            k = keyfn(d)
-            if not k:
-                continue
-            groups.setdefault(k, []).append(d)
-        for arr in groups.values():
-            if len(arr) < 2:
-                continue
-            # owner: keep ONE per match — protect the daily Geschenk first, then the BIGGEST
-            # QUOTE ("immer das höchste Risiko, die höchste Quote"), tie-break Risk>Value>Banker.
-            arr.sort(key=lambda d: (bool(d.get("is_gift")), _odd(d), _KEEP_RANK.get(_cat_of(d), 0)), reverse=True)
-            for d in arr[1:]:
-                to_delete.add(d["id"])
 
     def _mt(d):
         return (d.get("match_time") or "").strip()
@@ -5342,17 +5325,136 @@ async def _dedupe_hq_tips() -> int:
     def _both_teams(d):
         return (d.get("home_team") or "").strip() and (d.get("away_team") or "").strip()
 
-    # ONE pick per match (Geschenk protected, else biggest quote). Single-match Bet-Builders
-    # count too. A pick WITHOUT a real match identity (no home+away) is NEVER collapsed —
-    # otherwise every metadata-less pick would fold into one bucket and get mass-deleted.
-    # 1) exact both-team key  2) same kickoff + same home  3) same kickoff + same away
-    dedup_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}|{_grp(d)}" if _both_teams(d) else None)
-    dedup_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}|{_grp(d)}" if _mt(d) and d.get("home_team") else None)
-    dedup_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}|{_grp(d)}" if _mt(d) and d.get("away_team") else None)
+    # ── group tips of the SAME match via union-find over 3 identity strategies ──
+    parent = {d["id"]: d["id"] for d in survivors.values() if d["id"] not in to_delete}
+
+    def _find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(a, b):
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    def _union_by(keyfn):
+        groups: dict = {}
+        for d in survivors.values():
+            if d["id"] in to_delete:
+                continue
+            k = keyfn(d)
+            if not k:
+                continue
+            groups.setdefault(k, []).append(d["id"])
+        for ids in groups.values():
+            for i in ids[1:]:
+                _union(ids[0], i)
+
+    # A pick WITHOUT a real match identity (no home+away) is NEVER grouped — otherwise every
+    # metadata-less pick would fold into one bucket. 1) exact teams  2) kickoff+home  3) kickoff+away
+    _union_by(lambda d: f"{_match_key(d.get('home_team'), d.get('away_team'))}" if _both_teams(d) else None)
+    _union_by(lambda d: f"{_mt(d)}|H|{_team_core(d.get('home_team'))}" if _mt(d) and d.get("home_team") else None)
+    _union_by(lambda d: f"{_mt(d)}|A|{_team_core(d.get('away_team'))}" if _mt(d) and d.get("away_team") else None)
+
+    comps: dict = {}
+    for d in survivors.values():
+        if d["id"] in to_delete:
+            continue
+        comps.setdefault(_find(d["id"]), []).append(d)
+
+    def _compatible(labels):
+        """True unless the scoreline legs are mutually IMPOSSIBLE (empty intersection)."""
+        sat_all = None
+        for m in labels:
+            pred = market_constraint(m, home_t, away_t)
+            if pred is None:
+                continue
+            s = _sat(pred)
+            if not s:
+                continue
+            sat_all = s if sat_all is None else (sat_all & s)
+        return sat_all is None or len(sat_all) > 0
+
+    to_update: dict = {}
+    for members in comps.values():
+        if len(members) < 2:
+            continue
+        # base = gift (protect the daily Geschenk flag) → else a real Bet-Builder (leg meta) → else highest odds
+        gift = next((m for m in members if m.get("is_gift")), None)
+        base = gift or next((m for m in members if m.get("is_parlay") and m.get("legs")), None) or max(members, key=_odd)
+        home_t = (base.get("home_team") or "").strip()
+        away_t = (base.get("away_team") or "").strip()
+        # collect every selection (single market OR each leg of a one-match builder)
+        pairs = []
+        for d in members:
+            legs = d.get("legs") or []
+            if d.get("is_parlay") and legs:
+                l0 = legs[0]
+                sels = l0.get("selections") or []
+                sods = l0.get("sel_odds") or []
+                for i, s in enumerate(sels):
+                    pairs.append(((s or "").strip(), sods[i] if i < len(sods) else d.get("odds")))
+            else:
+                pairs.append(((d.get("market") or "").strip(), d.get("odds")))
+        seen, rows = set(), []
+        for lab, odd in pairs:
+            if not lab or lab.lower() in seen:
+                continue
+            seen.add(lab.lower())
+            rows.append({"market": lab, "odds": odd})
+        try:
+            kept, _dropped = dedupe_implied_legs(rows, home_t, away_t)
+        except Exception:
+            kept = rows
+        labels = [r["market"] for r in kept]
+        # impossible combination → don't merge; keep the single highest-quote pick, delete the rest.
+        if not _compatible(labels):
+            keep = max(members, key=_odd)
+            for d in members:
+                if d["id"] != keep["id"]:
+                    to_delete.add(d["id"])
+            continue
+        # source of clean leg meta (match/league/kickoff): prefer an existing builder leg.
+        src_leg = next((d["legs"][0] for d in members if d.get("is_parlay") and d.get("legs")), None)
+        match_lbl = (src_leg or {}).get("match") or f"{home_t} – {away_t}"
+        league = (src_leg or {}).get("league") or base.get("league") or ""
+        kickoff = (src_leg or {}).get("kickoff") or base.get("match_time") or ""
+        if len(kept) <= 1:
+            m0 = kept[0] if kept else {"market": base.get("market"), "odds": base.get("odds")}
+            to_update[base["id"]] = {"market": m0["market"], "odds": str(m0["odds"]),
+                                     "is_parlay": False, "legs": []}
+        else:
+            combined = _correlated_combo_odds([{"market": r["market"], "odds": r["odds"]} for r in kept])
+            if not combined or combined <= 1:
+                prod = 1.0
+                for r in kept:
+                    try:
+                        prod *= float(str(r["odds"]).replace(",", "."))
+                    except Exception:
+                        pass
+                combined = round(prod, 2)
+            to_update[base["id"]] = {
+                "is_parlay": True,
+                "legs": [{"match": match_lbl, "league": league, "kickoff": kickoff,
+                          "selections": labels, "sel_odds": [str(r["odds"]) for r in kept]}],
+                "odds": str(combined),
+                "market": " + ".join(labels) + " (Bet-Builder)",
+            }
+        for d in members:
+            if d["id"] != base["id"]:
+                to_delete.add(d["id"])
+
+    for tid, upd in to_update.items():
+        if tid in to_delete:
+            continue
+        await db.tips.update_one({"id": tid}, {"$set": upd})
 
     if to_delete:
         await db.tips.delete_many({"id": {"$in": list(to_delete)}})
-        logger.info(f"Dedup: removed {len(to_delete)} duplicate HQ picks (one per match, highest risk kept)")
+    if to_delete or to_update:
+        logger.info(f"Dedup: merged {len(to_update)} match-combos, removed {len(to_delete)} extra HQ picks")
     return len(to_delete)
 
 

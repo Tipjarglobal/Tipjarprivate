@@ -273,3 +273,9 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Bug: footballinsight-Telegram-Post mit Tippfehler "02/08/3026" -> Pick mit Jahr 3026 (ferne Zukunft) haengt ewig im Feed, wird nie abgerechnet.
 - Fix (scrapers_autopost.py _fi_parse): unplausibles Jahr (>cur+1 oder <cur-1) wird auf aktuelles Jahr geklemmt. Getestet: 3026->2026, gueltige 2026-Daten bleiben.
 - Altlast: den einen haengenden Pick (hqtip-fi-tg-footballinsight01-39768, vergangenes Datum, nicht abrechenbar) direkt geloescht. Feed sauber.
+
+### 2026-08-03 — Kollisionen mergen statt loeschen + Teamnamen-Parser [P0/P1]
+- Owner-Wunsch: pro Spiel EIN Pick = alle Selektionen in einem Bet-Builder kombiniert (Bsp Bukovyna: X2 + Ueber 0.5 + Unter 3.5), hoehere Gesamtquote.
+- server.py _dedupe_hq_tips komplett umgebaut: Union-Find gruppiert alle Picks eines Spiels (3 Identitaets-Strategien); pro Gruppe werden Selektionen via dedupe_implied_legs zusammengefuehrt, Gesamtquote via _correlated_combo_odds (Tor-Cluster-Daempfung), Geschenk-Flag bleibt erhalten. Import erweitert: market_constraint,_sat,GRID.
+- Widerspruchs-Schutz: unmoegliche Kombi (z.B. Ueber3.5 + Unter1.5) wird NICHT gemergt -> hoechste Quote bleibt. Getestet: Merge (2->1 Bet-Builder, 3 Selektionen, Quote 1.61) + Contra-Fallback (behaelt 3.10).
+- scrapers_autopost.py _fi_clean_team: extrahiert bei einzeiligen Telegram-Posts nur den echten Teamnamen (schneidet Pick/Datum/Liga/Disclaimer ab, strippt Free-pick-Label). Getestet: Midtjylland/Horsens, Real Madrid/Barcelona, Bodo/Glimt korrekt.

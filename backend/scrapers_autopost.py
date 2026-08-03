@@ -1271,6 +1271,20 @@ def _fi_market(pick: str):
     return None
 
 
+def _fi_clean_team(name: str) -> str:
+    """Extract just the real team name from a footballinsight fragment. Single-line posts
+    dump the pick/date/league/disclaimer right after the team, e.g.
+    'Horsens   Pick ➡️ over 2.5   Denmark  Superliga   02/08/2026 …' → 'Horsens'. Also strips a
+    leading 'Free pick'/'Pick' label from the home side ('Free pick Midtjylland' → 'Midtjylland')."""
+    n = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", name or "").strip()
+    # strip a leading label word first (so it isn't confused with the structural 'Pick' marker)
+    n = re.sub(r"^\s*(?:free\s*pick|pick|tip|today'?s?\s*pick)\s*[:\-]?\s*", "", n, flags=re.I)
+    # cut at the first token that can NEVER be part of a team name
+    n = re.split(r"(?:➡️|🕐|\bPick\b|\bTip\b|\bover\b|\bunder\b|\bGMT\b|\d{1,2}/\d{1,2}/\d{2,4}|\(|\bFor informational\b|\bhttps?:)",
+                 n, maxsplit=1, flags=re.I)[0]
+    return re.sub(r"\s{2,}", " ", n).strip(" -–:•|")
+
+
 def _fi_parse(text: str):
     """Parse a footballinsight 'Free pick' post → dict or None."""
     if not text or "🆚" not in text or "➡️" not in text:
@@ -1279,8 +1293,8 @@ def _fi_parse(text: str):
     pm = re.search(r"➡️\s*([^\n]+)", text)
     if not tm or not pm:
         return None
-    home = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", tm.group(1)).strip()
-    away = re.sub(r"[🌏🏆🇮🇸\U0001F1E6-\U0001F1FF]", "", tm.group(2)).strip()
+    home = _fi_clean_team(tm.group(1))
+    away = _fi_clean_team(tm.group(2))
     pick = re.sub(r"\bPick\b", "", pm.group(1), flags=re.I).strip()
     dm = re.search(r"(\d{2})/(\d{2})/(\d{4}).*?\((\d{1,2}):(\d{2})\)", text, re.DOTALL)
     league = ""
