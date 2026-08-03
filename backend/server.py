@@ -9827,12 +9827,20 @@ async def _run_code_scan(job_id: str, images: list):
                 _forced = _code_read_interpret(market, home, away)
                 if _forced.get("pattern") in _CODE_FORCE_RULES:
                     interp = _forced
-            # owner 2026-08 (Slovan Liberec – Teplice): a plain 1X2 code → decide via H2H/Form + Europa-Check
-            # ob '<Underdog> +1.5 Handicap' sicher ist, sonst spezifisches No Bet (kein Standardtext).
+            # owner 2026-08 (Sirius): a plain 1X2 / match-winner code is ALWAYS No Bet. The
+            # crossed-out selection is the winner who WON'T win, so we NEVER buy a DNB/Doppelte
+            # Chance on it — the Glaskugel only WARNS which team does not win.
             if _is_straightwin_code(market):
-                dec = await _code_straightwin_decision(home, away, market)
-                if dec:
-                    interp = dec
+                ws = _code_win_side(market, home, away)
+                loser = home if ws == "home" else away if ws == "away" else None
+                warn = f"{loser} gewinnt NICHT" if loser else "der durchgestrichene Sieger gewinnt nicht"
+                interp = {
+                    "read": "no_bet", "our_market": None, "alt_market": None,
+                    "pattern": "straightwin_nobet",
+                    "reason": (f"Glatter Sieg-Code (1X2) — die durchgestrichene Auswahl tritt nie ein: "
+                               f"{warn}. Eine Doppelte Chance/DNB darauf ist zu riskant → kein Tipp, "
+                               f"nur die Glaskugel-Warnung."),
+                    "stars": 0}
             # owner 2026-08 EUROPA-FAKTOR: if a team just played a European game (tired/rotated),
             # our counter gets even safer → boost to 10★ and say it in the reason (factual, from API).
             if interp.get("read") == "counter" and interp.get("pattern") != "straightwin_dog_plus15":
