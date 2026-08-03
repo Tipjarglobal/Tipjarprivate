@@ -470,3 +470,14 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - server.py resolve_unparseable_kickoffs(): fuer pending MEMBER/expert-Picks mit nicht-parsebarem Kickoff wird der echte Anstoss von API-Football geholt (find_upcoming_fixture -> date_iso) und als absolute UTC-Zeit gespeichert -> korrekt fuer jede Betrachter-Zeitzone. Rate-cap 12/Lauf, pro Pick max. stuendlich (ko_resolve_at). Aktualisiert auch home/away aus API. HQ-Scraper ausgenommen.
 - settlement.py settlement_loop ruft es periodisch auf; Import ergaenzt; fixture-Resolver liefert kickoff_utc.
 - Getestet live: 3/3 unlesbare aufgeloest (z.B. Dortmund-Bayern -> 2026-08-22T18:30:00+00:00). Backend clean, /api/tips 200.
+
+### 2026-08-03 — Ticket-Renderer Teamnamen groesser + neue Schrift [P0 erledigt]
+- ticket_render.py: Teamname-Titel von schmaler BarlowCondensed-Bold auf breite Barlow-Bold (BODY_B) umgestellt, Groesse fit 60->44, TITLE_H 74. Teamnamen jetzt gross/fett/lesbar, Trenner "–" ohne Tofu. Verifiziert per echtem /share-image Endpoint (polaris/master Tickets).
+- server.py: SHARE_RENDER_VER 5->8, damit gecachte alte Share-Bilder neu generiert werden.
+
+### 2026-08-03 — "Both halves over 0.5" falsch als "Gesamt-Tore Über 0.5" gelabelt [P0 erledigt]
+- Root cause: betting_logic.precise_label() erkannte englisches "halves" nicht -> "both halves over 0.5" (Tor in JEDER Halbzeit) wurde zum Match-Total "Gesamt-Tore Über 0.5" (nur 1 Tor gesamt) verfaelscht. Nur Anzeige, gespeicherter String war korrekt.
+- Fix precise_label: "both halves"/"halves"/"each half" zur Ausschlussliste hinzugefuegt -> Markt bleibt unveraendert.
+- Fix i18n.js _formatSelection: neue Regel "both halves over X" -> "Über X Tore in jeder Halbzeit" (localisiert).
+- Fix settlement.py: englische Begriffe "both halves"/"each half" zur each-half Grading-Regel ergaenzt (vorher Grading-Luecke -> ungrade/void). Bewertet jetzt korrekt: Tor in JEDER Halbzeit.
+- Verifiziert: precise_label Unit-Test, Frontend kompiliert clean, JS-Regex-Test ok.

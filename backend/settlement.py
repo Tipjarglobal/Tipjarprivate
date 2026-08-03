@@ -487,7 +487,8 @@ def _grade_goal_leg(kind, market, team, fx):
     if k == "btts" or ("beide teams treffen" in m and "halbzeit" not in m and "hz" not in m):
         return hg >= 1 and ag >= 1
     # "Tor in jeder Halbzeit" — a goal in BOTH halves (team-agnostic, text-gradeable)
-    if k in ("goal_each_half", "o05_each_txt") or "jeder halbzeit" in m or "beide halbzeiten" in m:
+    if (k in ("goal_each_half", "o05_each_txt") or "jeder halbzeit" in m
+            or "beide halbzeiten" in m or "both halves" in m or "each half" in m):
         if not ht_known:
             return None
         return ht_total >= 1 and sh_total >= 1

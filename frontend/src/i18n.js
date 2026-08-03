@@ -417,6 +417,11 @@ function _formatSelection(sel, t) {
   const dec = (x) => x.replace(",", ".");
   let m = s.match(/^total\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)/i);
   if (m) return localizeMarket(`Über ${dec(m[1])} Tore`, t);
+  // "Both halves over X" / "Over X goals in each half" → a goal in EACH half (NOT a match
+  // total). Must be caught before the generic over/under handler so it never collapses to
+  // a plain "Über X Tore" match total (owner 2026-08: bookie 'Both halves over 0.5').
+  m = s.match(/^both\s+halves\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Über ${dec(m[1])} Tore in jeder Halbzeit`, t);
   m = s.match(/^total\s+(?:under|unter)\s+(\d+(?:[.,]\d+)?)/i);
   if (m) return localizeMarket(`Unter ${dec(m[1])} Tore`, t);
   // leave already-worded markets to localizeMarket

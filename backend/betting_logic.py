@@ -223,6 +223,7 @@ def precise_label(label, home, away):
         return m
     # leave distinct-scope / special markets alone
     if any(k in low for k in ("halbzeit", "1. hz", "2. hz", " hz", "1st half", "2nd half",
+                              "both halves", "halves", "each half",
                               "asiat", "asian", "handicap", "ecken", "corner", "karten",
                               "card", "schütze", "scorer", "spieler", "player")):
         return m
