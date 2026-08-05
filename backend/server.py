@@ -284,6 +284,7 @@ async def _regen_pregames_bg():
             await master_doublepack()
             await master_build_packs()
             await master_easy_build()
+            await master_easy3day_build()
             await master_riskparade_build()
             await master_special_build()
             await master_avatar_calls()
@@ -13543,6 +13544,159 @@ async def master_easy_build() -> dict:
     return {"posted": 1, "odds": prod, "legs": len(legs), "codemine": n_cm}
 
 
+async def master_easy3day_build() -> dict:
+    """Owner 2026-08: ADDITIONAL Master 'Einfach' slip — a big 3-DAY safety accumulator
+    (12–14 legs, target total odds ~20–30) that mirrors a bookie multi-day 'X-fold'. Mostly
+    clear-favourite WINS ('<Team> Sieg', only when the favourite is very clear: fav_prob ≥ 72
+    ⇒ odds ≤ ~1.40) mixed with Über 1.5 / Über 0.5 / Team trifft, spanning today + the next 2
+    Berlin days. Never shares a fixture with another open Master pack. One open 3-Tage-Kombi at
+    a time, max one per Berlin day. Lives alongside (not replacing) the 8-game 'easy_mix' slip."""
+    now = datetime.now(timezone.utc)
+    bnow = _berlin_now()
+    day = bnow.date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "einfach", "easy3d": True,
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "einfach", "easy3d": True,
+             "master_day": day}):
+        return {"skipped": "done-today"}
+
+    # 3-day window: from now+20min up to the end of (Berlin today + 2 days).
+    window_end = (bnow + timedelta(days=3)).replace(
+        hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+
+    # This standalone 3-day showcase MAY reuse a strong favourite that also appears in another
+    # Master pack (owner 2026-08: the bookie multi-day slip is its own product) — so we only
+    # dedupe WITHIN this slip's own legs, never against other packs.
+    used_fixkeys = set()
+
+    def _fk(h, a):
+        return "|".join(sorted([_norm(h or ""), _norm(a or "")]))
+
+    raw = await db.match_predictions.find(
+        {"status": "pending", "updated_at": {"$gte": (now - timedelta(days=2)).isoformat()}},
+        {"_id": 0}).to_list(1500)
+    preds = [p for p in raw if _pred_whitelisted(p)]
+    seen_k = {}
+    for p in preds:
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko or ko <= now + timedelta(minutes=20) or ko >= window_end:
+            continue
+        if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league") or ""):
+            continue
+        if _fk(p.get("home"), p.get("away")) in used_fixkeys:
+            continue                       # never share a game with another open Master pack
+        k = _match_key(p.get("home"), p.get("away"))
+        cur = seen_k.get(k)
+        if cur is None or (p.get("fav_prob") or 0) > (cur.get("fav_prob") or 0):
+            p["_ko"] = ko                  # keep the STRONGEST-favourite reading per fixture
+            seen_k[k] = p
+    # strongest favourites first → the slip stays "mostly favourite wins" like the bookie example
+    cand = sorted(seen_k.values(), key=lambda p: -(p.get("fav_prob") or 0))
+
+    def _fav_win_leg(p):
+        """Clear-favourite straight WIN with realistic short odds (fp≥64 ⇒ odds ≤ ~1.42)."""
+        fav = _fav_team(p)
+        fp = p.get("fav_prob") or 0
+        if not (fav and p.get("fav") in ("home", "away") and fp >= 64):
+            return None
+        if learn_verdict("master", f"{fav} Sieg")[0] == "veto":
+            return None
+        od = ("1.15" if fp >= 85 else "1.22" if fp >= 80 else "1.28" if fp >= 75
+              else "1.35" if fp >= 70 else "1.42")
+        return ([f"{fav} Sieg"], [od])
+
+    def _safe_goal_leg(p):
+        """Safe goal market as filler so the slip mixes wins with Über 1.5 / Über 0.5 / Team trifft."""
+        fav = _fav_team(p)
+        fp = p.get("fav_prob") or 0
+        total = p.get("total") or 0
+        if total >= 2.7 and learn_verdict("master", "Über 1.5 Tore")[0] != "veto":
+            return (["Über 1.5 Tore"], ["1.30"])
+        if fav and fp >= 60 and learn_verdict("master", f"{fav} Über 0.5 Tore")[0] != "veto":
+            return ([f"{fav} Über 0.5 Tore"], ["1.22"])
+        if total >= 2.2 and learn_verdict("master", "Über 0.5 Tore")[0] != "veto":
+            return (["Über 0.5 Tore"], ["1.08"])
+        return None
+
+    legs, prod = [], 1.0
+    used_team_days = set()   # (team_norm, kickoff-date) → a team plays once per day, so this
+                             # also collapses bookie name variants (e.g. 'CSKA 1948' vs '… Sofia')
+
+    def _tds(p):
+        d = p["_ko"].date().isoformat()
+        return {(_norm(p.get("home") or ""), d), (_norm(p.get("away") or ""), d)}
+
+    def _skip(p):
+        return (_fk(p.get("home"), p.get("away")) in used_fixkeys
+                or bool(_tds(p) & used_team_days))
+
+    def _add(p, res):
+        nonlocal prod
+        sels, ods = res
+        used_fixkeys.add(_fk(p.get("home"), p.get("away")))
+        used_team_days.update(_tds(p))
+        legs.append({"match": f"{p.get('home')} \u2013 {p.get('away')}",
+                     "league": p.get("league") or "", "kickoff": p["_ko"].isoformat(),
+                     "status": "pending", "selections": sels, "sel_odds": ods})
+        for o in ods:
+            try:
+                prod *= float(str(o).replace(",", "."))
+            except Exception:
+                pass
+
+    def _full():
+        return len(legs) >= 14 or (len(legs) >= 12 and prod >= 24.0)
+
+    # Pass 1 — favourite WINS first (keeps the slip "mostly favourite wins" like the bookie).
+    for p in cand:
+        if _full():
+            break
+        if _skip(p):
+            continue
+        res = _fav_win_leg(p)
+        if res:
+            _add(p, res)
+
+    # Pass 2 — fill with SAFE goal markets (mixed) up to the target legs / odds band.
+    for p in cand:
+        if _full():
+            break
+        if _skip(p):
+            continue
+        res = _safe_goal_leg(p)
+        if res:
+            _add(p, res)
+
+    if len(legs) < 12:
+        return {"skipped": "not-enough", "legs": len(legs)}
+
+    legs.sort(key=lambda lg: _parse_kickoff(lg["kickoff"]) or now)  # chronological 3-day slip
+    prod = round(prod, 2)
+    n_win = sum(1 for lg in legs if any("Sieg" in s for s in lg["selections"]))
+    bot = await _get_master_bot()
+    tid = f"master-{uuid.uuid4().hex[:10]}"
+    first_ko = min((_parse_kickoff(lg["kickoff"]) or now) for lg in legs)
+    analysis = (f"👑 TipJarMaster Einfach – 3-Tage-Kombi: {len(legs)} Spiele über 3 Tage, "
+                f"hauptsächlich klare Favoriten-Siege ({n_win}× Sieg) plus sichere Tor-Märkte "
+                f"(Über 1.5, Über 0.5, Team trifft). Kein Lotto. Gesamtquote {prod:.2f}.")
+    await db.tips.insert_one({
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"{len(legs)}er 3-Tage-Kombi", "odds": f"{prod:.2f}",
+        "category": "banker", "master_category": "einfach", "master_day": day,
+        "easy3d": True, "ai_rating": 8.5, "ai_analysis": analysis,
+        "legs": legs, "is_parlay": True, "stake": "", "potential_return": "",
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    })
+    return {"posted": 1, "odds": prod, "legs": len(legs), "wins": n_win}
+
+
+
 
 
 def _special_legs_for(p, idx=0):
@@ -14143,6 +14297,7 @@ async def master_loop():
                 dp = await master_doublepack()
                 packs = await master_build_packs()
                 easy = await master_easy_build()
+                easy3d = await master_easy3day_build()
                 risk = await master_riskparade_build()
                 chal = await master_challenge()
                 # Owner: the 8-leg "Safe Bets" slip fires at 00:30 Europe/Berlin.
@@ -14167,8 +14322,9 @@ async def master_loop():
                 if alt.get("posted") or con.get("posted") or packs.get("posted") or dp.get("posted") \
                         or safe.get("posted") or special.get("posted") or avatar.get("posted") \
                         or hotc.get("posted") or risk.get("posted") or gifts2.get("posted") \
+                        or easy.get("posted") or easy3d.get("posted") \
                         or chal.get("action") in ("opened", "advanced", "completed", "reset_lost"):
-                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; scorer-kombi {luc}; gifts2 {gifts2}; challenge {chal}")
+                    logger.info(f"Master: live-alt {alt}; consensus {con}; doublepack {dp}; packs {packs}; easy {easy}; easy3d {easy3d}; risk {risk}; safe {safe}; special {special}; avatar {avatar}; hotscorer {hotc}; scorer-kombi {luc}; gifts2 {gifts2}; challenge {chal}")
             # Owner 2026-08: exactly ONE single-game pick per match (Risk > Value > Banker) —
             # kills the Risk+Value+Banker triple-posting of the same fixture. DB-only, so it runs
             # every cycle regardless of the API-Football key.

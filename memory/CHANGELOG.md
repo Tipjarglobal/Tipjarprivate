@@ -481,3 +481,11 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Fix i18n.js _formatSelection: neue Regel "both halves over X" -> "Über X Tore in jeder Halbzeit" (localisiert).
 - Fix settlement.py: englische Begriffe "both halves"/"each half" zur each-half Grading-Regel ergaenzt (vorher Grading-Luecke -> ungrade/void). Bewertet jetzt korrekt: Tor in JEDER Halbzeit.
 - Verifiziert: precise_label Unit-Test, Frontend kompiliert clean, JS-Regex-Test ok.
+
+### 2026-08-05 — Master 'Einfach': zusaetzlicher 3-Tage-Sammelschein [Feature]
+- Neue Funktion server.py master_easy3day_build(): baut ZUSAETZLICH zum 8er 'easy_mix' einen grossen 3-Tage-Sammelschein im Einfach-Bereich (master_category 'einfach', Flag easy3d=True).
+- 12-14 Legs, Zielquote ~20-30 (Band-Kontrolle: stop bei >=12 Legs & prod>=24, max 14). Fenster = heute + 2 Berlin-Tage.
+- Markt-Logik: Pass 1 klare Favoriten-Siege ('<Team> Sieg', fav_prob>=64 -> gestaffelte Quoten 1.15-1.42, <=~1.40 bei starken Favs); Pass 2 sichere Tor-Maerkte (Ueber 1.5 / Team Ueber 0.5 / Ueber 0.5) als Mix-Auffueller.
+- Dedup: per-Fixture + (Team, Tag) -> collabiert Bookie-Namensvarianten (z.B. 'CSKA 1948' vs '... Sofia'), keine Team-Doppelung. Darf Favoriten mit anderen Master-Packs teilen (eigenstaendiges Showcase-Produkt).
+- Eingehaengt in beide Loops (_regen_pregames_bg + Master-Hauptloop) mit Log 'easy3d {...}'. Settlement bewertet '{Team} Sieg' (settlement.py Z.339-341) und each-half/Tor-Maerkte korrekt.
+- Getestet: Build liefert 13 Legs @27.60, 4x Sieg + Mix, keine Duplikate; API /tips?source=master&mcat=einfach zeigt beide Scheine (13er 3-Tage + 8er Sicher-Mix). Backend clean.
