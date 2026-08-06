@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { RotateCcw, AlertTriangle, Trash2, Users } from "lucide-react";
+import { RotateCcw, AlertTriangle, Trash2, Users, Trophy } from "lucide-react";
 import Modal from "./Modal";
 import LineupWatchPanel from "./LineupWatchPanel";
+import HofPinPanel from "./HofPinPanel";
 import api, { apiErr } from "../api";
 import { toast } from "sonner";
 
@@ -11,6 +12,7 @@ export default function AdminResetBar() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [lineupOpen, setLineupOpen] = useState(false);
+  const [hofOpen, setHofOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const doReset = async () => {
@@ -53,6 +55,12 @@ export default function AdminResetBar() {
               onClick={() => setLineupOpen(true)}
               className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-emerald-500/60 text-emerald-300 font-bold px-4 py-2 text-sm hover:bg-emerald-500/10 active:scale-95 transition-all">
               <Users size={15} /> Startelf-Watchlist
+            </button>
+            <button
+              data-testid="admin-hof-pin-btn"
+              onClick={() => setHofOpen(true)}
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-amber-400/60 text-amber-300 font-bold px-4 py-2 text-sm hover:bg-amber-400/10 active:scale-95 transition-all">
+              <Trophy size={15} /> Hall of Fame pinnen
             </button>
             <button
               data-testid="admin-clear-live-settled-btn"
@@ -116,6 +124,7 @@ export default function AdminResetBar() {
       </Modal>
 
       <LineupWatchPanel open={lineupOpen} onClose={() => setLineupOpen(false)} />
+      <HofPinPanel open={hofOpen} onClose={() => setHofOpen(false)} />
     </>
   );
 }

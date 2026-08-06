@@ -489,3 +489,11 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Dedup: per-Fixture + (Team, Tag) -> collabiert Bookie-Namensvarianten (z.B. 'CSKA 1948' vs '... Sofia'), keine Team-Doppelung. Darf Favoriten mit anderen Master-Packs teilen (eigenstaendiges Showcase-Produkt).
 - Eingehaengt in beide Loops (_regen_pregames_bg + Master-Hauptloop) mit Log 'easy3d {...}'. Settlement bewertet '{Team} Sieg' (settlement.py Z.339-341) und each-half/Tor-Maerkte korrekt.
 - Getestet: Build liefert 13 Legs @27.60, 4x Sieg + Mix, keine Duplikate; API /tips?source=master&mcat=einfach zeigt beide Scheine (13er 3-Tage + 8er Sicher-Mix). Backend clean.
+
+### 2026-08-06 — Admin: einzelnen Gewinn-Schein in Hall of Fame pinnen (Ausnahme) [Feature]
+- Grund: Win-Claim vergibt 20 Credits ohne Quoten-Check, aber HoF verlangt Gesamtquote >=3.00 -> sub-3.00 Scheine (z.B. 2.17) bekamen Credits, erschienen aber nie. User wollte AUSNAHMSWEISE einen Schein posten (HoF war leer, Marketing), OHNE die Hauptregel zu aendern.
+- server.py: hall_of_fame() honoriert jetzt Flag hof_force=True als Ausnahme (bypass Quote+Legs, behaelt HOF_START-Datum). 3.00/20.00-Hauptregel unveraendert fuer alle anderen.
+- Neue Admin-Endpunkte: GET /admin/wins/recent (Liste + in_hof-Status), POST /admin/wins/{id}/pin, /unpin.
+- Frontend: neue Komponente HofPinPanel.jsx + Button 'Hall of Fame pinnen' in AdminResetBar.jsx (Modal listet letzte Claims, Pin/Unpin-Toggle).
+- WICHTIG: Preview- und Live-DB sind GETRENNT. Der eingereichte Schein des Users liegt in der LIVE-DB. Nach Deploy muss der User den Button auf tipjarglobal.com nutzen, um seinen Schein zu pinnen.
+- Getestet: Login als Admin, Test-Claim @2.17 -> vor Pin NICHT in HoF (size 0), nach Pin drin (size 1), nach Unpin wieder weg. Frontend-Screenshot: Panel + Claim-Liste + Pinnen-Button rendern korrekt.

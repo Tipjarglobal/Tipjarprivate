@@ -3509,11 +3509,16 @@ async def hall_of_fame():
         {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
     ).sort("total_odds", -1).limit(200).to_list(200)
     # Owner rule 2026-07-26: HoF opens 1 Aug 2026. SYSTEMS ONLY (≥ 2 legs). Minimum total
-    # quote is 3.00 — EXCEPT TipJarHQ's own systems, which must clear 20.00.
-    docs = [d for d in raw
-            if (d.get("legs_count") or 1) >= 2
-            and _to_float(d.get("total_odds")) >= _hof_min_odds(d.get("username"))
-            and _hof_after_start(d.get("created_at"))][:24]
+    # quote is 3.00 — EXCEPT TipJarHQ's own systems, which must clear 20.00. An admin may pin a
+    # single claim as a one-off exception (hof_force) — this NEVER changes the main rule for
+    # anyone else; it only lets that one flagged slip appear (still must be on/after 1 Aug).
+    def _hof_ok(d):
+        if d.get("hof_force"):
+            return _hof_after_start(d.get("created_at"))
+        return ((d.get("legs_count") or 1) >= 2
+                and _to_float(d.get("total_odds")) >= _hof_min_odds(d.get("username"))
+                and _hof_after_start(d.get("created_at")))
+    docs = [d for d in raw if _hof_ok(d)][:24]
     for d in docs:  # trophies always show $ too (owner rule)
         if d.get("stake"):
             d["stake"] = _money_to_usd(d.get("stake"))
@@ -3553,6 +3558,41 @@ async def my_wins(user: dict = Depends(get_current_user)):
             d["winnings"] = _money_to_usd(d.get("winnings"))
     total = sum(d.get("credits", 0) for d in docs)
     return {"claims": docs, "total_credits": total, "count": len(docs)}
+
+
+@api_router.get("/admin/wins/recent")
+async def admin_wins_recent(admin: dict = Depends(require_admin)):
+    """Recent approved win-claims + whether each currently shows in the Hall of Fame, so an admin
+    can pin a one-off exception (e.g. a sub-3.00 slip while the HoF is still empty)."""
+    docs = await db.win_claims.find(
+        {"status": "approved"}, {"_id": 0, "sig": 0, "user_id": 0}
+    ).sort("created_at", -1).limit(40).to_list(40)
+    for d in docs:
+        d["in_hof"] = bool(d.get("hof_force")) or (
+            (d.get("legs_count") or 1) >= 2
+            and _to_float(d.get("total_odds")) >= _hof_min_odds(d.get("username"))
+            and _hof_after_start(d.get("created_at")))
+        if d.get("stake"):
+            d["stake"] = _money_to_usd(d.get("stake"))
+        if d.get("winnings"):
+            d["winnings"] = _money_to_usd(d.get("winnings"))
+    return {"claims": docs}
+
+
+@api_router.post("/admin/wins/{claim_id}/pin")
+async def admin_wins_pin(claim_id: str, admin: dict = Depends(require_admin)):
+    r = await db.win_claims.update_one({"id": claim_id}, {"$set": {"hof_force": True}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Schein nicht gefunden")
+    return {"ok": True, "pinned": True}
+
+
+@api_router.post("/admin/wins/{claim_id}/unpin")
+async def admin_wins_unpin(claim_id: str, admin: dict = Depends(require_admin)):
+    r = await db.win_claims.update_one({"id": claim_id}, {"$set": {"hof_force": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Schein nicht gefunden")
+    return {"ok": True, "pinned": False}
 
 
 
