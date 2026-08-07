@@ -505,3 +505,12 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - HINWEIS: Automatische Abrechnung auf LIVE haengt an Loop-Ausfuehrung + API-Football-Coverage der (oft obskuren) Ligen. Der manuelle Button gibt dem Owner sofortige Kontrolle. Preview- und Live-DB sind getrennt -> User muss nach Deploy auf tipjarglobal.com "Jetzt abrechnen" druecken, um gestrige Spiele sofort abzurechnen.
 - P4 Codemining Auto-Auswahl: bereits automatisch (keine Aenderung noetig).
 - Getestet: server syntax OK, frontend compiled (1 harmloser eslint-warning), alle 4 Endpunkte per curl, Admin-Buttons rendern (Screenshot).
+
+### 2026-08-07 — Silent Instagram-Scout 'Spica' (@thatsfootball90x) fuettert Master [Feature]
+- Neuer stiller Hidden-Expert-Bot 'Spica' in _CHANNEL_BOTS (handle thatsfootball90x, silent=True, feeds_master=True). Nie oeffentlich sichtbar.
+- _ingest_emptips setzt jetzt learn_as_master=bool(bot_cfg.feeds_master) auf den Tipp.
+- learning.py refresh_learning: bezieht {learn_as_master:true}-Tipps ein und mappt sie aufs 'master'-System -> Master lernt aus Spicas settled Picks (Markt-Veto + per-Leg).
+- Neuer Admin-Endpunkt POST /admin/scout/ingest (Upload 1-6 Screenshots oder Text) -> Vision-OCR (analyze_tip) -> versteckter Tipp source=spica, is_expert, hidden, learn_as_master.
+- Frontend: ScoutFeedPanel.jsx + Button 'Scout fuettern' (fuchsia) in AdminResetBar.
+- Instagram NICHT direkt scrapebar (Login-Wall, crawl 403) -> OCR-Upload-Weg gewaehlt (Option A). Voll-Auto-Scraper waere Drittanbieter-API (kostenpflichtig) - nicht gebaut.
+- Getestet: 404 bei falschem Handle; Text-Ingest -> Spica-Tipp (hidden=True, learn_as_master=True, source=spica, aus public feed ausgeschlossen); refresh_learning trainiert 'master' darauf; Admin-Modal rendert (Screenshot). Bot-User role=expert/silent.

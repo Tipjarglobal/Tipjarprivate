@@ -82,11 +82,14 @@ async def refresh_learning() -> dict:
     try:
         cursor = db.tips.find(
             {"status": {"$in": ["won", "lost"]},
-             "source": {"$in": ["hq-master", "hq-system", "hq-auto", "smart", "hq-live"]}},
+             "$or": [
+                 {"source": {"$in": ["hq-master", "hq-system", "hq-auto", "smart", "hq-live"]}},
+                 {"learn_as_master": True},   # silent OCR scouts (e.g. Spica) train the Master
+             ]},
             {"_id": 0, "source": 1, "market": 1, "status": 1, "is_parlay": 1,
-             "master_category": 1, "category": 1, "legs": 1})
+             "master_category": 1, "category": 1, "legs": 1, "learn_as_master": 1})
         async for t in cursor:
-            system = "master" if t.get("source") == "hq-master" else "hq"
+            system = "master" if (t.get("source") == "hq-master" or t.get("learn_as_master")) else "hq"
             for b in _markets_of_tip(t):
                 _bump(fresh[system], b, t["status"])
             # owner 2026-06: the Master must LEARN FROM ITS MISTAKES. Learn per-LEG from its

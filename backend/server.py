@@ -2100,6 +2100,12 @@ _CHANNEL_BOTS = {
         "email": "atlas@tipjar.com", "name": "Atlas",
         "bio": "In-house Analyst — tägliche Value-Analysen aus GR-Experten-Pool.",
     },
+    "thatsfootball90x": {                 # Instagram @thatsfootball90x — OCR-fed silent scout
+        "email": "spica@tipjar.com", "name": "Spica",
+        "bio": "In-house Analyst — internationale Value-Picks.",
+        "silent": True,                   # never posts publicly …
+        "feeds_master": True,             # … but the Master LEARNS from its settled picks
+    },
     # Future tipster channels → add a UNIQUE bot here, e.g.:
     # "somechannel": {"email": "spica@tipjar.com", "name": "Spica", "bio": "..."},
 }
@@ -2238,6 +2244,7 @@ async def _ingest_emptips(images_b64, image_blobs, text, source_url="", skip_if_
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": bot_slug, "category": "value",
         "hidden": bool((bot_cfg or {}).get("silent")),
+        "learn_as_master": bool((bot_cfg or {}).get("feeds_master")),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.tips.insert_one(tip)
@@ -2264,6 +2271,37 @@ async def admin_emptips_ingest(
         raise HTTPException(status_code=400, detail="Bitte ein Wettschein-Bild oder Text angeben.")
     tip = await _ingest_emptips(images_b64, image_blobs, text)
     return {"ok": True, "tip": tip}
+
+
+@api_router.post("/admin/scout/ingest")
+async def admin_scout_ingest(
+    file: Optional[UploadFile] = File(default=None),
+    files: List[UploadFile] = File(default=[]),
+    text: str = Form(default=""),
+    handle: str = Form(default="thatsfootball90x"),
+    admin: dict = Depends(require_admin),
+):
+    """Feed a SILENT scout's betslip screenshot(s) (e.g. Instagram @thatsfootball90x → 'Spica').
+    Vision-OCR reads the picks and stores them as a hidden, Master-learning tip: never shown
+    publicly, but its settled outcome trains the Master (learn_as_master)."""
+    bot_cfg = _CHANNEL_BOTS.get((handle or "").strip().lower().lstrip("@"))
+    if not bot_cfg or not bot_cfg.get("feeds_master"):
+        raise HTTPException(status_code=404, detail="Unbekannter Scout-Handle.")
+    uploads = [f for f in ([file] + list(files)) if f is not None and getattr(f, "filename", None)][:6]
+    images_b64, image_blobs = [], []
+    for f in uploads:
+        rb = await f.read()
+        images_b64.append(base64.b64encode(rb).decode("utf-8"))
+        ext = (f.filename.rsplit(".", 1)[-1] if f.filename and "." in f.filename else "png").lower()
+        image_blobs.append((rb, ext, f.content_type or "image/png"))
+    if not images_b64 and not text.strip():
+        raise HTTPException(status_code=400, detail="Bitte ein Schein-Bild oder Text angeben.")
+    tip = await _ingest_emptips(images_b64, image_blobs, text, bot_cfg=bot_cfg)
+    if not tip:
+        return {"ok": False, "reason": "Kein gültiger Pick im Bild erkannt."}
+    return {"ok": True, "bot": bot_cfg["name"],
+            "legs": len(tip.get("legs") or []), "market": tip.get("market"),
+            "match": f'{tip.get("home_team","")} – {tip.get("away_team","")}'.strip(" –")}
 
 
 @api_router.post("/admin/emptips/run")
