@@ -101,14 +101,14 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   useEffect(() => {
     if (view !== "ai") return;
     let cancel = false;
-    const fetchC = () => api.get("/tips/counts").then(({ data }) => {
+    const fetchC = () => api.get("/tips/counts", { params: cat ? { category: cat } : {} }).then(({ data }) => {
       if (!cancel) setAiCounts({ "24": data.ai_now || 0, "48": data.ai_24_48 || 0,
         "48plus": data.ai_48plus || 0, "all": data.ai_total || 0 });
     }).catch(() => {});
     fetchC();
     const iv = setInterval(fetchC, 20000);
     return () => { cancel = true; clearInterval(iv); };
-  }, [view, refreshKey]);
+  }, [view, refreshKey, cat]);
 
   // Deep-link from a push notification carries a sub-tab (e.g. master "special"): select it
   // so the pick's list actually loads and jumpToPick can find & highlight the card.

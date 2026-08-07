@@ -1017,9 +1017,11 @@ async def master_avatar():
 
 
 @api_router.get("/tips/counts")
-async def tips_counts():
+async def tips_counts(category: Optional[str] = None):
     """Post counts per picks area — powers the homepage badges & area alerts.
-    The AI badge reflects the next-24h picks (the default view) so it stays realistic."""
+    The AI badge reflects the next-24h picks (the default view) so it stays realistic.
+    When `category` is given (banker/value/risk/gifts) the AI window counts reflect ONLY that
+    category, so each area shows its OWN correct counter."""
     await purge_expired_autotips()
     await expire_stale_pending()
     await purge_settled_tips()
@@ -1027,7 +1029,21 @@ async def tips_counts():
     # AI badge = every pending Single-Game pick (singles + bet-builder combos, all
     # days) so it matches the bundled red "new" count and the Banker/Value/Risk tabs.
     ai_docs = await db.tips.find(
-        {"source": "hq-auto", "status": "pending"}, {"match_time": 1}).to_list(1000)
+        {"source": "hq-auto", "status": "pending"},
+        {"match_time": 1, "category": 1, "is_gift": 1}).to_list(1000)
+
+    cat = (category or "").strip().lower()
+
+    def _cat_ok(d):
+        if not cat:
+            return True
+        if cat in ("gift", "gifts"):
+            return bool(d.get("is_gift"))
+        c = d.get("category")
+        bucket = "risk" if c == "risk" else "banker" if c == "banker" else "value"
+        return bucket == cat and not d.get("is_gift")
+    if cat:
+        ai_docs = [d for d in ai_docs if _cat_ok(d)]
 
     def _upcoming(mt):
         ko = _parse_kickoff(mt)
@@ -1088,6 +1104,7 @@ async def tips_counts():
         "$or": [
             {"source": "smart"},
             {"source": "hq-system"},
+            {"source": "hq-master", "is_parlay": True},
             {"source": "hq-auto", "category": "risk"},
             {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}},
         ],
@@ -2731,6 +2748,7 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
         q["$or"] = [
             {"source": "smart"},
             {"source": "hq-system"},
+            {"source": "hq-master", "is_parlay": True},
             {"source": "hq-auto", "category": "risk"},
             {"source": {"$nin": ["hq-auto", "smart", "hq-live", "hq-system", "hq-master"]}},
         ]

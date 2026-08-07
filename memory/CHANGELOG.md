@@ -497,3 +497,11 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Frontend: neue Komponente HofPinPanel.jsx + Button 'Hall of Fame pinnen' in AdminResetBar.jsx (Modal listet letzte Claims, Pin/Unpin-Toggle).
 - WICHTIG: Preview- und Live-DB sind GETRENNT. Der eingereichte Schein des Users liegt in der LIVE-DB. Nach Deploy muss der User den Button auf tipjarglobal.com nutzen, um seinen Schein zu pinnen.
 - Getestet: Login als Admin, Test-Claim @2.17 -> vor Pin NICHT in HoF (size 0), nach Pin drin (size 1), nach Unpin wieder weg. Frontend-Screenshot: Panel + Claim-Liste + Pinnen-Button rendern korrekt.
+
+### 2026-08-07 — Settlement/Zaehler/Best-of Sammelfix (User: "repariere alles") [P0/Feature]
+- P3 Kategorie-Zaehler: GET /tips/counts akzeptiert jetzt ?category=banker|value|risk|gifts und zaehlt NUR diese Kategorie (Fenster + Alle). Frontend RateWall.jsx uebergibt aktive Kategorie -> jeder Bereich zeigt seine EIGENE korrekte Zahl (vorher immer Gesamtzahl 31). Verifiziert: total 5 = value 4 + gift 1.
+- P2 Best of: bestwon-Abfrage (count @ ~1100 + list @ ~2747) schloss hq-master aus -> gewonnene Master-Parlays (Doppelpack Ajax+Benfica etc.) erschienen nie in Best of. Fix: {source:hq-master, is_parlay:true} in beide $or aufgenommen. Verifiziert: Master-Parlays erscheinen jetzt in /tips?source=bestwon.
+- P1 Settlement: Neuer Admin-Button "Jetzt abrechnen" (AdminResetBar) -> POST /admin/settle-now (Tipps+Parlays+Combos, umgeht Leader-Check) + POST /admin/code-reading/settle-finished (Codemining beendet -> Farbe+Ergebnis). Toast zeigt Anzahl. Settlement-Engine-Code ist korrekt (settle-now im Preview getestet: ok, checked 3). Leadership funktioniert (Lock TTL 90s, fail-open).
+- HINWEIS: Automatische Abrechnung auf LIVE haengt an Loop-Ausfuehrung + API-Football-Coverage der (oft obskuren) Ligen. Der manuelle Button gibt dem Owner sofortige Kontrolle. Preview- und Live-DB sind getrennt -> User muss nach Deploy auf tipjarglobal.com "Jetzt abrechnen" druecken, um gestrige Spiele sofort abzurechnen.
+- P4 Codemining Auto-Auswahl: bereits automatisch (keine Aenderung noetig).
+- Getestet: server syntax OK, frontend compiled (1 harmloser eslint-warning), alle 4 Endpunkte per curl, Admin-Buttons rendern (Screenshot).

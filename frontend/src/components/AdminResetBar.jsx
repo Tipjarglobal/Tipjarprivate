@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { RotateCcw, AlertTriangle, Trash2, Users, Trophy } from "lucide-react";
+import { RotateCcw, AlertTriangle, Trash2, Users, Trophy, RefreshCw } from "lucide-react";
 import Modal from "./Modal";
 import LineupWatchPanel from "./LineupWatchPanel";
 import HofPinPanel from "./HofPinPanel";
@@ -41,6 +41,27 @@ export default function AdminResetBar() {
     }
   };
 
+  const doSettleNow = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/settle-now");
+      let cm = 0;
+      try {
+        const r = await api.post("/admin/code-reading/settle-finished");
+        cm = r.data?.settled || 0;
+      } catch { /* codemining settle optional */ }
+      if (data.ok === false && data.reason) {
+        toast.error(data.reason);
+      } else {
+        toast.success(`Abgerechnet: ${data.settled || 0} Tipps · ${data.parlays?.settled || 0} Parlays · ${data.combos?.settled || 0} Combos · ${cm} Codemining`);
+      }
+    } catch (err) {
+      toast.error(apiErr(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
@@ -55,6 +76,13 @@ export default function AdminResetBar() {
               onClick={() => setLineupOpen(true)}
               className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-emerald-500/60 text-emerald-300 font-bold px-4 py-2 text-sm hover:bg-emerald-500/10 active:scale-95 transition-all">
               <Users size={15} /> Startelf-Watchlist
+            </button>
+            <button
+              data-testid="admin-settle-now-btn"
+              onClick={doSettleNow}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-sky-500/60 text-sky-300 font-bold px-4 py-2 text-sm hover:bg-sky-500/10 active:scale-95 transition-all disabled:opacity-50">
+              <RefreshCw size={15} /> {busy ? "Läuft…" : "Jetzt abrechnen"}
             </button>
             <button
               data-testid="admin-hof-pin-btn"
