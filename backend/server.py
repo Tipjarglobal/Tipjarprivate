@@ -7664,6 +7664,89 @@ async def _hot_scorer_for_team(team_name: str, seasons: list[int]) -> dict | Non
     return best
 
 
+async def _scorers_for_team(team_name: str, seasons: list[int], limit: int = 2) -> list[dict]:
+    """Owner 2026-06 ('sag welche Spieler heute treffen'): ALL reliable goalscorers of a team —
+    NOT just the striker (any outfield player who scores). Sorted by reliability
+    (minutes-per-goal ascending, then goals descending) so the most 'due-to-score' names come
+    first. Reuses the 24h player-stats cache → NO extra API quota.
+    Returns up to `limit` dicts {name, goals, gl (goals/start), mpg (minutes/goal), prob, odds}."""
+    tid = await resolve_team_id(team_name)
+    if not tid:
+        return []
+    players = await get_team_players(tid, seasons)
+    out = []
+    for pstat in players or []:
+        player = pstat.get("player") or {}
+        name = player.get("name")
+        stats = (pstat.get("statistics") or [{}])[0] or {}
+        games = stats.get("games") or {}
+        lineups = games.get("lineups") or 0
+        apps = games.get("appearences") or 0
+        minutes = games.get("minutes") or 0
+        pos = (games.get("position") or "").lower()
+        goals = (stats.get("goals") or {}).get("total") or 0
+        if not name or pos.startswith("goal"):
+            continue
+        if goals < 4:  # a genuine, repeat scorer only
+            continue
+        if lineups < 5 and apps < 8:  # a regular in the XI
+            continue
+        mpg = (minutes / goals) if (minutes and goals) else None
+        # prolific = scores at least ~ every 220' (generous, but weeds out one-off scorers)
+        if mpg is not None and mpg > 220:
+            continue
+        denom = max(lineups or apps, 1)
+        gl = goals / denom
+        prob = _prob_over(0.5, gl)
+        out.append({"name": name, "goals": int(goals), "gl": round(gl, 2),
+                    "mpg": round(mpg) if mpg else 9999,
+                    "prob": round(prob, 3), "odds": _odds_from_prob(prob)})
+    out.sort(key=lambda x: (x["mpg"], -x["goals"]))
+    return out[:limit]
+
+
+_EURO_TIE_KEYWORDS = ("champions league", "europa league", "conference league", "uefa")
+
+
+async def _fixture_scorer_context(team_id: int, opponent_name: str, now: datetime) -> dict | None:
+    """ONE /fixtures (next=15) call that serves BOTH jobs at once (no extra API quota vs. the
+    old kickoff-verification): returns the REAL fixture date vs the opponent AND the team's full
+    upcoming-fixtures list (used by the Europa-League rotation filter)."""
+    resp = await asyncio.to_thread(_apifootball, "/fixtures", {"team": team_id, "next": 15})
+    if not resp:
+        return None
+    ctx = {"fixtures": [], "home_name": None, "away_name": None, "date_iso": None}
+    for fx in resp:
+        th = (fx.get("teams", {}).get("home", {}) or {}).get("name", "")
+        ta = (fx.get("teams", {}).get("away", {}) or {}).get("name", "")
+        lg = fx.get("league") or {}
+        dt = (fx.get("fixture") or {}).get("date")
+        ctx["fixtures"].append({"home": th, "away": ta, "league": lg.get("name", ""),
+                                "country": lg.get("country", ""), "date": dt})
+        if ctx["date_iso"] is None and (_teams_match(th, opponent_name) or _teams_match(ta, opponent_name)):
+            ctx["home_name"], ctx["away_name"], ctx["date_iso"] = th, ta, dt
+    return ctx
+
+
+def _team_has_euro_tie(ctx: dict, team_name: str, now: datetime, within_days: int = 4) -> bool:
+    """True when this team plays a life-critical UEFA cup tie within `within_days` days (rotation
+    risk — e.g. Nijmegen vs Olympiakos). Reads only the already-fetched fixtures list → free."""
+    for fx in ctx.get("fixtures", []):
+        txt = f"{fx.get('league','')} {fx.get('country','')}".lower()
+        if not any(k in txt for k in _EURO_TIE_KEYWORDS):
+            continue
+        if not (_teams_match(fx.get("home"), team_name) or _teams_match(fx.get("away"), team_name)):
+            continue
+        try:
+            dt = datetime.fromisoformat((fx.get("date") or "").replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if 0 < (dt - now).total_seconds() <= within_days * 86400:
+            return True
+    return False
+
+
+
 QUAL_KEYWORDS = ("qualif", "champions league", "europa league", "conference league", "uefa",
                  "libertadores", "sudamericana", "afc champions", "caf champions", "concacaf champions",
                  "preliminary", "wcq", "ecq")
@@ -14207,9 +14290,16 @@ async def master_avatar_codemining() -> dict:
 
 
 async def master_hotscorer_combo() -> dict:
-    """Owner 2026-07-30 ('Konstantelias UND Pavlidis über 1.5 Tore → Hall of Fame'): once per
-    Berlin day, combine 2-3 IN-FORM strikers from different verified fixtures into ONE aggressive
-    'Doppelpack'-parlay ({Spieler} trifft 2+). High odds → a genuine Hall-of-Fame candidate."""
+    """Owner 2026-06 ('sag einfach welche 4 Spieler heute treffen — kein Doppelpack, API-sparsam'):
+    ONCE per Berlin day, build ONE Anytime-goalscorer accumulator (≥4 legs) from TODAY's games.
+    Because it runs once per Berlin day it is automatically a Saturday combo on Saturday and a
+    Sunday combo on Sunday. Rules (cheap — reuses the cached player stats & folds the Europa-tie
+    check into the SAME /fixtures call as the kickoff verification):
+      • only teams predicted to score >1.5 goals → 'buy' their goalscorers,
+      • '{Spieler} trifft' (Anytime) — NO Doppelpack,
+      • 2+ scorers from the SAME game allowed (max 2 per match),
+      • not only strikers — any prolific outfield player (goals, minutes-per-goal),
+      • SKIP any team with a life-critical UEFA cup tie within 4 days (rotation risk, e.g. Nijmegen)."""
     now = datetime.now(timezone.utc)
     day = _berlin_now().date().isoformat()
     if await db.tips.count_documents(
@@ -14221,85 +14311,124 @@ async def master_hotscorer_combo() -> dict:
         return {"skipped": "done-today"}
     preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
     gift_map = await _gift_stance_map()
-    picks, seen = [], set()
+    try:
+        from zoneinfo import ZoneInfo
+        _bz = ZoneInfo("Europe/Berlin")
+    except Exception:
+        _bz = None
+    today_b = _berlin_now().date()
+
+    # candidate TODAY-fixtures (Berlin day), soonest first
+    cand = []
     for p in preds:
-        if len(picks) >= 3:
-            break
         if not _pred_whitelisted(p):
-            continue
-        fav = _fav_team(p)
-        try:
-            fp = int(float(p.get("fav_prob") or 0))
-        except (TypeError, ValueError):
-            fp = 0
-        if not fav or fp < 60:
             continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
             continue
-        h = (ko - now).total_seconds() / 3600
-        if h < 2 or h > SMART_LOOKAHEAD_H:
+        ko_b = (ko.astimezone(_bz) if _bz else ko + timedelta(hours=2)).date()
+        if ko_b != today_b:
             continue
-        key = _match_key(p.get("home"), p.get("away"))
-        if key in seen:
+        if (ko - now).total_seconds() / 3600 < 1.5:  # not already kicked off
             continue
-        hs = await _hot_scorer_for_team(fav, _smart_seasons(p.get("kickoff")))
-        if not hs or hs["gl"] < 0.6:  # brace-capable, genuinely prolific striker only
-            continue
-        brace_prob = _prob_over(1.5, hs["gl"])
-        if brace_prob < 0.12:
-            continue
-        market = f"{hs['name']} trifft 2+ (Doppelpack)"
-        if _conflicts_with_gift(market, p.get("home"), p.get("away"), gift_map.get(key)):
-            continue
-        # verify the fixture is real (no phantom games)
+        cand.append((ko, p))
+    cand.sort(key=lambda x: x[0])
+
+    legs, seen_players = [], set()
+    for ko, p in cand:
+        if len(legs) >= 5:
+            break
         home, away = p.get("home"), p.get("away")
-        real_ko = p.get("kickoff") or ko.isoformat()
-        if API_FOOTBALL_KEY:
-            tidh = await resolve_team_id(home)
-            fx = find_upcoming_fixture(tidh, away) if tidh else None
-            if not fx or not fx.get("date_iso"):
-                continue
+        key = _match_key(home, away)
+        ph, pa = p.get("ph"), p.get("pa")
+        # which side is predicted to score 1.5+ goals?
+        goal_sides = []
+        if isinstance(ph, (int, float)) and ph >= 1.5:
+            goal_sides.append(home)
+        if isinstance(pa, (int, float)) and pa >= 1.5:
+            goal_sides.append(away)
+        if not goal_sides:  # fallback: a dominant favourite is trusted to score
+            fav = _fav_team(p)
             try:
-                ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
-            except Exception:
-                continue
-            home = fx.get("home_name") or home
-            away = fx.get("away_name") or away
-            real_ko = ko_dt.strftime("%d/%m/%Y %H:%M")
-        seen.add(key)
-        picks.append({"match": f"{home} - {away}", "league": p.get("league") or "",
-                      "kickoff": real_ko, "status": "pending",
-                      "selections": [market], "sel_odds": [hs["odds"]],
-                      "player": hs["name"], "goals": hs["goals"], "_ko": ko})
-    if len(picks) < 2:
-        return {"skipped": "not-enough", "have": len(picks)}
+                fp = int(float(p.get("fav_prob") or 0))
+            except (TypeError, ValueError):
+                fp = 0
+            if fav and fp >= 65:
+                goal_sides.append(fav)
+        if not goal_sides:
+            continue
+
+        per_match = 0
+        match_home, match_away = home, away
+        real_ko = p.get("kickoff") or ko.isoformat()
+        resolved = False
+        for team in goal_sides:
+            if per_match >= 2 or len(legs) >= 6:
+                break
+            opp = away if _teams_match(team, home) else home
+            if API_FOOTBALL_KEY:
+                tid_t = await resolve_team_id(team)
+                ctx = await _fixture_scorer_context(tid_t, opp, now) if tid_t else None
+                if not ctx or not ctx.get("date_iso"):
+                    continue  # can't verify a real fixture for this side
+                if _team_has_euro_tie(ctx, team, now):  # rotation risk → skip this team
+                    continue
+                if not resolved and ctx.get("home_name"):
+                    match_home = ctx["home_name"] or home
+                    match_away = ctx["away_name"] or away
+                    try:
+                        ko_dt = datetime.fromisoformat(ctx["date_iso"].replace("Z", "+00:00"))
+                        real_ko = ko_dt.strftime("%d/%m/%Y %H:%M")
+                    except Exception:
+                        pass
+                    resolved = True
+            scorers = await _scorers_for_team(team, _smart_seasons(p.get("kickoff")), limit=2)
+            for s in scorers:
+                if per_match >= 2 or len(legs) >= 5:
+                    break
+                if s["prob"] < 0.35:  # only RELIABLE scorers (skip longshots → winnable slip)
+                    continue
+                nm = s["name"]
+                if nm in seen_players:
+                    continue
+                market = f"{nm} trifft"
+                if _conflicts_with_gift(market, match_home, match_away, gift_map.get(key)):
+                    continue
+                seen_players.add(nm)
+                per_match += 1
+                legs.append({"match": f"{match_home} - {match_away}", "league": p.get("league") or "",
+                             "kickoff": real_ko, "status": "pending",
+                             "selections": [market], "sel_odds": [s["odds"]],
+                             "player": nm, "goals": s["goals"], "_ko": ko})
+    if len(legs) < 4:
+        return {"skipped": "not-enough", "have": len(legs)}
     combo = 1.0
-    for pk in picks:
-        combo *= float(pk["sel_odds"][0])
+    for lg in legs:
+        combo *= float(lg["sel_odds"][0])
     combo = round(combo, 2)
-    first_ko = min(pk["_ko"] for pk in picks)
-    names = ", ".join(pk["player"] for pk in picks)
-    for pk in picks:
-        pk.pop("_ko", None)
+    first_ko = min(lg["_ko"] for lg in legs)
+    names = ", ".join(lg["player"] for lg in legs)
+    for lg in legs:
+        lg.pop("_ko", None)
     bot = await _get_master_bot()
     tid = f"master-hs-{uuid.uuid4().hex[:10]}"
     await db.tips.insert_one({
         "id": tid, "user_id": bot["id"], "username": bot["username"],
         "is_master": True, "is_expert": False,
         "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-        "market": f"🔥 Torjäger-Kombi — {len(picks)} Stürmer im Doppelpack", "odds": f"{combo:.2f}",
+        "market": f"🔥 Torjäger-Kombi — {len(legs)} treffen heute", "odds": f"{combo:.2f}",
         "category": "value", "master_category": "hotscorer", "master_day": day,
-        "ai_rating": 8.4,
-        "ai_analysis": (f"🔥 Hall-of-Fame-Kandidat: {names} sind in Galaform und sollen JE einen "
-                        f"Doppelpack (2+ Tore) schnüren. Aggressive Kombi mit Gesamtquote {combo:.2f} — "
-                        f"kleiner Einsatz, großer Traum. Nur mit Köpfchen spielen."),
-        "legs": picks, "is_parlay": True,
+        "ai_rating": 8.2,
+        "ai_analysis": (f"🔥 Torjäger-Kombi des Tages: {names} sollen JE mindestens EINMAL treffen. "
+                        f"Nur Torschützen aus Teams gewählt, die über 1,5 Tore schießen; Spieler mit "
+                        f"Europapokal-Rückspiel in 4 Tagen (Rotationsgefahr) wurden gemieden. "
+                        f"Gesamtquote {combo:.2f} — kleiner Einsatz, großer Traum. Mit Köpfchen spielen."),
+        "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
     })
-    logger.info(f"Master Hot-Scorer combo: {names} @ {combo}")
-    return {"posted": 1, "odds": combo, "players": len(picks)}
+    logger.info(f"Master Torjäger-Kombi ({len(legs)}): {names} @ {combo}")
+    return {"posted": 1, "odds": combo, "players": len(legs)}
 
 
 async def master_lineup_scorer_combo() -> dict:

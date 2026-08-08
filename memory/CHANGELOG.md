@@ -520,3 +520,9 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Frontend RateWall.jsx: Jede AI-Sub-Kategorie (Banker/Value/Risk/Gift/Mental) zeigt jetzt einen EIGENEN persistenten Zähler (catTotals) statt nur roten Unread-Badge. Löst "(38)"-Verwirrung: Parent-Tab = Gesamt, Sub-Tabs = eigene Zahl (z.B. Value 18, Gift 6 = 24).
 - Fix: Brain-Import + doMasterReset-Funktion nachgezogen (Runtime-Fehler "Brain/doMasterReset is not defined" behoben).
 - Getestet: Admin-Bar rendert Master-Reset-Button (Screenshot), AI-Sub-Tabs zeigen eigene Zähler (Value 18/Gift 6, Screenshot), Endpunkt auth-geschützt (401 ohne Token).
+
+## 2026-08-08 (Fork) — Torjäger-Kombi neu: Anytime-Torschützen "wer trifft heute"
+- master_hotscorer_combo() komplett neu (server.py): KEIN Doppelpack mehr → einfache Anytime-Kombi "{Spieler} trifft" (4-5 Beine) aus den HEUTIGEN Spielen (Berlin-Tag). Läuft 1x/Berlin-Tag → automatisch Samstags-Kombi am Sa, Sonntags-Kombi am So.
+- Regeln: nur Teams mit Prognose >1,5 Tore (ph/pa>=1.5, sonst Favorit >=65%); 2+ Torschützen aus DEMSELBEN Spiel erlaubt (max 2/Spiel); NICHT nur Stürmer (jeder prolifische Feldspieler); nur ZUVERLÄSSIGE Scorer (Anytime-Prob >=0.35 → keine Longshots); Europapokal-Rotationsfilter: Team mit lebenswichtigem UEFA-Rückspiel in <=4 Tagen wird gemieden (z.B. NEC Nijmegen vs Olympiakos → ausgeschlossen).
+- Neue Helper: _scorers_for_team (Top-Scorer eines Teams aus 24h-Cache, sortiert nach Min/Tor → kein Extra-API), _fixture_scorer_context (EINE /fixtures next=15 Abfrage prüft echte Ansetzung UND UEFA-Nähe → kein Extra-API), _team_has_euro_tie.
+- Getestet (echte Daten 08.08.2026): postet 5er-Kombi @52.66, 2 Scorer aus Dalian Zhixing, alle heutige Spiele; Europa-Filter bestätigt (Nijmegen/Olympiakos am 11.08 in <=4 Tagen → True → ausgeschlossen); Frontend Master→Torjäger-Kombi rendert "{Spieler} to score @Quote" korrekt (Screenshot). Settlement gradet "trifft" bereits als Anytime-Scorer.
