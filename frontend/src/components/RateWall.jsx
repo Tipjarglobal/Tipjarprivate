@@ -154,6 +154,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
   const CAT_SEEN_KEY = "tj_cat_seen_ids";
   const catIdsRef = useRef({ banker: [], value: [], risk: [], gifts: [] });
   const [catUnread, setCatUnread] = useState({ banker: 0, value: 0, risk: 0, gifts: 0 });
+  const [catTotals, setCatTotals] = useState({ banker: 0, value: 0, risk: 0, gifts: 0, mental: 0 });
   const getCatSeen = () => {
     try { return JSON.parse(localStorage.getItem(CAT_SEEN_KEY) || "{}"); } catch { return {}; }
   };
@@ -164,19 +165,24 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
       const { data } = await api.get("/tips", { params: { source: "ai", status: "pending", limit: 300 } });
       const seen = getCatSeen();
       const counts = { banker: 0, value: 0, risk: 0, gifts: 0 };
+      const totals = { banker: 0, value: 0, risk: 0, gifts: 0, mental: 0 };
       const byCat = { banker: [], value: [], risk: [], gifts: [] };
       data.forEach((tp) => {
+        if (tp.category === "mental") totals.mental += 1;
         if (tp.is_gift) {
           byCat.gifts.push(tp.id);
+          totals.gifts += 1;
           if (!(seen.gifts || []).includes(tp.id)) counts.gifts += 1;
         }
         const c = bucketOf(tp);
         if (!c) return;
         byCat[c].push(tp.id);
+        totals[c] += 1;
         if (!(seen[c] || []).includes(tp.id)) counts[c] += 1;
       });
       catIdsRef.current = byCat;
       setCatUnread(counts);
+      setCatTotals(totals);
     } catch { /* ignore */ }
   }, [view]);
   useEffect(() => {
@@ -593,6 +599,12 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
               onClick={() => { markCatSeen(v); setCat((c) => (c === v ? null : v)); }}
               className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${cat === v ? on : `bg-surface ${off} hover:text-white`}`}>
               {lbl}
+              {catTotals[v] > 0 && (
+                <span data-testid={`cat-count-${v}`}
+                  className={`ml-2 text-[11px] font-mono rounded-full px-1.5 align-middle ${cat === v ? "bg-black/25" : "bg-void/60 text-zinc-300"}`}>
+                  {catTotals[v] > 99 ? "99+" : catTotals[v]}
+                </span>
+              )}
               {catUnread[v] > 0 && (
                 <span data-testid={`cat-badge-${v}`}
                   className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold leading-none shadow-lg ring-2 ring-void animate-pulse">

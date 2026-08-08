@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { RotateCcw, AlertTriangle, Trash2, Users, Trophy, RefreshCw, Radar } from "lucide-react";
+import { RotateCcw, AlertTriangle, Trash2, Users, Trophy, RefreshCw, Radar, Brain } from "lucide-react";
 import Modal from "./Modal";
 import LineupWatchPanel from "./LineupWatchPanel";
 import HofPinPanel from "./HofPinPanel";
@@ -15,6 +15,7 @@ export default function AdminResetBar() {
   const [lineupOpen, setLineupOpen] = useState(false);
   const [hofOpen, setHofOpen] = useState(false);
   const [scoutOpen, setScoutOpen] = useState(false);
+  const [masterOpen, setMasterOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const doReset = async () => {
@@ -36,6 +37,19 @@ export default function AdminResetBar() {
       const { data } = await api.post("/admin/clear-live-settled", { scope: "both" });
       toast.success(`Gelöscht: ${data.live_removed} Live · ${data.settled_removed} Abgerechnete`);
       setClearOpen(false);
+    } catch (err) {
+      toast.error(apiErr(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doMasterReset = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/master/reset-refresh");
+      toast.success(`Master zurückgesetzt: ${data.removed} offene Scheine entfernt · Neu gelernt: ${data.relearned ? "ja" : "nein"} · Frische Pakete werden gebaut…`);
+      setMasterOpen(false);
     } catch (err) {
       toast.error(apiErr(err));
     } finally {
@@ -91,6 +105,12 @@ export default function AdminResetBar() {
               onClick={() => setScoutOpen(true)}
               className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-fuchsia-500/60 text-fuchsia-300 font-bold px-4 py-2 text-sm hover:bg-fuchsia-500/10 active:scale-95 transition-all">
               <Radar size={15} /> Scout füttern
+            </button>
+            <button
+              data-testid="admin-master-reset-btn"
+              onClick={() => setMasterOpen(true)}
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-full border border-violet-500/60 text-violet-300 font-bold px-4 py-2 text-sm hover:bg-violet-500/10 active:scale-95 transition-all">
+              <Brain size={15} /> Master Reset
             </button>
             <button
               data-testid="admin-hof-pin-btn"
@@ -154,6 +174,30 @@ export default function AdminResetBar() {
             <button onClick={doReset} disabled={busy} data-testid="admin-reset-confirm-btn"
               className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-[#E11D2A] text-white py-2.5 text-sm font-bold hover:bg-[#c4141f] active:scale-95 transition-all disabled:opacity-50">
               <RotateCcw size={16} /> {busy ? "Läuft…" : "Ja, runterfahren"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={masterOpen} onClose={() => setMasterOpen(false)} title="Master zurücksetzen & neu lernen?" maxWidth="max-w-md" testId="admin-master-reset-confirm">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-3">
+            <Brain size={18} className="text-violet-300 shrink-0 mt-0.5" />
+            <p className="text-sm text-zinc-200 leading-snug">
+              Löscht <b>alle offenen Master-Scheine</b> und setzt die Master-Challenge zurück.
+              Die KI <b>lernt danach neu</b> aus allen abgerechneten Ergebnissen (eigene Fehler,
+              Experten, Scouts, HQ-Statistiken) und baut sofort <b>frische Master-Pakete</b>.
+              <b> Die abgerechnete Historie bleibt erhalten</b> – genau daraus lernt der Master.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setMasterOpen(false)} disabled={busy}
+              className="flex-1 rounded-lg border border-elevated py-2.5 text-sm font-semibold text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
+              Abbrechen
+            </button>
+            <button onClick={doMasterReset} disabled={busy} data-testid="admin-master-reset-confirm-btn"
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-violet-600 text-white py-2.5 text-sm font-bold hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50">
+              <Brain size={16} /> {busy ? "Läuft…" : "Ja, zurücksetzen"}
             </button>
           </div>
         </div>

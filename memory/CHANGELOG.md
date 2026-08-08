@@ -514,3 +514,9 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - Frontend: ScoutFeedPanel.jsx + Button 'Scout fuettern' (fuchsia) in AdminResetBar.
 - Instagram NICHT direkt scrapebar (Login-Wall, crawl 403) -> OCR-Upload-Weg gewaehlt (Option A). Voll-Auto-Scraper waere Drittanbieter-API (kostenpflichtig) - nicht gebaut.
 - Getestet: 404 bei falschem Handle; Text-Ingest -> Spica-Tipp (hidden=True, learn_as_master=True, source=spica, aus public feed ausgeschlossen); refresh_learning trainiert 'master' darauf; Admin-Modal rendert (Screenshot). Bot-User role=expert/silent.
+
+## 2026-06 (Fork) — Master-Reset-Button + AI-Sub-Zähler
+- Frontend: Neuer "Master Reset"-Button (Brain-Icon, violett) in AdminResetBar.jsx mit Sicherheits-Modal -> ruft POST /admin/master/reset-refresh (löscht offene Master-Scheine, RE-LEARN aus allen settled Ergebnissen, baut sofort frische Master-Pakete; abgerechnete Historie bleibt).
+- Frontend RateWall.jsx: Jede AI-Sub-Kategorie (Banker/Value/Risk/Gift/Mental) zeigt jetzt einen EIGENEN persistenten Zähler (catTotals) statt nur roten Unread-Badge. Löst "(38)"-Verwirrung: Parent-Tab = Gesamt, Sub-Tabs = eigene Zahl (z.B. Value 18, Gift 6 = 24).
+- Fix: Brain-Import + doMasterReset-Funktion nachgezogen (Runtime-Fehler "Brain/doMasterReset is not defined" behoben).
+- Getestet: Admin-Bar rendert Master-Reset-Button (Screenshot), AI-Sub-Tabs zeigen eigene Zähler (Value 18/Gift 6, Screenshot), Endpunkt auth-geschützt (401 ohne Token).
