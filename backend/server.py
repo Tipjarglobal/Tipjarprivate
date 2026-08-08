@@ -2304,6 +2304,41 @@ async def admin_scout_ingest(
             "match": f'{tip.get("home_team","")} – {tip.get("away_team","")}'.strip(" –")}
 
 
+@api_router.post("/admin/master/reset-refresh")
+async def admin_master_reset_refresh(admin: dict = Depends(require_admin)):
+    """Owner tool: wipe all OPEN Master slips, let the Master RE-LEARN from every settled result
+    (its own past mistakes + experts + scouts/codeminers + HQ stats), then rebuild fresh packs.
+    Settled (won/lost) history is KEPT on purpose — that is exactly what the learning reads."""
+    now = datetime.now(timezone.utc)
+    r = await db.tips.delete_many({"source": "hq-master", "status": {"$in": ["pending", "live"]}})
+    await db.master_challenge.update_one(
+        {"id": "state"},
+        {"$set": {"step": 1, "stake": CHALLENGE_START, "status": "idle",
+                  "current_tip_id": None, "updated_at": now.isoformat()}}, upsert=True)
+    # 1) RE-LEARN from all settled results (own mistakes, experts, scouts, HQ stats)
+    learned = False
+    try:
+        await refresh_learning()
+        learned = True
+    except Exception as e:
+        logger.error(f"reset-refresh learning error: {e}")
+    # 2) rebuild fresh Master packs immediately (don't wait for the 2-min loop)
+    built = {}
+    if API_FOOTBALL_KEY:
+        for name, fn in (("packs", master_build_packs), ("einfach", master_easy_build),
+                         ("einfach3d", master_easy3day_build), ("risk", master_riskparade_build),
+                         ("doublepack", master_doublepack), ("consensus", master_consensus),
+                         ("special", master_special_build), ("hotscorer", master_hotscorer_combo),
+                         ("challenge", master_challenge)):
+            try:
+                built[name] = await fn()
+            except Exception as e:
+                logger.error(f"reset-refresh build {name} error: {e}")
+                built[name] = {"error": str(e)[:80]}
+    return {"ok": True, "removed": r.deleted_count, "relearned": learned,
+            "api_key": bool(API_FOOTBALL_KEY), "rebuilt": built}
+
+
 @api_router.post("/admin/emptips/run")
 async def admin_emptips_run(admin: dict = Depends(require_admin)):
     """Trigger the auto EMP reader in the BACKGROUND (vision-AI on betslips is slow, so we
@@ -13299,8 +13334,12 @@ async def master_challenge() -> dict:
     cands = await _master_leg_candidates(now, 1.20, 1.60)
     safe = [c for c in cands if re.search(
         r"über 0\.5|über 1\.5|doppelte chance|1x|x2|beide teams treffen", c["market"].lower())]
-    pool = sorted(safe or cands, key=lambda c: c["odds"])
-    chosen = pool[:2]
+    pool = safe or cands
+    # Owner 2026-08: keep the Challenge at MATCH TEMPO — prefer games kicking off SOON (today),
+    # not days ahead (no more "2 Sunday-morning USA games"). Same-day window first, then soonest.
+    soon = [c for c in pool if (c["kickoff"] - now) <= timedelta(hours=18)]
+    pick_pool = sorted(soon or pool, key=lambda c: (c["kickoff"], c["odds"]))
+    chosen = pick_pool[:2]
     if len(chosen) < 2:
         return {"action": "no_opportunity", "step": st["step"]}
     chosen, prod = await _enrich_legs_real_odds(chosen)  # real bookmaker odds where available
