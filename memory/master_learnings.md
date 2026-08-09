@@ -150,3 +150,11 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
   • Per-Bein 'kickoff' = exakt die neben DEM Match gedruckte Uhrzeit (nie leeren/verschieben/erfinden).
 - Nicht getestet (Owner wollte Credits sparen). Bei nächstem echten Upload prüfen.
 - KNOWN FOLLOW-UP (Settlement): betting_logic _leg_predicate wertet DNB-Remis aktuell als WIN (h>=a) statt VOID/Rückzahlung. Falls DNB-Beine künftig falsch abgerechnet werden → dort Remis=void nachrüsten.
+
+## 12. DNB-Abrechnung korrigiert (Owner 2026-08-09)
+- judge_market (settlement.py) hat jetzt einen deterministischen DRAW-NO-BET-Shortcut (kein LLM/Credits):
+  Remis (hg==ag) => VOID (Rückzahlung); gebacktes Team gewinnt => won; verliert => lost.
+  Team wird aus dem Markt gelesen ("{Team} Draw No Bet"/"{Team} DNB") und via _teams_match Home/Away zugeordnet (Default Home).
+- Getestet mit 6 Fällen (Sion/Servette, Home & Away, Sieg/Remis/Niederlage) → ALLE OK.
+- Gilt für Einzel- UND Kombi-Beine (beide laufen über judge_market). Void-Bein wird im Parlay als Push behandelt und die Quote neu gerechnet.
+- Der frühere Follow-up (Remis-als-Win) ist damit erledigt.

@@ -704,6 +704,21 @@ async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
             return "won" if (int(hg) == x and int(ag) == y) else "lost"
         except Exception:
             pass
+    # Deterministic DRAW NO BET — a DRAW refunds the stake (VOID), not a loss/win.
+    if ("draw no bet" in m or "dnb" in m or "sieg ohne unentschieden" in m
+            or "unentschieden keine wette" in m):
+        try:
+            h, a = int(hg), int(ag)
+            if h == a:
+                return "void"  # push / refund on a draw
+            backed = re.sub(r'(?i)(draw no bet|dnb|sieg ohne unentschieden|unentschieden keine wette)',
+                            "", market or "").strip(" -–—:·").strip()
+            if backed and _teams_match(away, backed) and not _teams_match(home, backed):
+                return "won" if a > h else "lost"
+            # default: assume the HOME team is backed (or team matches home)
+            return "won" if h > a else "lost"
+        except Exception:
+            pass
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
