@@ -14190,7 +14190,7 @@ async def master_avatar_calls() -> dict:
         player_kind, player_line = None, None
         minute = None
         goal_friendly = (isinstance(total, (int, float)) and total >= 2.8) or over25
-        options = ["half_any", "dc"]
+        options = ["half_any", "ht_no_loss", "dc"]
         if goal_friendly:
             options.append("over15")
         choice = options[posted % len(options)]
@@ -14209,6 +14209,13 @@ async def master_avatar_calls() -> dict:
                     f"Unentschieden). {'Zuhause' if at_home else 'Auswärts'} viel zu stabil. "
                     f"Selbst bei einem 2-2 sind wir auf der sicheren Seite.")
             conf = 88
+        elif choice == "ht_no_loss":
+            market = f"{fav} verliert nicht zur Halbzeit"
+            odds = 1.28
+            call = (f"{fav} liegt zur Halbzeit NICHT hinten — {'zuhause' if at_home else 'auswärts'} "
+                    f"zu dominant, um zur Pause im Rückstand zu sein. Selbst ein 0-0 oder 2-2 zur "
+                    f"Halbzeit gewinnt diese Wette. Unfickbar.")
+            conf = 89
         else:  # half_any
             market = f"{fav} gewinnt mindestens eine Halbzeit"
             odds = 1.30

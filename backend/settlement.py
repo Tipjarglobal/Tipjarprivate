@@ -66,6 +66,8 @@ def _special_gift_kind(market: str):
     m = (market or "").lower()
     if "mindestens eine halbzeit" in m:
         return "half_any"
+    if "verliert nicht zur halbzeit" in m or "verliert nicht zur hz" in m or "nicht hinten zur halbzeit" in m:
+        return "ht_no_loss"                              # favourite is NOT behind at half-time
     if "nicht beide halbzeiten" in m:
         return "not_both_halves"
     if "ersten 2 tore" in m or "erste 2 tore" in m or "ersten zwei tore" in m:
@@ -84,7 +86,7 @@ def _special_gift_kind(market: str):
 def _fav_side_in_fixture(market: str, home_c: str, away_c: str, fx: dict) -> str:
     """Which fixture side (home/away) is the favourite named at the START of a special-gift
     market string ('<Fav> gewinnt ...' / '<Fav> schießt ...')."""
-    fname = market.split(" gewinnt")[0].split(" schießt")[0].strip()
+    fname = market.split(" gewinnt")[0].split(" schießt")[0].split(" verliert")[0].strip()
     if _teams_match(fx.get("home_name", ""), fname):
         return "home"
     if _teams_match(fx.get("away_name", ""), fname):
@@ -114,6 +116,12 @@ def _grade_special_gift(kind: str, market: str, home_c: str, away_c: str, fx: di
         if kind == "half_any":
             return bool(win1 or win2)
         return not (win1 and win2)                    # NOT both halves won
+    if kind == "ht_no_loss":
+        hh, ha = fx.get("ht_home"), fx.get("ht_away")
+        if hh is None or ha is None:
+            return None
+        f1, o1 = orient(hh, ha)                       # 1st-half goals (fav, opp)
+        return f1 >= o1                               # favourite not behind at half-time
     if kind in ("ht_win", "ht_ft"):
         hh, ha = fx.get("ht_home"), fx.get("ht_away")
         if hh is None or ha is None:

@@ -158,3 +158,9 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Getestet mit 6 Fällen (Sion/Servette, Home & Away, Sieg/Remis/Niederlage) → ALLE OK.
 - Gilt für Einzel- UND Kombi-Beine (beide laufen über judge_market). Void-Bein wird im Parlay als Push behandelt und die Quote neu gerechnet.
 - Der frühere Follow-up (Remis-als-Win) ist damit erledigt.
+
+## 13. Sprechblasen-Vielfalt: neue unfickbare Aussage (Owner 2026-08-09)
+- Neu in der Avatar-Rotation: "{Favorit} verliert nicht zur Halbzeit" (settlement kind=ht_no_loss: f1>=o1, Favorit liegt zur HZ NICHT hinten). Überlebt selbst 0-0/2-2 zur Pause; verliert nur, wenn der Favorit zur HZ zurückliegt.
+- Rotation jetzt: half_any → ht_no_loss → dc (→ over15 nur goal-friendly).
+- Settlement: _special_gift_kind erkennt "verliert nicht zur halbzeit/hz"; _grade_special_gift kind ht_no_loss; _fav_side_in_fixture splittet jetzt auch auf " verliert" (Team-Zuordnung Heim/Auswärts).
+- Deterministisch getestet (6 Fälle Heim+Auswärts, Sieg/Remis/Rückstand HZ) → ALLE OK. Keine Credits.
