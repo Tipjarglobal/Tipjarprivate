@@ -289,6 +289,7 @@ async def _regen_pregames_bg():
             await master_special_build()
             await master_avatar_calls()
             await master_hotscorer_combo()
+            await master_hard_2_2()
             await gift_specials_autopost()
         await master_avatar_codemining()
         if await ensure_chromium():
@@ -2329,7 +2330,7 @@ async def admin_master_reset_refresh(admin: dict = Depends(require_admin)):
                          ("einfach3d", master_easy3day_build), ("risk", master_riskparade_build),
                          ("doublepack", master_doublepack), ("consensus", master_consensus),
                          ("special", master_special_build), ("hotscorer", master_hotscorer_combo),
-                         ("challenge", master_challenge)):
+                         ("hard", master_hard_2_2), ("challenge", master_challenge)):
             try:
                 built[name] = await fn()
             except Exception as e:
@@ -2805,6 +2806,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["master_category"] = "avatar"
         elif mcat == "hotscorer":
             q["master_category"] = "hotscorer"
+        elif mcat == "hard":
+            q["master_category"] = "hard"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -14164,58 +14167,44 @@ async def master_avatar_calls() -> dict:
             fg = 0
         total = p.get("total") or 0
         over25, btts = bool(p.get("over25")), bool(p.get("btts"))
-        # drought (cache-only, NO extra API quota)
+        # drought (cache-only, NO extra API quota) — kept for the text flavour only
         scored_last, _, _ = await _team_last_scored(fav, allow_api=False)
         drought = scored_last == 0
-        minute = _avatar_goal_minute(fg, total, over25, btts, drought)
         at_home = p.get("fav") == "home"
-        # In-form striker signal (owner Pavlidis-4-Tore learning). Cache-backed → cheap.
+        # Owner 2026-08-09 ("die Sprechblasen sollen ALLES enthalten, was uns nicht ficken kann"):
+        # NUR bombensichere Aussagen für einen klaren Favoriten, rotierend für Abwechslung.
+        # KEIN 1.-HZ-Tor / Anytime-Torschütze mehr — die fallen bei 0-0 / 2-2 durch
+        # (Wolfsburg-0-0-Learning). Selbst bei einem 2-2 gewinnen diese Picks.
         avatar_player, avatar_scorer = None, False
         player_kind, player_line = None, None
-        hs = await _hot_scorer_for_team(fav, _smart_seasons(real_ko))
-        if hs and hs["prob"] >= 0.52:
-            avatar_player, avatar_scorer = hs["name"], True
-            player_kind = "scorer"
-            brace_prob = _prob_over(1.5, hs["gl"])
-            if hs["gl"] >= 0.8 and brace_prob >= 0.18:
-                # red-hot striker → aim for the Doppelpack (owner: 'Pavlidis über 1.5')
-                market = f"{hs['name']} — 2+ Tore (Doppelpack)"
-                odds = float(_odds_from_prob(brace_prob))
-                player_line = 1  # need = line+1 = 2 goals
-                form = (f"hat zuletzt getroffen und ist nicht zu stoppen"
-                        if not drought else f"ist heißhungrig")
-                call = (f"{hs['name']} {form} — ich traue ihm in {home} – {away} einen DOPPELPACK "
-                        f"zu ({hs['goals']} Saisontore). Bis zur {minute}. Minute liegt die erste Bude drin.")
-                conf = min(82, int(round(brace_prob * 100)) + 30)
-            else:
-                market = f"{hs['name']} — Torschütze (Anytime)"
-                odds = float(hs["odds"])
-                player_line = 0  # need = 1 goal (anytime)
-                form = (f"hat zuletzt NICHT getroffen und ist deshalb erst recht heiß"
-                        if drought else f"ist in Galaform ({hs['goals']} Saisontore)")
-                call = (f"{hs['name']} {form} — der trifft auch in {home} – {away}. "
-                        f"Ich sehe sein Tor bis zur {minute}. Minute. {fav} setzt sich durch.")
-                conf = min(90, int(round(hs["prob"] * 100)) + (5 if fg >= 2 else 0)
-                           + (4 if drought else 0))
-        elif minute <= 45:
-            market = "Über 0.5 Tore 1. Halbzeit"
+        minute = None
+        goal_friendly = (isinstance(total, (int, float)) and total >= 2.8) or over25
+        options = ["half_any", "dc"]
+        if goal_friendly:
+            options.append("over15")
+        choice = options[posted % len(options)]
+        if choice == "over15":
+            market = "Über 1.5 Tore"
+            odds = 1.30 if (isinstance(total, (int, float)) and total >= 3.2) else 1.40
+            call = (f"In {home} – {away} fallen genug Tore — Über 1,5 im Spiel ist die sichere "
+                    f"Bank. {fav} drückt {'zuhause' if at_home else 'auswärts'}; da kommt mehr "
+                    f"als nur ein Treffer. Das kann uns nicht ficken.")
+            conf = min(94, 74 + (8 if (isinstance(total, (int, float)) and total >= 3.2) else 0)
+                       + (6 if btts else 0))
+        elif choice == "dc":
+            market = f"Doppelte Chance {fav}"
+            odds = 1.25
+            call = (f"{fav} verliert dieses Spiel nicht — Doppelte Chance {fav} (Sieg oder "
+                    f"Unentschieden). {'Zuhause' if at_home else 'Auswärts'} viel zu stabil. "
+                    f"Selbst bei einem 2-2 sind wir auf der sicheren Seite.")
+            conf = 88
+        else:  # half_any
+            market = f"{fav} gewinnt mindestens eine Halbzeit"
             odds = 1.30
-            call = (f"In {home} – {away} sehe ich früh ein Tor. {fav} ist "
-                    f"{'zuhause' if at_home else 'auswärts'} brandgefährlich — die Bude fällt "
-                    f"schon in der 1. Halbzeit, bis zur {minute}. Minute. Klare Sache.")
-            conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
-                       + (4 if btts else 0) + (4 if drought else 0))
-        else:
-            market = f"{fav} Über 0.5 Tore"
-            odds = 1.22 if fg >= 2 else 1.32
-            call = (f"{fav} trifft in {home} – {away} — da bin ich mir sicher. "
-                    f"{'Zuhause' if at_home else 'Auswärts'} zu stark; das Tor fällt bis zur "
-                    f"{minute}. Minute.")
-            if drought:
-                call = (f"{fav} hat zuletzt NICHT getroffen — und genau deshalb sitzt sie diesmal. "
-                        + call)
-            conf = min(96, 70 + (10 if fg >= 2 else 4) + (6 if over25 else 0)
-                       + (4 if btts else 0) + (4 if drought else 0))
+            call = (f"{fav} gewinnt mindestens EINE der beiden Halbzeiten — praktisch unmöglich, "
+                    f"dass {fav} in KEINER Hälfte vorne liegt. Selbst wenn es am Ende 2-2 steht, "
+                    f"eine Halbzeit geht an {fav}. Unfickbar.")
+            conf = 90
         tid = f"master-av-{uuid.uuid4().hex[:8]}"
         await db.tips.insert_one({
             "id": tid, "user_id": bot["id"], "username": bot["username"],
@@ -14435,6 +14424,120 @@ async def master_hotscorer_combo() -> dict:
     })
     logger.info(f"Master Torjäger-Kombi ({len(legs)}): {names} @ {combo}")
     return {"posted": 1, "odds": combo, "players": len(legs)}
+
+
+async def master_hard_2_2() -> dict:
+    """Owner 2026-08-09 (neuer 'Hard'-Bereich): EINE tägliche Kombi aus EXAKTEN 2:2-Ergebnissen
+    für die 'Fallen'-Spiele — ein Favorit, den die MASSE auf Sieg tippt, der aber wahrscheinlich
+    remis mit Toren endet (wie gestern PSV / Sporting / Darmstadt). Contrarian-Denke: 'was fickt
+    die Scheine der größten Masse?'. Faktoren: klarer-aber-nicht-überragender Favorit (fav_prob
+    50-72) + BEIDE Teams treffen (ph>=1 & pa>=1) + tor-tragendes, enges Gesamt (3-5, |ph-pa|<=1).
+    ALLE passenden Spiele wandern in EINE hohe Kombi ('Genaues Ergebnis 2:2' pro Bein)."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "hard",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "hard", "master_day": day}):
+        return {"skipped": "done-today"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    try:
+        from zoneinfo import ZoneInfo
+        _bz = ZoneInfo("Europe/Berlin")
+    except Exception:
+        _bz = None
+    today_b = _berlin_now().date()
+    cand = []
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        _lg = (p.get("league") or "").lower()
+        if any(k in _lg for k in ("friendl", "freundschaft", "testspiel", "φιλικ", "amistoso", "amichev")):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        ko_b = (ko.astimezone(_bz) if _bz else ko + timedelta(hours=2)).date()
+        if ko_b != today_b:
+            continue
+        if (ko - now).total_seconds() / 3600 < 1.5:
+            continue
+        fav = _fav_team(p)
+        try:
+            fp = int(float(p.get("fav_prob") or 0))
+        except (TypeError, ValueError):
+            fp = 0
+        ph, pa = p.get("ph"), p.get("pa")
+        if not isinstance(ph, (int, float)) or not isinstance(pa, (int, float)):
+            continue
+        # 2:2-Fallenprofil: klarer, aber nicht überragender Favorit; BEIDE Seiten laut
+        # Prognose ~2 Tore (ein echtes 2:2 ist plausibel); enges, tor-tragendes Spiel.
+        if not fav or fp < 50 or fp > 72:
+            continue
+        if ph < 2 or pa < 2:
+            continue
+        tot = ph + pa
+        if tot > 5:
+            continue
+        if abs(ph - pa) > 1:
+            continue
+        cand.append((ko, p))
+    cand.sort(key=lambda x: x[0])
+    legs, seen = [], set()
+    for ko, p in cand:
+        if len(legs) >= 6:  # Sanity-Cap: eine 2:2-Kombi über 6 Beine ist astronomisch/nutzlos
+            break
+        home, away = p.get("home"), p.get("away")
+        key = _match_key(home, away)
+        if key in seen:
+            continue
+        real_ko = p.get("kickoff") or ko.isoformat()
+        if API_FOOTBALL_KEY:
+            tidh = await resolve_team_id(home)
+            fx = find_upcoming_fixture(tidh, away) if tidh else None
+            if not fx or not fx.get("date_iso"):
+                continue
+            try:
+                ko_dt = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00"))
+                real_ko = ko_dt.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                pass
+            home = fx.get("home_name") or home
+            away = fx.get("away_name") or away
+        seen.add(key)
+        legs.append({"match": f"{home} - {away}", "league": p.get("league") or "",
+                     "kickoff": real_ko, "status": "pending",
+                     "selections": ["Genaues Ergebnis 2:2"], "sel_odds": [13.0], "_ko": ko})
+    if len(legs) < 2:
+        return {"skipped": "not-enough", "have": len(legs)}
+    combo = 1.0
+    for lg in legs:
+        combo *= float(lg["sel_odds"][0])
+    combo = round(combo, 2)
+    first_ko = min(lg["_ko"] for lg in legs)
+    matches = ", ".join(lg["match"] for lg in legs)
+    for lg in legs:
+        lg.pop("_ko", None)
+    bot = await _get_master_bot()
+    tid = f"master-hard-{uuid.uuid4().hex[:10]}"
+    await db.tips.insert_one({
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"🎯 HARD — {len(legs)}× exaktes 2:2", "odds": f"{combo:.2f}",
+        "category": "risk", "master_category": "hard", "master_day": day,
+        "ai_rating": 7.0,
+        "ai_analysis": (f"🎯 HARD-Kombi: {len(legs)} Fallen-Spiele, die die Masse auf Favoriten-Sieg "
+                        f"tippt — ich sehe überall ein 2:2. Genau das, was die großen Scheine fickt. "
+                        f"Gesamtquote {combo:.2f}. Mini-Einsatz, Mega-Traum. Spiele: {matches}."),
+        "legs": legs, "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    })
+    logger.info(f"Master HARD 2:2 combo ({len(legs)}) @ {combo}")
+    return {"posted": 1, "odds": combo, "legs": len(legs)}
 
 
 async def master_lineup_scorer_combo() -> dict:

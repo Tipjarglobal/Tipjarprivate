@@ -694,6 +694,16 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
 
 async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
     """Use the LLM to decide won/lost/void for a bet market given the final score."""
+    # Deterministic EXACT-SCORE ("Genaues Ergebnis 2:2" / correct score) — no LLM needed.
+    m = (market or "").lower()
+    cs = re.search(r'(\d+)\s*[:\-]\s*(\d+)', m)
+    if cs and ("genaues ergebnis" in m or "correct score" in m or "exaktes ergebnis" in m
+               or "exact score" in m):
+        try:
+            x, y = int(cs.group(1)), int(cs.group(2))
+            return "won" if (int(hg) == x and int(ag) == y) else "lost"
+        except Exception:
+            pass
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
