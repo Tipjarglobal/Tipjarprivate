@@ -756,19 +756,56 @@ function StatusBadge({ status, t, report }) {
 }
 
 const NATION_FLAGS = {
-  portugal: "🇵🇹", spain: "🇪🇸", spanien: "🇪🇸", argentina: "🇦🇷", argentinien: "🇦🇷",
-  brazil: "🇧🇷", brasilien: "🇧🇷", germany: "🇩🇪", deutschland: "🇩🇪", france: "🇫🇷", frankreich: "🇫🇷",
-  england: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", italy: "🇮🇹", italien: "🇮🇹", netherlands: "🇳🇱", niederlande: "🇳🇱", holland: "🇳🇱",
-  sweden: "🇸🇪", schweden: "🇸🇪", norway: "🇳🇴", norwegen: "🇳🇴", denmark: "🇩🇰", dänemark: "🇩🇰",
-  belgium: "🇧🇪", belgien: "🇧🇪", croatia: "🇭🇷", kroatien: "🇭🇷", usa: "🇺🇸", mexico: "🇲🇽",
-  greece: "🇬🇷", griechenland: "🇬🇷", turkey: "🇹🇷", türkei: "🇹🇷", poland: "🇵🇱", polen: "🇵🇱",
-  austria: "🇦🇹", österreich: "🇦🇹", switzerland: "🇨🇭", schweiz: "🇨🇭", scotland: "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  // multi-word / specific keys FIRST so they win over generic ones
+  "north macedonia": "🇲🇰", "nordmazedonien": "🇲🇰", "south korea": "🇰🇷", "südkorea": "🇰🇷",
+  "south africa": "🇿🇦", "südafrika": "🇿🇦", "saudi arabia": "🇸🇦", "saudi-arabien": "🇸🇦",
+  "northern ireland": "🇬🇧", "nordirland": "🇬🇧", "united states": "🇺🇸", "costa rica": "🇨🇷",
+  "united arab emirates": "🇦🇪", "el salvador": "🇸🇻", "new zealand": "🇳🇿", "neuseeland": "🇳🇿",
+  // Europe
+  portugal: "🇵🇹", spain: "🇪🇸", spanien: "🇪🇸", germany: "🇩🇪", deutschland: "🇩🇪",
+  france: "🇫🇷", frankreich: "🇫🇷", england: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", italy: "🇮🇹", italien: "🇮🇹",
+  netherlands: "🇳🇱", niederlande: "🇳🇱", holland: "🇳🇱", belgium: "🇧🇪", belgien: "🇧🇪",
+  scotland: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", schottland: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", wales: "🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+  ireland: "🇮🇪", irland: "🇮🇪", sweden: "🇸🇪", schweden: "🇸🇪", norway: "🇳🇴", norwegen: "🇳🇴",
+  denmark: "🇩🇰", dänemark: "🇩🇰", finland: "🇫🇮", finnland: "🇫🇮", iceland: "🇮🇸", island: "🇮🇸",
+  austria: "🇦🇹", österreich: "🇦🇹", switzerland: "🇨🇭", schweiz: "🇨🇭", poland: "🇵🇱", polen: "🇵🇱",
+  czech: "🇨🇿", tschechien: "🇨🇿", slovakia: "🇸🇰", slowakei: "🇸🇰", hungary: "🇭🇺", ungarn: "🇭🇺",
+  romania: "🇷🇴", rumänien: "🇷🇴", bulgaria: "🇧🇬", bulgarien: "🇧🇬", greece: "🇬🇷", griechenland: "🇬🇷",
+  turkey: "🇹🇷", türkei: "🇹🇷", croatia: "🇭🇷", kroatien: "🇭🇷", serbia: "🇷🇸", serbien: "🇷🇸",
+  slovenia: "🇸🇮", slowenien: "🇸🇮", bosnia: "🇧🇦", bosnien: "🇧🇦", ukraine: "🇺🇦",
+  russia: "🇷🇺", russland: "🇷🇺", belarus: "🇧🇾", weißrussland: "🇧🇾", cyprus: "🇨🇾", zypern: "🇨🇾",
+  albania: "🇦🇱", albanien: "🇦🇱", montenegro: "🇲🇪", kosovo: "🇽🇰", moldova: "🇲🇩", luxembourg: "🇱🇺",
+  malta: "🇲🇹", "faroe": "🇫🇴", andorra: "🇦🇩", estonia: "🇪🇪", estland: "🇪🇪", latvia: "🇱🇻",
+  lettland: "🇱🇻", lithuania: "🇱🇹", litauen: "🇱🇹",
+  // Caucasus / Asia
+  azerbaijan: "🇦🇿", aserbaidschan: "🇦🇿", georgia: "🇬🇪", georgien: "🇬🇪", armenia: "🇦🇲",
+  armenien: "🇦🇲", kazakhstan: "🇰🇿", kasachstan: "🇰🇿", israel: "🇮🇱", china: "🇨🇳", japan: "🇯🇵",
+  korea: "🇰🇷", australia: "🇦🇺", australien: "🇦🇺", india: "🇮🇳", indien: "🇮🇳", indonesia: "🇮🇩",
+  indonesien: "🇮🇩", thailand: "🇹🇭", vietnam: "🇻🇳", malaysia: "🇲🇾", singapore: "🇸🇬", qatar: "🇶🇦",
+  katar: "🇶🇦", iran: "🇮🇷", iraq: "🇮🇶", irak: "🇮🇶", jordan: "🇯🇴", kuwait: "🇰🇼", bahrain: "🇧🇭",
+  uzbekistan: "🇺🇿", usbekistan: "🇺🇿",
+  // Americas
+  usa: "🇺🇸", mexico: "🇲🇽", mexiko: "🇲🇽", canada: "🇨🇦", kanada: "🇨🇦", brazil: "🇧🇷",
+  brasilien: "🇧🇷", argentina: "🇦🇷", argentinien: "🇦🇷", colombia: "🇨🇴", kolumbien: "🇨🇴",
+  chile: "🇨🇱", uruguay: "🇺🇾", paraguay: "🇵🇾", peru: "🇵🇪", ecuador: "🇪🇨", bolivia: "🇧🇴",
+  bolivien: "🇧🇴", venezuela: "🇻🇪", honduras: "🇭🇳", guatemala: "🇬🇹", panama: "🇵🇦", jamaica: "🇯🇲",
+  // Africa
+  egypt: "🇪🇬", ägypten: "🇪🇬", morocco: "🇲🇦", marokko: "🇲🇦", tunisia: "🇹🇳", tunesien: "🇹🇳",
+  algeria: "🇩🇿", algerien: "🇩🇿", nigeria: "🇳🇬", ghana: "🇬🇭", cameroon: "🇨🇲", kamerun: "🇨🇲",
+  senegal: "🇸🇳", kenya: "🇰🇪", kenia: "🇰🇪", "ivory coast": "🇨🇮", "elfenbeinküste": "🇨🇮",
 };
 const LEAGUE_FLAGS = {
-  allsvenskan: "🇸🇪", "la liga": "🇪🇸", "premier league": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", bundesliga: "🇩🇪",
-  "serie a": "🇮🇹", "ligue 1": "🇫🇷", eredivisie: "🇳🇱", "super league": "🇬🇷",
+  // German / brand league names without an explicit country word
+  bundesliga: "🇩🇪", "2. bundesliga": "🇩🇪", "la liga": "🇪🇸", laliga: "🇪🇸",
+  "premier league": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", championship: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "efl": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+  "serie a": "🇮🇹", "serie b": "🇮🇹", "coppa italia": "🇮🇹", "ligue 1": "🇫🇷", "ligue 2": "🇫🇷",
+  eredivisie: "🇳🇱", eerste: "🇳🇱", "super league": "🇬🇷", "süper lig": "🇹🇷", "super lig": "🇹🇷",
+  allsvenskan: "🇸🇪", superettan: "🇸🇪", eliteserien: "🇳🇴", superligaen: "🇩🇰", ekstraklasa: "🇵🇱",
+  "primeira liga": "🇵🇹", "jupiler": "🇧🇪", "pro league": "🇧🇪", "mls": "🇺🇸", "brasileir": "🇧🇷",
+  "primera a": "🇨🇴", "liga mx": "🇲🇽", "j1": "🇯🇵", "j league": "🇯🇵", "k league": "🇰🇷",
+  "a-league": "🇦🇺", "chinese super": "🇨🇳", "saudi": "🇸🇦",
 };
-const GLOBAL_KEYS = ["world cup", "länderspiel", "laenderspiel", "international", "nations league", "friendly", " wm", " em", "euro", "champions league", "europa league"];
+const GLOBAL_KEYS = ["world cup", "wm-quali", "wm quali", "länderspiel", "laenderspiel", "international", "nations league", "friendly", "freundschaft", " wm", " em", "euro", "champions league", "europa league", "conference league", "leagues cup", "copa", "libertadores"];
 
 function tipFlags(tip) {
   const flags = new Set();
@@ -779,6 +816,28 @@ function tipFlags(tip) {
   Object.entries(LEAGUE_FLAGS).forEach(([k, f]) => { if (hay.includes(k)) flags.add(f); });
   if (flags.size === 0 && GLOBAL_KEYS.some((k) => hay.includes(k))) flags.add("🌍");
   return [...flags].slice(0, 5);
+}
+
+// Owner 2026-08-09: ONE country flag per single game (top-left), NOT a flag row at the top.
+// Priority: country name/ISO2 → league → team names → global cup fallback.
+function iso2ToFlag(cc) {
+  const s = String(cc || "").trim();
+  if (!/^[a-zA-Z]{2}$/.test(s)) return "";
+  const A = 0x1F1E6;
+  return String.fromCodePoint(A + (s.toUpperCase().charCodeAt(0) - 65))
+       + String.fromCodePoint(A + (s.toUpperCase().charCodeAt(1) - 65));
+}
+function flagFor(country, league, match) {
+  const scan = (s) => {
+    if (!s) return "";
+    const hay = " " + String(s).toLowerCase() + " ";
+    for (const [k, f] of Object.entries(NATION_FLAGS)) if (hay.includes(k)) return f;
+    for (const [k, f] of Object.entries(LEAGUE_FLAGS)) if (hay.includes(k)) return f;
+    return "";
+  };
+  const hit = scan(country) || iso2ToFlag(country) || scan(league) || scan(match);
+  if (hit) return hit;
+  return "🌍"; // Owner: EVERY game must show a flag — globe fallback for unknown leagues
 }
 
 function SmartLab({ t, user, onCreated }) {
@@ -986,7 +1045,6 @@ function MemberSearch({ onUserClick, t }) {
 function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canDelete, onUserClick, onRefresh }) {
   const { lang } = useI18n();
   const trProse = useProseTranslations(tip.ai_analysis, lang);
-  const flags = tipFlags(tip);
   const [sharing, setSharing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -1188,9 +1246,6 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
               <Share2 size={13} /> {t("wall.share")}
             </button>
           )}
-          {flags.length > 0 && (
-            <span className="text-base leading-none tracking-tight" data-testid="tip-flags">{flags.join(" ")}</span>
-          )}
           {tip.final_home != null && tip.final_away != null && (
             <span className="text-[10px] font-mono font-bold text-white bg-void border border-elevated px-2 py-1 rounded" data-testid="final-score">
               {t("wall.final")} {tip.final_home}-{tip.final_away}
@@ -1271,10 +1326,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           {[...tip.legs].sort((a, b) => (kickoffInfo(a.kickoff).ts ?? Infinity) - (kickoffInfo(b.kickoff).ts ?? Infinity)).map((leg, li) => {
             const ls = STATUS_META[leg.status];
             const settled = ls && leg.status !== "pending";
+            const legFlag = flagFor(leg.country || tip.country, leg.league || tip.league, leg.match);
             return (
             <div key={li} title={leg.status === "void" ? t("wall.voidPush") : undefined} className={`rounded-lg bg-void border px-3 py-2.5 ${settled ? ls.cls.split(" ")[0].replace("/15", "/30") : "border-elevated"}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"} ${leg.status === "void" ? "line-through opacity-70" : ""}`}>{toLatin(leg.match) || "—"}</span>
+                <span className={`font-heading font-bold text-sm leading-tight ${settled ? ls.text : "text-white"} ${leg.status === "void" ? "line-through opacity-70" : ""}`}>{legFlag && <span className="mr-1.5 align-middle" data-testid={`leg-flag-${li}`}>{legFlag}</span>}{toLatin(leg.match) || "—"}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   {leg.banker && (
                     <span data-testid={`leg-banker-${li}`} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300">
@@ -1344,6 +1400,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
         <>
           <div className="flex items-start justify-between gap-2">
             <h4 className="font-heading font-bold text-white text-lg leading-tight">
+              {(() => { const sf = flagFor(tip.country, tip.league, `${tip.home_team || ""} ${tip.away_team || ""}`); return sf ? <span className="mr-1.5 align-middle" data-testid="single-flag">{sf}</span> : null; })()}
               {displayTeam(tip.home_team, tip.home_team_latin) || "—"} <span className="text-zinc-600 text-sm">vs</span> {displayTeam(tip.away_team, tip.away_team_latin) || "—"}
             </h4>
             {(() => {

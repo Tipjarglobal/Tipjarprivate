@@ -14392,6 +14392,7 @@ async def master_hotscorer_combo() -> dict:
                 seen_players.add(nm)
                 per_match += 1
                 legs.append({"match": f"{match_home} - {match_away}", "league": p.get("league") or "",
+                             "country": p.get("country") or "",
                              "kickoff": real_ko, "status": "pending",
                              "selections": [market], "sel_odds": [s["odds"]],
                              "player": nm, "goals": s["goals"], "_ko": ko})
@@ -14508,6 +14509,7 @@ async def master_hard_2_2() -> dict:
             away = fx.get("away_name") or away
         seen.add(key)
         legs.append({"match": f"{home} - {away}", "league": p.get("league") or "",
+                     "country": p.get("country") or "",
                      "kickoff": real_ko, "status": "pending",
                      "selections": ["Genaues Ergebnis 2:2"], "sel_odds": [13.0], "_ko": ko})
     if len(legs) < 2:

@@ -137,3 +137,8 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - REGEL 1 — Sprechblase (Avatar) nur UNFICKBARE Aussagen: statt "Über 0.5 1.HZ" / "Torschütze" (fällt bei 0-0 durch) jetzt Rotation aus (a) "{Favorit} gewinnt mindestens eine Halbzeit", (b) "Doppelte Chance {Favorit}", (c) "Über 1,5 Tore" (nur goal-friendly). Diese gewinnen SELBST bei einem 2-2. Umgesetzt in master_avatar_calls.
 - REGEL 2 — Neuer "Hard"-Bereich (master_hard_2_2): EINE tägliche Kombi aus EXAKTEN 2:2 für Fallen-Spiele. Faktoren wie gestern PSV/Sporting/Darmstadt: klarer-aber-nicht-überragender Favorit (fav_prob 50-72), BEIDE Seiten laut Prognose ~2 Tore (ph>=2 & pa>=2), Gesamt <=5, |ph-pa|<=1, keine Friendlies. Cap 6 Beine (sonst astronomische Quote). Settlement: "Genaues Ergebnis 2:2" deterministisch (judge_market Shortcut).
 - Beispiel: 3 Spiele × 2:2 ≈ Quote 2197 (Owner-Idee "8000er"). Mini-Einsatz, Mega-Traum.
+
+## 10. FLAGGEN + OCR-Feedback (Owner 2026-08-09)
+- Flaggen: EINE Landesflagge oben links VOR jedem einzelnen Spiel (Single & Kombi-Beine). Die alte Flaggen-Reihe oben rechts wurde ENTFERNT. flagFor(): Country-Name → ISO2-Code (z.B. "co"→🇨🇴) → Liga-Keyword → 🌍-Fallback (jedes Spiel MUSS eine Flagge haben). NATION/LEAGUE-Maps stark erweitert (EN+DE). Master-Kombi-Beine speichern jetzt "country".
+- Konnte KEINE von "Agent E3" vorbereitete Flaggen-Version im Code finden → frisch implementiert.
+- OFFEN (braucht LLM-Vision-Credits zum Testen): TipJarLogic/Codemining-OCR liest Slips falsch: "FC Sion" statt "FC Sion Draw No Bet"; "Molde Über 0.5 Team-Tore" falsch übernommen. Außerdem sollen die RICHTIGEN Uhrzeiten aus dem Slip übernommen werden. → mit Owner abstimmen, bevor Credits verbraucht werden.
