@@ -142,3 +142,11 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Flaggen: EINE Landesflagge oben links VOR jedem einzelnen Spiel (Single & Kombi-Beine). Die alte Flaggen-Reihe oben rechts wurde ENTFERNT. flagFor(): Country-Name → ISO2-Code (z.B. "co"→🇨🇴) → Liga-Keyword → 🌍-Fallback (jedes Spiel MUSS eine Flagge haben). NATION/LEAGUE-Maps stark erweitert (EN+DE). Master-Kombi-Beine speichern jetzt "country".
 - Konnte KEINE von "Agent E3" vorbereitete Flaggen-Version im Code finden → frisch implementiert.
 - OFFEN (braucht LLM-Vision-Credits zum Testen): TipJarLogic/Codemining-OCR liest Slips falsch: "FC Sion" statt "FC Sion Draw No Bet"; "Molde Über 0.5 Team-Tore" falsch übernommen. Außerdem sollen die RICHTIGEN Uhrzeiten aus dem Slip übernommen werden. → mit Owner abstimmen, bevor Credits verbraucht werden.
+
+## 11. OCR-Prompt-Fixes (Owner 2026-08-09, Option B: nur Prompt, kein Test)
+- AI_SYSTEM (TipJarLogic-Slip-Reader) + read_betslip (Win-Claim) ergänzt:
+  • DRAW NO BET: 'Draw No Bet'/'DNB'/'Sieg ohne Unentschieden'/'Unentschieden keine Wette' => '<Team> Draw No Bet' (Team MUSS drin bleiben, NIE zum reinen Sieger verkürzen). Beispiel-Fehler war 'FC Sion' statt 'FC Sion Draw No Bet'.
+  • TEAM-Tore Over/Under: 'Molde over 0.5' => 'Molde Über 0.5 Tore' (Team + Linie behalten, NICHT zu Gesamt-Tore machen).
+  • Per-Bein 'kickoff' = exakt die neben DEM Match gedruckte Uhrzeit (nie leeren/verschieben/erfinden).
+- Nicht getestet (Owner wollte Credits sparen). Bei nächstem echten Upload prüfen.
+- KNOWN FOLLOW-UP (Settlement): betting_logic _leg_predicate wertet DNB-Remis aktuell als WIN (h>=a) statt VOID/Rückzahlung. Falls DNB-Beine künftig falsch abgerechnet werden → dort Remis=void nachrüsten.

@@ -1250,7 +1250,16 @@ AI_SYSTEM = (
     "For an INDIVIDUAL / TEAM total (labels like 'Individual Total Team 1/2', 'Individuel Asian over 1', "
     "'Ομαδικό Asian over 1', 'Team Total'): PREFIX the selection with the EXACT team name it refers to — "
     "Team/Total 1 = the HOME team, Team/Total 2 = the AWAY team — e.g. 'FC Kopenhagen Asian Over 1.0'. "
-    "ALWAYS keep the word 'Asian' in the selection whenever the line is an Asian total/handicap."
+    "ALWAYS keep the word 'Asian' in the selection whenever the line is an Asian total/handicap. "
+    "DRAW NO BET — read it EXACTLY, never collapse it to a plain match-winner. Labels: 'Draw No Bet', "
+    "'DNB', 'Sieg ohne Unentschieden', 'Unentschieden keine Wette', 'no bet on draw', or a bet where a "
+    "draw refunds the stake => output '<Team> Draw No Bet' (the EXACT team backed, e.g. 'FC Sion Draw No "
+    "Bet'). NEVER shorten a Draw-No-Bet, Double Chance ('1X'/'X2'/'12') or Handicap pick to a bare winner. "
+    "TEAM total goals (a team backed for OVER/UNDER of ITS OWN goals, e.g. 'Molde over 0.5', 'Molde Über "
+    "0.5 Team-Tore') MUST keep BOTH the team name AND the exact Over/Under line => 'Molde Über 0.5 Tore' — "
+    "never drop the team and never turn it into a whole-match Total. "
+    "Each leg's 'kickoff' MUST be the exact time printed next to THAT match on the slip (never blank it if "
+    "a time is visible, never shift or invent it)."
 )
 
 
@@ -3320,6 +3329,8 @@ async def extract_win_slip(image_b64: str) -> dict:
             "gives a start). A bare team+number is ALWAYS a handicap, never a goals line; only "
             "'Total OVER/UNDER x.5' is a goals line (=> 'Über/Unter x.5 Tore'). "
             "double chance => '1X' or 'X2'; both teams to score => 'Beide Teams treffen'. "
+            "DRAW NO BET (labels 'Draw No Bet', 'DNB', 'Sieg ohne Unentschieden', 'Unentschieden keine "
+            "Wette') => '<Team> Draw No Bet' with the exact team backed — never reduce it to a plain winner. "
             "Keep 'home' and 'away' as the two teams of the match the leg belongs to."
         )
         resp = await chat.send_message(UserMessage(text=prompt, file_contents=[ImageContent(image_base64=image_b64)]))
