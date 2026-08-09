@@ -120,3 +120,13 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Owner: "Frag diese 4 Sachen nicht wieder." → beim finish-Tool KEINE ausgedachten
   Feature-Ideen / Enhancement-Vorschläge auflisten. Nur bauen, was der Owner explizit sagt.
   Kurze Abschluss-Zusammenfassung ohne "Next Action Items"-Ideen.
+
+## 8. FREUNDSCHAFTSSPIELE / TESTSPIELE — kein Torschützen-Vertrauen (Owner 2026-08-08)
+- Beobachtung (Owner): Es gibt im Sommer SEHR viele Freundschaftsspiele. Aufstellungen sind NICHT scrapebar → man weiß vorher nicht, wer wirklich spielt.
+- Barcelona spielte am 08.08.26 ZWEI Spiele am SELBEN Tag (Barcelona 1-0 Forest UND Udinese 1-0 Barcelona) → geteilter Kader, beide Aufstellungen schwach → "Scheiße gespielt", kaum Tore.
+- REGEL: Der Master soll in Freundschaftsspielen KEINE Torschützen-/Über-Tore-Picks blind setzen. Ein starker Klubname (Barça, Bournemouth, Real …) heißt NICHT, dass die A-Elf aufläuft oder trifft.
+- UMSETZUNG (Code, master_hotscorer_combo): Freundschaftsspiele werden aus der Torjäger-Kombi komplett AUSGESCHLOSSEN (Liga-Name enthält friendl/freundschaft/testspiel/φιλικ/amistoso/amichev). Zusätzlich existiert _is_domestic_league_fx (schließt friendl/cup aus) für die Ligaklassifizierung.
+- MASTER-VERSTÄNDNIS (Ziel): Falls Freundschaftsspiele doch mal genutzt werden, muss der Master erkennen, welche Teams "verstärkt genug antreten" (A-Kader) um zu treffen — sonst NICHT backen. Bis Aufstellungsdaten sicher vorliegen: Testspiele meiden.
+
+## HINWEIS ZUM BRAIN
+- Alles, was der Owner mir gibt (Screenshots, Ergebnisse, Regeln), wird HIER im Brain notiert. HQ und Master lernen daraus. Dieses File ist die Quelle für Kalibrierung & Regeln.

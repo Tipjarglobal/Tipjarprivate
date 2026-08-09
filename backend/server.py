@@ -14323,6 +14323,12 @@ async def master_hotscorer_combo() -> dict:
     for p in preds:
         if not _pred_whitelisted(p):
             continue
+        # Owner-Brain 2026-08-08: FRIENDLIES ausschließen. Kader sind bei Testspielen
+        # unvorhersehbar (Rotation, geteilte Kader — z.B. Barça 2 Spiele am selben Tag,
+        # beide schwach). Aufstellungen nicht scrapebar → kein Torschützen-Vertrauen.
+        _lg = (p.get("league") or "").lower()
+        if any(k in _lg for k in ("friendl", "freundschaft", "testspiel", "φιλικ", "amistoso", "amichev")):
+            continue
         ko = _parse_kickoff(p.get("kickoff"))
         if not ko:
             continue
