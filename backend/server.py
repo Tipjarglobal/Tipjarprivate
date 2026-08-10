@@ -14182,46 +14182,48 @@ async def master_avatar_calls() -> dict:
         scored_last, _, _ = await _team_last_scored(fav, allow_api=False)
         drought = scored_last == 0
         at_home = p.get("fav") == "home"
-        # Owner 2026-08-09 ("die Sprechblasen sollen ALLES enthalten, was uns nicht ficken kann"):
-        # NUR bombensichere Aussagen für einen klaren Favoriten, rotierend für Abwechslung.
-        # KEIN 1.-HZ-Tor / Anytime-Torschütze mehr — die fallen bei 0-0 / 2-2 durch
-        # (Wolfsburg-0-0-Learning). Selbst bei einem 2-2 gewinnen diese Picks.
+        # Owner 2026-08-09: English is the base language now. SAFE, varied statements for a clear
+        # favourite — plus the owner's headline request: an Asian Handicap -1 pick (win by 2 = won,
+        # win by exactly 1 = VOID/refund). Rotates for variety; survives even a 2-2 for the DC/half picks.
         avatar_player, avatar_scorer = None, False
         player_kind, player_line = None, None
         minute = None
         goal_friendly = (isinstance(total, (int, float)) and total >= 2.8) or over25
-        options = ["half_any", "ht_no_loss", "dc"]
+        options = ["ah_minus1", "half_any", "ht_no_loss", "dc"]
         if goal_friendly:
             options.append("over15")
         choice = options[posted % len(options)]
         if choice == "over15":
-            market = "Über 1.5 Tore"
+            market = "Over 1.5 Goals"
             odds = 1.30 if (isinstance(total, (int, float)) and total >= 3.2) else 1.40
-            call = (f"In {home} – {away} fallen genug Tore — Über 1,5 im Spiel ist die sichere "
-                    f"Bank. {fav} drückt {'zuhause' if at_home else 'auswärts'}; da kommt mehr "
-                    f"als nur ein Treffer. Das kann uns nicht ficken.")
+            call = (f"Enough goals in {home} vs {away} — Over 1.5 in the match is the safe bank. "
+                    f"{fav} pushes hard {'at home' if at_home else 'away'}; expect more than one goal.")
             conf = min(94, 74 + (8 if (isinstance(total, (int, float)) and total >= 3.2) else 0)
                        + (6 if btts else 0))
         elif choice == "dc":
-            market = f"Doppelte Chance {fav}"
+            market = f"Double Chance {fav}"
             odds = 1.25
-            call = (f"{fav} verliert dieses Spiel nicht — Doppelte Chance {fav} (Sieg oder "
-                    f"Unentschieden). {'Zuhause' if at_home else 'Auswärts'} viel zu stabil. "
-                    f"Selbst bei einem 2-2 sind wir auf der sicheren Seite.")
+            call = (f"{fav} won't lose this game — Double Chance {fav} (win or draw). "
+                    f"Far too solid {'at home' if at_home else 'away'}. Even a 2-2 keeps us safe.")
             conf = 88
         elif choice == "ht_no_loss":
-            market = f"{fav} verliert nicht zur Halbzeit"
+            market = f"{fav} not losing at half-time"
             odds = 1.28
-            call = (f"{fav} liegt zur Halbzeit NICHT hinten — {'zuhause' if at_home else 'auswärts'} "
-                    f"zu dominant, um zur Pause im Rückstand zu sein. Selbst ein 0-0 oder 2-2 zur "
-                    f"Halbzeit gewinnt diese Wette. Unfickbar.")
+            call = (f"{fav} is NOT behind at half-time — too dominant {'at home' if at_home else 'away'} "
+                    f"to trail at the break. Even a 0-0 or 2-2 at HT wins this. Unbreakable.")
             conf = 89
+        elif choice == "ah_minus1":
+            market = f"{fav} -1 Asian Handicap"
+            odds = 1.70
+            call = (f"{fav} to win by 2+ — {fav} -1 Asian Handicap. {'At home' if at_home else 'Away'} "
+                    f"strong enough to win clearly. If they win by exactly 1, the stake is refunded "
+                    f"(VOID) — so this only really loses if {fav} slips up entirely.")
+            conf = 78
         else:  # half_any
-            market = f"{fav} gewinnt mindestens eine Halbzeit"
+            market = f"{fav} wins at least one half"
             odds = 1.30
-            call = (f"{fav} gewinnt mindestens EINE der beiden Halbzeiten — praktisch unmöglich, "
-                    f"dass {fav} in KEINER Hälfte vorne liegt. Selbst wenn es am Ende 2-2 steht, "
-                    f"eine Halbzeit geht an {fav}. Unfickbar.")
+            call = (f"{fav} wins at least ONE of the two halves — almost impossible for {fav} to be "
+                    f"ahead in NEITHER half. Even if it ends 2-2, one half goes to {fav}. Unbreakable.")
             conf = 90
         tid = f"master-av-{uuid.uuid4().hex[:8]}"
         await db.tips.insert_one({
@@ -14430,13 +14432,13 @@ async def master_hotscorer_combo() -> dict:
         "id": tid, "user_id": bot["id"], "username": bot["username"],
         "is_master": True, "is_expert": False,
         "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-        "market": f"🔥 Torjäger-Kombi — {len(legs)} treffen heute", "odds": f"{combo:.2f}",
+        "market": f"🔥 Top Scorer Combo — {len(legs)} to score today", "odds": f"{combo:.2f}",
         "category": "value", "master_category": "hotscorer", "master_day": day,
         "ai_rating": 8.2,
-        "ai_analysis": (f"🔥 Torjäger-Kombi des Tages: {names} sollen JE mindestens EINMAL treffen. "
-                        f"Nur Torschützen aus Teams gewählt, die über 1,5 Tore schießen; Spieler mit "
-                        f"Europapokal-Rückspiel in 4 Tagen (Rotationsgefahr) wurden gemieden. "
-                        f"Gesamtquote {combo:.2f} — kleiner Einsatz, großer Traum. Mit Köpfchen spielen."),
+        "ai_analysis": (f"🔥 Top Scorer Combo of the day: {names} to each score AT LEAST once. "
+                        f"Only scorers from teams that score over 1.5 goals; players with a European "
+                        f"tie in 4 days (rotation risk) were avoided. Total odds {combo:.2f} — small "
+                        f"stake, big dream. Play smart."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
@@ -14529,7 +14531,7 @@ async def master_hard_2_2() -> dict:
         legs.append({"match": f"{home} - {away}", "league": p.get("league") or "",
                      "country": p.get("country") or "",
                      "kickoff": real_ko, "status": "pending",
-                     "selections": ["Genaues Ergebnis 2:2"], "sel_odds": [13.0], "_ko": ko})
+                     "selections": ["Correct Score 2:2"], "sel_odds": [13.0], "_ko": ko})
     if len(legs) < 2:
         return {"skipped": "not-enough", "have": len(legs)}
     combo = 1.0
@@ -14546,12 +14548,12 @@ async def master_hard_2_2() -> dict:
         "id": tid, "user_id": bot["id"], "username": bot["username"],
         "is_master": True, "is_expert": False,
         "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
-        "market": f"🎯 HARD — {len(legs)}× exaktes 2:2", "odds": f"{combo:.2f}",
+        "market": f"🎯 HARD — {len(legs)}", "odds": f"{combo:.2f}",
         "category": "risk", "master_category": "hard", "master_day": day,
         "ai_rating": 7.0,
-        "ai_analysis": (f"🎯 HARD-Kombi: {len(legs)} Fallen-Spiele, die die Masse auf Favoriten-Sieg "
-                        f"tippt — ich sehe überall ein 2:2. Genau das, was die großen Scheine fickt. "
-                        f"Gesamtquote {combo:.2f}. Mini-Einsatz, Mega-Traum. Spiele: {matches}."),
+        "ai_analysis": (f"🎯 HARD combo: {len(legs)} trap games the crowd backs the favourite to WIN — "
+                        f"I see a 2:2 in each. Exactly what wrecks the big slips. Total odds {combo:.2f}. "
+                        f"Tiny stake, mega dream. Games: {matches}."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),

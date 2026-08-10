@@ -568,7 +568,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
           </div>
           <MasterAvatar t={t} />
           <div className="flex flex-wrap gap-2 mb-6">
-            {[["hotscorer", "🔥 Torjäger-Kombi"], ["hard", "🎯 Hard 2:2"], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
+            {[["hotscorer", "🔥 Top Scorer Combo"], ["hard", "🎯 Hard"], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
               <button key={v} data-testid={`master-tab-${v}`}
                 onClick={() => setMasterTab(v)}
                 className={`relative px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide border transition-all ${masterTab === v ? "bg-[#E11D2A] text-white border-[#E11D2A] shadow-[0_0_14px_rgba(225,29,42,0.5)]" : "bg-surface text-red-300 border-[#E11D2A]/40 hover:text-white"}`}>
@@ -1192,7 +1192,7 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
           )}
           {tip.master_category && (
             <span data-testid={`master-cat-${tip.master_category}`} className="inline-flex items-center text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-400/15 text-amber-300 border border-amber-400/40">
-              {tip.master_category === "einfach" ? t("master.cat.einfach") : tip.master_category === "mittel" ? t("master.cat.mittel") : tip.master_category === "safe" ? t("master.cat.safe") : tip.master_category === "special" ? "Special" : tip.master_category === "avatar" ? `🔮 ${tip.avatar_minute || 90}'` : tip.master_category === "hotscorer" ? "🔥 Torjäger-Kombi" : `${t("master.cat.challenge")}${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
+              {tip.master_category === "einfach" ? t("master.cat.einfach") : tip.master_category === "mittel" ? t("master.cat.mittel") : tip.master_category === "safe" ? t("master.cat.safe") : tip.master_category === "special" ? "Special" : tip.master_category === "avatar" ? `🔮 ${tip.avatar_minute || 90}'` : tip.master_category === "hotscorer" ? "🔥 Top Scorer Combo" : tip.master_category === "hard" ? "🎯 Hard" : `${t("master.cat.challenge")}${tip.challenge_step ? ` ${tip.challenge_step}/4` : ""}`}
             </span>
           )}
           {tip.gift_covered && !tip.is_gift && (

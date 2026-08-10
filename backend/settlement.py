@@ -64,10 +64,15 @@ from poster_tz import record_offset
 def _special_gift_kind(market: str):
     """Detect the owner's special GIFTS from the market text."""
     m = (market or "").lower()
-    if "mindestens eine halbzeit" in m:
+    if "mindestens eine halbzeit" in m or "at least one half" in m:
         return "half_any"
-    if "verliert nicht zur halbzeit" in m or "verliert nicht zur hz" in m or "nicht hinten zur halbzeit" in m:
+    if ("verliert nicht zur halbzeit" in m or "verliert nicht zur hz" in m
+            or "nicht hinten zur halbzeit" in m or "not losing at half" in m
+            or "not behind at half" in m or "no loss at half" in m):
         return "ht_no_loss"                              # favourite is NOT behind at half-time
+    if ("-1 asian handicap" in m or "asian handicap -1" in m or "handicap -1" in m
+            or " -1 ah" in m):
+        return "ah_fav_1"                                # win by 2+ = won, by 1 = void, else lost
     if "nicht beide halbzeiten" in m:
         return "not_both_halves"
     if "ersten 2 tore" in m or "erste 2 tore" in m or "ersten zwei tore" in m:
@@ -85,13 +90,22 @@ def _special_gift_kind(market: str):
 
 def _fav_side_in_fixture(market: str, home_c: str, away_c: str, fx: dict) -> str:
     """Which fixture side (home/away) is the favourite named at the START of a special-gift
-    market string ('<Fav> gewinnt ...' / '<Fav> schießt ...')."""
-    fname = market.split(" gewinnt")[0].split(" schießt")[0].split(" verliert")[0].strip()
-    if _teams_match(fx.get("home_name", ""), fname):
+    market string ('<Fav> gewinnt ...' / '<Fav> -1 Asian Handicap' / '<Fav> wins ...')."""
+    m = (market or "").strip()
+    ml = m.lower()
+    hn = (fx.get("home_name") or "").strip()
+    an = (fx.get("away_name") or "").strip()
+    if hn and ml.startswith(hn.lower()):
         return "home"
-    if _teams_match(fx.get("away_name", ""), fname):
+    if an and ml.startswith(an.lower()):
         return "away"
-    return "home" if _teams_match(fx.get("home_name", ""), home_c) else "away"
+    fname = re.split(r'\s+(?:gewinnt|schießt|verliert|wins|scores|not\s|-1|\+1|double\s+chance|asian|über|over|under)',
+                     m, maxsplit=1, flags=re.I)[0].strip()
+    if _teams_match(hn, fname):
+        return "home"
+    if _teams_match(an, fname):
+        return "away"
+    return "home" if _teams_match(hn, home_c) else "away"
 
 
 def _grade_special_gift(kind: str, market: str, home_c: str, away_c: str, fx: dict):
@@ -122,6 +136,14 @@ def _grade_special_gift(kind: str, market: str, home_c: str, away_c: str, fx: di
             return None
         f1, o1 = orient(hh, ha)                       # 1st-half goals (fav, opp)
         return f1 >= o1                               # favourite not behind at half-time
+    if kind == "ah_fav_1":
+        fF, oF = orient(hg, ag)                       # full-time goals (fav, opp)
+        margin = fF - oF
+        if margin >= 2:
+            return True                               # covers -1 handicap
+        if margin == 1:
+            return "void"                             # win by exactly 1 → push/refund
+        return False
     if kind in ("ht_win", "ht_ft"):
         hh, ha = fx.get("ht_home"), fx.get("ht_away")
         if hh is None or ha is None:
@@ -813,6 +835,7 @@ async def settle_pending_tips() -> dict:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         outcome_market = tip.get("market", "")
+        definitive_push = False
         # learn this poster's kickoff timezone: the wall-clock they typed vs the real UTC kickoff.
         # Only for MEMBER/expert posts (not the HQ scrapers, whose times are handled separately).
         try:
@@ -856,7 +879,11 @@ async def settle_pending_tips() -> dict:
             if res is None:
                 await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
                 continue
-            new_status = "won" if res else "lost"
+            if res == "void":
+                new_status = "void"
+                definitive_push = True                # deterministic push (e.g. -1 AH won by 1)
+            else:
+                new_status = "won" if res else "lost"
         elif _is_corner_market(outcome_market):
             fx["corners"] = _corner_total_for_fixture(fx.get("fixture_id"))
             res = _grade_goal_leg("corner_o" if "über" in outcome_market.lower() else "corner_u",
@@ -869,7 +896,7 @@ async def settle_pending_tips() -> dict:
             outcome = await judge_market(tip.get("market", ""), home_c, away_c,
                                          fx["home_goals"], fx["away_goals"])
             new_status = outcome if outcome in ("won", "lost") else "void"
-        if new_status == "void":
+        if new_status == "void" and not definitive_push:
             await db.tips.update_one({"id": tip["id"]}, {"$inc": {"settle_attempts": 1}})
             continue
         # canonical (Latin) team names from API-Football, mapped to the tip's orientation,

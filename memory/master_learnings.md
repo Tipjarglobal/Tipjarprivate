@@ -171,3 +171,11 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - server.py: analyze_tip (1342) + SmartLab-Fan-Hint (9240) wählen jetzt pro Aufruf: Bild vorhanden → AI_VISION_MODEL (OCR-Genauigkeit bleibt, schützt Draw-No-Bet/Team-Tore/Uhrzeiten-Fixes); nur Text → AI_MODEL (Flash). Reine Vision-OCR (Win-Slip 3310, Code-Reader 9808, Lineup 12365) bleiben auf AI_VISION_MODEL.
 - Getestet: Text-Rating läuft auf gemini-2.5-flash (Log bestätigt), Rating 9.0, kein Fehler. Backend startet sauber.
 - Info: App nutzt EINEN EMERGENT_LLM_KEY (nicht 3). Kosten = Modell-Wahl + Token-Volumen, nicht Übersetzung.
+
+## 15. Englisch als Basissprache + Asian Handicap -1 + Hard-Umbenennung (Owner 2026-08-09)
+- HAUPTSPRACHE = ENGLISCH. Master-Markt-Labels jetzt Englisch: "Double Chance {fav}" (nicht "Doppelte Chance"), "{fav} wins at least one half", "{fav} not losing at half-time", "Over 1.5 Goals". Combo-Titel: "🔥 Top Scorer Combo", "🎯 HARD". Hard-Beine: "Correct Score 2:2". Badge-Labels + Tabs Englisch.
+- NEU in Sprechblasen-Rotation: "{fav} -1 Asian Handicap" (Sieg mit 2+ = won, mit genau 1 = VOID/Rückzahlung, sonst lost). Owner-Hauptwunsch "Lugano -1". Rotation: ah_minus1 → half_any → ht_no_loss → dc (→ over15 goal-friendly).
+- Settlement: _special_gift_kind erkennt jetzt EN+DE (half_any, ht_no_loss) + neu ah_fav_1; _grade_special_gift ah_fav_1 gibt True/"void"/False; _fav_side_in_fixture bilingual (Team am Marktanfang, startswith). Einzel-Settler finalisiert deterministischen Push (void) statt Endlos-Retry (definitive_push-Flag).
+- "Hard 2:2"-Bereich heißt jetzt nur noch "Hard" (Tab + Badge).
+- Getestet: AH -1 Grading (5-0=won, 2-1=void, 1-1=lost, Auswärts analog) + EN-Kind-Erkennung → OK. Screenshot: Bubble zeigt "FK Crvena Zvezda -1 Asian Handicap @1.70" (EN), Hard-Tab, Flaggen pro Spiel.
+- NOCH OFFEN (Owner-Wunschliste, nicht gebaut): Team-Total-Value-Picks im Master ("Sion over 1.5 team", "Vaduz over 1.5 team", "St. Gallen total over 3.5"), lockere ~10er Tore-Kombi, "over 23.5 shots"-Markt aus Experten-Reads.
