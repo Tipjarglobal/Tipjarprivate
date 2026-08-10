@@ -164,3 +164,10 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Rotation jetzt: half_any → ht_no_loss → dc (→ over15 nur goal-friendly).
 - Settlement: _special_gift_kind erkennt "verliert nicht zur halbzeit/hz"; _grade_special_gift kind ht_no_loss; _fav_side_in_fixture splittet jetzt auch auf " verliert" (Team-Zuordnung Heim/Auswärts).
 - Deterministisch getestet (6 Fälle Heim+Auswärts, Sieg/Remis/Rückstand HZ) → ALLE OK. Keine Credits.
+
+## 14. KOSTEN-SENKUNG: teures LLM-Modell nur noch für Vision (Owner 2026-08-09)
+- Problem: gemini-3.1-pro-preview (AI_MODEL) lief auf JEDEM Tipp-Rating (analyze_tip) → Hauptkostentreiber. Übersetzung war NIE das Problem (bereits Flash + DB-Cache).
+- Fix (core.py): AI_MODEL = "gemini-2.5-flash" (günstig, für häufige TEXT-Analyse), NEU AI_VISION_MODEL = "gemini-3.1-pro-preview" (stark, nur für Bild/OCR).
+- server.py: analyze_tip (1342) + SmartLab-Fan-Hint (9240) wählen jetzt pro Aufruf: Bild vorhanden → AI_VISION_MODEL (OCR-Genauigkeit bleibt, schützt Draw-No-Bet/Team-Tore/Uhrzeiten-Fixes); nur Text → AI_MODEL (Flash). Reine Vision-OCR (Win-Slip 3310, Code-Reader 9808, Lineup 12365) bleiben auf AI_VISION_MODEL.
+- Getestet: Text-Rating läuft auf gemini-2.5-flash (Log bestätigt), Rating 9.0, kein Fehler. Backend startet sauber.
+- Info: App nutzt EINEN EMERGENT_LLM_KEY (nicht 3). Kosten = Modell-Wahl + Token-Volumen, nicht Übersetzung.

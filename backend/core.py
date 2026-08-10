@@ -30,10 +30,14 @@ JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY')
 AI_MODEL_PROVIDER = "gemini"
-AI_MODEL = "gemini-3.1-pro-preview"
+# Owner 2026-08-09 (cost cut): the frequent TEXT analysis (tip rating on every posted tip,
+# analyses, briefs) now runs on the cheap Flash model. VISION/OCR (bet-slip & lineup image
+# reading) keeps the strong AI_VISION_MODEL so OCR accuracy (Draw No Bet, team totals, times)
+# stays intact. This alone removes the dominant Pro-preview spend.
+AI_MODEL = "gemini-2.5-flash"
+AI_VISION_MODEL = "gemini-3.1-pro-preview"
 # Cheap text-only model — used for translation, moderation, name/label/selection
-# canonicalisation, analysis prose and the qualifier briefing. Vision OCR (slip reading)
-# stays on the expensive AI_MODEL for accuracy. Cost-optimisation (owner 2026-07-30).
+# canonicalisation, analysis prose and the qualifier briefing.
 AI_TEXT_MODEL = "gemini-2.5-flash"
 API_FOOTBALL_KEY = os.environ.get('API_FOOTBALL_KEY')
 API_FOOTBALL_BASE = "https://v3.football.api-sports.io"

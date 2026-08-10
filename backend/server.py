@@ -50,7 +50,7 @@ from pywebpush import webpush, WebPushException
 from core import (
     mongo_url, client, db,
     JWT_SECRET, JWT_ALGORITHM, EMERGENT_LLM_KEY, STRIPE_API_KEY,
-    AI_MODEL_PROVIDER, AI_MODEL, AI_TEXT_MODEL, API_FOOTBALL_KEY, API_FOOTBALL_BASE, SETTLE_INTERVAL_SECONDS,
+    AI_MODEL_PROVIDER, AI_MODEL, AI_VISION_MODEL, AI_TEXT_MODEL, API_FOOTBALL_KEY, API_FOOTBALL_BASE, SETTLE_INTERVAL_SECONDS,
     VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT,
     SETTLE_BATCH_CAP, SETTLE_MAX_ATTEMPTS, FINISHED_STATUSES,
     SUBSCRIBER_DISPLAY_BOOST, SUBSCRIBER_BOOST_UNTIL, MEMBER_DISPLAY_BOOST, MEMBER_BOOST_UNTIL,
@@ -1339,7 +1339,7 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
             api_key=EMERGENT_LLM_KEY,
             session_id=f"tip-{uuid.uuid4()}",
             system_message=AI_SYSTEM,
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL if images_b64 else AI_MODEL)
 
         prompt = (
             f"User's written tip: {text or '(none)'}\n\n"
@@ -3307,7 +3307,7 @@ async def extract_win_slip(image_b64: str) -> dict:
     try:
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"win-{uuid.uuid4()}",
                        system_message=("You read betting bet-slip screenshots and output STRICT JSON only. "
-                                       "Never invent legs that are not visible.")).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+                                       "Never invent legs that are not visible.")).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL)
         prompt = (
             "Read this bet-slip screenshot. Return STRICT JSON: "
             '{"status":"won|lost|open|cashed","total_odds":<number>,"stake":"","winnings":"",'
@@ -9237,7 +9237,7 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
                 "most relevant real match you can infer (a marquee upcoming fixture is perfectly fine). "
                 "Never refuse and never return an empty/no-tip answer."
             ),
-        ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+        ).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL if images_b64 else AI_MODEL)
         kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
         if images_b64:
             kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64[:3]]
@@ -9805,7 +9805,7 @@ async def _code_read_scan_images(images_b64: List[str]) -> list:
         "\"code_market\":\"\",\"read\":\"counter|no_bet\",\"our_market\":\"\",\"reason\":\"\",\"stars\":0}]}")
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"coderead-{uuid.uuid4()}",
                    system_message="You are TipJar's Code-Reader. You read trap-bookie slips and give ONE safe counter-pick per game or NO BET. Output strict JSON."
-                   ).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+                   ).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL)
     resp = await chat.send_message(UserMessage(
         text=prompt, file_contents=[ImageContent(image_base64=b) for b in images_b64[:4]]))
     try:
@@ -12362,7 +12362,7 @@ async def _ocr_player_team(image_b64: str) -> dict:
         return {"player_name": "", "team": ""}
     try:
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"lu-{uuid.uuid4()}",
-                       system_message=_LINEUP_OCR_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_MODEL)
+                       system_message=_LINEUP_OCR_SYSTEM).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL)
         resp = await chat.send_message(UserMessage(
             text="Extract the player's full name and current club.",
             file_contents=[ImageContent(image_base64=image_b64)]))
