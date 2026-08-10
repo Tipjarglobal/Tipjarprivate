@@ -8402,6 +8402,25 @@ def _h2h_team_drought(h2h, team_id):
     return count, years
 
 
+def _h2h_team_scores_2plus(meetings, team_id, k=8):
+    """Owner 2026-08-10 ('Sirius zuhause kassiert immer 2 Tore von denen'): how often did this
+    team score 2+ in the recent head-to-head meetings? Returns (hits, total). Used to confirm the
+    'weaker team scores twice' value angle with REAL history, not just a model projection."""
+    hits = tot = 0
+    for m in (meetings or [])[:k]:
+        if m.get("home_id") == team_id:
+            g = m.get("gh")
+        elif m.get("away_id") == team_id:
+            g = m.get("ga")
+        else:
+            continue
+        tot += 1
+        if isinstance(g, (int, float)) and g >= 2:
+            hits += 1
+    return hits, tot
+
+
+
 def _scores_regularly(rows, team_id, thresh=0.5):
     """True when the team scored in >= thresh of its last matches (so a H2H blank is an
     anomaly primed for mean-reversion, not a genuinely toothless side)."""
@@ -14618,6 +14637,7 @@ async def master_value_goals_combo() -> dict:
         total = p.get("total")
         real_ko = p.get("kickoff") or ko.isoformat()
         rh, ra = home, away
+        tidh = tida = None
         if API_FOOTBALL_KEY:
             tidh = await resolve_team_id(home)
             fx = find_upcoming_fixture(tidh, away) if tidh else None
@@ -14633,13 +14653,24 @@ async def master_value_goals_combo() -> dict:
         # goal-friendly game. Same-game builder '{weaker team} Over 1.5 Goals' + 'Over 3.5 Goals'
         # (e.g. Brommapojkarna Over 1.5 + Total Over 3.5 @4.75, won 2:2). Both teams must project
         # to score (min goals >= 1.4) so the underdog genuinely reaches 2 — never a one-sided blowout.
+        # CONFIRM with real H2H history ('Sirius zuhause kassiert immer 2 Tore von denen'): only
+        # build the weaker-team leg when the H2H shows they actually score 2+ (or when no H2H exists).
         if (isinstance(ph, (int, float)) and isinstance(pa, (int, float))
                 and isinstance(total, (int, float)) and total >= 3.6
                 and min(ph, pa) >= 1.4):
-            weak_team, weak_pred = (rh, ph) if ph <= pa else (ra, pa)
+            weak_team, weak_pred, weak_is_home = (rh, ph, True) if ph <= pa else (ra, pa, False)
             pw = _prob_over(1.5, weak_pred)
             pt = _prob_over(3.5, total)
-            if pw >= 0.40 and pt >= 0.42:
+            h2h_confirms = True  # default (no data) → trust the model gate
+            if API_FOOTBALL_KEY and tidh:
+                tida = await resolve_team_id(away)
+                if tida:
+                    meetings = await match_stats.h2h_detailed(tidh, tida)
+                    wid = tidh if weak_is_home else tida
+                    hits, tot = _h2h_team_scores_2plus(meetings, wid)
+                    if tot >= 3:  # enough history to judge → require a real 2+ pattern
+                        h2h_confirms = hits >= max(2, round(tot * 0.5))
+            if pw >= 0.40 and pt >= 0.42 and h2h_confirms:
                 sels.append(f"{weak_team} Over 1.5 Goals"); sodds.append(round(float(_odds_from_prob(pw)), 2))
                 sels.append("Over 3.5 Goals"); sodds.append(round(float(_odds_from_prob(pt)), 2))
         # fallback: a single high-confidence goal leg (strong scorer or high match total)
@@ -14683,8 +14714,9 @@ async def master_value_goals_combo() -> dict:
         "ai_rating": 8.0,
         "ai_analysis": (f"💎 Value Goals Combo: {len(legs)} goal-friendly games. The value is the "
                         f"WEAKER team scoring twice — 'team Over 1.5 Goals' paired with 'Over 3.5 "
-                        f"Goals' in the same match (that combo pays big when the underdog nets 2, "
-                        f"e.g. a 2:2). Kept lean on purpose. Total odds {combo:.2f}. Small stake, big value."),
+                        f"Goals' in the same match, confirmed by head-to-head history where that side "
+                        f"keeps netting 2+ (that combo pays big when the underdog nets 2, e.g. a 2:2). "
+                        f"Kept lean on purpose. Total odds {combo:.2f}. Small stake, big value."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),
