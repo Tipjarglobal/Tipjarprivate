@@ -293,6 +293,8 @@ export function localizeMarket(market, t) {
   m = m.replace(/\bHalbzeit\b/gi, t("mkt.half"));
   m = m.replace(/Beide\s+Teams\s+treffen/gi, t("mkt.btts"));
   m = m.replace(/Beide\s+treffen/gi, t("mkt.btts"));
+  m = m.replace(/Team-?Tore\s+Über\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.teamgoals")} ${t("mkt.ovr")} ${n.replace(",", ".")}`);
+  m = m.replace(/Team-?Tore\s+Unter\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.teamgoals")} ${t("mkt.und")} ${n.replace(",", ".")}`);
   m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
   m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
   // English "Over/Under X Goals" (raw member/bookmaker slips) → locale, so it doesn't stay
@@ -911,6 +913,7 @@ const T = {
     "mkt.und": "Under",
     "mkt.corners": "Corners",
     "mkt.goals": "Goals",
+    "mkt.teamgoals": "Team Goals",
     "mkt.half": "Half",
     "mkt.btts": "Both Teams to Score (BTTS)",
     "mkt.ggng_yes": "Both Teams to Score",
@@ -1831,6 +1834,7 @@ const T = {
     "mkt.und": "Unter",
     "mkt.corners": "Ecken",
     "mkt.goals": "Tore",
+    "mkt.teamgoals": "Team-Tore",
     "mkt.half": "Halbzeit",
     "mkt.btts": "Beide Teams treffen (BTTS)",
     "mkt.ggng_yes": "Beide treffen",

@@ -179,3 +179,9 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - "Hard 2:2"-Bereich heißt jetzt nur noch "Hard" (Tab + Badge).
 - Getestet: AH -1 Grading (5-0=won, 2-1=void, 1-1=lost, Auswärts analog) + EN-Kind-Erkennung → OK. Screenshot: Bubble zeigt "FK Crvena Zvezda -1 Asian Handicap @1.70" (EN), Hard-Tab, Flaggen pro Spiel.
 - NOCH OFFEN (Owner-Wunschliste, nicht gebaut): Team-Total-Value-Picks im Master ("Sion over 1.5 team", "Vaduz over 1.5 team", "St. Gallen total over 3.5"), lockere ~10er Tore-Kombi, "over 23.5 shots"-Markt aus Experten-Reads.
+
+## 16. Value Goals Combo + Shots-OCR + Team-Total-Englisch-Fix (Owner 2026-08-09)
+- NEU master_value_goals_combo() → master_category "valuecombo", Tab "💎 Value Goals". 1x/Berlin-Tag, ~6er-Kombi (~6-15x): "{Team} Over 1.5 Goals" für starke Scorer (ph/pa>=1.8, prob>=0.45) + "Over 3.5 Goals" für torreiche Spiele (total>=3.6). Odds via _prob_over/_odds_from_prob. Keine Friendlies. Deckt Owner-Wunsch "Sion/Vaduz over 1.5 team + St.Gallen total over 3.5 + lockere 10er Kombi" ab. Getestet: 6 Beine @14.72.
+- Verdrahtet: master_loop, reset-refresh, mcat-Filter, Frontend Tab+Counts+Badge.
+- SHOTS-OCR: AI_SYSTEM erkennt jetzt Shots-Märkte ("Over 23.5 Shots"/"Schüsse"/"shots on target") und lässt sie als SHOTS (nicht Goals) stehen — nie in Tore umwandeln.
+- BUGFIX (app-weit): localizeMarket hatte KEINE Regel für die deutsche Team-Total-Kanonform "{Team} Team-Tore Über X" → blieb bei EN-Locale deutsch. Neu: Regel + Key mkt.teamgoals (en "Team Goals", de "Team-Tore"). Jetzt zeigt EN "Team Goals Over 1.5" (Screenshot bestätigt). Betraf ALLE Team-Total-Picks, nicht nur den neuen Combo.

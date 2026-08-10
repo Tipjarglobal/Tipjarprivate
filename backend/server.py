@@ -290,6 +290,7 @@ async def _regen_pregames_bg():
             await master_avatar_calls()
             await master_hotscorer_combo()
             await master_hard_2_2()
+            await master_value_goals_combo()
             await gift_specials_autopost()
         await master_avatar_codemining()
         if await ensure_chromium():
@@ -1258,6 +1259,9 @@ AI_SYSTEM = (
     "TEAM total goals (a team backed for OVER/UNDER of ITS OWN goals, e.g. 'Molde over 0.5', 'Molde Über "
     "0.5 Team-Tore') MUST keep BOTH the team name AND the exact Over/Under line => 'Molde Über 0.5 Tore' — "
     "never drop the team and never turn it into a whole-match Total. "
+    "SHOTS markets (labels 'Shots', 'Total Shots', 'Schüsse', 'shots on target', 'Schüsse aufs Tor') are "
+    "NOT goals — keep the word 'Shots' and the exact line, e.g. 'Benfica Over 23.5 Shots' or 'Over 23.5 "
+    "Shots on Target'. NEVER convert a shots line into a goals line (an 'over 23.5' is ALWAYS shots, never goals). "
     "Each leg's 'kickoff' MUST be the exact time printed next to THAT match on the slip (never blank it if "
     "a time is visible, never shift or invent it)."
 )
@@ -2339,7 +2343,8 @@ async def admin_master_reset_refresh(admin: dict = Depends(require_admin)):
                          ("einfach3d", master_easy3day_build), ("risk", master_riskparade_build),
                          ("doublepack", master_doublepack), ("consensus", master_consensus),
                          ("special", master_special_build), ("hotscorer", master_hotscorer_combo),
-                         ("hard", master_hard_2_2), ("challenge", master_challenge)):
+                         ("hard", master_hard_2_2), ("valuecombo", master_value_goals_combo),
+                         ("challenge", master_challenge)):
             try:
                 built[name] = await fn()
             except Exception as e:
@@ -2817,6 +2822,8 @@ async def list_tips(status: Optional[str] = None, sort: str = "new",
             q["master_category"] = "hotscorer"
         elif mcat == "hard":
             q["master_category"] = "hard"
+        elif mcat == "valuecombo":
+            q["master_category"] = "valuecombo"
         elif mcat == "slips":
             q["master_category"] = {"$exists": False}
     elif source == "members":
@@ -14559,6 +14566,111 @@ async def master_hard_2_2() -> dict:
         "source": "hq-master", "created_at": now.isoformat(),
     })
     logger.info(f"Master HARD 2:2 combo ({len(legs)}) @ {combo}")
+    return {"posted": 1, "odds": combo, "legs": len(legs)}
+
+
+async def master_value_goals_combo() -> dict:
+    """Owner 2026-08-09 ('Sion over 1.5 team, Vaduz over 1.5 team, St. Gallen total over 3.5 —
+    lockere 10er Quote'): ONE daily VALUE goals combo. Legs = team-total 'Over 1.5 Goals' for
+    teams predicted to score 1.5+, plus a match 'Over 3.5 Goals' for high-total games. Targets a
+    relaxed ~6-15x combo. Same-day only, no friendlies. English labels."""
+    now = datetime.now(timezone.utc)
+    day = _berlin_now().date().isoformat()
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "valuecombo",
+             "status": {"$in": ["pending", "live"]}}):
+        return {"skipped": "open"}
+    if await db.tips.count_documents(
+            {"source": "hq-master", "master_category": "valuecombo", "master_day": day}):
+        return {"skipped": "done-today"}
+    preds = await db.match_predictions.find({}, {"_id": 0}).to_list(1500)
+    try:
+        from zoneinfo import ZoneInfo
+        _bz = ZoneInfo("Europe/Berlin")
+    except Exception:
+        _bz = None
+    today_b = _berlin_now().date()
+    cand = []
+    for p in preds:
+        if not _pred_whitelisted(p):
+            continue
+        _lg = (p.get("league") or "").lower()
+        if any(k in _lg for k in ("friendl", "freundschaft", "testspiel", "φιλικ", "amistoso", "amichev")):
+            continue
+        ko = _parse_kickoff(p.get("kickoff"))
+        if not ko:
+            continue
+        ko_b = (ko.astimezone(_bz) if _bz else ko + timedelta(hours=2)).date()
+        if ko_b != today_b or (ko - now).total_seconds() / 3600 < 1.5:
+            continue
+        cand.append((ko, p))
+    cand.sort(key=lambda x: x[0])
+    legs, seen, combo = [], set(), 1.0
+    for ko, p in cand:
+        if len(legs) >= 6 or combo >= 13:
+            break
+        home, away = p.get("home"), p.get("away")
+        key = _match_key(home, away)
+        if key in seen:
+            continue
+        ph, pa = p.get("ph"), p.get("pa")
+        total = p.get("total")
+        real_ko = p.get("kickoff") or ko.isoformat()
+        rh, ra = home, away
+        if API_FOOTBALL_KEY:
+            tidh = await resolve_team_id(home)
+            fx = find_upcoming_fixture(tidh, away) if tidh else None
+            if not fx or not fx.get("date_iso"):
+                continue
+            try:
+                real_ko = datetime.fromisoformat(fx["date_iso"].replace("Z", "+00:00")).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                pass
+            rh, ra = fx.get("home_name") or home, fx.get("away_name") or away
+        pick = None
+        # prefer the stronger-scoring team's 'Over 1.5 Goals'; else a high match total
+        if isinstance(ph, (int, float)) and ph >= 1.8 and ph >= (pa or 0):
+            prob = _prob_over(1.5, ph)
+            if prob >= 0.45:
+                pick = (f"{rh} Over 1.5 Goals", float(_odds_from_prob(prob)))
+        elif isinstance(pa, (int, float)) and pa >= 1.8:
+            prob = _prob_over(1.5, pa)
+            if prob >= 0.45:
+                pick = (f"{ra} Over 1.5 Goals", float(_odds_from_prob(prob)))
+        if not pick and isinstance(total, (int, float)) and total >= 3.6:
+            prob = _prob_over(3.5, total)
+            if prob >= 0.42:
+                pick = ("Over 3.5 Goals", float(_odds_from_prob(prob)))
+        if not pick:
+            continue
+        seen.add(key)
+        combo *= pick[1]
+        legs.append({"match": f"{rh} - {ra}", "league": p.get("league") or "",
+                     "country": p.get("country") or "", "kickoff": real_ko, "status": "pending",
+                     "selections": [pick[0]], "sel_odds": [round(pick[1], 2)], "_ko": ko})
+    if len(legs) < 4:
+        return {"skipped": "not-enough", "have": len(legs)}
+    combo = round(combo, 2)
+    first_ko = min(lg["_ko"] for lg in legs)
+    for lg in legs:
+        lg.pop("_ko", None)
+    bot = await _get_master_bot()
+    tid = f"master-vc-{uuid.uuid4().hex[:10]}"
+    await db.tips.insert_one({
+        "id": tid, "user_id": bot["id"], "username": bot["username"],
+        "is_master": True, "is_expert": False,
+        "home_team": "", "away_team": "", "match_time": first_ko.isoformat(),
+        "market": f"💎 Value Goals Combo — {len(legs)} legs", "odds": f"{combo:.2f}",
+        "category": "value", "master_category": "valuecombo", "master_day": day,
+        "ai_rating": 8.0,
+        "ai_analysis": (f"💎 Value Goals Combo: {len(legs)} teams/matches that should hit the net — "
+                        f"team Over 1.5 Goals for the strong scorers, plus a high Over 3.5 total where "
+                        f"the goals flow. Relaxed total odds {combo:.2f}. Small stake, tidy value."),
+        "legs": legs, "is_parlay": True,
+        "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
+        "source": "hq-master", "created_at": now.isoformat(),
+    })
+    logger.info(f"Master Value Goals combo ({len(legs)}) @ {combo}")
     return {"posted": 1, "odds": combo, "legs": len(legs)}
 
 
