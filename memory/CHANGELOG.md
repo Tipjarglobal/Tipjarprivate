@@ -533,3 +533,14 @@ HINWEIS: greift auf tipjarglobal.com erst nach „Save to GitHub → Deploy".
 - settlement.py judge_market: deterministischer Exact-Score-Shortcut ("Genaues Ergebnis 2:2" → won/lost aus Endstand, kein LLM).
 - Frontend RateWall: neuer Tab "🎯 Hard 2:2" + mcat/Counts verdrahtet.
 - master_loop + reset-refresh: master_hard_2_2 eingebunden.
+
+## 2026-08-10 — Value Goals Combo: schwaches Team trifft doppelt (Same-Game-Builder)
+Owner-Gewinner-Schein (Brommapojkarna Over 1.5 + Total Over 3.5 @4.75, 2:2 gewonnen). Learning #17.
+- `master_value_goals_combo()` (server.py) umgebaut: jedes Bein ist jetzt ein SAME-GAME-BUILDER
+  "{schwächeres Team} Over 1.5 Goals" + "Over 3.5 Goals" — der Value steckt darin, dass das
+  SCHWÄCHERE Team zweimal trifft (hohe Quote, Markt unterschätzt es). Gate: torreiches,
+  ausgeglichenes Spiel (total≥3.6, min(ph,pa)≥1.4, pw≥0.40, pt≥0.42) → nie einseitiges Blowout.
+  Fallback = einzelnes starkes Over-1.5/Over-3.5-Bein. LEAN gehalten (2–4 Beine, Cap Quote 60).
+- Abrechnung unverändert über settle_multimatch_parlays (2-Selektions-Beine wie Special/Doppelpack).
+- Getestet (Mock gegen Preview-DB): Brommapojkarna O1.5 @2.1 + O3.5 @1.9 + Eindhoven O1.5 @2.26 +
+  O3.5 @2.06 → 4-Bein-Kombi @39.01 korrekt gebaut. Backend syntaxsauber, /api 200.

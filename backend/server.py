@@ -14570,10 +14570,11 @@ async def master_hard_2_2() -> dict:
 
 
 async def master_value_goals_combo() -> dict:
-    """Owner 2026-08-09 ('Sion over 1.5 team, Vaduz over 1.5 team, St. Gallen total over 3.5 —
-    lockere 10er Quote'): ONE daily VALUE goals combo. Legs = team-total 'Over 1.5 Goals' for
-    teams predicted to score 1.5+, plus a match 'Over 3.5 Goals' for high-total games. Targets a
-    relaxed ~6-15x combo. Same-day only, no friendlies. English labels."""
+    """Owner 2026-08-10 (winning slip 'Brommapojkarna Over 1.5 + Total Over 3.5 @4.75, won 2:2'):
+    ONE daily VALUE goals combo. The VALUE is the WEAKER team scoring twice in a goal-friendly
+    game: each leg is a SAME-GAME builder '{weaker team} Over 1.5 Goals' + 'Over 3.5 Goals' (only
+    when both teams project to score, min goals >= 1.4 — never a one-sided blowout). Falls back to
+    a single strong-scorer/high-total leg. Kept LEAN (2-4 legs) — more legs = more risk. English labels."""
     now = datetime.now(timezone.utc)
     day = _berlin_now().date().isoformat()
     if await db.tips.count_documents(
@@ -14607,7 +14608,7 @@ async def master_value_goals_combo() -> dict:
     cand.sort(key=lambda x: x[0])
     legs, seen, combo = [], set(), 1.0
     for ko, p in cand:
-        if len(legs) >= 6 or combo >= 13:
+        if len(legs) >= 4 or combo >= 60:
             break
         home, away = p.get("home"), p.get("away")
         key = _match_key(home, away)
@@ -14627,28 +14628,45 @@ async def master_value_goals_combo() -> dict:
             except Exception:
                 pass
             rh, ra = fx.get("home_name") or home, fx.get("away_name") or away
-        pick = None
-        # prefer the stronger-scoring team's 'Over 1.5 Goals'; else a high match total
-        if isinstance(ph, (int, float)) and ph >= 1.8 and ph >= (pa or 0):
-            prob = _prob_over(1.5, ph)
-            if prob >= 0.45:
-                pick = (f"{rh} Over 1.5 Goals", float(_odds_from_prob(prob)))
-        elif isinstance(pa, (int, float)) and pa >= 1.8:
-            prob = _prob_over(1.5, pa)
-            if prob >= 0.45:
-                pick = (f"{ra} Over 1.5 Goals", float(_odds_from_prob(prob)))
-        if not pick and isinstance(total, (int, float)) and total >= 3.6:
-            prob = _prob_over(3.5, total)
-            if prob >= 0.42:
-                pick = ("Over 3.5 Goals", float(_odds_from_prob(prob)))
-        if not pick:
+        sels, sodds = [], []
+        # OWNER LEARNING 2026-08-10: the VALUE is the WEAKER team scoring twice in a
+        # goal-friendly game. Same-game builder '{weaker team} Over 1.5 Goals' + 'Over 3.5 Goals'
+        # (e.g. Brommapojkarna Over 1.5 + Total Over 3.5 @4.75, won 2:2). Both teams must project
+        # to score (min goals >= 1.4) so the underdog genuinely reaches 2 — never a one-sided blowout.
+        if (isinstance(ph, (int, float)) and isinstance(pa, (int, float))
+                and isinstance(total, (int, float)) and total >= 3.6
+                and min(ph, pa) >= 1.4):
+            weak_team, weak_pred = (rh, ph) if ph <= pa else (ra, pa)
+            pw = _prob_over(1.5, weak_pred)
+            pt = _prob_over(3.5, total)
+            if pw >= 0.40 and pt >= 0.42:
+                sels.append(f"{weak_team} Over 1.5 Goals"); sodds.append(round(float(_odds_from_prob(pw)), 2))
+                sels.append("Over 3.5 Goals"); sodds.append(round(float(_odds_from_prob(pt)), 2))
+        # fallback: a single high-confidence goal leg (strong scorer or high match total)
+        if not sels:
+            if isinstance(ph, (int, float)) and ph >= 1.8 and ph >= (pa or 0):
+                prob = _prob_over(1.5, ph)
+                if prob >= 0.45:
+                    sels.append(f"{rh} Over 1.5 Goals"); sodds.append(round(float(_odds_from_prob(prob)), 2))
+            elif isinstance(pa, (int, float)) and pa >= 1.8:
+                prob = _prob_over(1.5, pa)
+                if prob >= 0.45:
+                    sels.append(f"{ra} Over 1.5 Goals"); sodds.append(round(float(_odds_from_prob(prob)), 2))
+            if not sels and isinstance(total, (int, float)) and total >= 3.6:
+                prob = _prob_over(3.5, total)
+                if prob >= 0.42:
+                    sels.append("Over 3.5 Goals"); sodds.append(round(float(_odds_from_prob(prob)), 2))
+        if not sels:
             continue
+        leg_odd = 1.0
+        for o in sodds:
+            leg_odd *= o
         seen.add(key)
-        combo *= pick[1]
+        combo *= leg_odd
         legs.append({"match": f"{rh} - {ra}", "league": p.get("league") or "",
                      "country": p.get("country") or "", "kickoff": real_ko, "status": "pending",
-                     "selections": [pick[0]], "sel_odds": [round(pick[1], 2)], "_ko": ko})
-    if len(legs) < 4:
+                     "selections": sels, "sel_odds": sodds, "_ko": ko})
+    if len(legs) < 2:
         return {"skipped": "not-enough", "have": len(legs)}
     combo = round(combo, 2)
     first_ko = min(lg["_ko"] for lg in legs)
@@ -14663,9 +14681,10 @@ async def master_value_goals_combo() -> dict:
         "market": f"💎 Value Goals Combo — {len(legs)} legs", "odds": f"{combo:.2f}",
         "category": "value", "master_category": "valuecombo", "master_day": day,
         "ai_rating": 8.0,
-        "ai_analysis": (f"💎 Value Goals Combo: {len(legs)} teams/matches that should hit the net — "
-                        f"team Over 1.5 Goals for the strong scorers, plus a high Over 3.5 total where "
-                        f"the goals flow. Relaxed total odds {combo:.2f}. Small stake, tidy value."),
+        "ai_analysis": (f"💎 Value Goals Combo: {len(legs)} goal-friendly games. The value is the "
+                        f"WEAKER team scoring twice — 'team Over 1.5 Goals' paired with 'Over 3.5 "
+                        f"Goals' in the same match (that combo pays big when the underdog nets 2, "
+                        f"e.g. a 2:2). Kept lean on purpose. Total odds {combo:.2f}. Small stake, big value."),
         "legs": legs, "is_parlay": True,
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "hq-master", "created_at": now.isoformat(),

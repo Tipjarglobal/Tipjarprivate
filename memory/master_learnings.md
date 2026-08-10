@@ -185,3 +185,10 @@ Der Owner ist frustriert über schwache Master-Picks. Diese Regeln MÜSSEN einge
 - Verdrahtet: master_loop, reset-refresh, mcat-Filter, Frontend Tab+Counts+Badge.
 - SHOTS-OCR: AI_SYSTEM erkennt jetzt Shots-Märkte ("Over 23.5 Shots"/"Schüsse"/"shots on target") und lässt sie als SHOTS (nicht Goals) stehen — nie in Tore umwandeln.
 - BUGFIX (app-weit): localizeMarket hatte KEINE Regel für die deutsche Team-Total-Kanonform "{Team} Team-Tore Über X" → blieb bei EN-Locale deutsch. Neu: Regel + Key mkt.teamgoals (en "Team Goals", de "Team-Tore"). Jetzt zeigt EN "Team Goals Over 1.5" (Screenshot bestätigt). Betraf ALLE Team-Total-Picks, nicht nur den neuen Combo.
+
+## 17. VALUE = schwaches Team trifft doppelt (Owner 2026-08-10)
+- Gewinner-Schein (Owner): Sirius vs IF Brommapojkarna — "Brommapojkarna (schwaches/Auswärts-Team) Over 1.5 Tore" + "Total Over 3.5" als Same-Game Bet-Builder @4.75, gewonnen bei 2:2. Zweites Beispiel: AZ Alkmaar Res vs FC Eindhoven — "Eindhoven Over 1.5 + Total Over 3.5" @2.90.
+- KERN-LEARNING: Der VALUE steckt darin, das SCHWÄCHERE Team zu backen, dass es ZWEIMAL trifft (Over 1.5 Team-Tore) — die Quote ist hoch, weil der Markt es unterschätzt. Kombiniert mit "Total Over 3.5" im SELBEN Spiel = großer Value.
+- LEAN halten: Owner "könnte noch Tor 1.HZ / Sirius Over 1.5 dazunehmen, aber die Quote steigt kaum und mehr Beine = mehr Risiko". Also nicht überladen.
+- WICHTIGE NUANCE (nicht Learning #6 widersprechen): NUR in torreichen, AUSGEGLICHENEN Spielen backen, wo BEIDE Teams treffen (min. projizierte Tore ≥1.4 pro Team, Gesamt ≥3.6). NIEMALS ein einseitiges Blowout-Underdog-"trifft".
+- UMSETZUNG (server.py master_value_goals_combo): jedes Bein ist jetzt ein Same-Game-Builder "{schwächeres Team} Over 1.5 Goals" + "Over 3.5 Goals" (Gate: total≥3.6 & min(ph,pa)≥1.4 & pw≥0.40 & pt≥0.42). Fallback = einzelnes starkes Over-1.5 / Over-3.5. Schlank: 2–4 Beine, Cap Quote 60. Getestet (Mock): Brommapojkarna O1.5 @2.1 + O3.5 @1.9 korrekt gebaut. Abrechnung über bestehende settle_multimatch_parlays (2-Selektions-Beine wie Special).
