@@ -200,3 +200,12 @@ Owner erklärt den Sirius–Brommapojkarna-Schein (2:2, Quote 4.75) im Detail. D
 - **Tabellenkonstellation / Motivation**: Sirius steht 1. mit 10 Punkten Vorsprung → auch ein Remis tut nicht weh → verwaltet, verteidigt lockerer → offenes Spiel. Brommapojkarna (13.) hat „Punkte-Not" → maximale Aggression → trifft. (NOCH NICHT im Code — bräuchte /standings-Daten, quota. Als Mental-Modell notiert.)
 - **„Fickerei-Faktor" / Contrarian**: Die MASSE kauft das Offensichtliche — „Sirius Sieg" + „Sirius Over 1.5" @1.40. Der Value liegt im 2:2 (beide treffen, hohes Total) @4.75. Immer fragen: „Was fickt die Scheine der Masse?" → Genau der Kern der Value Goals Combo (siehe auch Learning #9).
 - UMSETZUNG heute: H2H-Bestätigung im Value-Builder (server.py master_value_goals_combo + `_h2h_team_scores_2plus`). Standings/Motivation + Reisedistanz bleiben als Mental-Modell (quota/Datenlage) — bei Bedarf mit Owner abstimmen, bevor gebaut.
+
+## 19. SMART PICKS: KOMPLETTE Community-Kombi übernehmen (Owner 2026-08-10)
+- Fehler (Owner-Screenshot): @TipJarLogic postete eine Kombi "Dembélé Torschuss + PSG trifft + PSG verliert nicht @1.81" (PSG–Aston Villa Finale). Die KI kollabierte das auf EIN eigenes Bein "PSG Team-Tore Über 0.5 @1.81" und erfand eigenen Text. FALSCH.
+- REGEL: "Du musst IMMER die gesamte Kombi annehmen, nicht jedes Mal etwas Eigenes aussuchen und eigenen Text erfinden. Übernimm, was der Spieler nimmt, und passe den Text darauf an. Nur ändern, wenn eine Selektion zu unlogisch klingt." Nur wenn KEINE konkrete Wette vorliegt (reine Frage) darf die KI selbst einen Tipp vorschlagen.
+- UMSETZUNG (server.py):
+  • `generate_smart_from_idea` Prompt umgebaut: bei konkreter Wette/Slip ALLE Selektionen als `legs[]` faithfully übernehmen (nichts droppen/tauschen/erfinden), Spieler-Quoten behalten, Selektion nur bei Unlogik ändern, Analyse an die EXAKTEN Selektionen anpassen. JSON neu: is_combo, same_match, legs[], total_odds.
+  • `submit_smart_idea`: bei ≥2 Beinen → Parlay-Tip. Same-Match-Builder → `combo_legs` (Abrechnung via settle_hq_combos) + display `legs`; Multi-Match → nur `legs` (settle_multimatch_parlays). market = Selektionen mit " · " verbunden, odds = total_odds. Single-Fall unverändert.
+- Getestet (Mock): 3-Bein-PSG-Kombi korrekt gebaut (legs 3 + combo_legs 3, is_parlay, odds 1.81, Analyse passt). Frontend rendert legs[] automatisch als Parlay (RateWall 1308+) — keine FE-Änderung.
+- NICHT mit echten LLM-Credits getestet (Owner-Kostenwunsch) — beim nächsten echten Upload prüfen.

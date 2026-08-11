@@ -447,7 +447,25 @@ async def submit_smart_idea(
     home_in = (data.get("home_team") or "").strip()
     away_in = (data.get("away_team") or "").strip()
     market = (data.get("market") or "").strip()
-    if not market or not home_in:
+    # Owner 2026-08-10: TAKE OVER the player's FULL combo — every selection — never collapse it
+    # to one self-picked market. Parse all legs the KI extracted from the slip.
+    norm_legs = []
+    for lg in (data.get("legs") if isinstance(data.get("legs"), list) else []):
+        if not isinstance(lg, dict):
+            continue
+        m = (lg.get("market") or "").strip()
+        if not m:
+            continue
+        norm_legs.append({
+            "home": (lg.get("home_team") or home_in).strip(),
+            "away": (lg.get("away_team") or away_in).strip(),
+            "market": m,
+            "odds": str(lg.get("odds") or "").strip(),
+        })
+    is_combo = len(norm_legs) >= 2
+    if not market and norm_legs:
+        market = " · ".join(l["market"] for l in norm_legs)
+    if (not market and not norm_legs) or not home_in:
         await _drop_or_fail()
         return {"ok": True, "created": False, "reason": "not_actionable"}
 
@@ -485,6 +503,7 @@ async def submit_smart_idea(
         rating = 7.0
     analysis = (data.get("analysis") or "").strip()
     analysis = f"{analysis} 💡 Community-Insider von @{user.get('username','anon')} — von der KI zu einem Smart-Pick verarbeitet."
+    total_odds = str(data.get("total_odds") or data.get("odds") or "").strip()
     tip = {
         "id": tip_id, "user_id": (hq or user)["id"], "username": "TipJarHQ",
         "raw_text": "", "image_path": None,
@@ -492,13 +511,29 @@ async def submit_smart_idea(
         "match_time": kickoff, "country": country,
         "league": "TipJarHQ Smart Pick", "league_code": "",
         "market": market,
-        "odds": str(data.get("odds") or "").strip(), "ai_rating": rating, "ai_analysis": analysis,
+        "odds": total_odds, "ai_rating": rating, "ai_analysis": analysis,
         "legs": [], "is_parlay": False, "stake": "", "potential_return": "",
         "status": "pending", "sum_stars": 0, "ratings_count": 0, "avg_rating": 0,
         "source": "smart", "smart_idea": True, "report": is_report,
         "idea_by": user.get("username", "anon"),
         "created_at": now.isoformat(),
     }
+    if is_combo:
+        # Preserve the WHOLE combo the player submitted (owner rule).
+        same_match = bool(data.get("same_match")) or all(
+            _teams_match(l["home"], home_in) and _teams_match(l["away"], away_in) for l in norm_legs)
+        disp_legs = [{
+            "match": f"{l['home']} – {l['away']}",
+            "league": "TipJarHQ Smart Pick", "kickoff": kickoff, "status": "pending",
+            "selections": [l["market"]], "sel_odds": [l["odds"] or ""],
+        } for l in norm_legs]
+        tip["legs"] = disp_legs
+        tip["is_parlay"] = True
+        if same_match:
+            # single-game bet-builder → settled by settle_hq_combos (needs combo_legs)
+            tip["combo_legs"] = [{"market": l["market"], "odds": l["odds"] or "", "kind": ""}
+                                 for l in norm_legs]
+        # else multi-match accumulator → settled leg-by-leg by settle_multimatch_parlays (legs only)
     await db.tips.insert_one(tip)
     await db.smart_ideas.update_one({"id": idea_id}, {"$set": {"status": "used", "tip_id": tip_id}})
     return {"ok": True, "created": True, "tip": {k: v for k, v in tip.items() if k != "_id"}}
@@ -9217,51 +9252,52 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
             api_key=EMERGENT_LLM_KEY,
             session_id=f"smartidea-{uuid.uuid4()}",
             system_message=(
-                "You are TipJar's Smart Bet strategist — a confident, realistic football tipster. "
-                "A fan sends an insider hint, a QUESTION about a match (e.g. 'Was hältst du von "
-                "Frankreich - England?' or 'Hast du was zu Bayern - Dortmund?'), or a screenshot "
-                "(free-text tip, bet-builder / accumulator slip, stats sheet, hand-written analysis) "
-                "about an UPCOMING match. Your job: give ONE clever, REALISTIC smart bet for the "
-                "SINGLE most prominent match. "
-                "IMPORTANT BEHAVIOUR: If the fan only ASKS about a match (no concrete bet), treat it "
-                "as a request for YOUR expert recommendation and confidently propose your single best "
-                "realistic bet for that match. NEVER reveal or hint that the input lacked a concrete "
-                "bet. NEVER write meta phrases such as 'da noch keine konkrete Wette im Raum steht', "
-                "'keine konkrete Wette', 'da keine Wette vorliegt' or similar — always write as if this "
-                "is your own confident analysis. "
-                "REALISM RULES: pick a sensible, realistic market that genuinely fits the two "
-                "teams' real strength and form. Use realistic odds, typically 1.40–2.60. Do NOT "
-                "invent aggressive/absurd bets. "
-                "BET-QUALITY RULES (owner, very important): give a SPECIFIC, insightful primary "
-                "bet — NOT a lazy generic one. Prefer, depending on your read of the match: "
-                "(1) a CONCRETE team to score ('<Team> trifft / <Team> Über 0.5 Tore') when a side "
-                "is clearly too strong to be kept scoreless; (2) DOPPELTE CHANCE ('<Team> Doppelte "
-                "Chance 1X/X2') when a team realistically cannot lose; (3) HANDICAP ('<Team> "
-                "Handicap +1.5') when the underdog at worst loses by one; (4) a goal in the 2nd half "
-                "or a team scoring before minute 70; (5) Draw No Bet or a clear match result. State "
-                "clearly WHICH team won't lose or WHICH team will surely score. "
-                "STRICT: NEVER make a plain full-match 'Über 0.5 Tore' (whole game) the bet — it is "
-                "near-certain and worthless alone. A full-match 'Über 0.5 Tore' may ONLY appear as a "
-                "SECOND leg in a bet-builder, combined with a strong primary selection (e.g. '<Team> "
-                "Doppelte Chance 1X · Über 0.5 Tore'). Team-specific '<Team> Über 0.5 Tore' (that team "
-                "scores) IS allowed as a primary bet. "
-                "If several selections belong to one match (a bet-builder) COMBINE them into one "
-                "market string joined with ' · '. For a multi-match accumulator, pick the single "
-                "headline match. Identify the two REAL teams (full names, keep the language used, "
-                "e.g. 'Frankreich', 'England'). "
+                "You are TipJar's Smart Bet strategist. A fan (often the community insider "
+                "@TipJarLogic) sends you their bet — as free text or a screenshot of a bookmaker "
+                "slip / bet-builder / accumulator — or sometimes just a QUESTION about a match with "
+                "no concrete bet. "
+                "CORE RULE (owner, CRITICAL): when the input ALREADY contains a concrete bet, you "
+                "MUST TAKE OVER THE ENTIRE bet EXACTLY as the player made it — EVERY selection / leg. "
+                "Do NOT drop legs, do NOT replace a selection with a different market, and do NOT "
+                "invent your own pick. Reproduce ALL selections faithfully and keep the player's "
+                "odds. You may ONLY change a selection if it is clearly illogical or impossible; if "
+                "it sounds logical, keep it as-is. Then write the analysis to MATCH exactly those "
+                "selections (e.g. for 'Dembélé Torschuss + PSG trifft + PSG verliert nicht' talk "
+                "about Dembélé's shot, PSG scoring and PSG not losing — NOT some other market). "
+                "ONLY when the input has NO concrete bet (a pure question like 'Was hältst du von "
+                "Frankreich - England?', 'gib mir einen Tipp', a single team name) may you "
+                "confidently propose ONE clever, realistic bet of your own (realistic odds "
+                "1.40–2.60; never a bare full-match 'Über 0.5 Tore' alone). NEVER reveal that the "
+                "input lacked a bet and NEVER write meta phrases like 'da keine konkrete Wette "
+                "vorliegt'. "
+                "NORMALISE each selection to standard German market phrasing so it can be settled: "
+                "team scores = '<Team> Über 0.5 Tore'; player shots on target = '<Spieler> Über 0.5 "
+                "Torschüsse'; player shots = '<Spieler> Über X.5 Schüsse'; doesn't lose = '<Team> "
+                "Doppelte Chance'; win = '<Team> Sieg'; totals = 'Über/Unter X.5 Tore'; both score = "
+                "'Beide Teams treffen'; Draw No Bet = '<Team> Draw No Bet'; first-half markets keep "
+                "'1. Halbzeit'. Keep real team & player names (full, in the language used). "
                 "Respond with ONLY a compact JSON object, no markdown, with keys: "
-                "actionable (bool), home_team (str), away_team (str), market (str, in German), "
-                "match_time (str: the match date & kickoff EXACTLY as printed if visible, normalised to "
-                "'DD/MM/YYYY HH:MM' when possible; empty string if no date is shown), "
-                "rating (number 1-10), odds (string like '1.85' or '' if unknown), "
-                "analysis (str: a punchy, realistic 1-3 sentence German pre-match read — form, quality, "
-                "matchup — that justifies the bet with confidence and NO meta commentary about the input). "
-                "ALWAYS give a tip: set actionable=false ONLY if the input has absolutely nothing to do "
-                "with football (pure spam, insults, unrelated chatter). For ANY football-related input — "
-                "even a vague one ('gib mir einen Tipp', 'was läuft heute?', a single team name) — you "
-                "MUST set actionable=true and confidently propose ONE cool, realistic smart bet on the "
-                "most relevant real match you can infer (a marquee upcoming fixture is perfectly fine). "
-                "Never refuse and never return an empty/no-tip answer."
+                "actionable (bool), "
+                "is_combo (bool: true when there are 2+ selections), "
+                "same_match (bool: true when ALL selections belong to ONE match), "
+                "home_team (str: the (headline) match home team), away_team (str), "
+                "match_time (str: date & kickoff EXACTLY as printed, normalised to 'DD/MM/YYYY "
+                "HH:MM' when possible; '' if none shown), "
+                "legs (array — ONE object PER selection, each: {home_team, away_team, market (the "
+                "single selection, German), odds (string like '1.45' or '' if unknown)}; for a "
+                "same-match builder every leg shares the same teams; for a multi-match accumulator "
+                "each leg has its own teams), "
+                "market (str: for a SINGLE bet the one selection; for a combo the selections joined "
+                "with ' · '), "
+                "total_odds (str: the combo's TOTAL odds exactly as the player shows it, e.g. "
+                "'1.81'; '' if unknown), "
+                "odds (str: same as total_odds for a combo, else the single bet's odds), "
+                "rating (number 1-10), "
+                "analysis (str: a punchy 1-3 sentence German pre-match read that justifies THESE "
+                "EXACT selections with confidence and NO meta commentary). "
+                "Set actionable=false ONLY if the input has nothing to do with football (pure spam, "
+                "insults, unrelated chatter). For ANY football-related input you MUST set "
+                "actionable=true. Never refuse and never return an empty/no-tip answer."
             ),
         ).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL if images_b64 else AI_MODEL)
         kwargs = {"text": f"Fan hint: {text[:600] if text else '(see images)'}"}
@@ -9269,17 +9305,18 @@ async def generate_smart_from_idea(text: str, images_b64: list | None = None) ->
             kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64[:3]]
         resp = await chat.send_message(UserMessage(**kwargs))
         data = _parse_smart_json(resp)
-        if data and data.get("actionable") and data.get("market") and data.get("home_team"):
+        if data and data.get("actionable") and (data.get("market") or (isinstance(data.get("legs"), list) and data["legs"])) and data.get("home_team"):
             return data
         # Retry once, FORCING a concrete cool bet — the owner wants the KI to ALWAYS suggest
         # something, never a blank "no tip" reply.
         resp2 = await chat.send_message(UserMessage(text=(
-            "You MUST answer with actionable=true and ONE concrete, cool, realistic smart bet on the "
-            "single most relevant real match you can infer. Do NOT refuse and do NOT return "
-            "actionable=false. If the fan was vague, pick a marquee upcoming fixture and give your best "
-            "confident pick. Reply with ONLY the JSON object described above.")))
+            "You MUST answer with actionable=true. If the input already contains a concrete bet or "
+            "slip, take over ALL of its selections faithfully into the 'legs' array (do not drop or "
+            "swap any). If the input was only a vague question, propose ONE concrete, realistic bet "
+            "on the most relevant real match. Do NOT refuse. Reply with ONLY the JSON object described "
+            "above.")))
         data2 = _parse_smart_json(resp2)
-        if data2 and data2.get("market") and data2.get("home_team"):
+        if data2 and (data2.get("market") or (isinstance(data2.get("legs"), list) and data2["legs"])) and data2.get("home_team"):
             data2["actionable"] = True
             return data2
         return None

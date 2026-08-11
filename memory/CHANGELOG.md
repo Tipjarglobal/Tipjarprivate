@@ -544,3 +544,14 @@ Owner-Gewinner-Schein (Brommapojkarna Over 1.5 + Total Over 3.5 @4.75, 2:2 gewon
 - Abrechnung unverändert über settle_multimatch_parlays (2-Selektions-Beine wie Special/Doppelpack).
 - Getestet (Mock gegen Preview-DB): Brommapojkarna O1.5 @2.1 + O3.5 @1.9 + Eindhoven O1.5 @2.26 +
   O3.5 @2.06 → 4-Bein-Kombi @39.01 korrekt gebaut. Backend syntaxsauber, /api 200.
+
+## 2026-08-10 — Smart Picks: komplette Community-Kombi übernehmen (Learning #19)
+Owner-Bug: @TipJarLogic-Kombi (Dembélé Torschuss + PSG trifft + PSG verliert nicht @1.81) wurde von
+der KI auf EIN eigenes Bein "PSG Team-Tore Über 0.5" kollabiert + eigener Text erfunden.
+- `generate_smart_from_idea` (server.py): Prompt zwingt jetzt, bei konkreter Wette ALLE Selektionen
+  faithfully als legs[] zu übernehmen (nichts droppen/tauschen/erfinden), Quoten behalten, Analyse an
+  die exakten Selektionen anpassen; nur bei fehlender Wette selbst vorschlagen. JSON: is_combo,
+  same_match, legs[], total_odds.
+- `submit_smart_idea`: ≥2 Beine → Parlay. Same-Match → combo_legs (settle_hq_combos) + legs; Multi-Match
+  → legs (settle_multimatch_parlays). Single unverändert. Frontend rendert legs[] automatisch (RateWall).
+- Getestet (Mock): 3-Bein-PSG-Kombi korrekt (legs+combo_legs, odds 1.81). Prompt nicht mit Credits getestet.
