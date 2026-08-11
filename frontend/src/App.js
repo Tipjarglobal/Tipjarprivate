@@ -261,6 +261,7 @@ function Home() {
         onViewScorers={() => openTipsView("scorers")}
         onViewCodeReading={() => openTipsView("codereading")}
         onViewSettled={() => openTipsView("settled")}
+        isAdmin={user?.role === "admin"}
         counts={counts}
         newCounts={newCounts}
       />
@@ -383,7 +384,7 @@ function Home() {
               </button>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["livecommunity", "nav.viewlivecommunity"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"], ["codereading", "codereading"]].map(([v, lbl]) => {
+              {[["ai", "nav.viewtips"], ["smart", "nav.viewsmart"], ["members", "nav.viewmembers"], ["livecommunity", "nav.viewlivecommunity"], ["systems", "nav.viewsystems"], ["master", "nav.viewmaster"], ["live", "nav.viewlive"], ["settled", "nav.viewsettled"], ["scorers", "nav.viewscorers"], ["codereading", "codereading"]].filter(([v]) => user?.role === "admin" || (v !== "systems" && v !== "codereading")).map(([v, lbl]) => {
                 const active = tipsView === v;
                 let cls;
                 if (v === "master") {

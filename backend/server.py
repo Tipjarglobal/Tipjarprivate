@@ -6866,6 +6866,9 @@ async def snapshot_systems() -> int:
     """Persist today's system slips as tips (source=hq-system, is_parlay) so they get
     auto-settled leg-by-leg and any WINNING system surfaces in 'Best Won'. This is the
     only way to answer 'does a system ever win'. Frozen once per day via $setOnInsert."""
+    # Owner 2026-08-11 (credit/quota emergency): ALL system picks are switched OFF. No new
+    # hq-system slips are generated; the System Picks button is admin-only in the UI.
+    return 0
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return 0
@@ -11845,7 +11848,11 @@ async def live_autopost() -> dict:
     has_active_kombi = await db.tips.find_one(
         {"source": "hq-live", "is_parlay": True, "status": "live",
          "id": {"$regex": "^hqlive-kombi-"}}, {"_id": 1})
-    if not has_active_kombi and posted < LIVE_MAX_TIPS:
+    # Owner 2026-08-11: LIVE 4-folds ("Vierer-Live-Kombi") AND live half-time-goal tips are CUT.
+    # Nobody watches live 4-folds (small audience) and HT-goal bets win only ~1 in 5 (today Bodø,
+    # Red Star, Sabah all 0-0 at HT). Serious PREGAME half-time goals go to the Master Sprechblase
+    # instead (see master_avatar_calls). Block fully disabled.
+    if False and not has_active_kombi and posted < LIVE_MAX_TIPS:
         preds = await db.match_predictions.find({"status": "pending"}, {"_id": 0}).to_list(2000)
         _SRC_PRIO = {"forebet": 0, "predictz": 1, "statarea": 2, "apifootball": 3}
         preds.sort(key=lambda x: _SRC_PRIO.get(x.get("source"), 2))
@@ -14252,11 +14259,25 @@ async def master_avatar_calls() -> dict:
         player_kind, player_line = None, None
         minute = None
         goal_friendly = (isinstance(total, (int, float)) and total >= 2.8) or over25
+        # Owner 2026-08-11: a SERIOUS pregame half-time goal belongs in the Sprechblase (we cut
+        # HT-goal LIVE tips). Only when the game is a genuine goal-fest (over 2.5 + high total +
+        # 0:0 practically excluded) — never a joker/gift.
+        ht_serious = (over25 and isinstance(total, (int, float)) and total >= 3.2
+                      and _zero_zero_assessment(p).get("over_safe"))
         options = ["ah_minus1", "half_any", "ht_no_loss", "dc"]
         if goal_friendly:
             options.append("over15")
+        if ht_serious:
+            options.insert(0, "ht_goal")
         choice = options[posted % len(options)]
-        if choice == "over15":
+        if choice == "ht_goal":
+            market = "Over 0.5 Goals 1st Half"
+            odds = 1.44
+            call = (f"Goals come EARLY in {home} vs {away} — Over 0.5 Goals in the 1st half. "
+                    f"{fav} opens up fast {'at home' if at_home else 'away'}; expect the net to "
+                    f"bulge before the break.")
+            conf = 86
+        elif choice == "over15":
             market = "Over 1.5 Goals"
             odds = 1.30 if (isinstance(total, (int, float)) and total >= 3.2) else 1.40
             call = (f"Enough goals in {home} vs {away} — Over 1.5 in the match is the safe bank. "

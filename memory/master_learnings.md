@@ -209,3 +209,32 @@ Owner erklärt den Sirius–Brommapojkarna-Schein (2:2, Quote 4.75) im Detail. D
   • `submit_smart_idea`: bei ≥2 Beinen → Parlay-Tip. Same-Match-Builder → `combo_legs` (Abrechnung via settle_hq_combos) + display `legs`; Multi-Match → nur `legs` (settle_multimatch_parlays). market = Selektionen mit " · " verbunden, odds = total_odds. Single-Fall unverändert.
 - Getestet (Mock): 3-Bein-PSG-Kombi korrekt gebaut (legs 3 + combo_legs 3, is_parlay, odds 1.81, Analyse passt). Frontend rendert legs[] automatisch als Parlay (RateWall 1308+) — keine FE-Änderung.
 - NICHT mit echten LLM-Credits getestet (Owner-Kostenwunsch) — beim nächsten echten Upload prüfen.
+
+## 20. DOPPEL-K.O.: Psychologie > Quoten (Owner 2026-08-11)
+- Bei Zwei-Bein-K.o.-Duellen WENIGER auf Quoten schauen, MEHR auf Psychologie:
+  • Το γκολ της τιμής: das "Ehrentor", das die schlechte/unterlegene Mannschaft am Ende doch macht.
+  • Η ομάδα που πιέζει και δεν σκοράρει, στο τέλος το δέχεται: das Team, das verzweifelt drückt und einfach nicht trifft, kassiert am Ende selbst.
+- AGGREGAT-REGEL (Owner-Kalibrierung, echte Ergebnisse 11.08.26):
+  • Wenn das FINALE AGGREGAT für die gute Mannschaft ÜBER 4 Tore geht, trifft am Ende meist auch die schlechte Mannschaft mindestens 1 Tor. Beispiel: Dinamo Zagreb Hinspiel 5:0 → Rückspiel Žalgiris 1:2 (Debeljuh 56'), finales Aggregat 1:7 → Žalgiris hat doch getroffen.
+  • Vorschlag: in solchen einseitigen Rückspielen "{schwache Mannschaft} trifft / Über 0.5 Tore" anbieten (z.B. "Žalgiris trifft über 0.5").
+  • NUR SEHR WENIGE Teams treffen über ZWEI Spiele GAR NICHT: an dem Tag nur Kairat (Aggregat 0:2) und Sparta Praha (Aggregat 0:3). Also die "schlechte trifft am Ende doch"-Regel ist stark.
+- ERGEBNISSE zur Kalibrierung: NEC–Olympiacos 2:1 n.V. (agg 2:1); CSKA Sofia–Panathinaikos 1:2 (agg 2:3, Ehrentor Dvali 87'); Bodø/Glimt–USG 3:2 n.V. (agg 6:5, torreich beide); Sturm–Fenerbahçe 0:1 (agg 0:3).
+- HALTUNG: Hab KEINE ANGST, im Master (Hard-Bereich) ernste, schlaue Wetten zu geben. Die Master-Bereiche dürfen NICHT leer sein.
+
+## 21. Master-Bereiche NIE leer + Beispiel-Wetten (Owner 2026-08-11)
+- Genaue Ergebnisse (Hard): Olympiakos 1:1, Panathinaikos 1:1, Bodø/Glimt 2:2.
+- Oder weniger Risiko: Union SG trifft 2× (Über 1.5) + Über 3.5 Tore; schwächere Mannschaft (Nijmegen) trifft und verliert nicht; die bulgarische Mannschaft trifft und verliert nicht.
+- Sabah gewann mit 29:14 Torschüssen (Geschenk @1.44) UND 4:0 mit VIER späten Toren → Schuss-Dominanz + späte Tore sind ein starkes Über-/Team-trifft-Signal.
+
+## 22. LIVE-CUTS + HZ-Tor in die Sprechblase (Owner 2026-08-11)
+- HZ-Tor-Tipps LIVE komplett GECUTTET: gewinnen nur ~1 von 5 (an dem Tag Bodø, Roter Stern, Sabah alle 0:0 zur HZ). Live "Über 0.5 Tore 1. Halbzeit" wird nicht mehr gepostet.
+- ALLE Live-Vierer ("Vierer-Live-Kombi") GECUTTET — schaut kein Mensch, zu kleine Community. (server.py live_autopost Abschnitt 5 → `if False`.)
+- Ein SERIÖSES Pregame-HZ-Tor (kein Joker/Geschenk) gibt jetzt der MASTER in der Sprechblase (master_avatar_calls: neue Option "ht_goal", nur bei über25 + total≥3.2 + 0:0 praktisch ausgeschlossen → "Over 0.5 Goals 1st Half" @1.44, bilingual gradebar).
+
+## 23. SYSTEM PICKS AUS + Buttons Admin-only (Owner 2026-08-11, Credit-Notfall)
+- ALLE System-Picks abgeschaltet: `snapshot_systems()` → return 0 (keine hq-system-Scheine mehr, spart Settlement-Quote). Bestehende offene hq-system-Scheine gelöscht.
+- Buttons "System Picks" und "Codemining" nur noch für Admin sichtbar (Header.jsx + App.js Overlay-Nav via isAdmin = user.role==admin). Verifiziert per Screenshot: für Nicht-Admin beide weg.
+
+## 24. MASTER-TRAINING per Button = fast 0 Credits (Owner-Frage 2026-08-11)
+- Owner fragt, ob ein Button zum "Trainieren" des Masters (Ergebnisse zeigen, gewonnene Freunde-Scheine, Kommentare/Analysen) weniger Credits kostet.
+- ANTWORT: JA, drastisch. Das SPEICHERN von Ergebnissen/Kommentaren kostet 0 LLM-Credits (nur DB-Text). Die Lernregeln wirken über CODE-Regeln + dieses Brain-File, nicht über teure LLM-Dauerläufe. Ein Trainings-Button (Owner tippt/fotografiert Ergebnisse → landet in master_learnings/DB) ist der günstigste Weg, das Gehirn zu schärfen. Kann als nächstes gebaut werden.

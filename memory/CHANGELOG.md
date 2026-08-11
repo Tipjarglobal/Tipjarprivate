@@ -555,3 +555,13 @@ der KI auf EIN eigenes Bein "PSG Team-Tore Über 0.5" kollabiert + eigener Text 
 - `submit_smart_idea`: ≥2 Beine → Parlay. Same-Match → combo_legs (settle_hq_combos) + legs; Multi-Match
   → legs (settle_multimatch_parlays). Single unverändert. Frontend rendert legs[] automatisch (RateWall).
 - Getestet (Mock): 3-Bein-PSG-Kombi korrekt (legs+combo_legs, odds 1.81). Prompt nicht mit Credits getestet.
+
+## 2026-08-11 — Credit-Notfall + Live-Cuts + KO-Psychologie (Learnings #20-24)
+- System Picks KOMPLETT AUS: snapshot_systems()→0, bestehende hq-system gelöscht. Buttons "System
+  Picks" + "Codemining" nur noch Admin (Header.jsx/App.js isAdmin). Screenshot-verifiziert.
+- Live-Cuts (server.py live_autopost): Vierer-Live-Kombi + Live-HZ-Tor-Tipps deaktiviert (if False),
+  bestehende live 4-folds/HT-singles gelöscht.
+- Master-Avatar: neue "ht_goal"-Sprechblase für seriöses Pregame-HZ-Tor (über25+total≥3.2+0:0 exkl.)
+  → "Over 0.5 Goals 1st Half" @1.44 (bilingual gradebar).
+- Brain: KO-Psychologie (Aggregat>4 → schwaches Team trifft doch; Ehrentor; Žalgiris-Beispiel),
+  Sabah-Schüsse/späte Tore, Master-nie-leer-Beispiele, Training-Button = ~0 Credits.

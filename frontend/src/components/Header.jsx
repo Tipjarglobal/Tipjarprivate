@@ -93,7 +93,7 @@ function InstallAppButton() {
   );
 }
 
-export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLiveCommunity, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, counts = {}, newCounts = {} }) {
+export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLiveCommunity, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, isAdmin = false, counts = {}, newCounts = {} }) {
   const { t, lang, setLang, tz, setTz } = useI18n();
   const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
@@ -248,13 +248,13 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-9 gap-2">
             <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
             <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
-            <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />
+            {isAdmin && <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />}
             <QuickView onClick={onViewMaster} icon={Crown} label={t("nav.viewmaster")} testId="view-master-btn" count={counts.master} newCount={newCounts.master} variant="master" />
             <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" liveAction={onViewLiveCommunity} liveCount={counts.community_live} />
             <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
             <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
             <QuickView onClick={onViewScorers} icon={Target} label={t("nav.viewscorers")} testId="view-scorers-btn" variant="pink" />
-            <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Codemining" testId="view-codereading-btn" variant="grey" count={counts.codereading} />
+            {isAdmin && <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Codemining" testId="view-codereading-btn" variant="grey" count={counts.codereading} />}
           </div>
         </div>
       </div>
