@@ -539,6 +539,75 @@ async def submit_smart_idea(
     return {"ok": True, "created": True, "tip": {k: v for k, v in tip.items() if k != "_id"}}
 
 
+@api_router.post("/master/train")
+async def train_master(
+    text: str = Form(default=""),
+    files: List[UploadFile] = File(default=[]),
+    user: dict = Depends(get_current_user),
+):
+    """Owner 2026-08-11: ANY logged-in user can TEACH the TipJarMaster — free text (any language,
+    any betting philosophy) plus up to 4 images (odds screenshots, stats, results, slips). Each
+    submission is distilled ONCE by the LLM into a clear, reusable English lesson and stored in
+    db.master_brain for the Master to learn from. Storing costs ~0; one cheap distill call per teach."""
+    text = (text or "").strip()
+    uploads = [f for f in (files or []) if f is not None and getattr(f, "filename", None)][:4]
+    images_b64 = []
+    for f in uploads:
+        rb = await f.read()
+        images_b64.append(base64.b64encode(rb).decode("utf-8"))
+    if len(text) < 3 and not images_b64:
+        raise HTTPException(status_code=400, detail="Bitte schreib etwas oder lade ein Bild hoch.")
+    if len(text) > 4000:
+        text = text[:4000]
+    now = datetime.now(timezone.utc)
+    entry_id = str(uuid.uuid4())
+    lesson, topic, lang = "", "", ""
+    if EMERGENT_LLM_KEY:
+        try:
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=f"train-{entry_id}",
+                system_message=(
+                    "You are the MEMORY of TipJarMaster, a football-betting brain. A user is TEACHING "
+                    "you their knowledge, philosophy or observation — in ANY language, optionally with "
+                    "screenshots (odds, stats, results, bet slips). Understand it FULLY, no matter the "
+                    "language or the betting philosophy, however unusual. Distil it into ONE clear, "
+                    "reusable LESSON the Master can apply later. Preserve concrete numbers, teams, odds, "
+                    "results and rules EXACTLY as given (e.g. an odds set 1.60 / 2.90 / 2.60 that "
+                    "produced a 3-1). Respond with ONLY a compact JSON object, no markdown, keys: "
+                    "topic (str, a few words in English), "
+                    "lesson (str, 1-6 sentences in English capturing the rule/insight AND any concrete "
+                    "example the user gave), "
+                    "language (str, the language the user wrote in)."
+                ),
+            ).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL if images_b64 else AI_MODEL)
+            kwargs = {"text": f"User is teaching the Master: {text or '(see images)'}"}
+            if images_b64:
+                kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64[:4]]
+            resp = await chat.send_message(UserMessage(**kwargs))
+            data = _parse_smart_json(resp) or {}
+            lesson = (data.get("lesson") or "").strip()
+            topic = (data.get("topic") or "").strip()
+            lang = (data.get("language") or "").strip()
+        except Exception as ex:
+            logger.warning(f"master train distill failed: {ex}")
+    await db.master_brain.insert_one({
+        "id": entry_id, "user_id": user["id"], "username": user.get("username", "anon"),
+        "text": text, "images": len(images_b64),
+        "lesson": lesson, "topic": topic, "language": lang,
+        "status": "new", "created_at": now.isoformat(),
+    })
+    return {"ok": True, "saved": True, "lesson": lesson or text[:200]}
+
+
+@api_router.get("/admin/master-brain")
+async def list_master_brain(admin: dict = Depends(require_admin)):
+    """Owner/agent review queue: everything users taught the Master (newest first)."""
+    docs = await db.master_brain.find({}, {"_id": 0}).sort("created_at", -1).to_list(400)
+    return docs
+
+
+
 @api_router.get("/admin/smart/ideas")
 async def list_smart_ideas(admin: dict = Depends(require_admin)):
     docs = await db.smart_ideas.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)

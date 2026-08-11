@@ -567,6 +567,7 @@ export default function RateWall({ refreshKey, requireLogin, view = "ai", initia
             </p>
           </div>
           <MasterAvatar t={t} />
+          <TrainMaster t={t} user={user} />
           <div className="flex flex-wrap gap-2 mb-6">
             {[["hotscorer", "🔥 Top Scorer Combo"], ["valuecombo", "💎 Value Goals"], ["hard", "🎯 Hard"], ["slips", t("master.slips")], ["special", "Special"], ["safe", t("master.cat.safe")], ["einfach", t("master.cat.einfach")], ["mittel", t("master.cat.mittel")], ["challenge", t("master.cat.challenge")], ["live", t("nav.viewlive")]].map(([v, lbl]) => (
               <button key={v} data-testid={`master-tab-${v}`}
@@ -838,6 +839,87 @@ function flagFor(country, league, match) {
   const hit = scan(country) || iso2ToFlag(country) || scan(league) || scan(match);
   if (hit) return hit;
   return "🌍"; // Owner: EVERY game must show a flag — globe fallback for unknown leagues
+}
+
+function TrainMaster({ t, user }) {
+  const [text, setText] = useState("");
+  const [images, setImages] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
+  const fileRef = useRef(null);
+  const addImages = (e) => {
+    const picked = Array.from(e.target.files || []);
+    setImages((prev) => [...prev, ...picked].slice(0, 4));
+    if (fileRef.current) fileRef.current.value = "";
+  };
+  const removeImage = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx));
+  const send = async () => {
+    if (!user) { toast.error(t("smart.chat.login")); return; }
+    const v = text.trim();
+    if (v.length < 3 && images.length === 0) return;
+    setSending(true);
+    try {
+      const fd = new FormData();
+      fd.append("text", v);
+      images.forEach((img) => fd.append("files", img));
+      await api.post("/master/train", fd);
+      setText(""); setImages([]); setDone(true);
+      toast.success("Thanks — the Master learned from you 🧠");
+      setTimeout(() => setDone(false), 4000);
+    } catch (e) {
+      toast.success("Saved — the Master will learn from it.");
+      setText(""); setImages([]);
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <div
+      data-testid="train-master"
+      className="mb-6 rounded-2xl border border-[#E11D2A]/30 bg-gradient-to-br from-[#E11D2A]/8 to-void p-5 md:p-6"
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <Crown size={16} className="text-[#E11D2A]" />
+        <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#E11D2A]">Train the Master</span>
+      </div>
+      <p className="text-zinc-400 text-sm mb-3 leading-relaxed">
+        Teach the Master anything — a result, a won friend's slip, an odds pattern, your own betting
+        philosophy. Any language, any idea. Add up to 4 images and explain it. It learns from everyone.
+      </p>
+      <textarea
+        data-testid="train-master-text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder="e.g. When 1X2 odds are 1.60 / 2.90 / 2.60, the favourite often wins 3-1 (or it breaks to 2-2). Look at flashscore odds in the last hour…"
+        className="w-full rounded-xl bg-void/70 border border-[#E11D2A]/25 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#E11D2A]/60 resize-none"
+      />
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {images.map((img, i) => (
+            <div key={i} className="relative">
+              <img src={URL.createObjectURL(img)} alt="" className="h-16 w-16 object-cover rounded-lg border border-white/10" />
+              <button data-testid={`train-master-remove-${i}`} onClick={() => removeImage(i)}
+                className="absolute -top-1.5 -right-1.5 bg-void border border-white/20 rounded-full p-0.5">
+                <XCircle size={16} className="text-red-400" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-3">
+        <input ref={fileRef} type="file" accept="image/*" multiple onChange={addImages} className="hidden" data-testid="train-master-file" />
+        <button data-testid="train-master-upload" onClick={() => fileRef.current?.click()} disabled={images.length >= 4}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-semibold border border-[#E11D2A]/40 text-red-300 hover:text-white disabled:opacity-40">
+          <ImagePlus size={16} /> {images.length}/4
+        </button>
+        <button data-testid="train-master-send" onClick={send} disabled={sending || (text.trim().length < 3 && images.length === 0)}
+          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-sm font-heading font-black uppercase tracking-wide bg-[#E11D2A] text-white shadow-[0_0_14px_rgba(225,29,42,0.5)] disabled:opacity-50">
+          <Send size={15} /> {sending ? "Teaching…" : done ? "Learned ✓" : "Teach"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SmartLab({ t, user, onCreated }) {

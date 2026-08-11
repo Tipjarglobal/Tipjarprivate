@@ -565,3 +565,11 @@ der KI auf EIN eigenes Bein "PSG Team-Tore Über 0.5" kollabiert + eigener Text 
   → "Over 0.5 Goals 1st Half" @1.44 (bilingual gradebar).
 - Brain: KO-Psychologie (Aggregat>4 → schwaches Team trifft doch; Ehrentor; Žalgiris-Beispiel),
   Sabah-Schüsse/späte Tore, Master-nie-leer-Beispiele, Training-Button = ~0 Credits.
+
+## 2026-08-11 (b) — "Train the Master"-Button (Learning #25)
+- POST /api/master/train (jeder eingeloggte User, bis 4 Bilder + Text, jede Sprache) → LLM destilliert
+  EINMAL in eine englische Lektion → db.master_brain. GET /api/admin/master-brain (Review).
+- Frontend: rote "Train the Master"-Box im Master-Bereich (RateWall TrainMaster).
+- Getestet: Owner-Freund-Quotenphilosophie (1.60/2.90/2.60→3:1/2:2, flashscore last-hour) korrekt
+  destilliert+gespeichert; Box rendert (Screenshot). Quoten-Matching-Automatik NICHT gebaut (Owner-
+  Datenblocker: unrealistische Quoten, Last-Hour-Änderungen, flashscore-Quelle nötig).
