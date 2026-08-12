@@ -573,3 +573,10 @@ der KI auf EIN eigenes Bein "PSG Team-Tore Über 0.5" kollabiert + eigener Text 
 - Getestet: Owner-Freund-Quotenphilosophie (1.60/2.90/2.60→3:1/2:2, flashscore last-hour) korrekt
   destilliert+gespeichert; Box rendert (Screenshot). Quoten-Matching-Automatik NICHT gebaut (Owner-
   Datenblocker: unrealistische Quoten, Last-Hour-Änderungen, flashscore-Quelle nötig).
+
+## 2026-08-12 — Ein-Klick Bein-Korrektur (Learning #26)
+- POST /api/master/correct-leg: "Spiel vorbei"/"Kein Spiel" pro Master-Parlay-Bein → Fixture-Blacklist
+  (_MATCH_BL_KEYS + db.match_blacklist, 7 Tage) in _pred_whitelisted → kein Re-Post; Bein entfernt +
+  Quote/market neu; <2 Beine → Schein gelöscht (Neubau nächster Zyklus); Korrektur ins master_brain.
+- Frontend: zwei Buttons pro pending Master/AI-Bein (RateWall TipCard correctLeg).
+- Startup lädt refresh_match_blacklist(). Getestet E2E (3→2 update, 2→1 delete, whitelist-Ausschluss).

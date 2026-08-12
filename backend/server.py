@@ -607,6 +607,73 @@ async def list_master_brain(admin: dict = Depends(require_admin)):
     return docs
 
 
+@api_router.post("/master/correct-leg")
+async def correct_master_leg(body: dict = Body(...), user: dict = Depends(get_current_user)):
+    """Owner 2026-08-12 (credit-saver): one-tap human correction instead of expensive AI re-checks.
+    A user flags a leg of a Master/AI parlay as 'finished' (game already over) or 'nonexistent'
+    (game doesn't exist). The Master then: (1) blacklists that fixture so NO builder re-posts it,
+    (2) removes the leg from the slip, (3) if fewer than 2 legs remain, DELETES the slip (the daily
+    builder reposts a fresh one on its next run, now skipping the corrected game), (4) records the
+    correction in the Master brain."""
+    tip_id = (body.get("tip_id") or "").strip()
+    reason = (body.get("reason") or "finished").strip()
+    if reason not in ("finished", "nonexistent"):
+        reason = "finished"
+    leg_match = (body.get("match") or "").strip()
+    leg_index = body.get("leg_index")
+    tip = await db.tips.find_one({"id": tip_id}, {"_id": 0})
+    if not tip:
+        raise HTTPException(status_code=404, detail="Tip not found")
+    legs = tip.get("legs") or []
+    if not legs:
+        raise HTTPException(status_code=400, detail="Not a parlay")
+    idx = None
+    if isinstance(leg_index, int) and 0 <= leg_index < len(legs):
+        idx = leg_index
+    if idx is None and leg_match:
+        for i, lg in enumerate(legs):
+            if (lg.get("match") or "").strip() == leg_match:
+                idx = i
+                break
+    if idx is None:
+        raise HTTPException(status_code=400, detail="Leg not found")
+    removed = legs[idx]
+    m = (removed.get("match") or "").strip()
+    parts = re.split(r"\s[–\-]\s", m, maxsplit=1)
+    if len(parts) == 2:
+        key = _match_key(parts[0].strip(), parts[1].strip())
+        await db.match_blacklist.update_one({"key": key}, {"$set": {
+            "key": key, "match": m, "reason": reason, "by": user.get("username", "anon"),
+            "at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+        _MATCH_BL_KEYS.add(key)
+    await db.master_brain.insert_one({
+        "id": str(uuid.uuid4()), "user_id": user["id"], "username": user.get("username", "anon"),
+        "text": f"Correction: '{m}' is {reason}.", "images": 0,
+        "lesson": (f"Do NOT post '{m}' — the match is {'already finished' if reason == 'finished' else 'not a real/scheduled fixture'}. "
+                   f"Only post playable, upcoming games. Corrected by the community."),
+        "topic": "match correction", "language": "de", "status": "new",
+        "created_at": datetime.now(timezone.utc).isoformat()})
+    remaining = [lg for i, lg in enumerate(legs) if i != idx]
+    if len(remaining) < 2:
+        await db.tips.delete_one({"id": tip_id})
+        return {"ok": True, "action": "deleted", "removed": m, "reason": reason}
+    combo, sel_texts = 1.0, []
+    for lg in remaining:
+        for o in (lg.get("sel_odds") or []):
+            try:
+                combo *= float(o)
+            except Exception:
+                pass
+        sel_texts.extend(lg.get("selections") or [])
+    update = {"legs": remaining, "odds": f"{combo:.2f}"}
+    if tip.get("combo_legs") and len(tip["combo_legs"]) == len(legs):
+        update["combo_legs"] = [c for i, c in enumerate(tip["combo_legs"]) if i != idx]
+    if " · " in (tip.get("market") or ""):
+        update["market"] = " · ".join(sel_texts)
+    await db.tips.update_one({"id": tip_id}, {"$set": update})
+    return {"ok": True, "action": "updated", "removed": m, "legs": len(remaining), "odds": update["odds"]}
+
+
 
 @api_router.get("/admin/smart/ideas")
 async def list_smart_ideas(admin: dict = Depends(require_admin)):
@@ -5116,6 +5183,23 @@ MATCH_BLACKLIST = (
 # write + startup) so the hot _team_or_league_blocked() check stays synchronous/fast.
 _DYN_BL_LEAGUES: set = set()          # league-name substrings
 _DYN_BL_MATCHES: list = []            # list of (home_kw, away_kw) tuples
+_MATCH_BL_KEYS: set = set()           # order-independent match keys corrected as finished/nonexistent (time-boxed)
+
+
+async def refresh_match_blacklist():
+    """Owner 2026-08-12: one-tap corrections ('game is over' / 'game doesn't exist') blacklist a
+    SPECIFIC fixture (order-independent team pair) so NO builder re-posts it. Time-boxed to 7 days
+    so a legit future rematch of the same pair is not blocked forever."""
+    global _MATCH_BL_KEYS
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        keys = set()
+        async for d in db.match_blacklist.find({}, {"_id": 0, "key": 1, "at": 1}):
+            if d.get("key") and (d.get("at") or "") >= cutoff:
+                keys.add(d["key"])
+        _MATCH_BL_KEYS = keys
+    except Exception as e:
+        logger.warning(f"refresh_match_blacklist failed: {e}")
 
 
 async def refresh_dyn_blacklist():
@@ -6031,6 +6115,8 @@ async def topmatch_lookahead_autopost() -> dict:
 # Match-prediction store + multi-system builder (Lock Bet / Value / Risk / Gamble)
 # ---------------------------------------------------------------------------
 def _pred_whitelisted(p: dict) -> bool:
+    if _match_key(p.get("home"), p.get("away")) in _MATCH_BL_KEYS:
+        return False
     if _is_women_or_youth(p.get("home")) or _is_women_or_youth(p.get("away")):
         return False
     if _team_or_league_blocked(p.get("home"), p.get("away"), p.get("league")):
@@ -15560,6 +15646,7 @@ async def startup():
         logger.error(f"cn1 blacklist seed: {e}")
     await _refresh_blocked_leagues()
     await refresh_dyn_blacklist()
+    await refresh_match_blacklist()
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))

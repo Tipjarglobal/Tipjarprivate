@@ -1150,6 +1150,24 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
   };
   const isAiPick = ["hq-auto", "hq-live", "hq-system", "smart", "hq-master"].includes(tip.source)
     && ["pending", "live"].includes(tip.status);
+  const [fixingLeg, setFixingLeg] = useState(null);
+  const correctLeg = async (reason, legMatch) => {
+    if (fixingLeg) return;
+    setFixingLeg(legMatch + reason);
+    try {
+      const { data } = await api.post("/master/correct-leg", { tip_id: tip.id, reason, match: legMatch });
+      if (data.action === "deleted") {
+        toast.success("Danke! Schein gelöscht — der Master baut an seiner Stelle einen neuen 👑", { duration: 6000 });
+      } else {
+        toast.success(`Danke! „${legMatch}" entfernt — neue Quote ${data.odds}`, { duration: 5000 });
+      }
+      onRefresh?.();
+    } catch (err) {
+      toast.error(apiErr(err) || "Korrektur fehlgeschlagen");
+    } finally {
+      setFixingLeg(null);
+    }
+  };
   const doCorrect = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1468,6 +1486,27 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                   );
                 })()}
               </div>
+              {isMaster && isAiPick && leg.status === "pending" && (
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5">
+                  <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">Korrektur:</span>
+                  <button
+                    data-testid={`leg-fix-finished-${li}`}
+                    onClick={() => correctLeg("finished", leg.match)}
+                    disabled={!!fixingLeg}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full border border-amber-400/30 text-amber-300/90 hover:text-amber-200 hover:border-amber-400/60 disabled:opacity-40 transition-colors"
+                    title="Dieses Spiel ist schon vorbei">
+                    <Clock size={11} /> Spiel vorbei
+                  </button>
+                  <button
+                    data-testid={`leg-fix-nonexistent-${li}`}
+                    onClick={() => correctLeg("nonexistent", leg.match)}
+                    disabled={!!fixingLeg}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full border border-red-400/30 text-red-300/90 hover:text-red-200 hover:border-red-400/60 disabled:opacity-40 transition-colors"
+                    title="Dieses Spiel existiert nicht">
+                    <Ban size={11} /> Kein Spiel
+                  </button>
+                </div>
+              )}
             </div>
           );})}
           {(tip.odds || tip.stake || tip.potential_return) && (
