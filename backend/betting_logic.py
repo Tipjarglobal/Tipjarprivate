@@ -225,7 +225,9 @@ def precise_label(label, home, away):
     if any(k in low for k in ("halbzeit", "1. hz", "2. hz", " hz", "1st half", "2nd half",
                               "both halves", "halves", "each half",
                               "asiat", "asian", "handicap", "ecken", "corner", "karten",
-                              "card", "schütze", "scorer", "spieler", "player")):
+                              "card", "schütze", "scorer", "spieler", "player",
+                              "schuss", "schüsse", "schusse", "torschuss", "torschüsse",
+                              "torschusse", "shots", "shot on", " sot")):
         return m
     ud = "Über" if tot.group(1) in ("über", "ueber", "over") else "Unter"
     line = tot.group(2)

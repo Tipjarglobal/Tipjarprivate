@@ -1447,7 +1447,11 @@ function TipCard({ tip, i, t, onRate, myStars, isAdmin, onSettle, onDelete, canD
                       <ls.Icon size={9} className={leg.status === "live" ? "animate-pulse" : ""} /> {t(ls.key)}
                     </span>
                   )}
-                  {leg.live && leg.live_score ? (
+                  {["won", "lost", "void"].includes(leg.status) && leg.final ? (
+                    <span data-testid={`leg-final-score-${li}`} className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-zinc-700 rounded px-1.5 py-0.5">
+                      {leg.final}
+                    </span>
+                  ) : leg.live && leg.live_score && !["won", "lost", "void"].includes(leg.status) ? (
                     <span data-testid={`leg-live-score-${li}`} className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#F0443C] rounded px-1.5 py-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />{leg.live_score}{leg.live_minute != null ? ` ${leg.live_minute}'` : ""}
                     </span>

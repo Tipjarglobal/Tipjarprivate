@@ -929,7 +929,8 @@ async def settle_hq_combos() -> dict:
         return {"ok": False, "settled": 0}
     now = datetime.now(timezone.utc)
     combos = await db.tips.find(
-        {"source": {"$in": ["hq-auto", "smart", "hq-master"]}, "status": "pending", "is_parlay": True,
+        {"source": {"$in": ["hq-auto", "smart", "hq-master"]},
+         "status": {"$in": ["pending", "live"]}, "is_parlay": True,
          "combo_legs": {"$exists": True}},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled = 0
@@ -937,6 +938,11 @@ async def settle_hq_combos() -> dict:
         if _api_quota_exhausted():
             break
         if tip.get("settle_attempts", 0) >= SETTLE_MAX_ATTEMPTS:
+            continue
+        # BUG-001: Multi-MATCH-Parlay gehört zu settle_multimatch_parlays (Bein-für-Bein),
+        # nicht gegen EIN Fixture. Wegrouten, wenn Beine über mehrere Spiele gehen.
+        _mm = {(l.get("match") or "").strip() for l in (tip.get("legs") or []) if l.get("match")}
+        if len(_mm) > 1:
             continue
         ko = _parse_kickoff(tip.get("match_time"))
         if not _finished_eligible(tip.get("match_time"), ko, now):
@@ -1126,7 +1132,7 @@ async def settle_multimatch_parlays() -> dict:
     now = datetime.now(timezone.utc)
     parlays = await db.tips.find(
         {"status": {"$in": ["pending", "live", "cashed_out"]}, "is_parlay": True,
-         "combo_legs": {"$exists": False}, "legs.0": {"$exists": True}},
+         "legs.0": {"$exists": True}},
         {"_id": 0}).sort("created_at", 1).to_list(200)
     settled, judged = 0, 0
     scan_cache = {}
@@ -1135,6 +1141,10 @@ async def settle_multimatch_parlays() -> dict:
             break  # daily API quota gone → stop; don't burn parlay retry budgets
         is_cashed = tip.get("status") == "cashed_out"
         legs = tip.get("legs") or []
+        # BUG-001: echter SAME-Match-Builder (combo_legs, alle Beine ein Spiel) → settle_hq_combos.
+        _mm = {(l.get("match") or "").strip() for l in legs if l.get("match")}
+        if tip.get("combo_legs") and len(_mm) <= 1:
+            continue
         # Only enforce the retry cap once EVERY match is over. A slip created ~1h before
         # kickoff would otherwise burn its whole attempt budget while games are still
         # upcoming/in-play and never settle after full-time.
@@ -1248,6 +1258,8 @@ async def settle_multimatch_parlays() -> dict:
                 continue
             leg["status"] = "lost" if leg_res == "lost" else "won"
             leg["final"] = f"{hg}:{ag}"
+            for _k in ("live", "live_score", "live_minute", "live_danger"):
+                leg.pop(_k, None)
             changed = True
             if leg["status"] == "lost":
                 any_lost, all_won = True, False
