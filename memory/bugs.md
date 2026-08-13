@@ -4,7 +4,10 @@ Protokoll (Owner 2026-08-13): Bugs werden IMMER hier notiert. Beim Stichwort **"
 je Bug einen credit-minimalen Prompt + fertigen Code-Block (zum Selbsteinsetzen in der Produktion),
 damit der Owner möglichst wenig Credits verbraucht.
 
-Status-Legende: 🔴 offen · 🟡 teilweise/needs-verify · 🟢 gefixt
+Status-Legende: 🔴 offen · 🟡 teilweise/needs-verify · 🟢 gefixt · 🟣 Valhalla-Code geliefert (2026-08-13), noch nicht deployed
+
+VALHALLA 2026-08-13: Root-Causes final verifiziert. BUG-001+002 = Multi-Match-Routing + eingefrorener leg.live_score.
+Fix-Blöcke geliefert für settlement.py (settle_hq_combos + settle_multimatch_parlays), betting_logic.py (precise_label), RateWall.jsx (leg-score-Anzeige).
 
 ---
 
