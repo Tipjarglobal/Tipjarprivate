@@ -32,10 +32,15 @@ der ersten „won"-Erkennung gespeichert und beim echten Full-Time nicht aktuali
 (FT-Fixture) den echten Endstand jedes Beins (gh:ga aus find_finished_fixture) überschreiben, auch wenn das Bein
 schon als „won" markiert war.
 
-## BUG-003 🟢-ready — Spieler-Schüsse-Bein wird als „Gesamt-Tore Über 0.5" gelabelt
+## BUG-003 🟢-ready — Spieler-Schuss-Bein wird als „Gesamt-Tore Über 0.5" gelabelt
+**WICHTIG (Owner 2026-08-13) — zwei UNTERSCHIEDLICHE Märkte, nicht verwechseln:**
+- **Schuss / Schüsse** = normaler Schuss (shots, gr. σουτ) → niedrigere Quote, weniger Risiko. (Zafeiris-Fall = DIESER.)
+- **Torschuss / Torschüsse** = Schuss AUFS TOR (shot on target / SOT, gr. σουτ στην εστία) → höhere Quote, mehr Risiko.
+- Grading/OCR MÜSSEN beide getrennt behandeln (unterschiedliche Fixture-Stats: total shots vs. shots on target).
+  Beim Labeln zählen aber BEIDE als Spieler-Prop → beide dürfen NIE zu „Gesamt-Tore" werden.
 **Verifiziert:** `precise_label` (betting_logic.py:209). Zeile 225-228 Exklusions-Liste enthält KEIN
-„schüsse/torschüsse/shots/sot". Ein Bein „Zafeiris über 0.5 Torschüsse" (Spielername, kein Teamname im String)
-matcht `über 0.5` (Z.221), fällt durch die Exklusion und endet in Zeile 237 → „Gesamt-Tore Über 0.5".
+„schuss/schüsse/torschuss/torschüsse/shots/sot". Ein Bein „Zafeiris über 0.5 Schüsse" (Spielername, kein Teamname
+im String) matcht `über 0.5` (Z.221), fällt durch die Exklusion und endet in Zeile 237 → „Gesamt-Tore Über 0.5".
 **Fix (1 Zeile, sicher):** in das Tuple Z.225-228 aufnehmen:
-`"schüsse", "schusse", "torschüsse", "torschusse", "schuss", "shots", " sot", "sog"`
+`"schuss", "schüsse", "schusse", "torschuss", "torschüsse", "torschusse", "shots", " sot", "shot on"`
 Nur Anzeige (precise_label ist display-only, ändert NICHT den Grading-String) → risikolos.
