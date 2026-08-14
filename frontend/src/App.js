@@ -30,6 +30,8 @@ import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
+import CreditBattery from "./components/CreditBattery";
+import MemberJarWall from "./components/MemberJarWall";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -267,6 +269,11 @@ function Home() {
       />
       {user && !user.email_verified && <VerifyBanner />}
       {user?.role === "admin" && <AdminResetBar />}
+
+      <section className="px-4 pt-4">
+        <CreditBattery current={user?.credits ?? 0} max={2500} />
+        <MemberJarWall />
+      </section>
 
       {/* HERO */}
       <section className="relative overflow-hidden">

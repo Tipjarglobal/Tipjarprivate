@@ -4236,6 +4236,32 @@ async def search_users(q: str = "", limit: int = 15):
     return {"results": results, "games": games}
 
 
+@api_router.get("/users/public-jars")
+async def public_jars(limit: int = 40):
+    """Owner 2026-08: public Member Jar Wall. Returns members ranked by their jar fill
+    (received_credits = community love + own credits), each with a material tier (Wood→Galaxy).
+    Excludes admin/HQ system accounts."""
+    cursor = db.users.find(
+        {"role": {"$ne": "admin"},
+         "username": {"$nin": ["TipJarHQ", None, ""], "$not": {"$regex": "^(TEST_|referrer_)", "$options": "i"}},
+         "email": {"$nin": ["hq@tipjar.com", "admin@tipjar.com"]}},
+        {"_id": 0, "username": 1, "credits": 1, "received_credits": 1, "created_at": 1})
+    users = await cursor.to_list(500)
+    def _fill(u):
+        return int(u.get("received_credits", 0) or 0) + int(u.get("credits", 0) or 0)
+    users.sort(key=_fill, reverse=True)
+    out = []
+    for u in users[: max(1, min(limit, 100))]:
+        out.append({
+            "username": u.get("username"),
+            "credits": int(u.get("credits", 0) or 0),
+            "received_credits": int(u.get("received_credits", 0) or 0),
+            "fill": _fill(u),
+        })
+    return {"members": out}
+
+
+
 # ------------------------------------------------------------------ files
 @api_router.get("/users/public/{username}")
 async def public_profile(username: str):

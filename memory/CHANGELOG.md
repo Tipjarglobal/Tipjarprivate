@@ -580,3 +580,13 @@ der KI auf EIN eigenes Bein "PSG Team-Tore Über 0.5" kollabiert + eigener Text 
   Quote/market neu; <2 Beine → Schein gelöscht (Neubau nächster Zyklus); Korrektur ins master_brain.
 - Frontend: zwei Buttons pro pending Master/AI-Bein (RateWall TipCard correctLeg).
 - Startup lädt refresh_match_blacklist(). Getestet E2E (3→2 update, 2→1 delete, whitelist-Ausschluss).
+
+## 2026-08-14 — Credit Battery + Member Jar Wall (in /app rebuilt)
+- Owner hatte diese direkt im separaten Repo Tipjarprivate gebaut → NICHT in /app → kam nie in den Emergent-Deploy → live unsichtbar.
+- Neu in /app gebaut (deployt garantiert):
+  * frontend/src/components/CreditBattery.jsx — zeigt echte user.credits / 2500 CR, Farbe nach Ladung (<25% rot, <50% amber, <75% lime, sonst grün).
+  * frontend/src/components/MemberJarWall.jsx — 20 Materialien Wood→Galaxy nach fill (received_credits+credits).
+  * Backend GET /api/users/public-jars — echte Member (Test-/System-Accounts gefiltert).
+  * App.js: Import + Render unter Header (<CreditBattery current={user?.credits} max={2500}/> + <MemberJarWall/>).
+- Verifiziert per Screenshot: Batterie „0/2500 CR" (rot, logged out) + Jar-Grid mit Bronze/Stone etc. Endpoint 200.
+- HINWEIS memory/: die laufende App liest KEINE memory-Dateien (weder memory/ noch BRAIN.md/MEMORY.md) — reine Notizen. Kein App-Fix nötig; /app/memory bleibt als Builder-Wissensbasis erhalten.
