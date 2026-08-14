@@ -35,7 +35,10 @@ AI_MODEL_PROVIDER = "gemini"
 # reading) keeps the strong AI_VISION_MODEL so OCR accuracy (Draw No Bet, team totals, times)
 # stays intact. This alone removes the dominant Pro-preview spend.
 AI_MODEL = "gemini-2.5-flash"
-AI_VISION_MODEL = "gemini-3.1-pro-preview"
+# Owner 2026-08-14 (BUG: image upload 520): gemini-3.1-pro-preview VISION calls hung/retried
+# endlessly (>25s → Cloudflare 520, OCR never worked). Switched vision to gemini-2.5-flash, which
+# is multimodal, fast (~5s) AND cheaper — image uploads now read fast instead of timing out.
+AI_VISION_MODEL = "gemini-2.5-flash"
 # Cheap text-only model — used for translation, moderation, name/label/selection
 # canonicalisation, analysis prose and the qualifier briefing.
 AI_TEXT_MODEL = "gemini-2.5-flash"

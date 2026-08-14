@@ -47,3 +47,12 @@ im String) matcht `über 0.5` (Z.221), fällt durch die Exklusion und endet in Z
 **Fix (1 Zeile, sicher):** in das Tuple Z.225-228 aufnehmen:
 `"schuss", "schüsse", "schusse", "torschuss", "torschüsse", "torschusse", "shots", " sot", "shot on"`
 Nur Anzeige (precise_label ist display-only, ändert NICHT den Grading-String) → risikolos.
+
+## BUG-004 🟢 GEFIXT — Bild-Upload crasht mit Cloudflare 520 (Owner 2026-08-14)
+Ursache: AI_VISION_MODEL = "gemini-3.1-pro-preview" hing/retried endlos bei JEDEM Bild (LiteLLM-Retries
+20:07:11→20:07:58→20:08:18) → >25s → Ingress-Proxy antwortet mit unparsebarem 520. OCR funktionierte nie.
+Fix:
+1. core.py: AI_VISION_MODEL → "gemini-2.5-flash" (multimodal, ~5s, günstiger). Bild-Upload liest jetzt in 5s.
+2. server.py analyze_tip: LLM-Call in asyncio.wait_for(timeout=20) → fällt bei Hänger/Down schnell in den
+   bestehenden Fallback (ai_error=True, safe=True) → Tipp ist IMMER postbar, auch ohne LLM.
+Getestet: Text-Pfad (Flash) 5.6s ok; Bild-Pfad vorher 25s Timeout→jetzt 5.1s HTTP200 mit echten Teams/Quote.

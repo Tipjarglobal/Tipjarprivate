@@ -1530,7 +1530,10 @@ async def analyze_tip(images_b64: Optional[List[str]], text: str) -> dict:
         kwargs = {"text": prompt}
         if images_b64:
             kwargs["file_contents"] = [ImageContent(image_base64=b) for b in images_b64]
-        resp = await chat.send_message(UserMessage(**kwargs))
+        # Owner 2026-08-14 (BUG: Cloudflare 520 on upload): a slow/stuck vision call used to hang
+        # until the ingress proxy timed out and returned an unparseable 520. Cap it so it fails FAST
+        # into the fallback below → the tip can always be posted, even without LLM analysis.
+        resp = await asyncio.wait_for(chat.send_message(UserMessage(**kwargs)), timeout=20)
         raw = resp if isinstance(resp, str) else str(resp)
         raw = raw.strip()
         if raw.startswith("```"):
