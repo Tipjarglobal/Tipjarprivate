@@ -95,9 +95,11 @@ STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 # Credit economy config
 # 1 credit = €0.01 to buy. Withdrawals pay half: €5 per 1000 earned credits.
 CREDIT_PACKAGES = {
-    "starter": {"credits": 1000, "price": 10.0, "label": "Starter"},
-    "pro": {"credits": 5000, "price": 50.0, "label": "Pro"},
-    "whale": {"credits": 10000, "price": 100.0, "label": "Whale"},
+    "starter":   {"credits": 50,   "base": 50,   "bonus": 0,   "price": 9.99,   "label": "Starter",   "tag": ""},
+    "fan":       {"credits": 130,  "base": 120,  "bonus": 10,  "price": 19.99,  "label": "Fan",        "tag": "POPULAR"},
+    "supporter": {"credits": 420,  "base": 400,  "bonus": 20,  "price": 49.99,  "label": "Supporter",  "tag": ""},
+    "pro":       {"credits": 850,  "base": 800,  "bonus": 50,  "price": 79.99,  "label": "Pro",         "tag": "BEST VALUE"},
+    "whale":     {"credits": 1400, "base": 1300, "bonus": 100, "price": 109.99, "label": "Whale",       "tag": "BEST DEAL -61%"},
 }
 CREDIT_CURRENCY = "eur"
 GIFT_FEE = 0.10                 # platform keeps 10% of gifted credits

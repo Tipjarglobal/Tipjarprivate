@@ -128,6 +128,8 @@ def public_user(user: dict) -> dict:
         "language": user.get("language", "en"),
         "credits": user.get("credits", 0),
         "received_credits": user.get("received_credits", 0),
+        "coins": user.get("credits", 0),
+        "received_coins": user.get("received_credits", 0),
         "streak": user.get("streak", 0),
         "apex_flame": user.get("apex_flame", False),
         "expert_trial": user.get("expert_trial", False),
@@ -3339,7 +3341,8 @@ async def leaderboard():
 # ------------------------------------------------------------------ credits
 @api_router.get("/credits/packages")
 async def packages():
-    return CREDIT_PACKAGES
+    # coins == credits (alias); include id so the wallet can render the 5 packages directly.
+    return {pid: {**p, "id": pid, "coins": p["credits"]} for pid, p in CREDIT_PACKAGES.items()}
 
 
 @api_router.post("/credits/checkout")

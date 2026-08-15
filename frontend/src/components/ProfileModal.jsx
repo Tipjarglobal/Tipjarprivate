@@ -4,6 +4,7 @@ import api, { apiErr } from "../api";
 import { useI18n, LANGUAGES } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
+import MemberJarWall from "./MemberJarWall";
 import { Flame } from "lucide-react";
 
 const TIMEZONES = [
@@ -70,6 +71,7 @@ export default function ProfileModal({ open, onClose }) {
       <button data-testid="profile-save" onClick={save} disabled={busy} className={btnPrimary}>
         {busy ? t("common.loading") : t("profile.save")}
       </button>
+      <MemberJarWall />
     </Modal>
   );
 }
