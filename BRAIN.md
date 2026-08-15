@@ -981,3 +981,13 @@ Fix:
 2. server.py analyze_tip: LLM-Call in asyncio.wait_for(timeout=20) → fällt bei Hänger/Down schnell in den
    bestehenden Fallback (ai_error=True, safe=True) → Tipp ist IMMER postbar, auch ohne LLM.
 Getestet: Text-Pfad (Flash) 5.6s ok; Bild-Pfad vorher 25s Timeout→jetzt 5.1s HTTP200 mit echten Teams/Quote.
+
+## COIN JAR SYSTEM — 30 JARS (FINAL 15.08.2026, Quelle: /app/tipjar.md)
+Ersetzt das alte 20-Jar-System (Wood→Galaxy). Carton Box statt Cork. Preise unverändert außer Bamboo 75 & Carton Box 80 (NEU).
+Seal = 5% vom vollen Wert, rundet auf bei ,5. Einmalig kaufen, für immer auf diesem Jar. (Format: Name Vollwert/Seal)
+- TIER 1 COMMON (6, 40–80): Common Glass 40/2 (START) · Wood 50/3 · Stone 60/3 · Clay 70/4 · Bamboo 75/4 (NEU) · Carton Box 80/4 (ersetzt Cork)
+- TIER 2 UNCOMMON (6, 90–170): Bronze 90/5 · Iron 110/6 · Tin 130/7 · Copper 150/8 · Aluminum 160/8 · Brass 170/9
+- TIER 3 RARE (6, 180–280): Steel 180/9 · Silver 200/10 · Nickel 220/11 · Chrome 240/12 · Carbon 260/13 · Crystal 280/14
+- TIER 4 EPIC (6, 300–420): Gold 300/15 · Platinum 350/18 · Titanium 380/19 · Ruby 400/20 · Sapphire 410/21 · Emerald 420/21
+- TIER 5 LEGENDARY (4, 450–500): Diamond 450/23 · Obsidian 475/24 · Galaxy 500/25 · Void 500/25
+- TIER 6 MYTHIC (2, 500, Endgame): Nebula 500/25 · Infinity 500/25
