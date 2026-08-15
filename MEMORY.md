@@ -2161,3 +2161,8 @@ Use this account for any auth/admin testing (settle, status changes, admin endpo
 - "Ragazzi" is auto-promoted to Expert role on startup (if the user exists).
 - New registrations receive a welcome + Expert-invite message in the mailbox (mail icon in header).
 - Accepting the Expert invite (`POST /api/inbox/expert-accept`) instantly sets role=expert (trial).
+
+## GitHub-Sync i18n.js (2026-06) — WICHTIG für zukünftige Syncs
+- Beim Übernehmen der vom User als .txt hochgeladenen i18n.js war die Datei KOMPLETT dupliziert (T, I18nContext, I18nProvider, useI18n je 2x) -> Compile-Fehler "Identifier T has already been declared".
+- Erster Block (Z.1-3895): Helper-Funktionen + echt uebersetztes T (es/it/el/tr korrekt). Zweiter Block (angehaengt): keine Helper, viele englische Platzhalter. -> Ersten Block behalten, angehaengtes Duplikat ab "export const T" entfernt. Backup unter /tmp/i18n_backup_original.js.
+- Learning: Bei .txt-Uploads von i18n.js immer zuerst `grep -n "const T = \|I18nProvider\|useI18n"` auf Duplikate pruefen, dann Babel-Syntaxcheck, BEVOR restart.
