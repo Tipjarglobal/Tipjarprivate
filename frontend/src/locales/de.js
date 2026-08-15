@@ -512,7 +512,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Untergrenze 125 Münzen (5%)",
     "battery.payout": "Auszahlung ab 2000 Münzen",
-    "battery.full": "2500 Münzen gesamt",
+    "battery.full": "2500 COINS = VOLL — NIEMALS UNTER 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "Gewöhnlich",
     "jar.tier.uncommon": "Ungewöhnlich",

@@ -381,7 +381,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "الحد الأدنى 125 عملة (5%)",
     "battery.payout": "الدفع فوق 2000 عملة",
-    "battery.full": "2500 عملة إجمالاً",
+    "battery.full": "2500 COINS = ممتلئ — لا يقل أبداً عن 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "عادي",
     "jar.tier.uncommon": "غير شائع",

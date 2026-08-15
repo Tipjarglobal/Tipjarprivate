@@ -463,7 +463,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Κατώφλι 125 νομίσματα (5%)",
     "battery.payout": "Πληρωμή άνω των 2000 νομισμάτων",
-    "battery.full": "2500 νομίσματα συνολικά",
+    "battery.full": "2500 COINS = ΓΕΜΑΤΟ — ΠΟΤΕ ΚΑΤΩ ΑΠΟ 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "Κοινό",
     "jar.tier.uncommon": "Ασυνήθιστο",

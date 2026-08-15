@@ -382,7 +382,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Plancher 125 pièces (5%)",
     "battery.payout": "Paiement au-dessus de 2000 pièces",
-    "battery.full": "2500 pièces au total",
+    "battery.full": "2500 COINS = PLEIN — JAMAIS SOUS 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "Commun",
     "jar.tier.uncommon": "Peu commun",

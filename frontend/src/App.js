@@ -272,7 +272,7 @@ function Home() {
       {user?.role === "admin" && <AdminResetBar />}
 
       <section className="px-4 pt-4">
-        <CoinBattery current={user?.coins ?? user?.credits ?? 0} max={2500} />
+        <CoinBattery current={user?.credits ?? user?.coins ?? 0} max={2500} />
       </section>
 
       {/* HERO */}

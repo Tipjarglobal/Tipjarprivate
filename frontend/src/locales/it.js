@@ -382,7 +382,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Minimo 125 monete (5%)",
     "battery.payout": "Pagamento sopra 2000 monete",
-    "battery.full": "2500 monete totali",
+    "battery.full": "2500 COINS = PIENO — MAI SOTTO 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "Comune",
     "jar.tier.uncommon": "Non comune",

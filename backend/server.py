@@ -3485,12 +3485,19 @@ async def redeem(user: dict = Depends(get_current_user)):
     rc = fresh.get("received_credits", 0)
     if rc < REDEEM_THRESHOLD:
         raise HTTPException(status_code=400,
-                            detail=f"You need {REDEEM_THRESHOLD} received credits to redeem")
-    payout = round((rc / 1000.0) * REDEEM_EUR_PER_1000, 2)
-    await db.users.update_one({"id": user["id"]}, {"$set": {"received_credits": 0}})
+                            detail=f"You need {REDEEM_THRESHOLD} received coins (1 packet) to redeem")
+    # Bonus per packet (MEMORY.md FINAL): 10.000 Coins = 1 Packet = €50 base, +2.5% per
+    # packet redeemed, capped at +25% → max €62.50 from the 10th packet on.
+    prior = await db.redemptions.count_documents({"user_id": user["id"]})
+    packets = prior + 1
+    amount_eur = round(min(62.50, 50 * (1 + min(packets * 0.025, 0.25))), 2)
+    # Consume exactly ONE packet (10.000), keep any remainder — never zero-out silently.
+    await db.users.update_one({"id": user["id"]},
+                              {"$inc": {"received_credits": -REDEEM_THRESHOLD}})
     redemption = {
         "id": str(uuid.uuid4()), "user_id": user["id"], "username": fresh["username"],
-        "credits": rc, "amount_eur": payout, "currency": "eur", "status": "requested",
+        "credits": REDEEM_THRESHOLD, "packet": packets, "amount_eur": amount_eur,
+        "currency": "eur", "status": "requested",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.redemptions.insert_one(redemption)

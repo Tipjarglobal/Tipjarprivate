@@ -381,7 +381,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Taban 125 coin (5%)",
     "battery.payout": "2000 coin üzeri ödeme",
-    "battery.full": "Toplam 2500 coin",
+    "battery.full": "2500 COINS = DOLU — ASLA 125 ALTINDA DEĞİL",
     "battery.boost": "BOOST",
     "jar.tier.common": "Yaygın",
     "jar.tier.uncommon": "Az Bulunur",

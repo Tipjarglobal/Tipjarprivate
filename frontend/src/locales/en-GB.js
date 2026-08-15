@@ -556,7 +556,7 @@ const t = {
     "battery.sub": "TIPJAR POWER",
     "battery.floor": "Floor 125 coins (5%)",
     "battery.payout": "Payout above 2000 coins",
-    "battery.full": "2500 coins total",
+    "battery.full": "2500 COINS = FULL — NEVER BELOW 125",
     "battery.boost": "BOOST",
     "jar.tier.common": "Common",
     "jar.tier.uncommon": "Uncommon",
