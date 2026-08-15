@@ -2178,3 +2178,10 @@ Use this account for any auth/admin testing (settle, status changes, admin endpo
 - CoinBattery.jsx: echte Batterie [|||||]> + Nupsi, Anzeige in COINS (TOTAL 2500, FLOOR 125=5%, Payout >2000), Props current/max aus App.js. Farben <25% rot <50% amber <75% lime >=75% gruen. t("battery.title").
 - MemberJarWall.jsx: alter -1/h Decay ersetzt durch calculateDecay(jar, dailyCalls) = -5%/Tag, ceil bei ,5, isSealed=kein Decay, dailyCalls>=5=kein Decay, 5% Floor. Laeuft 1x/Tag.
 - OFFEN/HINWEIS: WalletModal.jsx Z.149 prueft lang==='en' -> jetzt 'en-GB', zeigt engl. '/ coin' statt 'per coin' (kosmetisch, WalletModal ist Owner-DONE-Datei, nicht angefasst).
+
+## Statistiken-Fix: Bots/Owner/Crawler raus + Berlin-TZ (2026-06)
+- server.py REAL_MEMBER_QUERY erweitert: schliesst jetzt is_bot=True, @example.com (E2E), Owner-Emails (STATS_EXCLUDE_EMAILS=admin@tipjar.com) + Owner-Usernames (STATS_EXCLUDE_USERNAMES=TipJarLogic,Duexxatuxx) aus. Beides via ENV ueberschreibbar.
+- track_visit: bricht ab bei is_bot-User und bei Crawler-User-Agent (_CRAWLER_UA_MARKERS). is_admin-Flag nutzt _is_excluded_member (admin+owner+bot). day jetzt Europe/Berlin.
+- /admin/visits: today + 14-Tage-Chart jetzt Europe/Berlin (BERLIN_TZ) statt UTC. "subscribers" (Label 'mit Push' in SecretInsights.jsx) = echte Nicht-Bot-Mitglieder mit push_subscriptions (nicht mehr anonyme subscribers).
+- Preview-DB ist test-verschmutzt (94 User); echte Zahl erscheint erst auf PRODUCTION nach Deploy. Preview: members 33->14 nach Fix.
+- BEWUSST NICHT umgesetzt: IP-Ausschluss + "Opera"-User-Agent-Ausschluss (wuerde echte Opera-Besucher mit-ausschliessen, mobile-IPs wechseln). Account-basiert (username/email/is_bot) ist zuverlaessig & geraeteunabhaengig.

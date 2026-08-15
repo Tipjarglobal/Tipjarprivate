@@ -16,6 +16,7 @@ import logging
 import asyncio
 import unicodedata
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 
 import jwt
@@ -2835,13 +2836,47 @@ async def _bump_rating_streak(user: dict, now: datetime) -> int:
     return streak
 
 
-# Real (human) members only: excludes admin, automated test/bot accounts (@t.com
-# emails, created by tests/E2E) and the internal HQ posting account. Used for the
-# "registered members" analytics so the count reflects actual people, not seeds/bots.
+# ── Analytics exclusions ──────────────────────────────────────────────────────
+# The owner's own accounts (admin + owner usernames TipJarLogic/Duexxatuxx), ALL
+# bots (is_bot — the Altair/Antares/…/TipJarMaster expert bots) and automated test
+# accounts (@t.com / @example.com / HQ) must NEVER count as real humans in any
+# visitor/member/registered/push statistic. Owner emails/usernames extendable via
+# env (comma-separated) without a code change.
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
+STATS_EXCLUDE_EMAILS = [e.strip() for e in os.environ.get(
+    "STATS_EXCLUDE_EMAILS", "admin@tipjar.com").split(",") if e.strip()]
+STATS_EXCLUDE_USERNAMES = [u.strip() for u in os.environ.get(
+    "STATS_EXCLUDE_USERNAMES", "TipJarLogic,Duexxatuxx").split(",") if u.strip()]
+_CRAWLER_UA_MARKERS = ["bot", "crawl", "spider", "headless", "lighthouse",
+                       "python", "curl", "wget", "ahrefs", "semrush", "scrapy"]
+
+# Real (human) members only: excludes admin + owner accounts, ALL bots, and
+# automated test/E2E accounts. Used for the "registered members" analytics so the
+# count reflects actual people, not seeds/bots.
 REAL_MEMBER_QUERY = {
     "role": {"$ne": "admin"},
-    "$nor": [{"email": {"$regex": r"@t\.com$"}}, {"email": "hq@tipjar.com"}],
+    "is_bot": {"$ne": True},
+    "$nor": [
+        {"email": {"$regex": r"@t\.com$"}},
+        {"email": {"$regex": r"@example\.com$"}},
+        {"email": "hq@tipjar.com"},
+        {"email": {"$in": STATS_EXCLUDE_EMAILS}},
+        {"username": {"$in": STATS_EXCLUDE_USERNAMES}},
+    ],
 }
+
+
+def _is_excluded_member(user: dict) -> bool:
+    """True if this account must never count in analytics (owner/admin/bot/test)."""
+    if not user:
+        return False
+    if user.get("role") == "admin" or user.get("is_bot"):
+        return True
+    if user.get("email") in STATS_EXCLUDE_EMAILS:
+        return True
+    if user.get("username") in STATS_EXCLUDE_USERNAMES:
+        return True
+    return False
 
 
 async def purge_demo_tips() -> int:
@@ -3931,15 +3966,22 @@ async def track_visit(inp: VisitInput, request: Request):
         user = await get_current_user(request)
     except Exception:
         user = None
+    # Never count bots (Altair…/TipJarMaster) or crawlers in analytics.
+    if user and user.get("is_bot"):
+        return {"ok": True, "excluded": "bot"}
+    ua = (request.headers.get("user-agent") or "").lower()
+    if any(c in ua for c in _CRAWLER_UA_MARKERS):
+        return {"ok": True, "excluded": "crawler"}
     uid = str(user.get("id")) if user else ""
-    is_admin = bool(user and user.get("role") == "admin")
+    # The owner's own accounts (admin + owner usernames) must never inflate counts.
+    is_admin = _is_excluded_member(user)
     # Identity: logged-in users are deduped per ACCOUNT across every device (so 4
     # logins from one person = 1 visitor); anonymous visitors are deduped per device.
     identity = f"u:{uid}" if uid else (f"d:{vid}" if vid else "")
     if not identity:
         return {"ok": True}
     now = datetime.now(timezone.utc)
-    day = now.strftime("%Y-%m-%d")
+    day = now.astimezone(BERLIN_TZ).strftime("%Y-%m-%d")
     if is_admin:
         # retroactively flag every past visit from this account AND this device so the
         # owner's own opens (logged in or not) drop out of the historical counts too.
@@ -3961,8 +4003,8 @@ async def track_visit(inp: VisitInput, request: Request):
 @api_router.get("/admin/visits")
 async def admin_visits(admin: dict = Depends(require_admin)):
     """Private analytics — admin only. Never exposed publicly. Admin/owner visits
-    are excluded (is_admin flag)."""
-    now = datetime.now(timezone.utc)
+    are excluded (is_admin flag). Days are Europe/Berlin (owner's timezone), not UTC."""
+    now = datetime.now(timezone.utc).astimezone(BERLIN_TZ)
     today = now.strftime("%Y-%m-%d")
     days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
     # A visit's identity = the account (u:<id>) when logged in, else the device
@@ -3997,7 +4039,11 @@ async def admin_visits(admin: dict = Depends(require_admin)):
     today_row = next((x for x in daily if x["day"] == today), {"unique": 0, "hits": 0})
     week = daily[-7:]
     members = await db.users.count_documents(REAL_MEMBER_QUERY)
-    subs = await db.subscribers.count_documents({})
+    # "mit Push": real (non-bot, non-owner) members that have at least one Web-Push
+    # subscription. Never counts bots or anonymous notify opt-ins.
+    real_ids = set(await db.users.distinct("id", REAL_MEMBER_QUERY))
+    push_uids = await db.push_subscriptions.distinct("user_id")
+    subs = sum(1 for uid in push_uids if uid in real_ids)
     # Split unique visitors into logged-in members (identity "u:") vs anonymous ("d:").
     is_member = {"$eq": [{"$substrCP": ["$_id", 0, 2]}, "u:"]}
     async def _split(match):
