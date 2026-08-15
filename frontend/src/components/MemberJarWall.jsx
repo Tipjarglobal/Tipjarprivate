@@ -7,18 +7,27 @@ export default function MemberJarWall({ jars = [] }) {
     setLocalJars(jars);
   }, [jars]);
 
-  // Decay: silver first -1/h
+  // tipjar.md DECAY -5% pro Tag wenn <5 Calls, SEALED = save
+  const calculateDecay = (jar, dailyCalls) => {
+    if (jar.isSealed) return jar.value; // SEALED verliert GAR NICHTS
+    if (dailyCalls >= 5) return jar.value; // 5 Calls = kein Decay
+    const decayAmount = jar.value * 0.05; // -5% pro Tag
+    const newValue = jar.value - decayAmount;
+    const ceilValue = Math.ceil(newValue * 2) / 2; // ceil bei ,5
+    const sealedFloor = jar.value * 0.05; // 5% Floor
+    return Math.max(sealedFloor, ceilValue);
+  };
+
+  // Decay laeuft 1x/Tag: Silber zerfaellt -5%, Gold + gesiegelte bleiben
   useEffect(() => {
     const interval = setInterval(() => {
-      setLocalJars(prev => {
-        return prev.map(jar => {
-          if (jar.type === 'silver' && jar.value > 0) {
-            return { ...jar, value: Math.max(0, jar.value - 1) };
-          }
-          return jar;
-        }).filter(j => j.value > 0);
-      });
-    }, 3600000); // 1h
+      setLocalJars(prev => prev.map(jar => {
+        if (jar.type === 'silver' && jar.value > 0) {
+          return { ...jar, value: calculateDecay(jar, jar.dailyCalls || 0) };
+        }
+        return jar;
+      }).filter(j => j.value > 0));
+    }, 86400000); // 1 Tag
     return () => clearInterval(interval);
   }, []);
 

@@ -2172,3 +2172,9 @@ Use this account for any auth/admin testing (settle, status changes, admin endpo
 - Beim Übernehmen der vom User als .txt hochgeladenen i18n.js war die Datei KOMPLETT dupliziert (T, I18nContext, I18nProvider, useI18n je 2x) -> Compile-Fehler "Identifier T has already been declared".
 - Erster Block (Z.1-3895): Helper-Funktionen + echt uebersetztes T (es/it/el/tr korrekt). Zweiter Block (angehaengt): keine Helper, viele englische Platzhalter. -> Ersten Block behalten, angehaengtes Duplikat ab "export const T" entfernt. Backup unter /tmp/i18n_backup_original.js.
 - Learning: Bei .txt-Uploads von i18n.js immer zuerst `grep -n "const T = \|I18nProvider\|useI18n"` auf Duplikate pruefen, dann Babel-Syntaxcheck, BEVOR restart.
+
+## i18n Locales-Refactor + COIN Battery + Jar-Decay (2026-06)
+- i18n.js -> Locales-Loader: 8 Dateien in frontend/src/locales/ (en-GB, de, es, el, fr, it, ar, tr), Fallback en-GB. "en" -> "en-GB" (Code), saved/browser "en" wird migriert. 545 Keys 1:1 extrahiert, plus Coin-Battery+30-Jar-Keys (Carton Box, COINS) in allen 8.
+- CoinBattery.jsx: echte Batterie [|||||]> + Nupsi, Anzeige in COINS (TOTAL 2500, FLOOR 125=5%, Payout >2000), Props current/max aus App.js. Farben <25% rot <50% amber <75% lime >=75% gruen. t("battery.title").
+- MemberJarWall.jsx: alter -1/h Decay ersetzt durch calculateDecay(jar, dailyCalls) = -5%/Tag, ceil bei ,5, isSealed=kein Decay, dailyCalls>=5=kein Decay, 5% Floor. Laeuft 1x/Tag.
+- OFFEN/HINWEIS: WalletModal.jsx Z.149 prueft lang==='en' -> jetzt 'en-GB', zeigt engl. '/ coin' statt 'per coin' (kosmetisch, WalletModal ist Owner-DONE-Datei, nicht angefasst).
