@@ -74,7 +74,7 @@ export default function MemberJarWall() {
       {loading ? (
         <p className="text-center text-zinc-500 text-sm">Lade Member…</p>
       ) : members.length === 0 ? (
-        <p className="text-center text-zinc-500 text-sm">Noch keine Member-Jars — lade Credits, um deinen Jar zu füllen.</p>
+        <p className="text-center text-zinc-500 text-sm">Noch keine Member-Jars — lade Münzen, um deinen Jar zu füllen.</p>
       ) : (
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 justify-items-center">
           {members.map((m) => <Jar key={m.username} member={m} />)}

@@ -491,8 +491,8 @@ function CreditsSuccess() {
         {state === "checking" && (<><Loader2 className="mx-auto text-volt animate-spin mb-4" size={48} /><p className="text-white text-lg">Confirming your payment…</p></>)}
         {state === "done" && (<>
           <CheckCircle2 className="mx-auto text-won mb-4" size={56} />
-          <h2 className="font-heading text-3xl font-black text-white">Credits added! 🎉</h2>
-          <p className="text-zinc-400 mt-2">Your balance is now <span className="font-mono font-bold text-volt">{credits}</span> credits.</p>
+          <h2 className="font-heading text-3xl font-black text-white">Coins added! 🎉</h2>
+          <p className="text-zinc-400 mt-2">Your balance is now <span className="font-mono font-bold text-volt">{credits}</span> coins.</p>
           <button onClick={() => navigate("/")} className="mt-6 rounded-full bg-volt text-void font-bold px-6 py-3 hover:bg-volt-hover transition-colors" data-testid="success-home">Back to TipJar</button>
         </>)}
         {state === "failed" && (<>

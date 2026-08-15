@@ -126,9 +126,9 @@ const CONTENT = {
         anzuzeigen. Rechtswidrige, beleidigende oder irreführende Inhalte sind untersagt und können
         entfernt werden.
       </Para>
-      <H>5. Credits & virtuelle Punkte</H>
+      <H>5. Münzen & virtuelle Punkte</H>
       <Para>
-        Innerhalb der Plattform erworbene oder erhaltene Credits stellen keinen Geldwert dar und sind
+        Innerhalb der Plattform erworbene oder erhaltene Münzen stellen keinen Geldwert dar und sind
         außerhalb der vorgesehenen Funktionen nicht übertragbar oder auszahlbar, sofern nicht
         ausdrücklich anders angegeben.
       </Para>
