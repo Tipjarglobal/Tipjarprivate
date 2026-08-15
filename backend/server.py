@@ -3483,20 +3483,25 @@ async def gift_credits(inp: GiftInput, user: dict = Depends(get_current_user)):
 async def redeem(user: dict = Depends(get_current_user)):
     fresh = await db.users.find_one({"id": user["id"]})
     rc = fresh.get("received_credits", 0)
+    # Battery (spendable coins) must be over 2000 to cash out (MEMORY.md FINAL).
+    if fresh.get("credits", 0) < 2000:
+        raise HTTPException(status_code=400, detail="Battery >2000 needed")
     if rc < REDEEM_THRESHOLD:
         raise HTTPException(status_code=400,
                             detail=f"You need {REDEEM_THRESHOLD} received coins (1 packet) to redeem")
-    # Bonus per packet (MEMORY.md FINAL): 10.000 Coins = 1 Packet = €50 base, +2.5% per
-    # packet redeemed, capped at +25% → max €62.50 from the 10th packet on.
-    prior = await db.redemptions.count_documents({"user_id": user["id"]})
-    packets = prior + 1
-    amount_eur = round(min(62.50, 50 * (1 + min(packets * 0.025, 0.25))), 2)
-    # Consume exactly ONE packet (10.000), keep any remainder — never zero-out silently.
-    await db.users.update_one({"id": user["id"]},
-                              {"$inc": {"received_credits": -REDEEM_THRESHOLD}})
+    # Bonus per packet (MEMORY.md FINAL): €50 base, +2.5% per packet already redeemed,
+    # capped at +25% → max €62.50 from the 10th packet on.
+    packets_before = fresh.get("total_packets_redeemed", 0) or 0
+    current_packet_number = packets_before + 1
+    bonus = min(current_packet_number * 0.025, 0.25)
+    amount_eur = round(min(62.50, 50.00 * (1 + bonus)), 2)
+    # Consume exactly ONE packet (10.000 received coins), keep any remainder.
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$inc": {"received_credits": -REDEEM_THRESHOLD, "total_packets_redeemed": 1}})
     redemption = {
         "id": str(uuid.uuid4()), "user_id": user["id"], "username": fresh["username"],
-        "credits": REDEEM_THRESHOLD, "packet": packets, "amount_eur": amount_eur,
+        "credits": REDEEM_THRESHOLD, "packet": current_packet_number, "amount_eur": amount_eur,
         "currency": "eur", "status": "requested",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
