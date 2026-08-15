@@ -4311,11 +4311,12 @@ async def sponsors_feed():
 async def public_jars(limit: int = 40):
     """Owner 2026-08: public Member Jar Wall. Returns members ranked by their jar fill
     (received_credits = community love + own credits), each with a material tier (Wood→Galaxy).
-    Excludes admin/HQ system accounts."""
+    Excludes admin/HQ, ALL bots (is_bot), owner accounts and E2E/test accounts (same
+    analytics exclusion as the visitor stats) so only real humans appear on the wall."""
+    q = dict(REAL_MEMBER_QUERY)
+    q["username"] = {"$nin": ["TipJarHQ", None, ""], "$not": {"$regex": "^(TEST_|referrer_)", "$options": "i"}}
     cursor = db.users.find(
-        {"role": {"$ne": "admin"},
-         "username": {"$nin": ["TipJarHQ", None, ""], "$not": {"$regex": "^(TEST_|referrer_)", "$options": "i"}},
-         "email": {"$nin": ["hq@tipjar.com", "admin@tipjar.com"]}},
+        q,
         {"_id": 0, "username": 1, "credits": 1, "received_credits": 1, "created_at": 1})
     users = await cursor.to_list(500)
     def _fill(u):
