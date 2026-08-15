@@ -4239,6 +4239,25 @@ async def search_users(q: str = "", limit: int = 15):
     return {"results": results, "games": games}
 
 
+@api_router.get("/sponsors/feed")
+async def sponsors_feed():
+    """Sponsor feed for the SponsorFeeder banner (wazamba etc.). Kept in /app so the component
+    always has a backing endpoint. Reads optional overrides from db.sponsors, else static default."""
+    try:
+        docs = await db.sponsors.find({"active": {"$ne": False}}, {"_id": 0}).sort("order", 1).to_list(50)
+    except Exception:
+        docs = []
+    if not docs:
+        docs = [{
+            "name": "Wazamba",
+            "tagline": "50% Reload-Bonus bis zu 500€",
+            "bonus": "bis 500€",
+            "url": "https://www.wazamba.com",
+            "logo": "",
+        }]
+    return {"sponsors": docs}
+
+
 @api_router.get("/users/public-jars")
 async def public_jars(limit: int = 40):
     """Owner 2026-08: public Member Jar Wall. Returns members ranked by their jar fill

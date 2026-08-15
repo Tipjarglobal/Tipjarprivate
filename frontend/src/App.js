@@ -30,6 +30,7 @@ import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
+import SponsorFeeder from "./components/SponsorFeeder";
 import CreditBattery from "./components/CreditBattery";
 import MemberJarWall from "./components/MemberJarWall";
 
@@ -247,6 +248,7 @@ function Home() {
       <SplashScreen />
       <NotificationPrompt />
       <PromoBanner />
+      <SponsorFeeder />
       <Header
         onSubmit={() => setSubmitOpen(true)}
         onLogin={() => openAuth("login")}
