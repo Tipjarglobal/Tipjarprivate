@@ -12,15 +12,11 @@ Features: AI slip parsing, automated tips scraped from Forebet/Predictz/Statarea
 footballpredictions, multi-leg Bet-Builders, live odds, Hall of Fame, strict
 auto-settlement into unified "Abgerechnet" (Settled) tab, anonymous cloned-tipster bots.
 
-## Language
-User is GREEK. Communicate ONLY in Greek.
-
-## Behavioral rules (hard constraints)
-- DO NOT propose unsolicited features/improvements ("Μην προτείνεις νέες προσθηκες").
-- Betting logic: NO exact scores. REMOVE logically redundant legs (e.g. -1.5 HC + BTTS ⇒ omit Over 2.5/3.5).
-- Risk-averse philosophy: avoid 0:0 leagues, "Value Bankers" combos, custom Asian-line logic.
-- One UNIQUE in-house bot per scraped tipster channel — never mix personas.
-- API-Football quotas are tight → always use caching (match_stats.py), never live-hit loops.
+## Language & hard rules → Quelle der Wahrheit: /app/tipjar.md
+Owner spricht Deutsch, Englisch & Griechisch gleich gut; **Deutsch bevorzugt** (aktuelle Kommunikation = Deutsch).
+Alle harten Regeln (keine unaufgeforderten Features, keine exakten Ergebnisse, redundante Beine entfernen,
+risk-averse, 1 eindeutiger Bot pro Kanal, API-Football-Caching) stehen EINMAL in tipjar.md (OWNER + HARD RULES)
+— hier nicht mehr dupliziert.
 
 ## Architecture
 ```
