@@ -146,7 +146,7 @@ export default function WalletModal({ open, onClose, initialTab, initialGiftTo }
                     {p.bestDeal && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400 text-black font-bold flex items-center gap-1"><Crown size={10}/>{tx("bestDeal")}</span>}
                     {p.bestValue && <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500 text-white font-bold">{tx("bestValue")}</span>}
                   </p>
-                  <p className="font-mono text-volt font-bold text-xs mt-0.5">${perCoin} {lang==='de'?'pro Münze': lang==='en'?'per coin':'/ coin'}</p>
+                  <p className="font-mono text-volt font-bold text-xs mt-0.5">${perCoin} {lang==='de'?'pro Münze': lang==='en-GB'?'per coin':'/ coin'}</p>
                 </div>
                 <span className="font-mono font-black text-xl text-white">€{price.toFixed(2)}</span>
               </button>
