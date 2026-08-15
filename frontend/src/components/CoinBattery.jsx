@@ -1,42 +1,86 @@
-import React from "react";
-import { Zap } from "lucide-react";
+import React, { useEffect, useState } from "react";
 
-// TIPJAR POWER battery. Shows the user's coins out of full power (2500). No "CR" suffix.
-// Colour by charge: <25% red, <50% amber, <75% lime, else green.
-export default function CoinBattery({ current = 0, max = 2500 }) {
-  const cur = Math.max(0, Number(current) || 0);
-  const cap = Math.max(1, Number(max) || 2500);
-  const pct = Math.min(100, Math.round((cur / cap) * 100));
-  const color =
-    pct < 25 ? "#FF1E56" : pct < 50 ? "#FFB020" : pct < 75 ? "#E1FF00" : "#00FF94";
+export default function CoinBattery() {
+  const [power, setPower] = useState(75);
+  const [lastBoost, setLastBoost] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem("tipjar_battery");
+      if (saved) {
+        const n = parseInt(saved);
+        setPower(isNaN(n) || n < 5 ? 5 : n);
+      }
+    } catch {}
+
+    const onBoost = (e) => {
+      const add = e?.detail?.power || 5;
+      setPower(p => {
+        const next = Math.min(100, p + add);
+        try { window.localStorage.setItem("tipjar_battery", String(next)); } catch {}
+        return next;
+      });
+      setLastBoost(`+${add}%`);
+      setTimeout(() => setLastBoost(null), 3000);
+    };
+
+    window.addEventListener("tipjar-boost", onBoost);
+    window.addEventListener("tipjar-boost-gold", onBoost);
+    return () => {
+      window.removeEventListener("tipjar-boost", onBoost);
+      window.removeEventListener("tipjar-boost-gold", onBoost);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (power < 5) setPower(5);
+  }, [power]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const boosts = [10, 20, 30, 40];
+    const triggerBoost = () => {
+      const randomBoost = boosts[Math.floor(Math.random() * boosts.length)];
+      setPower(p => {
+        const next = Math.min(100, p + randomBoost);
+        try { window.localStorage.setItem("tipjar_battery", String(next)); } catch {}
+        return next;
+      });
+      setLastBoost(`+${randomBoost}% BOOST`);
+      setTimeout(() => setLastBoost(null), 4000);
+    };
+    const firstTimeout = setTimeout(triggerBoost, 480000 + Math.random() * 420000);
+    const interval = setInterval(() => {
+      if (Math.random() < 0.3) triggerBoost();
+    }, 2700000 + Math.random() * 2700000);
+    return () => {
+      clearTimeout(firstTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const pct = Math.max(5, Math.min(100, power));
+  const color = pct > 60 ? "#D4FF32" : pct > 30 ? "#FFD447" : "#ff4444";
 
   return (
-    <div
-      data-testid="coin-battery"
-      className="w-full max-w-md mx-auto rounded-2xl border border-white/10 bg-[#18181B]/80 backdrop-blur p-4 md:p-5"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Zap size={16} style={{ color }} />
-          <span className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-300">TIPJAR POWER</span>
+    <div className="w-full max-w-5xl mx-auto mb-4 p-3 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-between relative overflow-hidden">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-black border border-white/10 flex items-center justify-center text-[12px]">⚡</div>
+        <div>
+          <div className="text-[10px] font-bold tracking-widest text-zinc-500 flex items-center gap-2">
+            TIPJAR POWER
+            {lastBoost && <span className="text-[10px] font-black text-black bg-[#D4FF32] px-2 py-0.5 rounded-full animate-bounce">{lastBoost}</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-32 h-2 bg-black rounded-full overflow-hidden border border-white/10">
+              <div className="h-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+            </div>
+            <span className="text-[11px] font-black" style={{ color }}>{pct}%</span>
+          </div>
         </div>
-        <span data-testid="coin-battery-value" className="font-mono text-sm font-bold" style={{ color }}>
-          {cur.toLocaleString()}/{cap.toLocaleString()}
-        </span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <div className="relative flex-1 h-7 rounded-md border-2 border-white/25 bg-void/70 overflow-hidden">
-          <div
-            className="h-full rounded-sm transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 14px ${color}` }}
-            data-testid="coin-battery-fill"
-          />
-          <span className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white/90 mix-blend-difference">
-            {pct}%
-          </span>
-        </div>
-        <div className="w-1.5 h-4 rounded-r-sm bg-white/25" />
-      </div>
+      <div className="text-[10px] text-zinc-500">{power}/100</div>
     </div>
   );
 }
