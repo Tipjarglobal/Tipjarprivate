@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../api';
 
 // FINAL 30 Jars nach MEMORY.md 15.08.2026 - Carton Box statt Cork
 const JARS_FINAL = [
@@ -43,8 +44,26 @@ const JARS_FINAL = [
 
 export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
   const [tab, setTab] = useState('INVENTORY');
+  const [openCase, setOpenCase] = useState([]);
+  const [note, setNote] = useState('');
   const owned = JARS_FINAL.filter(j => j.owned);
-  const showcase = [JARS_FINAL[0], null, null]; // max 3 offene Jars (Starter Common Glass + 2 LEER)
+  const byId = (id) => JARS_FINAL.find(j => j.id === id);
+
+  useEffect(() => {
+    api.get('/jars/opencase').then(r => setOpenCase(r.data?.jar_ids || [])).catch(() => {});
+  }, []);
+
+  const saveCase = (ids) => {
+    setOpenCase(ids);
+    api.put('/jars/opencase', { jar_ids: ids }).catch(() => {});
+  };
+  const addToCase = (j) => {
+    if (openCase.includes(j.id)) return;
+    if (openCase.length >= 3) { setNote('Max 3 offene Jars im Open Case!'); setTimeout(() => setNote(''), 2200); return; }
+    saveCase([...openCase, j.id]);
+  };
+  const removeFromCase = (id) => saveCase(openCase.filter(x => x !== id));
+  const showcase = [0, 1, 2].map(i => (openCase[i] != null ? byId(openCase[i]) : null));
 
   const getRarityColor = (r) => {
     if (r==='COMMON') return 'text-zinc-400';
@@ -81,17 +100,27 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
 
       {tab==='INVENTORY' && (
         <div>
-          <p className="text-[11px] text-zinc-500 mb-3">Owned Lager - {owned.length}/30 - Nur im Besitz - mit Glow</p>
+          <p className="text-[11px] text-zinc-500 mb-3">Owned Lager (geschlossen, mit Deckel) — {owned.length}/30 · tippe ein Jar → in den Open Case (max 3)</p>
+          {note && <div className="text-[10px] text-red-400 mb-2 font-bold">{note}</div>}
           <div className="grid grid-cols-3 gap-3">
-            {JARS_FINAL.filter(j=>j.owned).map(j => (
-              <div key={j.id} className="bg-zinc-900 rounded-xl p-3 border border-zinc-800 relative" style={{boxShadow: `0 0 20px ${j.color}40`}}>
+            {JARS_FINAL.filter(j=>j.owned).map(j => {
+              const inCase = openCase.includes(j.id);
+              return (
+              <button key={j.id} onClick={()=>addToCase(j)} disabled={inCase}
+                className="text-left bg-zinc-900 rounded-xl p-3 border border-zinc-800 relative hover:border-yellow-400/50 transition-colors disabled:cursor-default" style={{boxShadow: `0 0 20px ${j.color}40`}}>
                 <div className="flex justify-between text-[8px]"><span className={getRarityColor(j.rarity)}>{j.rarity}</span><span className="text-zinc-600">{j.need} Coins</span></div>
-                <div className="h-20 my-2 rounded-lg flex items-center justify-center text-3xl" style={{background: `${j.color}20`}}>🏺</div>
+                <div className="h-20 my-2 rounded-lg flex items-center justify-center relative" style={{background: `${j.color}20`}}>
+                  <span className="text-3xl">🫙</span>
+                  <span className="absolute top-1 left-1 text-[8px] text-zinc-400">🔒 zu</span>
+                </div>
                 <div className="text-[10px] font-bold truncate">{j.short}</div>
                 <div className="text-[8px] text-zinc-500">Seal {j.seal} Coins</div>
-                <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{background:j.color}}/>
-              </div>
-            ))}
+                {inCase
+                  ? <div className="absolute top-2 right-2 text-[8px] font-black text-[#D4FF32]">IM CASE ✓</div>
+                  : <div className="absolute top-2 right-2 text-[8px] text-zinc-500">+ Open Case</div>}
+              </button>
+              );
+            })}
             {owned.length===0 && <div className="col-span-3 text-center py-10 text-zinc-600 text-xs">Noch keine Jars - Start mit Common Glass 40</div>}
           </div>
         </div>
@@ -119,16 +148,18 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
 
       {tab==='OPEN CASE' && (
         <div>
+          <p className="text-[11px] text-zinc-500 mb-3">Offene Jars (kein Deckel) — {openCase.length}/3 · tippe zum Zurücklegen ins Inventory</p>
+          {note && <div className="text-[10px] text-red-400 mb-2 font-bold">{note}</div>}
           <div className="grid grid-cols-3 gap-3">
             {showcase.map((j,i) => (
               <div key={i} className="bg-zinc-900 rounded-xl p-3 border border-zinc-800 h-32 flex flex-col">
                 {j ? (
-                  <>
-                    <div className="text-[8px] text-zinc-500">{j.rarity} • {j.need} Coins</div>
+                  <button onClick={()=>removeFromCase(j.id)} className="text-left flex-1 flex flex-col w-full">
+                    <div className="text-[8px] text-zinc-500">{j.rarity} • offen</div>
                     <div className="flex-1 flex items-center justify-center text-3xl">🏺</div>
                     <div className="text-[9px] font-bold">{j.short}</div>
-                    <div className="text-[7px] text-zinc-500">{i+1}/3</div>
-                  </>
+                    <div className="text-[7px] text-[#D4FF32]">{i+1}/3 • tippen zum Entfernen</div>
+                  </button>
                 ) : (
                   <div className="flex-1 border-2 border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center">
                     <span className="text-zinc-600">+</span><span className="text-[9px] text-zinc-600">LEER</span>
