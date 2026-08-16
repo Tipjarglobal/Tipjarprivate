@@ -4,8 +4,9 @@ import api, { apiErr } from "../api";
 import { useI18n, LANGUAGES } from "../i18n";
 import { useAuth } from "../auth";
 import { toast } from "sonner";
-import MemberJarWall from "./MemberJarWall";
 import { Flame } from "lucide-react";
+import Jardex from "./JarDex";
+import OpenCase from "./OpenCase";
 
 const TIMEZONES = [
   "UTC", "Europe/London", "Europe/Berlin", "Europe/Athens", "Europe/Madrid",
@@ -21,6 +22,7 @@ export default function ProfileModal({ open, onClose }) {
   const [timezone, setTimezone] = useState(user?.timezone || "UTC");
   const [language, setLanguage] = useState(user?.language || "en");
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState("PROFILE");
 
   React.useEffect(() => {
     if (open && user) {
@@ -45,6 +47,33 @@ export default function ProfileModal({ open, onClose }) {
 
   return (
     <Modal open={open} onClose={onClose} title={t("profile.title")} testId="profile-modal">
+      <div className="flex gap-2 mb-4">
+        {[["PROFILE", "Profil"], ["JARDEX", "Sammlung"], ["OPENCASE", "Open Case"]].map(([key, label]) => (
+          <button
+            key={key}
+            data-testid={`profile-tab-${key.toLowerCase()}`}
+            onClick={() => setView(key)}
+            className={`px-4 py-2 rounded-lg font-black text-[11px] tracking-widest transition-colors ${view === key ? "bg-volt text-black" : "bg-zinc-900 text-zinc-500 border border-zinc-800"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "JARDEX" && (
+        <div data-testid="profile-jardex" className="max-h-[70vh] overflow-y-auto -mx-4">
+          <Jardex userCoins={user?.coins ?? user?.credits ?? 0} userCredits={user?.credits ?? 0} />
+        </div>
+      )}
+
+      {view === "OPENCASE" && (
+        <div data-testid="profile-opencase" className="max-h-[70vh] overflow-y-auto -mx-4">
+          <OpenCase />
+        </div>
+      )}
+
+      {view === "PROFILE" && (
+      <>
       {user?.apex_flame && (
         <div data-testid="own-apex-flame" className="mb-4 flex items-center gap-2 rounded-xl bg-bell/15 border border-bell/40 px-3 py-2 text-sm font-black text-bell">
           <Flame size={16} /> {t("profile.apexFlame")}
@@ -71,7 +100,8 @@ export default function ProfileModal({ open, onClose }) {
       <button data-testid="profile-save" onClick={save} disabled={busy} className={btnPrimary}>
         {busy ? t("common.loading") : t("profile.save")}
       </button>
-      <MemberJarWall />
+      </>
+      )}
     </Modal>
   );
 }

@@ -1672,6 +1672,9 @@ async def register(inp: RegisterInput):
         "language": inp.language,
         "credits": 100,          # welcome credits
         "received_credits": 0,
+        "starter_jar": "Common Glass",   # jeder startet mit 1 offenen Glas-Jar
+        "jars_owned": ["Common Glass"],
+        "total_packets_redeemed": 0,
         "streak": 0,
         "last_rated_date": None,
         "ratings_given": 0,
