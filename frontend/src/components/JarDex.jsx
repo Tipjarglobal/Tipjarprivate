@@ -62,7 +62,7 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
       <div className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-4">
         <div>
           <h1 className="text-2xl font-black tracking-[0.2em]">TIPJAR</h1>
-          <p className="text-[10px] text-zinc-500">{userCredits} / 2500 CR Battery</p>
+          <p className="text-[10px] text-zinc-500">{userCredits} / 2500 COIN BATTERY</p>
         </div>
         <div className="bg-zinc-900 border border-yellow-500/30 px-4 py-2 rounded-full flex items-center gap-2">
           <span>🪙</span><span className="font-bold">{userCoins.toLocaleString()} Coins</span>
