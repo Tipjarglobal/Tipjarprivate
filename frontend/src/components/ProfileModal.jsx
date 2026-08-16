@@ -6,7 +6,6 @@ import { useAuth } from "../auth";
 import { toast } from "sonner";
 import { Flame } from "lucide-react";
 import Jardex from "./JarDex";
-import OpenCase from "./OpenCase";
 
 const TIMEZONES = [
   "UTC", "Europe/London", "Europe/Berlin", "Europe/Athens", "Europe/Madrid",
@@ -48,7 +47,7 @@ export default function ProfileModal({ open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title={t("profile.title")} testId="profile-modal">
       <div className="flex gap-2 mb-4">
-        {[["PROFILE", "Profil"], ["JARDEX", "Sammlung"], ["OPENCASE", "Open Case"]].map(([key, label]) => (
+        {[["PROFILE", "Profil"], ["JARDEX", "Sammlung"]].map(([key, label]) => (
           <button
             key={key}
             data-testid={`profile-tab-${key.toLowerCase()}`}
@@ -63,12 +62,6 @@ export default function ProfileModal({ open, onClose }) {
       {view === "JARDEX" && (
         <div data-testid="profile-jardex" className="max-h-[70vh] overflow-y-auto -mx-4">
           <Jardex userCoins={user?.coins ?? user?.credits ?? 0} userCredits={user?.credits ?? 0} />
-        </div>
-      )}
-
-      {view === "OPENCASE" && (
-        <div data-testid="profile-opencase" className="max-h-[70vh] overflow-y-auto -mx-4">
-          <OpenCase />
         </div>
       )}
 

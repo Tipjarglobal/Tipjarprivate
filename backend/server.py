@@ -1674,7 +1674,7 @@ async def register(inp: RegisterInput):
         "received_credits": 0,
         "starter_jar": "Common Glass",   # jeder startet mit 1 offenen Glas-Jar
         "jars_owned": ["Common Glass"],
-        "open_case": [1],                 # Common Glass (id 1) offen im Case
+        "open_case": ["common_glass"],   # Common Glass offen im Case
         "total_packets_redeemed": 0,
         "streak": 0,
         "last_rated_date": None,
@@ -3516,7 +3516,7 @@ async def redeem(user: dict = Depends(get_current_user)):
 
 
 class OpenCaseInput(BaseModel):
-    jar_ids: List[int] = []
+    jar_ids: List[str] = []
 
 
 @api_router.get("/jars/opencase")
@@ -3530,8 +3530,8 @@ async def set_opencase(inp: OpenCaseInput, user: dict = Depends(get_current_user
     # Max 3 offene Jars im Case; Duplikate raus, Reihenfolge erhalten.
     seen, ids = set(), []
     for x in (inp.jar_ids or []):
-        xi = int(x)
-        if xi not in seen:
+        xi = str(x).strip()[:64]
+        if xi and xi not in seen:
             seen.add(xi); ids.append(xi)
         if len(ids) >= 3:
             break

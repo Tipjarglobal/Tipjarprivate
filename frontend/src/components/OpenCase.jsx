@@ -16,7 +16,8 @@ export default function OpenCase() {
 
   return (
     <div className="w-full">
-      <h3 className="text-[12px] font-black tracking-widest text-white mb-3">OPEN CASE • 3 SLOTS</h3>
+      <h3 className="text-[12px] font-black tracking-widest text-white mb-1">OPEN CASE • 3 SLOTS</h3>
+      <p className="text-[9px] text-zinc-500 mb-3">Dein aktives Set • Bis zu 3 Jars sammeln gleichzeitig Coins • Tippe zum Zurücklegen</p>
       
       <div className="grid grid-cols-3 gap-3">
         {openJars.map((slot, i) => (
@@ -57,10 +58,6 @@ export default function OpenCase() {
             <div className="absolute top-1 left-1 w-[14px] h-[14px] rounded-full bg-white/10 flex items-center justify-center text-[7px] font-black text-white/60">{i+1}</div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-3 text-[9px] text-zinc-600 leading-relaxed">
-        • 3 offene Gläser max • Coins fallen hier rein (Top POV) • Inventory hat Front View geschlossen
       </div>
     </div>
   );

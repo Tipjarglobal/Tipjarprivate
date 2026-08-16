@@ -16,7 +16,7 @@ export default function AnimatedJar() {
 
 // Behält die JAR_DEFS für andere Komponenten die es importieren (z.B. JarDex, MemberJarWall)
 export const JAR_DEFS = [
-  { id: "common_glass", name: "Common Glass", coins: 40, color: "#e5e7eb", tier: "common", graphic: "/jars/graphic_common_glass_closed_front.png" },
+  { id: "common_glass", name: "Common Glass", coins: 40, color: "#e5e7eb", tier: "common", graphic: "/jars/graphic_common_glass_closed_front.png", graphicOpen: "/jars/g_common_open_top.png" },
   { id: "wood", name: "Wood", coins: 50, color: "#92400e", tier: "common", graphic: "/jars/graphic_wood_closed_front.png" },
   { id: "stone", name: "Stone", coins: 60, color: "#78716c", tier: "common", graphic: "/jars/graphic_stone_closed_front.png" },
   { id: "clay", name: "Clay", coins: 70, color: "#a16207", tier: "common", graphic: "/jars/graphic_wood_closed_front.png" },
@@ -34,7 +34,7 @@ export const JAR_DEFS = [
   { id: "chrome", name: "Chrome", coins: 220, color: "#f4f4f5", tier: "rare", graphic: "/jars/g_chrome_closed.png" },
   { id: "titanium", name: "Titanium", coins: 250, color: "#a1a1aa", tier: "rare", graphic: "/jars/g_titanium_closed.png" },
   { id: "obsidian", name: "Obsidian", coins: 280, color: "#18181b", tier: "epic", graphic: "/jars/g_obsidian_closed.png" },
-  { id: "gold", name: "Gold", coins: 300, color: "#facc15", tier: "epic", graphic: "/jars/g_ruby_closed.png", isLuxury: true },
+  { id: "gold", name: "Gold", coins: 300, color: "#facc15", tier: "epic", graphic: "/jars/g_ruby_closed.png", graphicOpen: "/jars/g_gold_open_top.png", isLuxury: true },
   { id: "ruby", name: "Ruby", coins: 320, color: "#dc2626", tier: "epic", graphic: "/jars/g_ruby_closed.png", isLuxury: true },
   { id: "sapphire", name: "Sapphire", coins: 330, color: "#2563eb", tier: "epic", graphic: "/jars/g_sapphire_closed.png", isLuxury: true },
   { id: "platinum", name: "Platinum", coins: 350, color: "#e7e5e4", tier: "epic", graphic: "/jars/g_platinum_closed.png", isLuxury: true },
