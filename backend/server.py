@@ -70,6 +70,13 @@ from glitch_lexikon import (
     LEXIKON_PROMPT_BLOCK, brain_lessons as _glitch_brain_lessons,
     build_avatar_speech_for_tip, master_pille_must_have_safe, get_safety_speech,
 )
+from real_odds import (
+    add_real_ticket_any_language, get_real_quote_multilang, get_all_quotes_for_match,
+    normalize_market, snapshot_providers, hydrate as _odds_hydrate,
+)
+from ticket_collector import (
+    ingest_instagram, ingest_experten, ingest_capella_scraper, universal_ticket_parser,
+)
 
 app = FastAPI(title="TipJar API")
 api_router = APIRouter(prefix="/api")
@@ -3820,6 +3827,9 @@ async def claim_win(file: Optional[UploadFile] = File(None),
     if await db.win_claims.find_one({"sig": sig}):
         raise HTTPException(status_code=409, detail="Dieser Schein wurde bereits eingereicht.")
 
+    # 2c: jeder echte Schein füttert automatisch die mehrsprachige Real-Odds-DB
+    await _auto_ingest_slip_odds(legs, source=user.get("username") or "slip")
+
     # store a STANDARDISED TipJar-branded slip (never the raw bookmaker screenshot)
     ext, store_ct = "webp", "image/webp"
     stake, winnings = _money_to_usd(stake), _money_to_usd(winnings)  # always $
@@ -4497,6 +4507,98 @@ async def admin_update_glitch_bet(bet_id: str, body: dict = Body(default={}), ad
 async def admin_delete_glitch_bet(bet_id: str, admin: dict = Depends(require_admin)):
     await db.glitch_bets.delete_one({"id": bet_id})
     return {"ok": True}
+
+
+# ── Real Odds: mehrsprachige echte Quoten aus allen Quellen ──────────
+class OddsIngestInput(BaseModel):
+    source: str = "raw"            # raw | instagram | experten | capella
+    text: str = ""
+    caption: str = ""
+    image_ocr_text: str = ""
+    name: str = ""
+    match_hint: Optional[str] = None
+    data: dict = {}
+
+
+async def _persist_odds(match: str, market: str):
+    await db.real_quotes.update_one(
+        {"match": match, "market": market},
+        {"$set": {"providers": snapshot_providers(match, market),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True)
+
+
+async def _auto_ingest_slip_odds(legs, source: str = "slip"):
+    """2c: trägt jeden Leg eines eingelesenen Scheins in die Real-Odds-DB ein."""
+    try:
+        src = re.sub(r"\s+", "_", (source or "slip").strip().lower())[:40] or "slip"
+        touched = set()
+        for l in (legs or []):
+            try:
+                od = float(l.get("odds") or 0)
+            except (TypeError, ValueError):
+                od = 0.0
+            home, away, market = l.get("home", ""), l.get("away", ""), l.get("market", "")
+            if not (od > 1.0 and market and (home or away)):
+                continue
+            match = f"{home} vs {away}".strip(" vs ").strip()
+            add_real_ticket_any_language(match, market, src, od, "de")
+            touched.add((match, normalize_market(market)))
+        for match, market in touched:
+            await _persist_odds(match, market)
+    except Exception as e:
+        logger.error(f"auto-ingest slip odds: {e}")
+
+
+@api_router.post("/odds/ingest")
+async def odds_ingest(inp: OddsIngestInput, admin: dict = Depends(require_admin)):
+    """Nimmt einen Schein aus beliebiger Quelle/Sprache und trägt die echte Quote ein."""
+    src = (inp.source or "raw").lower()
+    parsed = None
+    if src == "instagram":
+        parsed = ingest_instagram(inp.caption, inp.image_ocr_text, inp.match_hint)
+    elif src == "experten":
+        parsed = ingest_experten(inp.name or "experte", inp.text, inp.match_hint)
+    elif src == "capella":
+        parsed = inp.data if ingest_capella_scraper(inp.data or {}) else None
+    else:
+        p = universal_ticket_parser(inp.text, default_match=inp.match_hint)
+        if p and p.get("quote", 0) > 1.0:
+            add_real_ticket_any_language(p["match"], p["market_raw"], p["anbieter"], p["quote"], p["sprache"])
+            parsed = p
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Konnte keinen gültigen Schein erkennen (Quote < 1.0 oder leer?).")
+    match = parsed.get("match") or "Unbekanntes Match"
+    market = normalize_market(parsed.get("market_raw") or parsed.get("market") or "")
+    await _persist_odds(match, market)
+    avg, count, details = get_real_quote_multilang(match, market)
+    return {"ok": True, "match": match, "market": market, "avg": avg, "count": count, "providers": details}
+
+
+@api_router.get("/odds/quote")
+async def odds_quote(match: str, market: str, admin: dict = Depends(require_admin)):
+    avg, count, details = get_real_quote_multilang(match, market)
+    return {"match": match, "market": normalize_market(market), "avg": avg, "count": count, "providers": details}
+
+
+@api_router.get("/odds/all")
+async def odds_all(admin: dict = Depends(require_admin)):
+    docs = await db.real_quotes.find({}, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    out = []
+    for d in docs:
+        providers = d.get("providers") or {}
+        quotes = [v.get("quote") for v in providers.values() if v.get("quote")]
+        out.append({"match": d.get("match"), "market": d.get("market"),
+                    "avg": round(sum(quotes) / len(quotes), 3) if quotes else None,
+                    "count": len(quotes), "providers": providers, "updated_at": d.get("updated_at")})
+    return {"quotes": out, "matches": len({d.get("match") for d in docs})}
+
+
+@api_router.delete("/odds/{match}/{market}")
+async def odds_delete(match: str, market: str, admin: dict = Depends(require_admin)):
+    await db.real_quotes.delete_one({"match": match, "market": normalize_market(market)})
+    REAL = get_all_quotes_for_match(match)
+    return {"ok": True, "remaining_markets": len(REAL)}
 
 
 @api_router.get("/users/public-jars")
@@ -15949,6 +16051,10 @@ async def startup():
                 upsert=True)
     except Exception as e:
         logger.error(f"glitch lexikon brain seed: {e}")
+    try:
+        _odds_hydrate(await db.real_quotes.find({}, {"_id": 0}).to_list(5000))
+    except Exception as e:
+        logger.error(f"real_odds hydrate: {e}")
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))

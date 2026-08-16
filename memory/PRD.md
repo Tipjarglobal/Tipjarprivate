@@ -36,8 +36,13 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
   - `MasterAvatar.jsx` ersetzt: rotierende Safety-Speech-Blase (alle 4s), generisch für JEDES Team.
   - `glitch_lexikon.py` ersetzt: + `SAFETY_SPEECH_TEMPLATES`, `get_safety_speech`, `build_avatar_speech_for_tip`, `master_pille_must_have_safe`.
   - `/api/master/avatar` reichert jeden Call mit generischem Safety-Speech + `safety_speeches` an (Playable-Filter beibehalten).
-  - OFFEN/bewusst NICHT gemacht: `master_pille_must_have_safe(legs)` in die Kombi-Builder eingefügt — würde einen odds-losen,
-    nicht-settlebaren Leg mit fremdem Schema in echte Parlays injizieren → bricht Quote/Settlement. Erst schema-sicher umsetzen.
+- **Real Odds (mehrsprachige echte Quoten) — immer MongoDB**:
+  - `/app/backend/real_odds.py` (Markt-Normalisierung über Sprachen: Über/Over/Más de/Üst/Più di… + `REAL_QUOTES_DB` + Persistenz-Helfer `snapshot_providers`/`hydrate`).
+  - `/app/backend/ticket_collector.py` (Parser + Collectors: `ingest_instagram`, `ingest_experten`, `ingest_capella_scraper`, `universal_ticket_parser`). Quoten-Parser gefixt (nahm fälschlich Markt-Linie 0.5 statt @1.46).
+  - Persistenz: MongoDB `real_quotes` (`{match, market, providers, updated_at}`); Startup-Hydration in `REAL_QUOTES_DB`.
+  - API (Admin): `POST /api/odds/ingest` (source: raw|instagram|experten|capella), `GET /api/odds/quote`, `GET /api/odds/all`, `DELETE /api/odds/{match}/{market}`.
+  - 2c: Win-Claim-Reader (`extract_win_slip`) füttert via `_auto_ingest_slip_odds` jeden echten Schein automatisch in die Odds-DB (anbieter=username, defensiv).
+  - Hinweis: Top-Level-Module (nicht `core/`, da `core.py` schon existiert).
 
 ## Backlog / offene Ideen
 - P1: Sponsor-Klick-Verlauf als 14-Tage-Balkenchart.
