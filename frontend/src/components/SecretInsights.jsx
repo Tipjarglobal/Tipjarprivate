@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers } from "lucide-react";
+import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers, MousePointerClick } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
 import { toLatin, isKickoffTimeUnknown } from "../i18n";
@@ -47,6 +47,8 @@ export default function SecretInsights() {
         <LiveHealth health={health} healthErr={healthErr} />
 
         <PickManager />
+
+        <SponsorStats />
 
         <SettlementMonitor />
 
@@ -314,6 +316,69 @@ const PickManager = () => {
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+
+
+// ── Sponsor-Klick-Ranking ────────────────────────────────────
+// Shows how many times each sponsor button was clicked (bots/admins excluded).
+const SponsorStats = () => {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  const load = () => {
+    setErr(false);
+    api.get("/admin/sponsor-stats").then((r) => setData(r.data)).catch(() => setErr(true));
+  };
+  useEffect(load, []);
+  const stats = data?.stats || [];
+  const maxClicks = Math.max(1, ...stats.map((s) => s.clicks || 0));
+
+  return (
+    <div className="rounded-2xl border border-elevated bg-surface p-5 mb-8" data-testid="sponsor-stats">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <MousePointerClick className="text-volt" size={16} />
+          <p className="text-xs uppercase tracking-widest text-zinc-400">Sponsor-Klicks · Ranking</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {data && <span className="text-[10px] text-zinc-500">{data.total_clicks || 0} gesamt</span>}
+          <button onClick={load} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="sponsor-stats-refresh">
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </div>
+
+      {!data && !err && (
+        <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={16} /> lädt…</div>
+      )}
+      {err && <p className="text-lost text-sm">Konnte Sponsor-Statistik nicht laden.</p>}
+      {data && stats.length === 0 && (
+        <p className="text-sm text-zinc-500" data-testid="sponsor-stats-empty">Noch keine Sponsor-Klicks erfasst.</p>
+      )}
+
+      <div className="space-y-2">
+        {stats.map((s, i) => (
+          <div key={s.sponsor_id} className="flex items-center gap-3" data-testid={`sponsor-stat-${s.sponsor_id}`}>
+            <span className="text-[11px] font-mono text-zinc-600 w-5 text-right shrink-0">{i + 1}.</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-white font-semibold uppercase tracking-wider truncate">{s.sponsor_id}</span>
+                <span className="text-xs font-mono font-black text-volt shrink-0 ml-2">{s.clicks || 0}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-void/60 overflow-hidden">
+                <div className="h-full rounded-full bg-volt/70" style={{ width: `${((s.clicks || 0) / maxClicks) * 100}%` }} />
+              </div>
+              {s.last_click && (
+                <p className="text-[9px] text-zinc-600 mt-0.5">
+                  zuletzt {new Date(s.last_click).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
