@@ -1,13 +1,16 @@
-"""TipJar owner's Money-Glitch Lexikon.
+"""TipJar owner's Money-Glitch Lexikon - IMPROVED GENERELL
 
-Central knowledge base of the owner's proven football-betting value patterns
-(Typ1..Typ9). Used in two places:
-  1) `LEXIKON_PROMPT_BLOCK` is appended to the slip-analysis AI prompt so the
-     model recognises + rates these patterns on real slips users post.
-  2) `detect_glitch()` auto-tags entries in the private admin bet-tracker.
+Central knowledge base + GENERELLER Safety Glitch Melder für TipJarMaster
+Jede Master Pille hat IMMER einen Safe drin
+Speech Blase meldet Safety Glitches für ALLE Teams generisch
+
+Beispiele die du genannt hast:
+- Ludogorets trifft und verliert nicht
+- Antwerp trifft  
+- Porto wird 1 bis 4 mal treffen
+-> Aber gilt jetzt für JEDES Team generisch
 """
 
-# ── Country flags for the bet tracker ────────────────────────────────
 FLAGS = {
     "Bulgarien": "🇧🇬", "Niederlande": "🇳🇱", "Belgien": "🇧🇪", "Norwegen": "🇳🇴",
     "Portugal": "🇵🇹", "Türkei": "🇹🇷", "Frankreich": "🇫🇷", "Serbien": "🇷🇸",
@@ -28,7 +31,6 @@ FLAGS = {
     "Ecuador": "🇪🇨", "Paraguay": "🇵🇾",
 }
 
-# ── The lexikon: owner's value patterns ──────────────────────────────
 GLITCH_LEXIKON = {
     "TYP1_HINSPIEL": {
         "beschreibung": "2. KO-Runde – Hinspiel gewonnen, Qualifikation in regulärer Zeit kaufen 1.05-1.06",
@@ -89,6 +91,35 @@ GLITCH_LEXIKON = {
     },
 }
 
+# === NEU: GENERELLER Safety Speech für TipJarMaster Bubble ===
+SAFETY_SPEECH_TEMPLATES = {
+    "TYP5_DNB_SICHERHEIT": "🛡️ {team} trifft und verliert nicht",
+    "TYP1_HINSPIEL": "🛡️ {team} trifft und verliert nicht",
+    "TYP4_IMMER_LIEFERANTEN": "⚽ {team} trifft",
+    "TYP2_BUILDER_KORRELATION": "🔒 {team} wird 1 bis 4 mal treffen",
+    "TYP7_MASTER_TOR_ASSIST": "🎯 {team} trifft oder bereitet vor",
+    "TYP9_SIEG_BTTS": "🎯 {team} trifft und gewinnt mit Gegentor",
+    "TYP8_LUCAS_1HZ_TOR": "⏰ {team} trifft vor Pause",
+    "TYP6_SHOTS_DOMINANZ": "📈 {team} Chancen-Überhang - trifft",
+    "TYP3_LIVE_OVER": "⏱️ {team} Over spät - beide brauchen Tor",
+}
+
+def get_safety_speech(team: str, glitch_key: str) -> str:
+    """GENERELL für JEDES Team - z.B. Ludogorets, Antwerp, Porto oder irgendein Team"""
+    # Normalisiere Key
+    key = glitch_key.replace("🎁 ","").replace("🔒 ","").strip()
+    # Suche passenden Template Key
+    for k in SAFETY_SPEECH_TEMPLATES:
+        if k in key or key in k:
+            return SAFETY_SPEECH_TEMPLATES[k].format(team=team)
+    # Fallback nach detect
+    if "TYP5" in key or "TYP1" in key or "DNB" in key or "X2" in key:
+        return f"🛡️ {team} trifft und verliert nicht"
+    if "TYP2" in key and "PORTO" in key:
+        return f"🔒 {team} wird 1 bis 4 mal treffen"
+    if "TYP4" in key or "TYP2" in key:
+        return f"⚽ {team} trifft"
+    return f"✅ {team} Safety Call"
 
 def detect_glitch(market, quote, first_leg=None, minute=None, notes=""):
     """Auto-tag a bet with the matching glitch type. Returns '' if none matches."""
@@ -102,49 +133,75 @@ def detect_glitch(market, quote, first_leg=None, minute=None, notes=""):
     except (TypeError, ValueError):
         mi = None
 
-    # Typ8 – Lucas 1st half
     if any(x in m for x in ["1st half", "1. ht", "1.ht", "1.hz", "1. halbzeit"]):
         if q and q >= 1.70:
             return "🎁 TYP8 LUCAS 1HZ"
         return "📈 1HZ TOR"
-    # Typ7 – score or assist
     if any(x in m for x in ["trifft oder", "score or assist", "tor oder assist", "goal or assist"]):
         return "🎁 TYP7 MASTER TOR+ASSIST"
     if "tzolis" in m and any(x in m for x in ["assist", "trifft", "score"]):
         return "🎁 TYP7 MASTER TZOLIS"
-    # Typ1 – qualify in regular time after won first leg
     if first_leg and ("regular time" in m or "winning method" in m) and q and q <= 1.15:
         return "🎁 TYP1 HINSPIEL"
     if "over 1" in m and first_leg and q and q <= 1.10:
         return "🎁 TYP1 HINSPIEL"
-    # Typ6 – shots dominance
     if "total shots" in m or "1x2 total" in m:
         return "🎁 TYP6 SHOTS"
-    # Typ2 – builder correlation
     if ("über 0.5" in m or "over 0.5" in m) and "unter 5.5" in m:
         return "🎁 TYP2 PORTO 1-5"
     if "+" in (market or "") and ("shot" in m or "schuss" in m) and ("over 0.5" in m or "über 0.5" in m):
         return "🎁 TYP2 BUILDER"
     if "1x" in m and ("über 0.5" in m or "over 0.5" in m):
         return "🎁 TYP2 BUILDER"
-    # Typ3 – live over late
     if mi and mi >= 70 and ("über" in m or "over" in m) and q and q >= 1.40:
         return "🎁 TYP3 LIVE"
-    # Typ4 – reliable shot providers
     if any(name in m for name in ["salah", "karetsas", "zafeiris", "dembele", "dembélé"]) and ("schuss" in m or "shot" in m):
         return "🎁 TYP4 IMMER"
     if "antwerp" in m and ("über 0.5" in m or "over 0.5" in m):
         return "🎁 TYP4 IMMER"
-    # Typ5 – draw no bet
     if any(x in m for x in ["draw no bet", "dnb", "unentschieden keine wette"]):
         return "🔒 TYP5 DNB"
-    # Typ9 – win + btts
     if any(x in m for x in ["sieg", "win", "gewinnt"]) and any(x in m for x in ["btts", "both to score", "beide treffen"]):
         return "🎁 TYP9 SIEG+BTTS"
     return ""
 
+def build_avatar_speech_for_tip(tip: dict) -> str:
+    """
+    Baut Safety Speech für einen Tip - GENERELL für alle Teams
+    Input: tip dict mit home_team, away_team, market
+    Output: "Ludogorets trifft und verliert nicht" etc. generisch
+    """
+    home = tip.get("home_team","Team")
+    away = tip.get("away_team","")
+    market = tip.get("market","")
+    glitch = detect_glitch(market, tip.get("odds"))
+    # Team raten
+    team = home
+    if away and away.lower() in market.lower():
+        team = away
+    # Wenn Market enthält "Team XY" nimm das
+    if "team" in market.lower():
+        # Versuche Team aus Market zu extrahieren
+        for t in [home, away]:
+            if t.lower() in market.lower():
+                team = t
+                break
+    return get_safety_speech(team, glitch) if glitch else f"⚽ {team} trifft"
 
-# Compact English guidance appended to the slip-analysis AI prompt.
+def master_pille_must_have_safe(legs: list) -> list:
+    """Stellt sicher: Jede Master Pille hat IMMER einen Safe drin"""
+    has_safe = False
+    for leg in legs:
+        m = (leg.get("market","") if isinstance(leg, dict) else str(leg)).lower()
+        if any(k in m for k in ["draw no bet", "dnb", "über 0.5", "over 0.5", "trifft", "x2", "1x"]):
+            has_safe = True
+            break
+    if not has_safe and legs:
+        first = legs[0]
+        team = first.get("home_team","Team") if isinstance(first, dict) else "Team"
+        legs.insert(0, {"market": f"{team} Draw No Bet", "glitch": "TYP5_DNB", "is_banker": True, "home_team": team})
+    return legs
+
 LEXIKON_PROMPT_BLOCK = (
     " OWNER VALUE-PATTERN LEXIKON — when a slip matches one of these known profitable patterns, "
     "treat it as a strong, SAFE value play (rate it HIGH) and name the pattern briefly in the analysis: "
@@ -159,9 +216,7 @@ LEXIKON_PROMPT_BLOCK = (
     "(9) Top team WIN + BTTS (Bayern, Man City, PSG, Real vs an offensive opponent) @~2.2-2.8 — they win but concede once."
 )
 
-
 def brain_lessons():
-    """Return the lexikon as reusable Master-brain lessons (idempotent seed)."""
     out = []
     for key, d in GLITCH_LEXIKON.items():
         out.append({
@@ -170,3 +225,16 @@ def brain_lessons():
             "lesson": f"{d['beschreibung']} — {d['logik']} (Quote {d.get('quote_range','')}, Markt: {d.get('markt','')})",
         })
     return out
+
+# Demo GENERELL
+if __name__ == "__main__":
+    print("=== GENERELLER Safety Speech Test ===")
+    tests = [
+        {"home_team":"Ludogorets", "market":"Draw No Bet", "odds":1.27},
+        {"home_team":"Antwerp", "market":"Antwerp Team Über 0.5", "odds":1.30},
+        {"home_team":"Porto", "market":"X2 + Über 0.5 + Unter 5.5", "odds":1.23},
+        {"home_team":"Bayern", "market":"Bayern Sieg + BTTS", "odds":2.40},
+        {"home_team":"Irgendein Team", "market":"Über 0.5", "odds":1.25},
+    ]
+    for t in tests:
+        print(build_avatar_speech_for_tip(t))

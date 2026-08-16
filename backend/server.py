@@ -68,6 +68,7 @@ from learning import refresh_learning, learn_verdict, learn_bucket, _LEARN
 from glitch_lexikon import (
     FLAGS as GLITCH_FLAGS, GLITCH_LEXIKON, detect_glitch,
     LEXIKON_PROMPT_BLOCK, brain_lessons as _glitch_brain_lessons,
+    build_avatar_speech_for_tip, master_pille_must_have_safe, get_safety_speech,
 )
 
 app = FastAPI(title="TipJar API")
@@ -1190,7 +1191,22 @@ async def master_avatar():
         calls.append(d)
         if len(calls) >= 12:
             break
-    return {"count": len(calls), "calls": calls, "generated_at": day}
+    # Owner 2026-08: GENERELLER Safety-Glitch-Speech — für JEDES Team generisch.
+    # Speech-Blase rotiert client-seitig alle 4s durch diese Sätze.
+    safety_speeches = []
+    for d in calls:
+        try:
+            sp = build_avatar_speech_for_tip(d)
+            d["safety_speech"] = sp
+            d["avatar_text"] = sp
+            d["glitch_type"] = detect_glitch(d.get("market", ""), d.get("odds"))
+            safety_speeches.append(sp)
+        except Exception:
+            continue
+    if not safety_speeches:
+        safety_speeches = ["Ich lese die heutigen Spiele – sichere Tor-Calls gleich hier."]
+    return {"count": len(calls), "calls": calls, "generated_at": day,
+            "safety_speeches": safety_speeches}
 
 
 

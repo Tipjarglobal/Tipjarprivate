@@ -32,6 +32,12 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
     9 Lessons idempotent in `db.master_brain` geseedet (Startup).
   - Privater Bet-Tracker (Admin `/insights`): `GET /admin/glitch-lexikon`, `GET/POST /admin/glitch-bets`,
     `PUT/DELETE /admin/glitch-bets/{id}` — Auto-Tagging via `detect_glitch`, Profit-Summary. UI: `GlitchTracker`.
+- **TipJarMaster GENERELLER Safety-Glitch-Melder (Patch 16.08.)**:
+  - `MasterAvatar.jsx` ersetzt: rotierende Safety-Speech-Blase (alle 4s), generisch für JEDES Team.
+  - `glitch_lexikon.py` ersetzt: + `SAFETY_SPEECH_TEMPLATES`, `get_safety_speech`, `build_avatar_speech_for_tip`, `master_pille_must_have_safe`.
+  - `/api/master/avatar` reichert jeden Call mit generischem Safety-Speech + `safety_speeches` an (Playable-Filter beibehalten).
+  - OFFEN/bewusst NICHT gemacht: `master_pille_must_have_safe(legs)` in die Kombi-Builder eingefügt — würde einen odds-losen,
+    nicht-settlebaren Leg mit fremdem Schema in echte Parlays injizieren → bricht Quote/Settlement. Erst schema-sicher umsetzen.
 
 ## Backlog / offene Ideen
 - P1: Sponsor-Klick-Verlauf als 14-Tage-Balkenchart.
