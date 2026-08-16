@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import api from "../api";
 
 const WAZAMBA = { 
   id: "wazamba", 
@@ -41,6 +42,7 @@ export default function SponsorFeeder() {
 
   const handleClick = (s) => {
     const isDone = clicked[s.id];
+    api.post(`/sponsors/${s.id}/click`).catch(() => {});
     setAnimating(s.id);
     setJarJump(true);
     setTimeout(() => setShowCoin(true), 250);

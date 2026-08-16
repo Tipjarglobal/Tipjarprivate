@@ -4347,6 +4347,40 @@ async def sponsors_feed():
     return {"sponsors": docs}
 
 
+@api_router.post("/sponsors/{sponsor_id}/click")
+async def sponsor_click(sponsor_id: str, request: Request):
+    """Track a sponsor click. Bots/admins/crawlers are excluded so stats stay honest."""
+    sid = (sponsor_id or "").strip().lower()[:64]
+    if not sid:
+        return {"ok": False}
+    try:
+        user = await get_current_user(request)
+    except Exception:
+        user = None
+    if user and user.get("is_bot"):
+        return {"ok": True, "excluded": "bot"}
+    if _is_excluded_member(user):
+        return {"ok": True, "excluded": "admin"}
+    ua = (request.headers.get("user-agent") or "").lower()
+    if any(c in ua for c in _CRAWLER_UA_MARKERS):
+        return {"ok": True, "excluded": "crawler"}
+    now = datetime.now(timezone.utc)
+    await db.sponsor_clicks.update_one(
+        {"sponsor_id": sid},
+        {"$inc": {"clicks": 1}, "$set": {"last_click": now.isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.get("/admin/sponsor-stats")
+async def admin_sponsor_stats(admin: dict = Depends(require_admin)):
+    """Private sponsor click analytics — admin only. Sorted by total clicks desc."""
+    docs = await db.sponsor_clicks.find({}, {"_id": 0}).sort("clicks", -1).to_list(200)
+    total = sum(int(d.get("clicks", 0)) for d in docs)
+    return {"stats": docs, "total_clicks": total}
+
+
 @api_router.get("/users/public-jars")
 async def public_jars(limit: int = 40):
     """Owner 2026-08: public Member Jar Wall. Returns members ranked by their jar fill
