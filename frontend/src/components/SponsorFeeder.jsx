@@ -14,6 +14,8 @@ const OTHERS = [
   { id: "pistolo", name: "PISTOLO", color: "#FFCC00", url: "https://pistolo.com/?ref=tipjar" },
   { id: "5gringos", name: "5GRINGOS", color: "#8B4513", url: "https://5gringos.com/?ref=tipjar" },
   { id: "20bet", name: "20BET", color: "#00B050", url: "https://20bet.com/?ref=tipjar" },
+  { id: "betscore", name: "BETSCORE", color: "#FFD600", url: "https://betscore.com/?ref=tipjar" },
+  { id: "sgcasino", name: "SGCASINO", color: "#F59E0B", url: "https://sgcasino.com/?ref=tipjar" },
 ];
 
 const STORAGE_KEY = "tipjar_sponsor_clicks_v2";
