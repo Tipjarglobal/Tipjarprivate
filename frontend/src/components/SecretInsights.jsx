@@ -327,13 +327,21 @@ const PickManager = () => {
 const SponsorStats = () => {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
-  const load = () => {
+  const [period, setPeriod] = useState("all");
+  const load = (p = period) => {
     setErr(false);
-    api.get("/admin/sponsor-stats").then((r) => setData(r.data)).catch(() => setErr(true));
+    setData(null);
+    api.get(`/admin/sponsor-stats?period=${p}`).then((r) => setData(r.data)).catch(() => setErr(true));
   };
-  useEffect(load, []);
+  useEffect(() => { load(period); /* eslint-disable-next-line */ }, [period]);
   const stats = data?.stats || [];
   const maxClicks = Math.max(1, ...stats.map((s) => s.clicks || 0));
+
+  const PERIODS = [
+    { key: "today", label: "Heute" },
+    { key: "7d", label: "7 Tage" },
+    { key: "all", label: "Gesamt" },
+  ];
 
   return (
     <div className="rounded-2xl border border-elevated bg-surface p-5 mb-8" data-testid="sponsor-stats">
@@ -344,10 +352,23 @@ const SponsorStats = () => {
         </div>
         <div className="flex items-center gap-3">
           {data && <span className="text-[10px] text-zinc-500">{data.total_clicks || 0} gesamt</span>}
-          <button onClick={load} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="sponsor-stats-refresh">
+          <button onClick={() => load(period)} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="sponsor-stats-refresh">
             <RefreshCw size={15} />
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 mb-4" data-testid="sponsor-stats-period">
+        {PERIODS.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => setPeriod(p.key)}
+            className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors ${period === p.key ? "bg-volt/20 text-volt" : "bg-void/50 text-zinc-500 hover:text-zinc-300"}`}
+            data-testid={`sponsor-period-${p.key}`}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       {!data && !err && (
@@ -355,7 +376,7 @@ const SponsorStats = () => {
       )}
       {err && <p className="text-lost text-sm">Konnte Sponsor-Statistik nicht laden.</p>}
       {data && stats.length === 0 && (
-        <p className="text-sm text-zinc-500" data-testid="sponsor-stats-empty">Noch keine Sponsor-Klicks erfasst.</p>
+        <p className="text-sm text-zinc-500" data-testid="sponsor-stats-empty">Noch keine Sponsor-Klicks in diesem Zeitraum.</p>
       )}
 
       <div className="space-y-2">

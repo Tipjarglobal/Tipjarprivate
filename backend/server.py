@@ -4349,7 +4349,8 @@ async def sponsors_feed():
 
 @api_router.post("/sponsors/{sponsor_id}/click")
 async def sponsor_click(sponsor_id: str, request: Request):
-    """Track a sponsor click. Bots/admins/crawlers are excluded so stats stay honest."""
+    """Track a sponsor click as an individual event (so stats can be filtered by
+    period). Bots/crawlers are excluded; admins ARE counted (owner test clicks count)."""
     sid = (sponsor_id or "").strip().lower()[:64]
     if not sid:
         return {"ok": False}
@@ -4359,26 +4360,37 @@ async def sponsor_click(sponsor_id: str, request: Request):
         user = None
     if user and user.get("is_bot"):
         return {"ok": True, "excluded": "bot"}
-    if _is_excluded_member(user):
-        return {"ok": True, "excluded": "admin"}
     ua = (request.headers.get("user-agent") or "").lower()
     if any(c in ua for c in _CRAWLER_UA_MARKERS):
         return {"ok": True, "excluded": "crawler"}
     now = datetime.now(timezone.utc)
-    await db.sponsor_clicks.update_one(
-        {"sponsor_id": sid},
-        {"$inc": {"clicks": 1}, "$set": {"last_click": now.isoformat()}},
-        upsert=True,
-    )
+    day = now.astimezone(BERLIN_TZ).strftime("%Y-%m-%d")
+    await db.sponsor_clicks.insert_one({"sponsor_id": sid, "ts": now.isoformat(), "day": day})
     return {"ok": True}
 
 
 @api_router.get("/admin/sponsor-stats")
-async def admin_sponsor_stats(admin: dict = Depends(require_admin)):
-    """Private sponsor click analytics — admin only. Sorted by total clicks desc."""
-    docs = await db.sponsor_clicks.find({}, {"_id": 0}).sort("clicks", -1).to_list(200)
-    total = sum(int(d.get("clicks", 0)) for d in docs)
-    return {"stats": docs, "total_clicks": total}
+async def admin_sponsor_stats(period: str = "all", admin: dict = Depends(require_admin)):
+    """Private sponsor click analytics — admin only. Sorted by clicks desc.
+    period: 'today' (Europe/Berlin day) | '7d' (last 7 days) | 'all'."""
+    now = datetime.now(timezone.utc).astimezone(BERLIN_TZ)
+    match = {}
+    if period == "today":
+        match = {"day": now.strftime("%Y-%m-%d")}
+    elif period == "7d":
+        days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(0, 7)]
+        match = {"day": {"$in": days}}
+    pipeline = []
+    if match:
+        pipeline.append({"$match": match})
+    pipeline += [
+        {"$group": {"_id": "$sponsor_id", "clicks": {"$sum": 1}, "last_click": {"$max": "$ts"}}},
+        {"$sort": {"clicks": -1}},
+    ]
+    rows = await db.sponsor_clicks.aggregate(pipeline).to_list(200)
+    stats = [{"sponsor_id": r["_id"], "clicks": r.get("clicks", 0), "last_click": r.get("last_click")} for r in rows]
+    total = sum(s["clicks"] for s in stats)
+    return {"stats": stats, "total_clicks": total, "period": period}
 
 
 @api_router.get("/users/public-jars")
