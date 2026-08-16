@@ -65,6 +65,10 @@ from core import (
     _api_reserve_locked, _API_DAY,
 )
 from learning import refresh_learning, learn_verdict, learn_bucket, _LEARN
+from glitch_lexikon import (
+    FLAGS as GLITCH_FLAGS, GLITCH_LEXIKON, detect_glitch,
+    LEXIKON_PROMPT_BLOCK, brain_lessons as _glitch_brain_lessons,
+)
 
 app = FastAPI(title="TipJar API")
 api_router = APIRouter(prefix="/api")
@@ -1439,6 +1443,8 @@ AI_SYSTEM = (
     "Each leg's 'kickoff' MUST be the exact time printed next to THAT match on the slip (never blank it if "
     "a time is visible, never shift or invent it)."
 )
+# Owner: inject the Money-Glitch Lexikon so the analyst recognises + rates these value patterns.
+AI_SYSTEM = AI_SYSTEM + LEXIKON_PROMPT_BLOCK
 
 
 _PLACEHOLDER_TEAMS = {
@@ -4391,6 +4397,90 @@ async def admin_sponsor_stats(period: str = "all", admin: dict = Depends(require
     stats = [{"sponsor_id": r["_id"], "clicks": r.get("clicks", 0), "last_click": r.get("last_click")} for r in rows]
     total = sum(s["clicks"] for s in stats)
     return {"stats": stats, "total_clicks": total, "period": period}
+
+
+class GlitchBetInput(BaseModel):
+    land: str = ""
+    match: str = ""
+    market: str = ""
+    quote: Optional[float] = None
+    einsatz: Optional[float] = None
+    ergebnis: str = ""
+    status: str = "offen"
+    first_leg: str = ""
+    minute: Optional[int] = None
+    notes: str = ""
+    fremd_tip: bool = False
+
+
+@api_router.get("/admin/glitch-lexikon")
+async def admin_glitch_lexikon(admin: dict = Depends(require_admin)):
+    """The owner's Money-Glitch Lexikon + country flags (for the tracker UI)."""
+    return {"lexikon": GLITCH_LEXIKON, "flags": GLITCH_FLAGS}
+
+
+def _glitch_bet_doc(inp: GlitchBetInput) -> dict:
+    glitch = detect_glitch(inp.market, inp.quote, inp.first_leg or None, inp.minute, inp.notes)
+    return {
+        "flag": GLITCH_FLAGS.get(inp.land, "🏳️"),
+        "land": inp.land, "match": inp.match, "market": inp.market,
+        "quote": inp.quote, "einsatz": inp.einsatz, "ergebnis": inp.ergebnis,
+        "status": (inp.status or "offen").lower(), "first_leg": inp.first_leg,
+        "minute": inp.minute, "notes": inp.notes, "fremd_tip": bool(inp.fremd_tip),
+        "glitch": glitch,
+    }
+
+
+def _glitch_summary(docs: list) -> dict:
+    won = sum(1 for d in docs if d.get("status") == "gewonnen")
+    lost = sum(1 for d in docs if d.get("status") == "verloren")
+    push = sum(1 for d in docs if d.get("status") == "push")
+    offen = sum(1 for d in docs if d.get("status") == "offen")
+    profit = 0.0
+    for d in docs:
+        st, stake, q = d.get("status"), (d.get("einsatz") or 0), (d.get("quote") or 0)
+        if st == "gewonnen":
+            profit += stake * q - stake
+        elif st == "verloren":
+            profit -= stake
+    return {"total": len(docs), "won": won, "lost": lost, "push": push,
+            "offen": offen, "profit": round(profit, 2)}
+
+
+@api_router.get("/admin/glitch-bets")
+async def admin_glitch_bets(admin: dict = Depends(require_admin)):
+    docs = await db.glitch_bets.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"bets": docs, "summary": _glitch_summary(docs)}
+
+
+@api_router.post("/admin/glitch-bets")
+async def admin_add_glitch_bet(inp: GlitchBetInput, admin: dict = Depends(require_admin)):
+    doc = _glitch_bet_doc(inp)
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.glitch_bets.insert_one({**doc})
+    doc.pop("_id", None)
+    return {"ok": True, "bet": doc}
+
+
+@api_router.put("/admin/glitch-bets/{bet_id}")
+async def admin_update_glitch_bet(bet_id: str, body: dict = Body(default={}), admin: dict = Depends(require_admin)):
+    allowed = {}
+    if "status" in body:
+        allowed["status"] = str(body.get("status") or "offen").lower()
+    if "ergebnis" in body:
+        allowed["ergebnis"] = str(body.get("ergebnis") or "")
+    if not allowed:
+        raise HTTPException(status_code=400, detail="Nichts zu ändern.")
+    await db.glitch_bets.update_one({"id": bet_id}, {"$set": allowed})
+    doc = await db.glitch_bets.find_one({"id": bet_id}, {"_id": 0})
+    return {"ok": True, "bet": doc}
+
+
+@api_router.delete("/admin/glitch-bets/{bet_id}")
+async def admin_delete_glitch_bet(bet_id: str, admin: dict = Depends(require_admin)):
+    await db.glitch_bets.delete_one({"id": bet_id})
+    return {"ok": True}
 
 
 @api_router.get("/users/public-jars")
@@ -15831,6 +15921,18 @@ async def startup():
     await _refresh_blocked_leagues()
     await refresh_dyn_blacklist()
     await refresh_match_blacklist()
+    try:
+        for les in _glitch_brain_lessons():
+            await db.master_brain.update_one(
+                {"id": les["id"]},
+                {"$set": {"topic": les["topic"], "lesson": les["lesson"],
+                          "source": "glitch_lexikon", "status": "approved", "language": "de"},
+                 "$setOnInsert": {"id": les["id"], "user_id": "system",
+                                  "username": "owner", "text": les["lesson"], "images": 0,
+                                  "created_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True)
+    except Exception as e:
+        logger.error(f"glitch lexikon brain seed: {e}")
     asyncio.create_task(_startup_seed())
     _BG_TASKS.append(asyncio.create_task(_leadership_loop()))
     _BG_TASKS.append(asyncio.create_task(settlement_loop()))

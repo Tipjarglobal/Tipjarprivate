@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers, MousePointerClick } from "lucide-react";
+import { Eye, Users, BellRing, TrendingUp, Loader2, Lock, Activity, CheckCircle2, XCircle, Trophy, Ban, Trash2, RefreshCw, SlidersHorizontal, Layers, MousePointerClick, Target, Plus } from "lucide-react";
 import api, { apiErr } from "../api";
 import { useAuth } from "../auth";
 import { toLatin, isKickoffTimeUnknown } from "../i18n";
@@ -49,6 +49,8 @@ export default function SecretInsights() {
         <PickManager />
 
         <SponsorStats />
+
+        <GlitchTracker />
 
         <SettlementMonitor />
 
@@ -396,6 +398,182 @@ const SponsorStats = () => {
                   zuletzt {new Date(s.last_click).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                 </p>
               )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+
+// ── Glitch Bet-Tracker (privat) ──────────────────────────────
+// Owner-only Wett-Notizbuch: erfasst Wetten und taggt automatisch den
+// Money-Glitch-Typ (Typ1..Typ9) via Backend detect_glitch.
+const STATUS_OPTS = [
+  { key: 'offen', label: 'Offen' },
+  { key: 'gewonnen', label: 'Gewonnen' },
+  { key: 'verloren', label: 'Verloren' },
+  { key: 'push', label: 'Push' },
+];
+const STATUS_CLS = {
+  offen: 'bg-zinc-700/40 text-zinc-300', gewonnen: 'bg-won/20 text-won',
+  verloren: 'bg-lost/20 text-lost', push: 'bg-zinc-700/40 text-zinc-400',
+};
+const EMPTY_BET = { land: '', match: '', market: '', quote: '', einsatz: '', ergebnis: '', status: 'offen', first_leg: '', minute: '', notes: '', fremd_tip: false };
+
+const GlitchTracker = () => {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  const [flags, setFlags] = useState({});
+  const [lexikon, setLexikon] = useState({});
+  const [form, setForm] = useState(EMPTY_BET);
+  const [showForm, setShowForm] = useState(false);
+  const [showLex, setShowLex] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    setErr(false);
+    api.get('/admin/glitch-bets').then((r) => setData(r.data)).catch(() => setErr(true));
+  };
+  useEffect(() => {
+    load();
+    api.get('/admin/glitch-lexikon').then((r) => { setFlags(r.data.flags || {}); setLexikon(r.data.lexikon || {}); }).catch(() => {});
+  }, []);
+
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const submit = async () => {
+    if (!form.match && !form.market) return;
+    setBusy(true);
+    try {
+      const payload = {
+        ...form,
+        quote: form.quote === '' ? null : parseFloat(form.quote),
+        einsatz: form.einsatz === '' ? null : parseFloat(form.einsatz),
+        minute: form.minute === '' ? null : parseInt(form.minute, 10),
+      };
+      await api.post('/admin/glitch-bets', payload);
+      setForm(EMPTY_BET);
+      setShowForm(false);
+      load();
+    } catch (e) { /* silent */ } finally { setBusy(false); }
+  };
+  const changeStatus = async (bet, status) => {
+    await api.put(`/admin/glitch-bets/${bet.id}`, { status }).catch(() => {});
+    load();
+  };
+  const del = async (bet) => {
+    if (!window.confirm(`Wette „${bet.match || bet.market}" löschen?`)) return;
+    await api.delete(`/admin/glitch-bets/${bet.id}`).catch(() => {});
+    load();
+  };
+
+  const s = data?.summary || {};
+  const bets = data?.bets || [];
+  const flagNames = Object.keys(flags);
+  const inputCls = "bg-void border border-elevated rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-zinc-600 focus:border-volt/50 outline-none";
+
+  return (
+    <div className="rounded-2xl border border-elevated bg-surface p-5 mb-8" data-testid="glitch-tracker">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Target className="text-volt" size={16} />
+          <p className="text-xs uppercase tracking-widest text-zinc-400">Glitch Bet-Tracker</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowLex((v) => !v)} className="text-[10px] font-semibold px-2.5 py-1.5 rounded-lg bg-void/60 text-zinc-400 hover:text-volt" data-testid="glitch-lexikon-toggle">Lexikon</button>
+          <button onClick={() => setShowForm((v) => !v)} className="text-[10px] font-black px-2.5 py-1.5 rounded-lg bg-volt/20 text-volt inline-flex items-center gap-1" data-testid="glitch-add-toggle"><Plus size={12} /> Wette</button>
+          <button onClick={load} className="text-zinc-500 hover:text-volt transition-colors" title="Neu laden" data-testid="glitch-refresh"><RefreshCw size={15} /></button>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {data && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4" data-testid="glitch-summary">
+          {[['Gesamt', s.total], ['Gewonnen', s.won], ['Verloren', s.lost], ['Push', s.push], ['Offen', s.offen]].map(([l, v]) => (
+            <div key={l} className="rounded-xl border border-elevated bg-void/40 p-2 text-center">
+              <p className="font-mono font-black text-lg leading-none">{v ?? 0}</p>
+              <p className="text-[9px] uppercase tracking-widest text-zinc-500 mt-1">{l}</p>
+            </div>
+          ))}
+          <div className={`rounded-xl border p-2 text-center ${(s.profit || 0) >= 0 ? 'border-won/40 bg-won/10' : 'border-lost/40 bg-lost/10'}`}>
+            <p className={`font-mono font-black text-lg leading-none ${(s.profit || 0) >= 0 ? 'text-won' : 'text-lost'}`}>{(s.profit || 0) > 0 ? '+' : ''}{s.profit ?? 0}</p>
+            <p className="text-[9px] uppercase tracking-widest text-zinc-500 mt-1">Profit</p>
+          </div>
+        </div>
+      )}
+
+      {/* Lexikon reference */}
+      {showLex && (
+        <div className="mb-4 space-y-2 max-h-64 overflow-y-auto" data-testid="glitch-lexikon-list">
+          {Object.entries(lexikon).map(([key, d]) => (
+            <div key={key} className="rounded-xl border border-elevated bg-void/40 p-3">
+              <p className="text-[11px] font-black text-volt">{key}</p>
+              <p className="text-[11px] text-white">{d.beschreibung}</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">{d.logik}</p>
+              <p className="text-[9px] text-zinc-600 mt-1">Quote {d.quote_range} · {d.markt}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add form */}
+      {showForm && (
+        <div className="mb-4 rounded-xl border border-volt/30 bg-void/40 p-3 grid grid-cols-2 gap-2" data-testid="glitch-form">
+          <select className={inputCls} value={form.land} onChange={(e) => setF('land', e.target.value)} data-testid="glitch-land">
+            <option value="">Land…</option>
+            {flagNames.map((n) => <option key={n} value={n}>{flags[n]} {n}</option>)}
+          </select>
+          <select className={inputCls} value={form.status} onChange={(e) => setF('status', e.target.value)} data-testid="glitch-status">
+            {STATUS_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+          <input className={`${inputCls} col-span-2`} placeholder="Spiel z.B. Rio Ave vs Porto" value={form.match} onChange={(e) => setF('match', e.target.value)} data-testid="glitch-match" />
+          <input className={`${inputCls} col-span-2`} placeholder="Markt z.B. X2 + Über 0.5 + Unter 5.5" value={form.market} onChange={(e) => setF('market', e.target.value)} data-testid="glitch-market" />
+          <input className={inputCls} type="number" step="0.01" placeholder="Quote" value={form.quote} onChange={(e) => setF('quote', e.target.value)} data-testid="glitch-quote" />
+          <input className={inputCls} type="number" placeholder="Einsatz €" value={form.einsatz} onChange={(e) => setF('einsatz', e.target.value)} data-testid="glitch-einsatz" />
+          <input className={inputCls} placeholder="Ergebnis z.B. 0:2" value={form.ergebnis} onChange={(e) => setF('ergebnis', e.target.value)} data-testid="glitch-ergebnis" />
+          <input className={inputCls} placeholder="Hinspiel z.B. 0:2 (opt.)" value={form.first_leg} onChange={(e) => setF('first_leg', e.target.value)} data-testid="glitch-firstleg" />
+          <input className={inputCls} type="number" placeholder="Minute (live, opt.)" value={form.minute} onChange={(e) => setF('minute', e.target.value)} data-testid="glitch-minute" />
+          <label className="flex items-center gap-2 text-[11px] text-zinc-400"><input type="checkbox" checked={form.fremd_tip} onChange={(e) => setF('fremd_tip', e.target.checked)} data-testid="glitch-fremd" /> Fremd-Tipp</label>
+          <input className={`${inputCls} col-span-2`} placeholder="Notizen (opt.)" value={form.notes} onChange={(e) => setF('notes', e.target.value)} data-testid="glitch-notes" />
+          <button onClick={submit} disabled={busy} className="col-span-2 bg-volt text-black font-black text-xs py-2 rounded-lg disabled:opacity-40" data-testid="glitch-submit">
+            {busy ? 'Speichern…' : 'Wette speichern (Glitch wird auto-erkannt)'}
+          </button>
+        </div>
+      )}
+
+      {!data && !err && <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="animate-spin" size={16} /> lädt…</div>}
+      {err && <p className="text-lost text-sm">Konnte Wetten nicht laden.</p>}
+      {data && bets.length === 0 && <p className="text-sm text-zinc-500" data-testid="glitch-empty">Noch keine Wetten erfasst. Tippe „+ Wette".</p>}
+
+      {/* Bets list */}
+      <div className="space-y-2">
+        {bets.map((b) => (
+          <div key={b.id} className="rounded-xl border border-elevated bg-void/40 p-3" data-testid={`glitch-bet-${b.id}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-white font-semibold truncate">{b.flag} {b.match || b.market}</p>
+                <p className="text-[11px] text-zinc-400 break-words">{b.market}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-zinc-500">
+                  {b.quote ? <span>Quote {b.quote}</span> : null}
+                  {b.einsatz ? <span>· {b.einsatz}€</span> : null}
+                  {b.ergebnis ? <span>· {b.ergebnis}</span> : null}
+                  {b.fremd_tip ? <span className="text-zinc-600">· Fremd</span> : null}
+                </div>
+                {b.glitch ? <span className="inline-block mt-1.5 text-[10px] font-black text-volt bg-volt/10 px-2 py-0.5 rounded-full">{b.glitch}</span> : null}
+                {b.notes ? <p className="text-[10px] text-zinc-600 mt-1 break-words">{b.notes}</p> : null}
+              </div>
+              <button onClick={() => del(b)} className="text-lost/70 hover:text-lost shrink-0" data-testid={`glitch-del-${b.id}`}><Trash2 size={14} /></button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {STATUS_OPTS.map((o) => (
+                <button key={o.key} onClick={() => changeStatus(b, o.key)}
+                  className={`text-[9px] font-bold px-2 py-1 rounded ${b.status === o.key ? STATUS_CLS[o.key] : 'bg-void/60 text-zinc-600 hover:text-zinc-300'}`}
+                  data-testid={`glitch-status-${o.key}-${b.id}`}>
+                  {o.label}
+                </button>
+              ))}
             </div>
           </div>
         ))}
