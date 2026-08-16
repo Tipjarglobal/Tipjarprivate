@@ -32,7 +32,6 @@ import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
 import SponsorFeeder from "./components/SponsorFeeder";
 import CoinBattery from "./components/CoinBattery";
-import MemberJarWall from "./components/MemberJarWall";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -274,11 +273,6 @@ function Home() {
 
       <section className="px-4 pt-4">
         <CoinBattery current={user?.credits ?? user?.coins ?? 0} max={2500} />
-        {user && (
-          <div className="max-w-7xl mx-auto mt-3">
-            <MemberJarWall />
-          </div>
-        )}
       </section>
 
       {/* HERO */}
