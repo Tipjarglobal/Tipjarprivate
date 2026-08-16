@@ -140,11 +140,6 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
           </div>
         </div>
       )}
-
-      <div className="mt-8 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800 text-[10px] text-zinc-500">
-        <div>Carton Box statt Cork • Starter Common Glass 40 im OPEN CASE • fill = received_credits + credits • Seal 5% einmalig für immer</div>
-        <div className="mt-1">Member Jars Wall komplett raus - nur noch diese 3 Tabs Seite</div>
-      </div>
     </div>
   );
 }
