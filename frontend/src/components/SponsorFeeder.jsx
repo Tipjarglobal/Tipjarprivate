@@ -14,11 +14,6 @@ const OTHERS = [
   { id: "pistolo", name: "PISTOLO", color: "#FFCC00", url: "https://pistolo.com/?ref=tipjar" },
   { id: "5gringos", name: "5GRINGOS", color: "#8B4513", url: "https://5gringos.com/?ref=tipjar" },
   { id: "20bet", name: "20BET", color: "#00B050", url: "https://20bet.com/?ref=tipjar" },
-  { id: "granswin", name: "GRANSWIN", color: "#FFD700", url: "https://granswin.com/?ref=tipjar" },
-  { id: "scored", name: "SCORED", color: "#00CCFF", url: "https://scored.com/?ref=tipjar" },
-  { id: "betlab", name: "BETLAB", color: "#111111", url: "https://betlab.com/?ref=tipjar" },
-  { id: "spinbetter", name: "SPINBETTER", color: "#FF8C00", url: "https://spinbetter.com/?ref=tipjar" },
-  { id: "coldbet", name: "COLDBET", color: "#00BFFF", url: "https://coldbet.com/?ref=tipjar" },
 ];
 
 const STORAGE_KEY = "tipjar_sponsor_clicks_v2";
