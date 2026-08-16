@@ -44,7 +44,7 @@ const JARS_FINAL = [
 export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
   const [tab, setTab] = useState('INVENTORY');
   const owned = JARS_FINAL.filter(j => j.owned);
-  const showcase = [JARS_FINAL[0], null, null, null, null, null]; // Starter Common Glass + 5 LEER für Homepage Pille
+  const showcase = [JARS_FINAL[0], null, null]; // max 3 offene Jars (Starter Common Glass + 2 LEER)
 
   const getRarityColor = (r) => {
     if (r==='COMMON') return 'text-zinc-400';
@@ -71,7 +71,7 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
 
       {/* 3 TABS */}
       <div className="flex gap-2 mb-6">
-        {['INVENTORY','JARDEX','SHOWCASE'].map(t => (
+        {['INVENTORY','JARDEX','OPEN CASE'].map(t => (
           <button key={t} onClick={()=>setTab(t)}
             className={`px-5 py-3 rounded-lg font-black text-xs tracking-widest ${tab===t ? 'bg-yellow-400 text-black shadow-[0_0_15px_rgba(250,204,21,0.6)]' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
             {t}
@@ -117,9 +117,8 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
         </div>
       )}
 
-      {tab==='SHOWCASE' && (
+      {tab==='OPEN CASE' && (
         <div>
-          <p className="text-[11px] text-zinc-500 mb-3">6 für Homepage Pille - 2 gefüllt 4 LEER - Diese erscheinen auf Startseite als Pille</p>
           <div className="grid grid-cols-3 gap-3">
             {showcase.map((j,i) => (
               <div key={i} className="bg-zinc-900 rounded-xl p-3 border border-zinc-800 h-32 flex flex-col">
@@ -128,7 +127,7 @@ export default function Jardex({ userCoins = 12340, userCredits = 42 }) {
                     <div className="text-[8px] text-zinc-500">{j.rarity} • {j.need} Coins</div>
                     <div className="flex-1 flex items-center justify-center text-3xl">🏺</div>
                     <div className="text-[9px] font-bold">{j.short}</div>
-                    <div className="text-[7px] text-zinc-500">{i+1}/6 Homepage</div>
+                    <div className="text-[7px] text-zinc-500">{i+1}/3</div>
                   </>
                 ) : (
                   <div className="flex-1 border-2 border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center">
