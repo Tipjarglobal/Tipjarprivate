@@ -32,6 +32,10 @@ import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
 import SponsorFeeder from "./components/SponsorFeeder";
 import CoinBattery from "./components/CoinBattery";
+import Raster1_RentPills from "./components/Raster1_RentPills";
+import Raster2_Header from "./components/Raster2_Header";
+import Raster5_InputFeedback from "./components/Raster5_InputFeedback";
+import Raster6_Battery from "./components/Raster6_8Lang";
 
 const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
@@ -247,8 +251,8 @@ function Home() {
       <SplashScreen />
       <NotificationPrompt />
       <PromoBanner />
-      <SponsorFeeder />
-      <Header
+      <Raster1_RentPills />
+      <Raster2_Header
         onSubmit={() => setSubmitOpen(true)}
         onLogin={() => openAuth("login")}
         onSignup={() => openAuth("signup")}
@@ -357,6 +361,24 @@ function Home() {
       <div id="best-wins">
         <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} onUserClick={openProfile} />
       </div>
+
+      {/* RASTER 5 — Input & Feedback (8-sprachig) */}
+      <Raster5_InputFeedback
+        lang={lang}
+        isAdmin={user?.role === "admin"}
+        onSubmit={() => setSubmitOpen(true)}
+        onWallet={() => setWalletOpen(true)}
+        onProfile={() => setProfileOpen(true)}
+      />
+
+      {/* RASTER 6 — Batterie + Leaderboard (8-sprachig) */}
+      <section className="px-4 py-4">
+        <Raster6_Battery
+          lang={lang}
+          batteryCoins={user?.credits ?? user?.coins ?? 0}
+          onFeedClick={() => setWalletOpen(true)}
+        />
+      </section>
 
       <footer className="border-t border-elevated py-10 text-center px-4">
         <div className="inline-flex flex-col items-center leading-none" data-testid="footer-logo">

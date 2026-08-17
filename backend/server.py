@@ -4709,6 +4709,52 @@ async def odds_delete(match: str, market: str, admin: dict = Depends(require_adm
     return {"ok": True, "remaining_markets": len(REAL)}
 
 
+class FeedbackInput(BaseModel):
+    name: str = ""
+    message: str = ""
+
+
+@api_router.post("/feedback")
+async def submit_feedback(inp: FeedbackInput):
+    msg = (inp.message or "").strip()[:600]
+    if len(msg) < 2:
+        raise HTTPException(status_code=400, detail="Feedback zu kurz.")
+    doc = {"id": str(uuid.uuid4()), "name": (inp.name or "Anonym").strip()[:60],
+           "message": msg, "published": False,
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.feedback.insert_one({**doc})
+    return {"ok": True}
+
+
+@api_router.get("/feedback")
+async def list_feedback():
+    docs = await db.feedback.find({"published": True}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"feedback": docs, "count": len(docs)}
+
+
+@api_router.get("/feedback/count")
+async def feedback_count():
+    return {"count": await db.feedback.count_documents({"published": True})}
+
+
+@api_router.get("/admin/feedback")
+async def admin_list_feedback(admin: dict = Depends(require_admin)):
+    docs = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"feedback": docs}
+
+
+@api_router.put("/admin/feedback/{fid}")
+async def admin_publish_feedback(fid: str, body: dict = Body(default={}), admin: dict = Depends(require_admin)):
+    await db.feedback.update_one({"id": fid}, {"$set": {"published": bool(body.get("published", True))}})
+    return {"ok": True}
+
+
+@api_router.delete("/admin/feedback/{fid}")
+async def admin_delete_feedback(fid: str, admin: dict = Depends(require_admin)):
+    await db.feedback.delete_one({"id": fid})
+    return {"ok": True}
+
+
 @api_router.get("/users/public-jars")
 async def public_jars(limit: int = 40):
     """Owner 2026-08: public Member Jar Wall. Returns members ranked by their jar fill
