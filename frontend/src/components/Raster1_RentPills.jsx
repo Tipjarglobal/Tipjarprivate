@@ -1,9 +1,7 @@
 import React from "react";
-import { Crown, Instagram } from "lucide-react";
 import SponsorFeeder from "./SponsorFeeder";
 
-// RASTER 1 — Top Partner: Intro + 2 Rent-Templates (bleiben IMMER) + Wettanbieter-Pillen.
-const IG = "https://instagram.com/tipjarglobal";
+// RASTER 1 — Top Partner: Intro + Rent-Templates + Wettanbieter (im SponsorFeeder).
 const T = {
   de: { intro: "Deine Partner auf TipJar – buche deine eigene Pille für deinen Link oder entdecke unsere Top-Wettanbieter. Jede Pille ist ein direkter Link – deine Sichtbarkeit, dein Business.", rent2: "2× DEIN LINK HIER", rent1: "DEIN LINK HIER", top: "TOP", per: "/Monat", book: "Jetzt buchen → Instagram" },
   en: { intro: "Your partners on TipJar – book your own pill for your link or discover our top bookmakers. Every pill is a direct link – your visibility, your business.", rent2: "2× YOUR LINK HERE", rent1: "YOUR LINK HERE", top: "TOP", per: "/month", book: "Book now → Instagram" },
@@ -17,29 +15,12 @@ const T = {
 
 export default function Raster1_RentPills({ lang = "de", ...rest }) {
   const t = T[lang] || T.de;
-  const open = () => window.open(IG, "_blank");
   return (
     <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster1-top-partner">
       <div className="max-w-5xl mx-auto">
         <p className="text-xs text-zinc-400 mb-3 leading-relaxed">{t.intro}</p>
-        <div className="grid grid-cols-1 gap-3 mb-3">
-          <button onClick={open} data-testid="rent2-template"
-            className="relative w-full rounded-2xl border-2 border-volt bg-surface hover:bg-elevated transition-colors px-4 py-5 text-center">
-            <span className="absolute top-2 left-3 inline-flex items-center gap-1 bg-volt text-black text-[9px] font-black px-2 py-0.5 rounded-full"><Crown size={11} /> {t.top}</span>
-            <span className="block text-base font-black text-white">RENT 2 PILLS FOR YOUR LINK</span>
-            <span className="block text-volt font-black text-sm mt-1">300€ {t.per}</span>
-            <span className="block text-[11px] text-zinc-400 mt-1 inline-flex items-center gap-1 justify-center"><Instagram size={12} /> {t.book}</span>
-          </button>
-          <button onClick={open} data-testid="rent1-template"
-            className="w-full rounded-2xl border border-elevated bg-surface hover:border-volt/50 transition-colors px-4 py-4 text-center">
-            <span className="block text-sm font-black text-white">RENT A PILL FOR YOUR LINK</span>
-            <span className="block text-[11px] text-zinc-400">{t.rent1}</span>
-            <span className="block text-volt font-black text-sm mt-1">150€ {t.per}</span>
-            <span className="block text-[11px] text-zinc-400 mt-1 inline-flex items-center gap-1 justify-center"><Instagram size={12} /> {t.book}</span>
-          </button>
-        </div>
       </div>
-      {/* Wettanbieter-Pillen (bestehender Feeder, Klick-Tracking bleibt) */}
+      {/* Rent-Templates (RENT 2 PILLS / RENT A PILL) + Wettanbieter-Pillen leben im Feeder */}
       <SponsorFeeder {...rest} />
     </section>
   );

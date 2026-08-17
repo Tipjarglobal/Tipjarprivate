@@ -65,6 +65,14 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
+### Patch 17.08.2026 (UPGRADE_FINAL_v3 – Duplikate entfernt)
+Nach `/app/memory/UPGRADE_FINAL_v3.md`:
+- **Header-Duplikat gelöscht** (`Header.jsx`): der ganze „Quick-view CTAs"-Block (member-guide „Willst du von Wetten Geld verdienen?", ai-correction-guide KI-Text, 9er-Picks-Grid) entfernt. Diese Inhalte leben jetzt einzig in Raster 3 + 4. Header zeigt nur noch die Nav-Leiste. ⚠️ Nebeneffekt: Admin-only Pills „Systems" & „Codemining" waren nur hier erreichbar → aktuell nicht mehr über die Startseite erreichbar (bei Bedarf Admin-Shortcut neu setzen).
+- **Raster 1** (`Raster1_RentPills.jsx`): eigene 2 „DEIN LINK HIER"-Templates gelöscht (waren Duplikat). Es bleiben nur die RENT-Templates im `SponsorFeeder` + Intro-Text + Wettanbieter-Grid.
+- **SponsorFeeder.jsx**: Preise gefixt: „RENT 2 PILLS FOR YOUR LINK" 80€→**300€/MONTH**, „RENT A PILL FOR YOUR LINK" 50€→**150€/MONTH**.
+- Verifikation (Playwright-Assertions, kein Fehler): Header-Pick-Pills & member-guide weg; „300€/MONTH"+„150€/MONTH" im DOM, „80€/MONTH"+„50€/MONTH" nicht mehr vorhanden; Raster 1 & 3 rendern.
+- OFFEN (Plattform): GitHub neu autorisieren → Save to GitHub → Deploy, damit tipjarglobal.com den bereinigten Stand zeigt.
+
 ### Patch 17.08.2026 (UPGRADE_FINAL – Raster 1–4 Refactor)
 Umgesetzt nach `/app/memory/UPGRADE_FINAL.md`:
 - **Raster 1**: Titel auf Englisch „RENT 2 PILLS FOR YOUR LINK" (300€) / „RENT A PILL FOR YOUR LINK" (150€), Instagram-Klick, Wettanbieter unverändert.

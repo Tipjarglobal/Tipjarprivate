@@ -227,37 +227,6 @@ export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfil
           </button>
         </div>
       </div>
-
-      {/* Quick-view green CTAs: stacked on mobile, row on desktop */}
-      <div className="border-t border-white/5 px-4 sm:px-6 py-2.5">
-        <div className="max-w-7xl mx-auto">
-          <div data-testid="member-guide" className="mb-2.5 rounded-xl border border-[#E11D2A]/40 bg-gradient-to-r from-[#E11D2A]/12 via-[#E11D2A]/5 to-transparent px-4 py-2.5 flex items-start gap-2.5">
-            <Crown size={16} className="text-[#E11D2A] shrink-0 mt-0.5" />
-            <p className="text-xs sm:text-sm leading-snug">
-              <span className="font-heading font-black text-white">{t("master.manual.title")} </span>
-              <span className="text-zinc-300">{t("master.manual.body")}</span>
-            </p>
-          </div>
-          <div data-testid="ai-correction-guide" className="mb-2.5 rounded-xl border border-sky-400/40 bg-gradient-to-r from-sky-400/12 via-sky-400/5 to-transparent px-4 py-2.5 flex items-start gap-2.5">
-            <Info size={16} className="text-sky-300 shrink-0 mt-0.5" />
-            <p className="text-xs sm:text-sm leading-snug">
-              <span className="font-heading font-black text-sky-200">{t("ai.correct.guide.title")} </span>
-              <span className="text-zinc-300">{t("ai.correct.guide.body")}</span>
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-9 gap-2">
-            <QuickView onClick={onViewTips} icon={Sparkles} label={t("nav.viewtips")} testId="view-tips-btn" count={counts.ai} newCount={newCounts.ai} />
-            <QuickView onClick={onViewSmart} icon={Brain} label={t("nav.viewsmart")} testId="view-smart-btn" count={counts.smart} newCount={newCounts.smart} spoiler={t("smart.spoiler")} />
-            {isAdmin && <QuickView onClick={onViewSystems} icon={Layers} label={t("nav.viewsystems")} testId="view-systems-btn" count={counts.systems} newCount={newCounts.systems} />}
-            <QuickView onClick={onViewMaster} icon={Crown} label={t("nav.viewmaster")} testId="view-master-btn" count={counts.master} newCount={newCounts.master} variant="master" />
-            <QuickView onClick={onViewMembers} icon={Users} label={t("nav.viewmembers")} testId="view-members-btn" count={counts.members} newCount={newCounts.members} variant="gold" liveAction={onViewLiveCommunity} liveCount={counts.community_live} />
-            <QuickView onClick={onViewLive} icon={Radio} label={t("nav.viewlive")} testId="view-live-btn" count={counts.live} newCount={newCounts.live} live variant="blue" />
-            <QuickView onClick={onViewSettled} icon={Flag} label={t("nav.viewsettled")} testId="view-settled-btn" count={counts.settled} newCount={newCounts.settled} variant="checkered" />
-            <QuickView onClick={onViewScorers} icon={Target} label={t("nav.viewscorers")} testId="view-scorers-btn" variant="pink" />
-            {isAdmin && <QuickView onClick={onViewCodeReading} icon={ScanLine} label="Codemining" testId="view-codereading-btn" variant="grey" count={counts.codereading} />}
-          </div>
-        </div>
-      </div>
     </header>
   );
 }

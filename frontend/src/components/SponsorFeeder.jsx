@@ -88,7 +88,7 @@ export default function SponsorFeeder() {
           </div>
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[1px]">
-          <div className="text-[13px] text-[#D4FF32] tracking-widest flex items-center gap-2">📸 RENT 2 PILLS FOR YOUR LINK 80€/MONTH</div>
+          <div className="text-[13px] text-[#D4FF32] tracking-widest flex items-center gap-2">📸 RENT 2 PILLS FOR YOUR LINK 300€/MONTH</div>
           <div className="text-[9px] text-pink-300 mt-1">CLICK -> INSTAGRAM @tipjarglobal</div>
         </div>
       </button>
@@ -102,7 +102,7 @@ export default function SponsorFeeder() {
           <span className="text-[10px] text-zinc-600">YOUR LINK HERE</span>
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30">
-          <div className="text-[12px] text-white tracking-widest flex items-center gap-2">📸 RENT A PILL FOR YOUR LINK 50€/MONTH</div>
+          <div className="text-[12px] text-white tracking-widest flex items-center gap-2">📸 RENT A PILL FOR YOUR LINK 150€/MONTH</div>
           <div className="text-[8px] text-pink-300 mt-1">CLICK -> INSTAGRAM @tipjarglobal</div>
         </div>
       </button>
