@@ -13,7 +13,7 @@ const TIMEZONES = [
   "Asia/Dubai", "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney",
 ];
 
-export default function ProfileModal({ open, onClose }) {
+export default function ProfileModal({ open, onClose, initialTab = "PROFILE" }) {
   const { t, setLang } = useI18n();
   const { user, setUser } = useAuth();
   const [username, setUsername] = useState(user?.username || "");
@@ -21,13 +21,14 @@ export default function ProfileModal({ open, onClose }) {
   const [timezone, setTimezone] = useState(user?.timezone || "UTC");
   const [language, setLanguage] = useState(user?.language || "en");
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState("PROFILE");
+  const [view, setView] = useState(initialTab);
 
   React.useEffect(() => {
     if (open && user) {
       setUsername(user.username); setEmail(user.email || ""); setTimezone(user.timezone); setLanguage(user.language);
+      setView(initialTab);
     }
-  }, [open, user]);
+  }, [open, user, initialTab]);
 
   const save = async () => {
     setBusy(true);

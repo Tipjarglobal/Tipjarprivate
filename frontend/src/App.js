@@ -71,7 +71,9 @@ function Home() {
   const [authMode, setAuthMode] = useState("login");
   const [submitOpen, setSubmitOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
+  const [walletGift, setWalletGift] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState("PROFILE");
   const [winOpen, setWinOpen] = useState(false);
   const [legal, setLegal] = useState({ open: false, tab: "impressum" });
   const [tipsOpen, setTipsOpen] = useState(false);
@@ -168,6 +170,24 @@ function Home() {
   const openProfile = useCallback((username) => {
     if (username) setProfileUser(username);
   }, []);
+
+  const openCollection = useCallback(() => {
+    if (!user) { requireLogin(); return; }
+    setProfileTab("JARDEX");
+    setProfileOpen(true);
+  }, [user, requireLogin]);
+
+  const openGiftBattery = useCallback(() => {
+    if (!user) { requireLogin(); return; }
+    setWalletGift(false);
+    setWalletOpen(true);
+  }, [user, requireLogin]);
+
+  const openGift = useCallback(() => {
+    if (!user) { requireLogin(); return; }
+    setWalletGift(true);
+    setWalletOpen(true);
+  }, [user, requireLogin]);
 
   const openTipsView = (view) => {
     setTipsView(view);
@@ -302,6 +322,7 @@ function Home() {
         batteryCoins={user?.credits ?? user?.coins ?? 0}
         onSubmit={() => setSubmitOpen(true)}
         onEarn={() => setWinOpen(true)}
+        onCollection={openCollection}
       />
 
       {/* RASTER 4b — Community Picks (gelb) + Live KI Picks (blau) */}
@@ -410,7 +431,8 @@ function Home() {
         <Raster6_Battery
           lang={lang}
           batteryCoins={user?.credits ?? user?.coins ?? 0}
-          onFeedClick={() => setWalletOpen(true)}
+          onFeedClick={openGiftBattery}
+          onGiftClick={openGift}
         />
       </section>
 
@@ -498,15 +520,15 @@ function Home() {
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
       <SubmitTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
-      <WalletModal open={walletOpen} onClose={() => { setWalletOpen(false); setGiftTarget(""); }}
-        initialTab={giftTarget ? "gift" : "buy"} initialGiftTo={giftTarget} />
+      <WalletModal open={walletOpen} onClose={() => { setWalletOpen(false); setGiftTarget(""); setWalletGift(false); }}
+        initialTab={giftTarget || walletGift ? "gift" : "buy"} initialGiftTo={giftTarget} />
       <PublicProfileModal
         open={!!profileUser}
         username={profileUser}
         onClose={() => setProfileUser("")}
         onGift={(u) => { setProfileUser(""); openGiftTo(u); }}
       />
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ProfileModal open={profileOpen} onClose={() => { setProfileOpen(false); setProfileTab("PROFILE"); }} initialTab={profileTab} />
       <WinClaimModal open={winOpen} onClose={() => setWinOpen(false)}
         requireLogin={() => { setWinOpen(false); requireLogin(); }} onClaimed={onPublished}
         onViewBestWins={() => document.getElementById("best-wins")?.scrollIntoView({ behavior: "smooth" })} />

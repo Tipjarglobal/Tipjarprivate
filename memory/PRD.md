@@ -62,8 +62,14 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - Verifikation: sauberer Webpack-Compile (nur bestehende ESLint-Warnings), keine React-Runtime-Fehler in Konsole, `raster3-ai-picks` im DOM auffindbar. ⚠️ Kein sauberer Live-Screenshot möglich (Screenshot-Tool liefert bei dieser App nur den frühen Splash-PNG-Frame).
 
 ## Offene Tasks (nächste Session)
-- P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`), damit Sektionen bei leerem KI-Feed nicht leer wirken.
+- P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
+
+### Patch 17.08.2026 (Batterie-Klick + Meine-Sammlung-Button)
+- `Raster6_8Lang.jsx`: Haupt-Batterie deutlich klickbar gemacht (pulsierender „Tippen zum Aufladen"-Hinweis, Klick-Icon, Ring-Highlight, ganze Karte als Button) + 2 Aktionen: **„Credits feeden"** (`onFeedClick`) und **„Spendieren"** (`onGiftClick`). Emoji durch lucide-Icons ersetzt. Neue 8-sprachige Keys `tapHint`, `giftBtn`. RTL für ar.
+- `App.js`: `onFeedClick`→`openGiftBattery` (Wallet Top-Up), `onGiftClick`→`openGift` (Wallet Gift-Tab, `walletGift`-State). Beide mit Login-Guard.
+- `Raster4_Money.jsx`: dritter Button **„Meine Sammlung"** (`onCollection`, Boxes-Icon) neben Tipp einwerfen / Münzen verdienen. 8-sprachiger Key `collection`.
+- `App.js` + `ProfileModal.jsx`: `openCollection` öffnet Profil direkt auf dem **Sammlung (JARDEX)**-Tab via neuem `initialTab`-Prop.
 
 ## Backlog / offene Ideen
 - P1: Sponsor-Klick-Verlauf als 14-Tage-Balkenchart.
