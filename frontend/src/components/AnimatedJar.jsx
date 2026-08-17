@@ -90,10 +90,6 @@ export default function AnimatedJar() {
         animate={{ y: [0, -8, 0], scale: boostFlash ? [1, 1.1, 1] : 1 }} 
         transition={{ y: { duration: 3, repeat: Infinity, ease: "easeInOut" }, scale: { duration: 0.5, ease: "easeOut" } }} 
       />
-      <div className="mt-4 text-center">
-        <div className="text-[11px] font-black tracking-widest" style={{ color: currentJar.color }}>{currentJar.name.toUpperCase()} • {fillPercent.toFixed(0)}%</div>
-        <div className="text-[9px] text-zinc-500">{credits.toFixed(0)} / {nextCoins} COINS • {idx+1}/30 • {currentJar.tier.toUpperCase()} • Seal {currentJar.seal}</div>
-      </div>
     </div>
   );
 }
