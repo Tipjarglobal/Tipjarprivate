@@ -1704,7 +1704,7 @@ async def register(inp: RegisterInput):
         "received_credits": 0,
         "starter_jar": "Common Glass",   # jeder startet mit 1 offenen Glas-Jar
         "jars_owned": ["Common Glass"],
-        "open_case": ["common_glass"],   # Common Glass offen im Case
+        "open_case": [],                  # leer — alle 3 Slots gleichwertig, kein fester Jar
         "total_packets_redeemed": 0,
         "streak": 0,
         "last_rated_date": None,

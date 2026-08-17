@@ -22,9 +22,9 @@ export default function OpenCase() {
         }
       }
     } catch {}
-    // Start: alle 3 Slots leer, User wählt selbst - oder Slot1 mit currentJar initial, aber danach frei
+    // Start: ALLE 3 Slots leer und gleichwertig — kein fester Glas-Jar in Slot 1
     return [
-      { id: "slot1", jar: currentJar || null, filled: 0 },
+      { id: "slot1", jar: null, filled: 0 },
       { id: "slot2", jar: null, filled: 0 },
       { id: "slot3", jar: null, filled: 0 },
     ];
