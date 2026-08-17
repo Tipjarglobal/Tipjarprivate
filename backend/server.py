@@ -3622,7 +3622,20 @@ def parse_slip_text_to_legs(text: str) -> dict:
     lines = [ln.strip() for ln in re.split(r"[\n\r]+", text or "") if ln.strip()]
     legs, status_lost, cur_home, cur_away = [], False, "", ""
 
+    def _fix_ocr_umlauts(s):
+        # OCR verliert oft Umlaute: "Uber/Ueber" -> "Über", "Schusse" -> "Schüsse"
+        if not s:
+            return s
+        for pat, rep in (
+            (r"\bue?ber\b", "über"),
+            (r"\btorschue?sse\b", "torschüsse"),
+            (r"\bschue?sse\b", "schüsse"),
+        ):
+            s = re.sub(pat, rep, s, flags=re.IGNORECASE)
+        return s
+
     def _add(home, away, market_raw, odds):
+        market_raw = _fix_ocr_umlauts(market_raw)
         market = (normalize_market(market_raw) or market_raw).strip()
         if not market or not odds or odds <= 1.0:
             return
