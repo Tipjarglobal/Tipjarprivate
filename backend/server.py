@@ -76,6 +76,7 @@ from real_odds import (
 )
 from ticket_collector import (
     ingest_instagram, ingest_experten, ingest_capella_scraper, universal_ticket_parser,
+    extract_quote as _tc_extract_quote,
 )
 
 app = FastAPI(title="TipJar API")
@@ -3587,12 +3588,103 @@ WIN_CASHED_CREDITS = 20
 WIN_MAX_CREDITS = 20             # cap per claim
 
 
+def _ocr_tesseract(image_bytes: bytes) -> str:
+    """LLM-freie, kostenlose OCR (lokal). Liest Text aus einem Schein-Screenshot."""
+    try:
+        import io, pytesseract
+        from PIL import Image
+        img = Image.open(io.BytesIO(image_bytes))
+        return pytesseract.image_to_string(img, lang="eng+deu")
+    except Exception as ex:
+        logger.error(f"tesseract OCR failed: {ex}")
+        return ""
+
+
+def parse_slip_text_to_legs(text: str) -> dict:
+    """LLM-frei: baut Legs aus rohem Schein-Text (OCR oder Eingabe).
+    Stateful: merkt sich das aktuelle Match über Zeilen hinweg (Team-Zeile + Markt-Zeile
+    getrennt, wie auf echten Screenshots), überspringt Summenzeilen, strippt angehängte Quoten."""
+    import math
+
+    SUMMARY = ("gesamtquote", "kombiquote", "quote gesamt", "total odds", "gesamteinsatz",
+               "einsatz", "stake", "auszahlung", "gewinn", "winnings", "mögl. gewinn",
+               "possible win", "cash out", "cashout", "ausgezahlt", "betrag")
+
+    def _is_match_line(s):
+        return bool(re.search(r"\s+(?:vs\.?|–|@ )\s+|\svs\s", s, flags=re.IGNORECASE)) \
+            or bool(re.search(r"^[\w\.\' ]{2,}\s+[-–]\s+[\w\.\' ]{2,}$", s))
+
+    def _teams(s):
+        ps = re.split(r"\s+(?:vs\.?|–|[-])\s+", s, flags=re.IGNORECASE)
+        ps = [p.strip() for p in ps if p.strip()]
+        return (ps[0], ps[1]) if len(ps) >= 2 else ("", "")
+
+    lines = [ln.strip() for ln in re.split(r"[\n\r]+", text or "") if ln.strip()]
+    legs, status_lost, cur_home, cur_away = [], False, "", ""
+
+    def _add(home, away, market_raw, odds):
+        market = (normalize_market(market_raw) or market_raw).strip()
+        if not market or not odds or odds <= 1.0:
+            return
+        legs.append({"home": home, "away": away, "league": "", "date": "", "time": "",
+                     "market": market, "odds": round(float(odds), 2), "result": "won"})
+
+    for ln in lines:
+        low = ln.lower()
+        if any(w in low for w in ["verloren", " lost", "lose", "✗", "❌"]):
+            status_lost = True
+        # Summenzeile? (nur überspringen wenn kein echtes Match drinsteckt)
+        if any(w in low for w in SUMMARY) and " vs " not in low:
+            continue
+        if "|" in ln:  # klares Format: Heim vs Gast | Markt | Quote
+            cols = [c.strip() for c in ln.split("|")]
+            home, away = _teams(cols[0]) if cols else ("", "")
+            market_raw = cols[1] if len(cols) > 1 else ""
+            odds = _tc_extract_quote(cols[2]) if len(cols) > 2 else _tc_extract_quote(ln)
+            if home and away:
+                cur_home, cur_away = home, away
+            _add(home or cur_home, away or cur_away, market_raw, odds)
+            continue
+        odds = _tc_extract_quote(ln)
+        # Reine Match-Kopfzeile (Teams, keine Quote) -> merken
+        if _is_match_line(ln) and (not odds or odds <= 1.0):
+            cur_home, cur_away = _teams(ln)
+            continue
+        # Auswahl-Zeile mit Quote -> Markt = Zeile ohne angehängte Quote
+        if odds and odds > 1.0:
+            market_raw = re.sub(r"[@]?\s*\d+[.,]\d+\s*$", "", ln).strip(" -–:@")
+            if _is_match_line(ln):
+                h, a = _teams(re.sub(r"\s*\d+[.,]\d+.*$", "", ln))
+                if h and a:
+                    cur_home, cur_away = h, a
+            _add(cur_home, cur_away, market_raw, odds)
+
+    odds_list = [l["odds"] for l in legs if l["odds"]]
+    total = round(math.prod(odds_list), 2) if odds_list else 0.0
+    status = "lost" if status_lost else ("won" if legs else "unknown")
+    return {"status": status, "total_odds": total, "stake": "", "winnings": "", "legs": legs}
+
+
+def _slip_ocr_fallback(image_b64: str, fallback: dict) -> dict:
+    """LLM-freier Bild-Fallback: Tesseract OCR -> Text-Parser."""
+    try:
+        text = _ocr_tesseract(base64.b64decode(image_b64))
+        parsed = parse_slip_text_to_legs(text)
+        return parsed if parsed.get("legs") else fallback
+    except Exception as ex:
+        logger.error(f"tesseract slip fallback failed: {ex}")
+        return fallback
+
+
 async def extract_win_slip(image_b64: str) -> dict:
-    """Gemini Vision: read a bookmaker bet-slip screenshot into structured JSON."""
+    """Read a bet-slip screenshot into structured JSON.
+    Primary: Gemini Vision. LLM-free fallback: local Tesseract OCR + Regex (kostenlos)."""
     fallback = {"status": "unknown", "total_odds": 0, "stake": "", "winnings": "", "legs": []}
-    if not EMERGENT_LLM_KEY or not image_b64:
+    if not image_b64:
         return fallback
     try:
+        if not EMERGENT_LLM_KEY:
+            raise RuntimeError("no-llm-budget")
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"win-{uuid.uuid4()}",
                        system_message=("You read betting bet-slip screenshots and output STRICT JSON only. "
                                        "Never invent legs that are not visible.")).with_model(AI_MODEL_PROVIDER, AI_VISION_MODEL)
@@ -3629,7 +3721,7 @@ async def extract_win_slip(image_b64: str) -> dict:
                 raw = raw.lstrip()[4:]
         s, e = raw.find("{"), raw.rfind("}")
         if s == -1 or e == -1:
-            return fallback
+            return _slip_ocr_fallback(image_b64, fallback)
         data = json.loads(raw[s:e + 1])
         legs = []
         for lg in (data.get("legs") or [])[:20]:
@@ -3646,12 +3738,13 @@ async def extract_win_slip(image_b64: str) -> dict:
             total = float(data.get("total_odds") or 0)
         except Exception:
             total = 0.0
-        return {"status": str(data.get("status", "") or "").lower(), "total_odds": round(total, 2),
-                "stake": str(data.get("stake", "") or ""), "winnings": str(data.get("winnings", "") or ""),
-                "legs": legs}
+        result = {"status": str(data.get("status", "") or "").lower(), "total_odds": round(total, 2),
+                  "stake": str(data.get("stake", "") or ""), "winnings": str(data.get("winnings", "") or ""),
+                  "legs": legs}
+        return result if result["legs"] else _slip_ocr_fallback(image_b64, fallback)
     except Exception as ex:
         logger.error(f"win slip extract failed: {ex}")
-        return fallback
+        return _slip_ocr_fallback(image_b64, fallback)
 
 
 async def _system_match_keys() -> set:
@@ -3742,6 +3835,7 @@ def _pretty_country(c: str) -> str:
 async def claim_win(file: Optional[UploadFile] = File(None),
                     files: Optional[List[UploadFile]] = File(None),
                     type: str = Form(...),
+                    slip_text: Optional[str] = Form(None),
                     user: dict = Depends(get_current_user)):
     ctype = (type or "").strip().lower()
     if ctype not in ("played", "posted", "live", "cashed"):
@@ -3757,8 +3851,9 @@ async def claim_win(file: Optional[UploadFile] = File(None),
         b = await file.read()
         if b:
             imgs_raw.append(b)
-    if not imgs_raw:
-        raise HTTPException(status_code=400, detail="No file uploaded")
+    has_text = bool(slip_text and slip_text.strip())
+    if not imgs_raw and not has_text:
+        raise HTTPException(status_code=400, detail="Kein Schein hochgeladen (Bild oder Text).")
 
     if ctype == "live":
         legs = []
@@ -3780,8 +3875,8 @@ async def claim_win(file: Optional[UploadFile] = File(None),
     elif ctype == "cashed":
         # Cashed-out slip: the bettor took an early payout. It's their own trophy,
         # so we DON'T require it to match a TipJar system — just that it was cashed out.
-        raw = imgs_raw[0]
-        slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))
+        slip = (await extract_win_slip(base64.b64encode(imgs_raw[0]).decode("utf-8"))) if imgs_raw \
+            else parse_slip_text_to_legs(slip_text)
         if slip["status"] not in ("cashed", "won"):
             raise HTTPException(status_code=422,
                                 detail="Kein ausgezahlter Schein erkannt. Lade einen 'Cashed Out'/'Ausgezahlt'-Schein hoch.")
@@ -3793,8 +3888,8 @@ async def claim_win(file: Optional[UploadFile] = File(None),
         credits = WIN_CASHED_CREDITS
         total_odds, stake, winnings = slip["total_odds"], slip["stake"], slip["winnings"]
     else:
-        raw = imgs_raw[0]
-        slip = await extract_win_slip(base64.b64encode(raw).decode("utf-8"))
+        slip = (await extract_win_slip(base64.b64encode(imgs_raw[0]).decode("utf-8"))) if imgs_raw \
+            else parse_slip_text_to_legs(slip_text)
         if slip["status"] not in ("won", "cashed"):
             raise HTTPException(status_code=422, detail="Nur gewonnene oder ausgezahlte Scheine zählen.")
         legs = slip["legs"]

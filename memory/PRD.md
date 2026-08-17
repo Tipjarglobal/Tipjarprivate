@@ -43,6 +43,12 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
   - API (Admin): `POST /api/odds/ingest` (source: raw|instagram|experten|capella), `GET /api/odds/quote`, `GET /api/odds/all`, `DELETE /api/odds/{match}/{market}`.
   - 2c: Win-Claim-Reader (`extract_win_slip`) füttert via `_auto_ingest_slip_odds` jeden echten Schein automatisch in die Odds-DB (anbieter=username, defensiv).
   - Hinweis: Top-Level-Module (nicht `core/`, da `core.py` schon existiert).
+- **LLM-freie Schein-Annahme (Option A, Tesseract-Fallback)**:
+  - `extract_win_slip` (server.py): zuerst Gemini Vision; wenn LLM-Budget leer / LLM aus / leeres Ergebnis → lokaler **Tesseract-OCR-Fallback** (`_ocr_tesseract`) → `parse_slip_text_to_legs` (Regex + `real_odds.normalize_market`). Kostet 0 Credits, kein LLM.
+  - `parse_slip_text_to_legs`: stateful mehrzeiliger Parser (Team-Zeile + Markt-Zeile getrennt, überspringt Summenzeilen, strippt angehängte Quoten). Auch für Pipe-Format „Heim vs Gast | Markt | Quote".
+  - `claim_win`: optionaler `slip_text`-Form-Param (Text-Einreichung möglich, aber KEIN Frontend-Button — vom Nutzer nicht gewünscht).
+  - Deps: `tesseract-ocr` (System-Binary, in Preview via apt) + `pytesseract` (requirements.txt).
+  - ⚠️ PRODUCTION-WARNUNG: Tesseract-System-Binary muss im Deploy-Image vorhanden sein. Kein Aptfile/Dockerfile im Repo → Emergent Support kontaktieren, ob `tesseract-ocr` in Production installiert ist, sonst greift der Fallback dort nicht.
 
 ## Backlog / offene Ideen
 - P1: Sponsor-Klick-Verlauf als 14-Tage-Balkenchart.
