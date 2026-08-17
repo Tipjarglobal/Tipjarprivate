@@ -13,11 +13,10 @@ const TIER_COLOR = {
   mystic: 'text-pink-400',
 };
 
-const SELL_MULT = 10;                 // muss zum Backend (JAR_SELL_MULTIPLIER) passen
-const sellReward = (j) => (j.coins || 0) * SELL_MULT;
+const sellReward = (j) => (j.coins || 0);   // Verkaufswert = Jar-Wert (Refund; +einmaliger Bonus im Backend)
 const RewardBadge = ({ jar }) => (
   <span className="absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-0.5 rounded-full bg-[#FFD447] text-black text-[8px] font-black px-1.5 py-0.5 shadow"
-    title="Verkaufswert bei 100%">
+    title="Verkaufswert">
     💰 +{sellReward(jar).toLocaleString()}
   </span>
 );
@@ -42,32 +41,50 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
   const [tab, setTab] = useState('INVENTORY');
   const [openCase, setOpenCase] = useState([]);
   const [note, setNote] = useState('');
+  const [ownedIds, setOwnedIds] = useState(['common_glass']);
   const [soldJars, setSoldJars] = useState([]);
+  const [nextJar, setNextJar] = useState(null);
   const coins = userCoins;
-  const owned = JAR_DEFS.filter(j => coins >= j.coins);
+  const ownedSet = new Set(ownedIds);
+  const owned = JAR_DEFS.filter(j => ownedSet.has(j.id));
   const byId = (id) => JAR_DEFS.find(j => j.id === id);
   const tierCls = (t) => TIER_COLOR[t] || 'text-white';
-  const sortedJars = [...JAR_DEFS].sort((a, b) => a.coins - b.coins);
-  const jarFill = (j) => {
-    const idx = sortedJars.findIndex(x => x.id === j.id);
-    const next = sortedJars[idx + 1];
-    if (!next) return 100;
-    const span = next.coins - j.coins;
-    if (span <= 0) return 100;
-    return Math.max(0, Math.min(100, Math.round(((coins - j.coins) / span) * 100)));
+  const isOwned = (j) => ownedSet.has(j.id);
+  const jarFill = (j) => (ownedSet.has(j.id) ? 100 : 0);   // besitzt = 100% voll, sonst gesperrt
+
+  const loadState = () => api.get('/jars/state').then(r => {
+    setOwnedIds(r.data?.owned_jars || ['common_glass']);
+    setSoldJars(r.data?.sold_jars || []);
+    setNextJar(r.data?.next_jar || null);
+  }).catch(() => {});
+
+  const acquireJar = async (e, j) => {
+    e.stopPropagation();
+    try {
+      const { data } = await api.post('/jars/acquire', { jar_id: j.id });
+      if (data.user) setUser(data.user);
+      toast.success(`${j.name.toUpperCase()} freigeschaltet! (−${data.cost} 🪙)`);
+      loadState();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Freischalten nicht möglich');
+    }
   };
+
   const sellJar = async (e, j) => {
     e.stopPropagation();
     try {
       const { data } = await api.post('/jars/sell', { jar_id: j.id });
-      setSoldJars((s) => [...s, j.id]);
       if (data.user) setUser(data.user);
-      toast.success(`Jar verkauft: +${data.reward} Coins 💰`);
+      toast.success(data.prestige > 0
+        ? `Jar verkauft: +${data.reward} 🪙 (inkl. +${data.prestige} Bonus)`
+        : `Jar verkauft: +${data.reward} 🪙`);
+      loadState();
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Verkauf nicht möglich');
     }
   };
 
+  useEffect(() => { loadState(); }, []);
   useEffect(() => {
     const valid = new Set(JAR_DEFS.map(j => j.id));
     api.get('/jars/opencase').then(r => {
@@ -117,41 +134,47 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
       {tab === 'INVENTORY' && (
         <div>
           <div className="mb-3 rounded-xl border border-[#D4FF32]/25 bg-[#D4FF32]/5 px-3 py-2.5 text-[11px] leading-relaxed text-zinc-300">
-            <span className="text-[#D4FF32] font-black">✨ Neue Jars finden:</span> Du schaltest neue Jars durch <b>Coins</b> frei – je mehr Coins, desto seltener der Jar. Extra-Jars findest du durch <b>zufällige Besuche</b> der App und besonders durch <b>⭐ Sterne-Bewertungen</b>, die du bekommst. Tippe einen Jar an, um ihn ins Open Case zu legen.
+            <span className="text-[#D4FF32] font-black">🎮 So funktioniert die Sammlung:</span> Jeder Jar wird <b>der Reihe nach freigeschaltet</b> und kostet Coins (je seltener, desto teurer). Ein freigeschalteter Jar ist voll und du kannst ihn <b>verkaufen</b> – du bekommst die Coins zurück <b>plus einmaligen Bonus</b>. Coins verdienst du AFK, durch Sponsor-Klicks, ⭐ Bewertungen und Gewinne.
           </div>
           <p className="text-[11px] text-zinc-500 mb-3">Deine Jars • {owned.length}/30</p>
           {note && <div className="text-[10px] text-red-400 mb-2 font-bold">{note}</div>}
           <div className="grid grid-cols-3 gap-3">
-            {owned.map(j => {
+            {[...JAR_DEFS].sort((a, b) => a.coins - b.coins).map(j => {
+              const mine = isOwned(j);
               const inCase = openCase.includes(j.id);
+              const canUnlock = !mine && j.id === nextJar;
+              const affordable = coins >= (j.coins || 0);
               return (
-                <button key={j.id} data-testid={`inv-jar-${j.id}`} onClick={() => addToCase(j)} disabled={inCase}
-                  className="text-left bg-zinc-900 rounded-xl p-3 border border-zinc-800 relative hover:border-yellow-400/50 transition-colors disabled:cursor-default" style={{ boxShadow: `0 0 20px ${j.color}40` }}>
-                  <RewardBadge jar={j} />
-                  <div className="flex justify-between text-[8px] pr-14"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins} Coins</span></div>
-                  <div className="h-20 my-2 rounded-lg flex items-center justify-center" style={{ background: `${j.color}20` }}>
-                    <JarImg jar={j} className="h-full object-contain" />
-                  </div>
-                  <div className="text-[10px] font-bold truncate">{j.name.toUpperCase()} {inCase ? <span className="text-[#D4FF32]">· IM CASE ✓</span> : <span className="text-zinc-500">· + Open Case</span>}</div>
-                  {/* %-Füllstand */}
-                  <div className="mt-1.5">
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${jarFill(j)}%`, background: jarFill(j) >= 100 ? '#22c55e' : '#D4FF32' }} />
+                <div key={j.id} data-testid={`inv-jar-${j.id}`}
+                  className={`text-left rounded-xl p-3 border relative transition-colors ${mine ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-950 border-zinc-900 opacity-80'}`}
+                  style={mine ? { boxShadow: `0 0 20px ${j.color}40` } : {}}>
+                  {mine && <RewardBadge jar={j} />}
+                  {!mine && <span className="absolute top-1.5 right-1.5 z-10 text-[9px]">🔒</span>}
+                  <div className="flex justify-between text-[8px] pr-14"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins} 🪙</span></div>
+                  <button onClick={() => mine && addToCase(j)} disabled={!mine || inCase} className="w-full h-20 my-2 rounded-lg flex items-center justify-center disabled:cursor-default" style={{ background: `${j.color}20` }}>
+                    <JarImg jar={j} className={`h-full object-contain ${mine ? '' : 'opacity-30 grayscale'}`} />
+                  </button>
+                  <div className="text-[10px] font-bold truncate">{j.name.toUpperCase()}{mine && (inCase ? <span className="text-[#D4FF32]"> · IM CASE ✓</span> : <span className="text-zinc-500"> · + Open Case</span>)}</div>
+                  {mine ? (
+                    <div className="mt-1.5">
+                      <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full bg-[#22c55e]" style={{ width: '100%' }} /></div>
+                      <div className="text-[8px] text-zinc-400 mt-0.5">100% voll • verkaufbar 💰</div>
+                      <div onClick={(e) => sellJar(e, j)} data-testid={`sell-jar-${j.id}`}
+                        className="mt-1 text-center text-[9px] font-black text-black bg-[#22c55e] rounded-full py-1 hover:brightness-110 active:scale-95 transition-all cursor-pointer">
+                        Jar verkaufen 💰
+                      </div>
                     </div>
-                    <div className="text-[8px] text-zinc-400 mt-0.5">{jarFill(j)}% voll{jarFill(j) >= 100 ? ' • verkaufbar 💰' : ''}</div>
-                    {jarFill(j) >= 100 && (
-                      soldJars.includes(j.id)
-                        ? <div className="mt-1 text-[8px] text-zinc-500 font-bold">verkauft ✓</div>
-                        : <div onClick={(e) => sellJar(e, j)} data-testid={`sell-jar-${j.id}`}
-                            className="mt-1 text-center text-[9px] font-black text-black bg-[#22c55e] rounded-full py-1 hover:brightness-110 active:scale-95 transition-all cursor-pointer">
-                            Jar verkaufen 💰
-                          </div>
-                    )}
-                  </div>
-                </button>
+                  ) : canUnlock ? (
+                    <div onClick={(e) => acquireJar(e, j)} data-testid={`unlock-jar-${j.id}`}
+                      className={`mt-1.5 text-center text-[9px] font-black rounded-full py-1.5 transition-all cursor-pointer ${affordable ? 'bg-[#D4FF32] text-black hover:brightness-110 active:scale-95' : 'bg-zinc-800 text-zinc-500'}`}>
+                      🔓 Freischalten ({j.coins} 🪙)
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-center text-[8px] text-zinc-600 py-1.5">🔒 gesperrt</div>
+                  )}
+                </div>
               );
             })}
-            {owned.length === 0 && <div className="col-span-3 text-center py-10 text-zinc-600 text-xs">Noch keine Jars – Start mit Common Glass (40 Coins)</div>}
           </div>
         </div>
       )}
@@ -162,7 +185,7 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
           <p className="text-[11px] text-zinc-500 mb-3">Sammle alle 30 Jars • Alle Grafiken immer sichtbar • Je mehr Coins desto seltener</p>
           <div className="grid grid-cols-3 gap-2">
             {JAR_DEFS.map(j => {
-              const unlocked = coins >= j.coins;
+              const unlocked = isOwned(j);
               return (
                 <div key={j.id} data-testid={`dex-jar-${j.id}`} className={`relative rounded-xl p-2 border ${unlocked ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-950 border-zinc-900'}`}>
                   {unlocked && <RewardBadge jar={j} />}

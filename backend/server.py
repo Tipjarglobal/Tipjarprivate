@@ -3721,41 +3721,86 @@ JAR_VALUES = {
     "diamond": 450, "obsidian": 475, "galaxy": 500, "void": 500, "nebula": 500, "infinity": 500,
 }
 _JAR_ORDER = sorted(JAR_VALUES.items(), key=lambda x: x[1])
-JAR_SELL_MULTIPLIER = 10   # Verkaufswert = Jar-Wert × Multiplikator (leicht anpassbar)
+JAR_SELL_PRESTIGE_PCT = 0.5   # einmaliger Bonus beim ERSTEN Verkauf eines Jars (Anti-Glitch)
+
+
+def _user_owned_jars(user):
+    ow = user.get("owned_jars")
+    return list(ow) if ow else ["common_glass"]
+
+
+def _next_unowned(owned):
+    for jid, _ in _JAR_ORDER:
+        if jid not in owned:
+            return jid
+    return None
 
 
 class JarSellInput(BaseModel):
     jar_id: str
 
 
-@api_router.post("/jars/sell")
-async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
+@api_router.get("/jars/state")
+async def jars_state(user: dict = Depends(get_current_user)):
+    owned = _user_owned_jars(user)
+    nxt = _next_unowned(owned)
+    return {
+        "owned_jars": owned,
+        "sold_jars": user.get("sold_jars") or [],
+        "credits": int(user.get("credits") or 0),
+        "next_jar": nxt,
+        "next_cost": JAR_VALUES.get(nxt, 0) if nxt else 0,
+    }
+
+
+@api_router.post("/jars/acquire")
+async def acquire_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
+    """RPG-Fortschritt: schaltet den NÄCHSTEN Jar frei (kostet Coins = Sink, kein Mint)."""
     jid = inp.jar_id
     if jid not in JAR_VALUES:
         raise HTTPException(status_code=400, detail="Unknown jar")
-    coins = int(user.get("credits") or user.get("coins") or 0)
-    ids = [i for i, _ in _JAR_ORDER]
-    idx = ids.index(jid)
-    threshold = JAR_VALUES[jid]
-    if coins < threshold:
-        raise HTTPException(status_code=400, detail="Jar noch nicht freigeschaltet")
-    # "full" = coins reached the next tier's threshold (top jar is always full)
-    if idx + 1 < len(_JAR_ORDER):
-        nxt = _JAR_ORDER[idx + 1][1]
-        if coins < nxt:
-            raise HTTPException(status_code=400, detail="Jar noch nicht voll (100%)")
-    sold = set(user.get("sold_jars") or [])
-    if jid in sold:
-        raise HTTPException(status_code=400, detail="Jar wurde bereits verkauft")
-    reward = threshold * JAR_SELL_MULTIPLIER
+    owned = _user_owned_jars(user)
+    if jid in owned:
+        raise HTTPException(status_code=400, detail="Jar gehört dir bereits")
+    if jid != _next_unowned(owned):
+        raise HTTPException(status_code=400, detail="Erst den nächsten Jar in der Reihe freischalten")
+    cost = JAR_VALUES[jid]
+    coins = int(user.get("credits") or 0)
+    if coins < cost:
+        raise HTTPException(status_code=400, detail=f"Nicht genug Coins ({cost} nötig)")
     await db.users.update_one({"id": user["id"]},
-                              {"$inc": {"credits": reward}, "$addToSet": {"sold_jars": jid}})
+                              {"$inc": {"credits": -cost}, "$addToSet": {"owned_jars": jid}})
+    # Startbestand sicherstellen, falls owned_jars vorher leer war
+    await db.users.update_one({"id": user["id"], "owned_jars": {"$exists": False}},
+                              {"$set": {"owned_jars": owned + [jid]}})
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"ok": True, "cost": cost, "user": public_user(fresh)}
+
+
+@api_router.post("/jars/sell")
+async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
+    """Verkauf ist NET-NEUTRAL (Refund = Kaufpreis) + einmaliger Prestige-Bonus je Jar.
+    Der Jar wird dabei ABGEGEBEN (aus der Sammlung entfernt) → kein Money-Glitch möglich."""
+    jid = inp.jar_id
+    if jid not in JAR_VALUES:
+        raise HTTPException(status_code=400, detail="Unknown jar")
+    owned = _user_owned_jars(user)
+    if jid not in owned:
+        raise HTTPException(status_code=400, detail="Jar gehört dir nicht")
+    value = JAR_VALUES[jid]
+    sold = set(user.get("sold_jars") or [])
+    prestige = int(value * JAR_SELL_PRESTIGE_PCT) if jid not in sold else 0
+    reward = value + prestige
+    await db.users.update_one({"id": user["id"]},
+                              {"$inc": {"credits": reward},
+                               "$pull": {"owned_jars": jid},
+                               "$addToSet": {"sold_jars": jid}})
     await db.credit_transactions.insert_one({
         "id": str(uuid.uuid4()), "type": "jar_sale", "to_user": user["id"],
         "amount": reward, "jar_id": jid, "created_at": datetime.now(timezone.utc).isoformat(),
     })
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    return {"ok": True, "reward": reward, "user": public_user(fresh)}
+    return {"ok": True, "reward": reward, "prestige": prestige, "user": public_user(fresh)}
 
 
 
