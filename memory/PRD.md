@@ -65,6 +65,17 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
+### Patch 17.08.2026 (UPGRADE_FINAL – Raster 1–4 Refactor)
+Umgesetzt nach `/app/memory/UPGRADE_FINAL.md`:
+- **Raster 1**: Titel auf Englisch „RENT 2 PILLS FOR YOUR LINK" (300€) / „RENT A PILL FOR YOUR LINK" (150€), Instagram-Klick, Wettanbieter unverändert.
+- **Raster 2 (Supporter)**: Instagram-Text entfernt, weiße Titel-Wörter (PARTNER/SPONSOR/VIP/…) entfernt (nur noch gelbe Badges oben rechts), **Preis oben links gelb fett**, Höhen gesqueezed (XXL groß, XL/L mittel, M/S klein). Klick öffnet **Purchase-Window** (Modal mit Features je Paket + Kauf-CTA → Instagram), statt direkt Instagram.
+- **Raster 3 (KI)**: ⓘ-Info-Icon ergänzt. Neues Layout: Zeile1 Single|Smart(+„Mit der KI reden"), Zeile2 Master (full), Zeile3 Abgerechnet|**Live KI Picks** (aus 4b hierher), Zeile4 Statistiken (full).
+- **Raster 4**: Community-Marketing-Block gelöscht (Badge/Headline/Body/Infobox). Batterie bleibt, **„NIEMALS UNTER 125" entfernt** (in `CoinBattery.jsx`, sprachneutral). 4 Actions: Tipp einwerfen / Münzen verdienen / Meine Sammlung / **Community Picks ansehen (gelb + LIVE)** – letzteres aus 4b hierher.
+- **Raster 4b entfernt** (aus `App.js`), Standalone-Batterie oben entfernt (keine Doppel-Batterie mehr).
+- **OpenCase-Bug (JarDex)**: veraltete Jar-IDs (frosted/cosmic) werden beim Laden gefiltert → kein leeres erstes Feld mehr; neuer `JarImg` mit Fallback-Kette (open→closed→Farb-Block) fixt broken images (Wood/Bamboo).
+- Verifikation: sauberer Compile; funktionaler Smoke-Test (alle Raster-Testids + Supporter-Purchase-Window öffnet) ohne Fehler.
+- OFFEN (Plattform, nicht durch Agent machbar): GitHub-OAuth neu autorisieren → Save to GitHub → Deploy/Publish, damit tipjarglobal.com aktuell wird.
+
 ### Patch 17.08.2026 (Leaderboard echte Daten + fliegende Münzen + Fake-Zahlen entfernt)
 - **Fake-Social-Proof entfernt**: `core.py` `MEMBER_DISPLAY_BOOST` (war 400) und `SUBSCRIBER_DISPLAY_BOOST` (war 140) auf **0** gesetzt. `/api/stats`, `/api/notifications/stats`, Subscribe/Unsubscribe zeigen jetzt NUR reale Zahlen (Mitglieder, Benachrichtigungs-Abos). Keine Platzhalter mehr im Frontend gefunden (InviteSection/NotificationBell nutzen bereits echte APIs).
 - **Echtes Gifting-Leaderboard**: neues `GET /api/gifting/leaderboards` — aggregiert `credit_transactions` (type=gift) zu 4 Boards: `week` (7 Tage Aktivität = verschenkt+erhalten), `all` (All-Time Aktivität), `received` (All-Time erhalten), `gifted` (All-Time verschenkt). Nur echte Mitglieder (`REAL_MEMBER_QUERY`, Test/Bot/Admin gefiltert). Top 10, Medaillen-Ränge.

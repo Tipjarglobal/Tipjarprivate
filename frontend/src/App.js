@@ -32,13 +32,11 @@ import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
 import SponsorFeeder from "./components/SponsorFeeder";
-import CoinBattery from "./components/CoinBattery";
 import Raster1_RentPills from "./components/Raster1_RentPills";
 import Raster2_Header from "./components/Raster2_Header";
 import Raster2_Supporter from "./components/Raster2_Supporter";
 import Raster3_AiPicks from "./components/Raster3_AiPicks";
 import Raster4_Money from "./components/Raster4_Money";
-import Raster4b_CommunityLive from "./components/Raster4b_CommunityLive";
 import Raster5_InputFeedback from "./components/Raster5_InputFeedback";
 import Raster6_Battery from "./components/Raster6_8Lang";
 
@@ -302,10 +300,6 @@ function Home() {
       {user && !user.email_verified && <VerifyBanner />}
       {user?.role === "admin" && <AdminResetBar />}
 
-      <section className="px-4 pt-4">
-        <CoinBattery current={user?.credits ?? user?.coins ?? 0} max={2500} />
-      </section>
-
       {/* RASTER 3 — KI-Pillen */}
       <Raster3_AiPicks
         lang={lang}
@@ -316,24 +310,18 @@ function Home() {
         onViewMaster={() => openTipsView("master")}
         onViewSettled={() => openTipsView("settled")}
         onViewScorers={() => openTipsView("scorers")}
+        onViewLive={() => openTipsView("live")}
       />
 
-      {/* RASTER 4 — Mit Wetten Geld verdienen + Community + Batterie */}
+      {/* RASTER 4 — Mit Wetten Geld verdienen + Batterie + 4 Actions */}
       <Raster4_Money
         lang={lang}
         batteryCoins={user?.credits ?? user?.coins ?? 0}
         onSubmit={() => setSubmitOpen(true)}
         onEarn={() => setWinOpen(true)}
         onCollection={openCollection}
-      />
-
-      {/* RASTER 4b — Community Picks (gelb) + Live KI Picks (blau) */}
-      <Raster4b_CommunityLive
-        lang={lang}
-        counts={counts}
         onViewMembers={() => openTipsView("members")}
         onViewLiveCommunity={() => openTipsView("livecommunity")}
-        onViewLive={() => openTipsView("live")}
       />
 
       {/* HERO */}

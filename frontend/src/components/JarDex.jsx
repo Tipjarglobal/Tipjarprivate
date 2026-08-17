@@ -11,6 +11,21 @@ const TIER_COLOR = {
   mystic: 'text-pink-400',
 };
 
+// Bild mit Fallback-Kette: open→closed→farbiger Initial-Block (fixt broken image bei Wood/Bamboo etc.)
+function JarImg({ jar, open = false, className = "" }) {
+  const chain = (open ? [jar.graphicOpen, jar.graphic] : [jar.graphic, jar.graphicOpen]).filter(Boolean);
+  const [idx, setIdx] = useState(0);
+  const src = chain[idx];
+  if (!src) {
+    return (
+      <div className={`flex items-center justify-center w-full h-full rounded-lg ${className}`} style={{ background: jar.color }}>
+        <span className="text-lg font-black text-black/70">{(jar.name || "?")[0]}</span>
+      </div>
+    );
+  }
+  return <img src={src} alt={jar.name} className={className} onError={() => setIdx((i) => i + 1)} />;
+}
+
 export default function Jardex({ userCoins = 0, userCredits = 0 }) {
   const [tab, setTab] = useState('INVENTORY');
   const [openCase, setOpenCase] = useState([]);
@@ -21,7 +36,13 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
   const tierCls = (t) => TIER_COLOR[t] || 'text-white';
 
   useEffect(() => {
-    api.get('/jars/opencase').then(r => setOpenCase(r.data?.jar_ids || [])).catch(() => {});
+    const valid = new Set(JAR_DEFS.map(j => j.id));
+    api.get('/jars/opencase').then(r => {
+      const raw = r.data?.jar_ids || [];
+      const ids = raw.filter(id => valid.has(id));   // veraltete IDs (frosted/cosmic) raus → kein leerer Slot
+      setOpenCase(ids);
+      if (ids.length !== raw.length) api.put('/jars/opencase', { jar_ids: ids }).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   const saveCase = (ids) => {
@@ -72,7 +93,7 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                   className="text-left bg-zinc-900 rounded-xl p-3 border border-zinc-800 relative hover:border-yellow-400/50 transition-colors disabled:cursor-default" style={{ boxShadow: `0 0 20px ${j.color}40` }}>
                   <div className="flex justify-between text-[8px]"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins} Coins</span></div>
                   <div className="h-20 my-2 rounded-lg flex items-center justify-center" style={{ background: `${j.color}20` }}>
-                    <img src={j.graphic} alt={j.name} className="h-full object-contain" />
+                    <JarImg jar={j} className="h-full object-contain" />
                   </div>
                   <div className="text-[10px] font-bold truncate">{j.name.toUpperCase()}</div>
                   {inCase
@@ -97,7 +118,7 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                 <div key={j.id} data-testid={`dex-jar-${j.id}`} className={`rounded-xl p-2 border ${unlocked ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-950 border-zinc-900'}`}>
                   <div className="flex justify-between text-[7px]"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins}</span></div>
                   <div className="h-16 my-1 rounded-lg flex items-center justify-center" style={{ background: unlocked ? `${j.color}15` : '#000' }}>
-                    <img src={j.graphic} alt={j.name} className={`h-full object-contain ${unlocked ? '' : 'opacity-40'}`} />
+                    <JarImg jar={j} className={`h-full object-contain ${unlocked ? '' : 'opacity-40'}`} />
                   </div>
                   <div className="text-[8px] font-bold truncate">{j.name.toUpperCase()}</div>
                 </div>
@@ -118,7 +139,7 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                 {j ? (
                   <button data-testid={`case-slot-${i}`} onClick={() => removeFromCase(j.id)} className="text-left flex-1 flex flex-col w-full">
                     <div className="text-[8px] text-zinc-500">{j.tier.toUpperCase()} • offen</div>
-                    <div className="flex-1 flex items-center justify-center"><img src={j.graphicOpen || j.graphic} alt={j.name} className="h-full object-contain" /></div>
+                    <div className="flex-1 flex items-center justify-center"><JarImg jar={j} open className="h-full object-contain" /></div>
                     <div className="text-[9px] font-bold truncate">{j.name.toUpperCase()}</div>
                     <div className="text-[7px] text-[#D4FF32]">{i + 1}/3 • tippen zum Zurücklegen</div>
                   </button>

@@ -79,7 +79,7 @@ export default function CoinBattery({ current = 0, max = TOTAL_COINS }) {
 
       <div className="flex items-center justify-between mt-2">
         <p className="text-[10px] text-zinc-500 font-semibold">
-          {t("battery.full", "2500 COINS = VOLL — NIEMALS UNTER 125")}
+          {t("battery.full", "2500 COINS = VOLL — NIEMALS UNTER 125").split("—")[0].trim()}
         </p>
         <p className="text-[10px] font-bold" style={{ color: canPayout ? "#22c55e" : "#71717a" }} data-testid="coin-battery-payout">
           {canPayout ? t("battery.payoutReady", "Auszahlung bereit") : `${PAYOUT_MIN}+ ${t("battery.payoutShort", "für Auszahlung")}`}
