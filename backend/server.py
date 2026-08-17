@@ -3864,7 +3864,14 @@ def _ocr_tesseract(image_bytes: bytes) -> str:
         import io, pytesseract
         from PIL import Image
         img = Image.open(io.BytesIO(image_bytes))
-        return pytesseract.image_to_string(img, lang="eng+deu")
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        try:
+            langs = set(pytesseract.get_languages(config=""))
+        except Exception:
+            langs = set()
+        lang = "eng+deu" if {"eng", "deu"} <= langs else ("deu" if "deu" in langs else "eng")
+        return pytesseract.image_to_string(img, lang=lang)
     except Exception as ex:
         logger.error(f"tesseract OCR failed: {ex}")
         return ""
@@ -3965,6 +3972,8 @@ async def extract_win_slip(image_b64: str) -> dict:
     fallback = {"status": "unknown", "total_odds": 0, "stake": "", "winnings": "", "legs": []}
     if not image_b64:
         return fallback
+    # LLM-FREI (Owner-Vorgabe 17.08.2026): kein LLM-Vision, direkt lokale Tesseract-OCR.
+    return _slip_ocr_fallback(image_b64, fallback)
     try:
         if not EMERGENT_LLM_KEY:
             raise RuntimeError("no-llm-budget")
