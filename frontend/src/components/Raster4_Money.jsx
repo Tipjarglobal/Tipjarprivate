@@ -22,7 +22,7 @@ const T = {
     submit: "Tahmin at", earn: "Jeton kazan", collection: "Koleksiyonum", community: "Community Picks'e bak", live: "Canlı" },
 };
 
-export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit, onEarn, onCollection, onViewMembers, onViewLiveCommunity }) {
+export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit, onEarn, onCollection, onViewMembers, onViewLiveCommunity, onCharge }) {
   const t = T[lang] || T.de;
   const rtl = lang === "ar";
   return (
@@ -33,7 +33,7 @@ export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit,
           <p className="text-sm text-zinc-300 leading-relaxed">{t.lead}</p>
         </div>
 
-        <CoinBattery current={batteryCoins} max={2500} />
+        <CoinBattery current={batteryCoins} max={2500} onClick={onCharge} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           <button onClick={onSubmit} data-testid="r4-submit-btn"

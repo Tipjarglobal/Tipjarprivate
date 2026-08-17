@@ -72,17 +72,17 @@ export default function SponsorFeeder() {
         </div>
       )}
 
-      {/* 1. RENT 2 PILLS - GEFLOCHTEN - INSTAGRAM */}
+      {/* 1. RENT 2 PILLS - GEFLOCHTEN - INSTAGRAM (Standardhöhe 60px) */}
       <button
         onClick={() => window.open("https://www.instagram.com/tipjarglobal", "_blank")}
-        className="w-full h-[72px] mb-3 rounded-xl font-black border-2 border-dashed border-pink-500/50 hover:border-pink-400 bg-zinc-800/50 hover:bg-zinc-800 transition-all cursor-pointer relative overflow-hidden group"
+        className="w-full h-[60px] mb-3 rounded-xl font-black border-2 border-dashed border-pink-500/50 hover:border-pink-400 bg-zinc-800/50 hover:bg-zinc-800 transition-all cursor-pointer relative overflow-hidden group"
       >
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex items-center justify-center -space-x-6 opacity-60">
-            <div className="w-[180px] h-[48px] rounded-full bg-gradient-to-r from-zinc-700 to-zinc-600 border-2 border-white/20 flex items-center justify-center transform -rotate-3 group-hover:rotate-0 transition-transform">
+            <div className="w-[180px] h-[38px] rounded-full bg-gradient-to-r from-zinc-700 to-zinc-600 border-2 border-white/20 flex items-center justify-center transform -rotate-3 group-hover:rotate-0 transition-transform">
               <span className="text-[10px] text-zinc-300">YOUR LINK</span>
             </div>
-            <div className="w-[180px] h-[48px] rounded-full bg-gradient-to-r from-zinc-600 to-zinc-700 border-2 border-white/20 flex items-center justify-center transform rotate-3 group-hover:rotate-0 transition-transform z-10">
+            <div className="w-[180px] h-[38px] rounded-full bg-gradient-to-r from-zinc-600 to-zinc-700 border-2 border-white/20 flex items-center justify-center transform rotate-3 group-hover:rotate-0 transition-transform z-10">
               <span className="text-[10px] text-zinc-300">YOUR LINK</span>
             </div>
           </div>
@@ -93,12 +93,12 @@ export default function SponsorFeeder() {
         </div>
       </button>
 
-      {/* 2. RENT 1 PILL - GLEICHE BREITE WIE WAZAMBA - INSTAGRAM */}
+      {/* 2. RENT 1 PILL - Standardhöhe 60px - INSTAGRAM */}
       <button
         onClick={() => window.open("https://www.instagram.com/tipjarglobal", "_blank")}
-        className="w-full h-[64px] mb-3 rounded-xl font-bold border-2 border-dashed border-pink-500/30 hover:border-pink-400 bg-zinc-800/30 hover:bg-zinc-800/60 transition-all cursor-pointer relative overflow-hidden flex items-center justify-center group"
+        className="w-full h-[60px] mb-3 rounded-xl font-bold border-2 border-dashed border-pink-500/30 hover:border-pink-400 bg-zinc-800/30 hover:bg-zinc-800/60 transition-all cursor-pointer relative overflow-hidden flex items-center justify-center group"
       >
-        <div className="w-[60%] h-[44px] rounded-full bg-zinc-700/30 border border-white/5 flex items-center justify-center">
+        <div className="w-[60%] h-[36px] rounded-full bg-zinc-700/30 border border-white/5 flex items-center justify-center">
           <span className="text-[10px] text-zinc-600">YOUR LINK HERE</span>
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30">
@@ -107,10 +107,10 @@ export default function SponsorFeeder() {
         </div>
       </button>
 
-      {/* 3. WAZAMBA */}
+      {/* 3. WAZAMBA - Standardhöhe 60px */}
       <button
         onClick={() => handleClick(WAZAMBA)}
-        className={`w-full h-[72px] mb-3 rounded-xl font-black border-2 transition-all cursor-pointer relative overflow-hidden flex items-center justify-between px-4
+        className={`w-full h-[60px] mb-3 rounded-xl font-black border-2 transition-all cursor-pointer relative overflow-hidden flex items-center justify-between px-4
           ${clicked[WAZAMBA.id]? 'brightness-[0.6] border-green-500/50' : 'border-[#D4FF32]/50 hover:border-[#D4FF32] hover:scale-[1.01]'}
           ${animating === WAZAMBA.id? 'ring-2 ring-[#D4FF32] scale-[1.02]' : ''}`}
         style={{ background: `linear-gradient(135deg, ${WAZAMBA.color} 0%, #4C1D95 100%)`, color: 'white' }}
@@ -130,7 +130,7 @@ export default function SponsorFeeder() {
           const isDone = clicked[s.id];
           return (
             <button key={s.id} onClick={() => handleClick(s)}
-              className={`h-[52px] rounded-lg font-black text-[10px] tracking-wider border transition-all cursor-pointer relative
+              className={`h-[41px] rounded-lg font-black text-[10px] tracking-wider border transition-all cursor-pointer relative
                 ${isDone? 'brightness-[0.5] scale-[0.96] border-green-500/30' : 'hover:scale-[1.04] border-white/10'}
                 ${animating === s.id? 'ring-2 ring-[#D4FF32] z-10' : ''}`}
               style={{ background: s.color, color: 'white' }}>

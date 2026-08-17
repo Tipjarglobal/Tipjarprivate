@@ -322,6 +322,7 @@ function Home() {
         onCollection={openCollection}
         onViewMembers={() => openTipsView("members")}
         onViewLiveCommunity={() => openTipsView("livecommunity")}
+        onCharge={openGiftBattery}
       />
 
       {/* HERO */}

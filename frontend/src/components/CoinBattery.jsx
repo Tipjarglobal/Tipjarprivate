@@ -6,7 +6,7 @@ const FLOOR_COINS = 125;    // 5% — fällt NIEMALS darunter
 const PAYOUT_MIN = 2000;    // Auszahlung ab 2000
 
 // FETTE LANGE Münz-Batterie über die ganze Breite: [ |||||||||| ]▶ mit Nupsi.
-export default function CoinBattery({ current = 0, max = TOTAL_COINS }) {
+export default function CoinBattery({ current = 0, max = TOTAL_COINS, onClick }) {
   const i18n = useI18n();
   const t = (k, fb) => (i18n && i18n.t && i18n.t(k) !== k ? i18n.t(k) : fb);
   const [flash, setFlash] = useState(null);
@@ -38,13 +38,20 @@ export default function CoinBattery({ current = 0, max = TOTAL_COINS }) {
   return (
     <div
       data-testid="coin-battery"
-      className="w-full max-w-5xl mx-auto mb-4 rounded-2xl bg-zinc-900 border border-white/10 p-4"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      className={`w-full max-w-5xl mx-auto mb-4 rounded-2xl bg-zinc-900 border p-4 transition-all ${onClick ? "cursor-pointer border-[#FFD447]/40 hover:border-[#FFD447] hover:shadow-[0_0_22px_rgba(255,212,71,0.28)] active:scale-[0.99] ring-1 ring-[#FFD447]/20" : "border-white/10"}`}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-black tracking-widest text-zinc-300">
             ⚡ {t("battery.title", "MÜNZ-BATTERIE")}
           </span>
+          {onClick && (
+            <span data-testid="coin-battery-charge-hint" className="text-[10px] font-black text-black bg-[#FFD447] px-2 py-0.5 rounded-full animate-pulse">
+              👆 {t("battery.charge", "Antippen zum Aufladen")}
+            </span>
+          )}
           {flash && (
             <span data-testid="coin-battery-boost" className="text-[11px] font-black text-black bg-[#FFD447] px-2.5 py-0.5 rounded-full animate-bounce shadow-lg">
               {flash} 🪙

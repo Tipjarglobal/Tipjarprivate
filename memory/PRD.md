@@ -65,6 +65,21 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
+### Patch 17.08.2026 (Pillen-Trim, Tiers, klickbare Batterie, Jar-Instruktionen, Handbücher)
+- **3mm-Trim** (`SponsorFeeder.jsx`): RENT2/RENT1/WAZAMBA auf einheitliche Standardhöhe 60px, Sponsor-Grid 41px, innere Elemente angepasst. Standardhöhe = getrimmte Höhe.
+- **Supporter-Tiers** (`Raster2_Supporter.jsx`): alle 5 Pillen haben jetzt Badge oben rechts – PARTNER > SPONSOR > VIP > FAN > SUPPORTER. Höhen vereinheitlicht (py-5/py-4/py-3).
+- **Klickbare Batterie** (`CoinBattery.jsx` + `Raster4_Money` + `App.js`): CoinBattery nimmt `onClick`; in Raster 4 öffnet Klick das Wallet zum Aufladen. Deutlicher Hinweis „👆 Antippen zum Aufladen" + Hover-Ring.
+- **Jar-Instruktionen + %-Anzeige** (`JarDex.jsx`): 
+  - OPEN CASE Info-Box: AFK Silver Coins, Gold Coins bei Sponsor-Klick, volles Jar (100%) verkaufbar.
+  - INVENTORY Info-Box: neue Jars durch Coins + zufällige Besuche + ⭐ Sterne-Bewertungen.
+  - Neuer %-Füllbalken pro Jar (INVENTORY + OPEN CASE), 100% = „verkaufbar 💰".
+- **Handbücher gesichert** (`/app/memory/`): 9 aus Git wiederhergestellt (HANDBOOK, CHANGELOG, betting_notes, betting_strategy_notes, bugs, master_learnings, master_system_strategy, owner_preferences, smart_picks_principle) + tipjar.md/MEMORY.md/BRAIN.md/PLAY_STORE_GUIDE.md/STORE_LISTING.md hineinkopiert. Hinweis: `meta.md` existiert nicht in der Git-Historie (vermutlich = MEMORY.md).
+- Verifikation: Compile sauber; Assertions bestanden (Batterie-Klick-Hinweis + alle 5 Tier-Badges).
+
+## OFFEN / benötigt Entscheidung
+- **Kauf → Pille automatisch einbauen** (User-Wunsch): braucht echten Checkout (Stripe) + Admin-Freigabe + `partner_pills`-Collection + dynamisches Rendern in Raster 1/2. Aktuell läuft Kauf über Instagram-DM (manuell). NICHT gefälscht – muss als eigenes Feature gebaut werden.
+- **„Alles aus den Handbüchern zu Wahrheit machen"**: sehr großer, offener Scope. Nächster Schritt: Handbücher (tipjar.md/MEMORY.md/HANDBOOK.md) gemeinsam durchgehen und als priorisierte Task-Liste abarbeiten.
+
 ### Patch 17.08.2026 (UPGRADE_FINAL_v3 – Duplikate entfernt)
 Nach `/app/memory/UPGRADE_FINAL_v3.md`:
 - **Header-Duplikat gelöscht** (`Header.jsx`): der ganze „Quick-view CTAs"-Block (member-guide „Willst du von Wetten Geld verdienen?", ai-correction-guide KI-Text, 9er-Picks-Grid) entfernt. Diese Inhalte leben jetzt einzig in Raster 3 + 4. Header zeigt nur noch die Nav-Leiste. ⚠️ Nebeneffekt: Admin-only Pills „Systems" & „Codemining" waren nur hier erreichbar → aktuell nicht mehr über die Startseite erreichbar (bei Bedarf Admin-Shortcut neu setzen).

@@ -35,13 +35,13 @@ const FEATURES = {
 const PILLS = [
   { id: "xxl", price: "119,99€", weeks: 6, coins: 1600, badge: "PARTNER", crown: true, size: "xxl", hasLink: true },
   { id: "xl", price: "79,99€", weeks: 5, coins: 950, badge: "SPONSOR", size: "md", hasLink: true },
-  { id: "l", price: "49,99€", weeks: 4, coins: 460, badge: "BESTSELLER", best: true, size: "md", hasLink: true },
-  { id: "m", price: "19,99€", weeks: 3, coins: 150, size: "sm" },
-  { id: "s", price: "9,99€", weeks: 2, coins: 50, size: "sm" },
+  { id: "l", price: "49,99€", weeks: 4, coins: 460, badge: "VIP", best: true, size: "md", hasLink: true },
+  { id: "m", price: "19,99€", weeks: 3, coins: 150, badge: "FAN", size: "sm" },
+  { id: "s", price: "9,99€", weeks: 2, coins: 50, badge: "SUPPORTER", size: "sm" },
 ];
 
-// Höhen: xxl wie 300€-Template, md wie 150€, sm etwas kleiner
-const H = { xxl: "py-6", md: "py-5", sm: "py-3.5" };
+// Höhen: nach 3mm-Trim vereinheitlicht (Standard). xxl etwas höher, Rest kompakt.
+const H = { xxl: "py-5", md: "py-4", sm: "py-3" };
 
 export default function Raster2_Supporter({ lang = "de" }) {
   const t = T[lang] || T.de;
