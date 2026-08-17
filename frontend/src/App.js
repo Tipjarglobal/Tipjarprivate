@@ -31,6 +31,7 @@ import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
+import AdminPillsPanel from "./components/AdminPillsPanel";
 import SponsorFeeder from "./components/SponsorFeeder";
 import Raster1_RentPills from "./components/Raster1_RentPills";
 import Raster2_Header from "./components/Raster2_Header";
@@ -299,6 +300,7 @@ function Home() {
       />
       {user && !user.email_verified && <VerifyBanner />}
       {user?.role === "admin" && <AdminResetBar />}
+      {user?.role === "admin" && <AdminPillsPanel />}
 
       {/* RASTER 3 — KI-Pillen */}
       <Raster3_AiPicks
@@ -563,6 +565,64 @@ function CreditsSuccess() {
   );
 }
 
+function PillsSuccess() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [state, setState] = useState("checking");
+  const [pill, setPill] = useState(null);
+  const [link, setLink] = useState("");
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    const sid = params.get("session_id");
+    if (!sid) { navigate("/"); return; }
+    let attempts = 0;
+    const poll = async () => {
+      try {
+        const { data } = await api.get(`/pills/checkout/status/${sid}`);
+        if (data.payment_status === "paid") { setState("done"); setPill(data.pill); return; }
+        if (data.status === "expired" || attempts >= 6) { setState("failed"); return; }
+        attempts += 1; setTimeout(poll, 2000);
+      } catch { setState("failed"); }
+    };
+    poll();
+  }, [params, navigate]);
+
+  const submitLink = async () => {
+    if (!pill || !link.trim()) return;
+    try { await api.put(`/pills/${pill.id}/link`, { link: link.trim() }); setSent(true); toast.success("Link eingereicht – wird geprüft"); }
+    catch { toast.error("Konnte Link nicht speichern"); }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-void grain px-4">
+      <div className="text-center max-w-md w-full" data-testid="pills-success">
+        {state === "checking" && (<><Loader2 className="mx-auto text-volt animate-spin mb-4" size={48} /><p className="text-white text-lg">Zahlung wird bestätigt…</p></>)}
+        {state === "done" && (<>
+          <CheckCircle2 className="mx-auto text-won mb-4" size={56} />
+          <h2 className="font-heading text-3xl font-black text-white">Deine Pille ist live! 🎉</h2>
+          <p className="text-zinc-400 mt-2">{pill?.label} · {pill?.weeks} Wochen. Jetzt deinen Link eintragen – er wird kurz von uns geprüft und dann klickbar.</p>
+          {!sent ? (
+            <div className="mt-5 flex flex-col gap-3">
+              <input data-testid="pill-link-input" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://dein-link.de"
+                className="w-full rounded-full bg-surface border border-elevated px-4 py-3 text-white outline-none focus:border-volt" />
+              <button data-testid="pill-link-submit" onClick={submitLink} className="rounded-full bg-volt text-void font-bold px-6 py-3 hover:bg-volt-hover transition-colors">Link einreichen</button>
+            </div>
+          ) : (
+            <p className="mt-4 text-volt font-bold" data-testid="pill-link-pending">✓ Link eingereicht – wird geprüft.</p>
+          )}
+          <button onClick={() => navigate("/")} className="mt-6 rounded-full border border-elevated text-white font-bold px-6 py-3 hover:border-volt transition-colors" data-testid="pills-home">Zur Startseite</button>
+        </>)}
+        {state === "failed" && (<>
+          <p className="text-lost text-lg mb-3">Zahlung konnte nicht bestätigt werden.</p>
+          <button onClick={() => navigate("/")} className="rounded-full border border-elevated text-white font-bold px-6 py-3 hover:border-volt transition-colors">Zur Startseite</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+
 function VerifyBanner() {
   const { t } = useI18n();
   const [sending, setSending] = useState(false);
@@ -651,6 +711,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/credits/success" element={<CreditsSuccess />} />
+            <Route path="/pills/success" element={<PillsSuccess />} />
             <Route path="/verify" element={<VerifyEmail />} />
             <Route path="/insights" element={<SecretInsights />} />
           </Routes>

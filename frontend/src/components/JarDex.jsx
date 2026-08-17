@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import { toast } from 'sonner';
+import { useAuth } from '../auth';
 import { JAR_DEFS } from './AnimatedJar';
 
 const TIER_COLOR = {
@@ -27,9 +29,11 @@ function JarImg({ jar, open = false, className = "" }) {
 }
 
 export default function Jardex({ userCoins = 0, userCredits = 0 }) {
+  const { setUser } = useAuth();
   const [tab, setTab] = useState('INVENTORY');
   const [openCase, setOpenCase] = useState([]);
   const [note, setNote] = useState('');
+  const [soldJars, setSoldJars] = useState([]);
   const coins = userCoins;
   const owned = JAR_DEFS.filter(j => coins >= j.coins);
   const byId = (id) => JAR_DEFS.find(j => j.id === id);
@@ -42,6 +46,17 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
     const span = next.coins - j.coins;
     if (span <= 0) return 100;
     return Math.max(0, Math.min(100, Math.round(((coins - j.coins) / span) * 100)));
+  };
+  const sellJar = async (e, j) => {
+    e.stopPropagation();
+    try {
+      const { data } = await api.post('/jars/sell', { jar_id: j.id });
+      setSoldJars((s) => [...s, j.id]);
+      if (data.user) setUser(data.user);
+      toast.success(`Jar verkauft: +${data.reward} Coins 💰`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Verkauf nicht möglich');
+    }
   };
 
   useEffect(() => {
@@ -114,6 +129,14 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                       <div className="h-full rounded-full transition-all" style={{ width: `${jarFill(j)}%`, background: jarFill(j) >= 100 ? '#22c55e' : '#D4FF32' }} />
                     </div>
                     <div className="text-[8px] text-zinc-400 mt-0.5">{jarFill(j)}% voll{jarFill(j) >= 100 ? ' • verkaufbar 💰' : ''}</div>
+                    {jarFill(j) >= 100 && (
+                      soldJars.includes(j.id)
+                        ? <div className="mt-1 text-[8px] text-zinc-500 font-bold">verkauft ✓</div>
+                        : <div onClick={(e) => sellJar(e, j)} data-testid={`sell-jar-${j.id}`}
+                            className="mt-1 text-center text-[9px] font-black text-black bg-[#22c55e] rounded-full py-1 hover:brightness-110 active:scale-95 transition-all cursor-pointer">
+                            Jar verkaufen 💰
+                          </div>
+                    )}
                   </div>
                   {inCase
                     ? <div className="absolute top-2 right-2 text-[8px] font-black text-[#D4FF32]">IM CASE ✓</div>
@@ -171,6 +194,12 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                       <div className="text-[8px] mt-0.5" style={{ color: jarFill(j) >= 100 ? '#22c55e' : '#a1a1aa' }} data-testid={`case-fill-${i}`}>
                         {jarFill(j)}% voll{jarFill(j) >= 100 ? ' • verkaufbar 💰' : ''}
                       </div>
+                      {jarFill(j) >= 100 && !soldJars.includes(j.id) && (
+                        <div onClick={(e) => sellJar(e, j)} data-testid={`case-sell-${i}`}
+                          className="mt-1 text-center text-[9px] font-black text-black bg-[#22c55e] rounded-full py-1 hover:brightness-110 active:scale-95 transition-all cursor-pointer">
+                          Jar verkaufen 💰
+                        </div>
+                      )}
                     </div>
                     <div className="text-[7px] text-zinc-500 mt-0.5">tippen zum Zurücklegen</div>
                   </button>

@@ -65,6 +65,23 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
+### Patch 17.08.2026 (Kauf→Pille Stripe-Flow + Jar verkaufen)
+**Kauf→Pille (Stripe Flow B, `emergentintegrations`, `STRIPE_API_KEY=sk_test_emergent`, EUR):**
+- Backend `server.py`: `PILL_PACKAGES` (rent2 300€, rent1 150€, partner 119,99€, sponsor 79,99€, vip 49,99€, fan 19,99€, supporter 9,99€; Laufzeit 2–6 Wo).
+  - `POST /api/pills/checkout`, `GET /api/pills/checkout/status/{sid}` (fulfillt Pille idempotent bei paid), Webhook `/api/webhook/stripe` erweitert (kind=pill).
+  - `GET /api/pills` (public, nur freigegebene Links), `GET /api/pills/mine`, `PUT /api/pills/{id}/link` (→ pending), `GET /api/admin/pills/pending`, `POST /api/admin/pills/{id}/approve|reject`.
+  - `partner_pills`-Collection: tier/label/price/weeks/coins/link/pending_link/link_status/status/expires_at.
+- Frontend: `Raster2_Supporter` Kauf-Button → Stripe-Checkout; aktive gekaufte Pillen erscheinen sofort UNTER den Templates (approved-Link klickbar, sonst „Link in Prüfung"). Neue Route `/pills/success` (`PillsSuccess`) mit Link-Eingabe (→ Freigabe). `AdminPillsPanel` im Admin-Bereich mit Freigeben/Ablehnen.
+- Ablauf: Zahlung → Pille sofort live → Käufer trägt Link ein → Admin gibt frei → Link klickbar. KEINE Bilder/Objekt-Storage (auf Wunsch weggelassen).
+
+**Jar verkaufen (In-App Coins):**
+- `POST /api/jars/sell {jar_id}`: nur bei 100% vollem Jar (coins ≥ nächste Tier-Schwelle), jeder Jar 1× verkaufbar (`user.sold_jars`), Reward = Jar-Wert in Coins. `JAR_VALUES` (30 Jars) im Backend.
+- Frontend `JarDex`: „Jar verkaufen 💰"-Button auf 100%-Jars in INVENTORY & OPEN CASE, aktualisiert Coins via `useAuth`.
+- ⚠️ Ökonomie-Hinweis: Reward = Jar-Schwellenwert (bis 500 Coins), einmal pro Jar. Bei Bedarf anpassbar.
+
+**Verifikation (curl E2E):** Jar-Verkauf (Reward 40, Credits 100→140, Doppelverkauf blockiert) ✅; Pillen-Lifecycle Link→Admin-pending→approve→public sichtbar ✅; Stripe-Checkout-URL erzeugt ✅; Frontend-Smoke (Homepage rendert, Purchase-Window, Buy-Button = Preis) ✅.
+- test_credentials.md aktualisiert (war leer).
+
 ### Patch 17.08.2026 (Pillen-Trim, Tiers, klickbare Batterie, Jar-Instruktionen, Handbücher)
 - **3mm-Trim** (`SponsorFeeder.jsx`): RENT2/RENT1/WAZAMBA auf einheitliche Standardhöhe 60px, Sponsor-Grid 41px, innere Elemente angepasst. Standardhöhe = getrimmte Höhe.
 - **Supporter-Tiers** (`Raster2_Supporter.jsx`): alle 5 Pillen haben jetzt Badge oben rechts – PARTNER > SPONSOR > VIP > FAN > SUPPORTER. Höhen vereinheitlicht (py-5/py-4/py-3).

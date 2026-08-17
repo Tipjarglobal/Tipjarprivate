@@ -1,5 +1,7 @@
-import React, { useState } from "react";
-import { Crown, Eye, Link2, Image as ImageIcon, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Crown, Eye, Link2, Image as ImageIcon, X, ExternalLink } from "lucide-react";
+import api from "../api";
+import { toast } from "sonner";
 
 // RASTER 2 — Supporter: 5 Blank-Templates (bleiben IMMER), teuerste oben.
 // Preis oben links (gelb), Badge oben rechts, Münzen darunter. Klick → Purchase-Window.
@@ -33,11 +35,11 @@ const FEATURES = {
 };
 
 const PILLS = [
-  { id: "xxl", price: "119,99€", weeks: 6, coins: 1600, badge: "PARTNER", crown: true, size: "xxl", hasLink: true },
-  { id: "xl", price: "79,99€", weeks: 5, coins: 950, badge: "SPONSOR", size: "md", hasLink: true },
-  { id: "l", price: "49,99€", weeks: 4, coins: 460, badge: "VIP", best: true, size: "md", hasLink: true },
-  { id: "m", price: "19,99€", weeks: 3, coins: 150, badge: "FAN", size: "sm" },
-  { id: "s", price: "9,99€", weeks: 2, coins: 50, badge: "SUPPORTER", size: "sm" },
+  { id: "xxl", pkg: "partner", price: "119,99€", weeks: 6, coins: 1600, badge: "PARTNER", crown: true, size: "xxl", hasLink: true },
+  { id: "xl", pkg: "sponsor", price: "79,99€", weeks: 5, coins: 950, badge: "SPONSOR", size: "md", hasLink: true },
+  { id: "l", pkg: "vip", price: "49,99€", weeks: 4, coins: 460, badge: "VIP", best: true, size: "md", hasLink: true },
+  { id: "m", pkg: "fan", price: "19,99€", weeks: 3, coins: 150, badge: "FAN", size: "sm" },
+  { id: "s", pkg: "supporter", price: "9,99€", weeks: 2, coins: 50, badge: "SUPPORTER", size: "sm" },
 ];
 
 // Höhen: nach 3mm-Trim vereinheitlicht (Standard). xxl etwas höher, Rest kompakt.
@@ -47,7 +49,23 @@ export default function Raster2_Supporter({ lang = "de" }) {
   const t = T[lang] || T.de;
   const feats = (FEATURES[lang] || FEATURES.en);
   const [sel, setSel] = useState(null);
-  const IG = "https://instagram.com/tipjarglobal";
+  const [pills, setPills] = useState([]);
+  const [buying, setBuying] = useState(false);
+
+  useEffect(() => {
+    api.get("/pills").then((r) => setPills(r.data || [])).catch(() => {});
+  }, []);
+
+  const buy = async (p) => {
+    setBuying(true);
+    try {
+      const { data } = await api.post("/pills/checkout", { package_id: p.pkg, origin_url: window.location.origin });
+      window.location.href = data.url;
+    } catch (e) {
+      toast.error(e?.response?.status === 401 ? "Bitte zuerst einloggen" : "Kauf konnte nicht gestartet werden");
+      setBuying(false);
+    }
+  };
 
   return (
     <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster2-supporter">
@@ -70,6 +88,32 @@ export default function Raster2_Supporter({ lang = "de" }) {
             </button>
           ))}
         </div>
+
+        {/* Gekaufte, aktive Pillen (erscheinen sofort nach dem Kauf) */}
+        {pills.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3" data-testid="supporter-active-pills">
+            {pills.map((p) => {
+              const clickable = p.link_status === "approved" && p.link;
+              return (
+                <button key={p.id} data-testid={`active-pill-${p.id}`}
+                  onClick={() => clickable && window.open(p.link, "_blank", "noopener")}
+                  className={`relative w-full rounded-2xl border border-volt/40 bg-gradient-to-r from-volt/10 to-transparent px-4 py-3 text-left transition-colors ${clickable ? "hover:border-volt cursor-pointer" : "cursor-default"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-white truncate">{p.username || p.label}</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-volt shrink-0">
+                      {p.tier === "partner" && <Crown size={12} />}{p.label}
+                    </span>
+                  </div>
+                  <div className="text-[11px] mt-1 flex items-center gap-1">
+                    {clickable
+                      ? <span className="text-volt inline-flex items-center gap-1"><ExternalLink size={11} /> {p.link}</span>
+                      : <span className="text-zinc-500">🔗 Link in Prüfung…</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Purchase-Window */}
@@ -99,9 +143,9 @@ export default function Raster2_Supporter({ lang = "de" }) {
                 </li>
               ))}
             </ul>
-            <button data-testid="supporter-buy-btn" onClick={() => window.open(IG, "_blank")}
-              className="w-full rounded-full bg-volt text-void font-black py-3 hover:brightness-110 active:scale-95 transition-all">
-              {t.contact}
+            <button data-testid="supporter-buy-btn" onClick={() => buy(sel)} disabled={buying}
+              className="w-full rounded-full bg-volt text-void font-black py-3 hover:brightness-110 active:scale-95 transition-all disabled:opacity-60">
+              {buying ? "…" : `${t.buy} · ${sel.price}`}
             </button>
             <button onClick={() => setSel(null)} className="w-full text-center text-xs text-zinc-500 mt-3 hover:text-white">{t.close}</button>
           </div>

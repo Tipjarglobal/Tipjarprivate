@@ -3537,8 +3537,225 @@ async def stripe_webhook(request: Request):
             await db.payment_transactions.update_one(
                 {"session_id": event.session_id},
                 {"$set": {"credited": True, "payment_status": "paid", "status": "complete"}})
-            await db.users.update_one({"id": txn["user_id"]}, {"$inc": {"credits": txn["credits"]}})
+            if txn.get("kind") == "pill":
+                await _fulfill_pill(txn)
+            else:
+                await db.users.update_one({"id": txn["user_id"]}, {"$inc": {"credits": txn["credits"]}})
     return {"received": True}
+
+
+# ============================================================================
+# PARTNER/SPONSOR/RENT PILLS — Stripe purchase → pill appears in Raster 2
+# ============================================================================
+PILL_PACKAGES = {
+    "rent2":     {"label": "RENT 2 PILLS", "price": 300.0,  "weeks": 4, "tier": "rent2",     "coins": 0},
+    "rent1":     {"label": "RENT A PILL",  "price": 150.0,  "weeks": 4, "tier": "rent1",     "coins": 0},
+    "partner":   {"label": "PARTNER",      "price": 119.99, "weeks": 6, "tier": "partner",   "coins": 1600},
+    "sponsor":   {"label": "SPONSOR",      "price": 79.99,  "weeks": 5, "tier": "sponsor",   "coins": 950},
+    "vip":       {"label": "VIP",          "price": 49.99,  "weeks": 4, "tier": "vip",       "coins": 460},
+    "fan":       {"label": "FAN",          "price": 19.99,  "weeks": 3, "tier": "fan",       "coins": 150},
+    "supporter": {"label": "SUPPORTER",    "price": 9.99,   "weeks": 2, "tier": "supporter", "coins": 50},
+}
+
+
+async def _fulfill_pill(txn):
+    """Idempotent: create the partner pill immediately after successful payment."""
+    existing = await db.partner_pills.find_one({"session_id": txn["session_id"]})
+    if existing:
+        return {k: v for k, v in existing.items() if k != "_id"}
+    pkg = PILL_PACKAGES.get(txn.get("pill_package"), {})
+    now = datetime.now(timezone.utc)
+    weeks = pkg.get("weeks", 4)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "session_id": txn["session_id"],
+        "user_id": txn["user_id"],
+        "username": txn.get("username", ""),
+        "tier": pkg.get("tier", txn.get("pill_package", "")),
+        "label": pkg.get("label", txn.get("pill_package", "")),
+        "price": txn.get("amount", 0),
+        "weeks": weeks,
+        "coins": pkg.get("coins", 0),
+        "link": "",
+        "pending_link": "",
+        "link_status": "none",
+        "status": "active",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(weeks=weeks)).isoformat(),
+    }
+    await db.partner_pills.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+class PillCheckoutInput(BaseModel):
+    package_id: str
+    origin_url: str
+
+
+class PillLinkInput(BaseModel):
+    link: str
+
+
+@api_router.get("/pills/packages")
+async def pill_packages():
+    return {pid: {**p, "id": pid} for pid, p in PILL_PACKAGES.items()}
+
+
+@api_router.post("/pills/checkout")
+async def pills_checkout(inp: PillCheckoutInput, request: Request, user: dict = Depends(get_current_user)):
+    if inp.package_id not in PILL_PACKAGES:
+        raise HTTPException(status_code=400, detail="Invalid package")
+    pkg = PILL_PACKAGES[inp.package_id]
+    host_url = str(request.base_url)
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host_url}api/webhook/stripe")
+    origin = inp.origin_url.rstrip("/")
+    success_url = f"{origin}/pills/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/?checkout=cancelled"
+    metadata = {"user_id": user["id"], "pill_package": inp.package_id, "kind": "pill"}
+    req = CheckoutSessionRequest(amount=float(pkg["price"]), currency=CREDIT_CURRENCY,
+                                 success_url=success_url, cancel_url=cancel_url, metadata=metadata)
+    session: CheckoutSessionResponse = await stripe.create_checkout_session(req)
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "user_id": user["id"],
+        "kind": "pill",
+        "pill_package": inp.package_id,
+        "username": user.get("username", ""),
+        "amount": float(pkg["price"]),
+        "currency": CREDIT_CURRENCY,
+        "payment_status": "initiated",
+        "status": "initiated",
+        "credited": False,
+        "metadata": metadata,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api_router.get("/pills/checkout/status/{session_id}")
+async def pills_status(session_id: str, request: Request, user: dict = Depends(get_current_user)):
+    txn = await db.payment_transactions.find_one({"session_id": session_id})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    host_url = str(request.base_url)
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host_url}api/webhook/stripe")
+    status: CheckoutStatusResponse = await stripe.get_checkout_status(session_id)
+    await db.payment_transactions.update_one({"session_id": session_id},
+                                             {"$set": {"payment_status": status.payment_status, "status": status.status}})
+    pill = None
+    if status.payment_status == "paid" and not txn.get("credited"):
+        await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"credited": True}})
+        pill = await _fulfill_pill(txn)
+    else:
+        doc = await db.partner_pills.find_one({"session_id": session_id}, {"_id": 0})
+        pill = doc
+    return {"payment_status": status.payment_status, "status": status.status, "pill": pill}
+
+
+@api_router.get("/pills")
+async def list_pills():
+    """Public: active, non-expired pills for Raster 2. Only approved links are exposed."""
+    now = datetime.now(timezone.utc).isoformat()
+    docs = await db.partner_pills.find({"status": "active", "expires_at": {"$gt": now}}, {"_id": 0}).to_list(200)
+    return [{
+        "id": d["id"], "tier": d["tier"], "label": d["label"], "coins": d.get("coins", 0),
+        "weeks": d["weeks"], "username": d.get("username", ""),
+        "link": d.get("link", "") if d.get("link_status") == "approved" else "",
+        "link_status": d.get("link_status", "none"),
+    } for d in docs]
+
+
+@api_router.get("/pills/mine")
+async def my_pills(user: dict = Depends(get_current_user)):
+    return await db.partner_pills.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+
+
+@api_router.put("/pills/{pill_id}/link")
+async def set_pill_link(pill_id: str, inp: PillLinkInput, user: dict = Depends(get_current_user)):
+    pill = await db.partner_pills.find_one({"id": pill_id})
+    if not pill:
+        raise HTTPException(status_code=404, detail="Pill not found")
+    if pill["user_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not your pill")
+    await db.partner_pills.update_one({"id": pill_id},
+                                      {"$set": {"pending_link": inp.link.strip(), "link_status": "pending"}})
+    return {"ok": True, "link_status": "pending"}
+
+
+@api_router.get("/admin/pills/pending")
+async def admin_pending_pills(admin: dict = Depends(require_admin)):
+    return await db.partner_pills.find({"link_status": "pending"}, {"_id": 0}).to_list(200)
+
+
+@api_router.get("/admin/pills")
+async def admin_all_pills(admin: dict = Depends(require_admin)):
+    return await db.partner_pills.find({}, {"_id": 0}).sort("created_at", -1).to_list(300)
+
+
+@api_router.post("/admin/pills/{pill_id}/approve")
+async def admin_approve_pill(pill_id: str, admin: dict = Depends(require_admin)):
+    pill = await db.partner_pills.find_one({"id": pill_id})
+    if not pill:
+        raise HTTPException(status_code=404, detail="Pill not found")
+    await db.partner_pills.update_one({"id": pill_id},
+                                      {"$set": {"link": pill.get("pending_link", ""), "link_status": "approved", "pending_link": ""}})
+    return {"ok": True}
+
+
+@api_router.post("/admin/pills/{pill_id}/reject")
+async def admin_reject_pill(pill_id: str, admin: dict = Depends(require_admin)):
+    await db.partner_pills.update_one({"id": pill_id},
+                                      {"$set": {"link_status": "rejected", "pending_link": ""}})
+    return {"ok": True}
+
+
+# ============================================================================
+# JAR SELLING — a full (100%) jar can be sold for in-app coins (once per jar)
+# ============================================================================
+JAR_VALUES = {
+    "common_glass": 40, "wood": 50, "stone": 60, "clay": 70, "bamboo": 75, "carton_box": 80,
+    "bronze": 90, "iron": 110, "tin": 130, "copper": 150, "aluminum": 160, "brass": 170,
+    "steel": 180, "silver": 200, "nickel": 220, "chrome": 240, "carbon": 260, "crystal": 280,
+    "gold": 300, "platinum": 350, "titanium": 380, "ruby": 400, "sapphire": 410, "emerald": 420,
+    "diamond": 450, "obsidian": 475, "galaxy": 500, "void": 500, "nebula": 500, "infinity": 500,
+}
+_JAR_ORDER = sorted(JAR_VALUES.items(), key=lambda x: x[1])
+
+
+class JarSellInput(BaseModel):
+    jar_id: str
+
+
+@api_router.post("/jars/sell")
+async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
+    jid = inp.jar_id
+    if jid not in JAR_VALUES:
+        raise HTTPException(status_code=400, detail="Unknown jar")
+    coins = int(user.get("credits") or user.get("coins") or 0)
+    ids = [i for i, _ in _JAR_ORDER]
+    idx = ids.index(jid)
+    threshold = JAR_VALUES[jid]
+    if coins < threshold:
+        raise HTTPException(status_code=400, detail="Jar noch nicht freigeschaltet")
+    # "full" = coins reached the next tier's threshold (top jar is always full)
+    if idx + 1 < len(_JAR_ORDER):
+        nxt = _JAR_ORDER[idx + 1][1]
+        if coins < nxt:
+            raise HTTPException(status_code=400, detail="Jar noch nicht voll (100%)")
+    sold = set(user.get("sold_jars") or [])
+    if jid in sold:
+        raise HTTPException(status_code=400, detail="Jar wurde bereits verkauft")
+    reward = threshold
+    await db.users.update_one({"id": user["id"]},
+                              {"$inc": {"credits": reward}, "$addToSet": {"sold_jars": jid}})
+    await db.credit_transactions.insert_one({
+        "id": str(uuid.uuid4()), "type": "jar_sale", "to_user": user["id"],
+        "amount": reward, "jar_id": jid, "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"ok": True, "reward": reward, "user": public_user(fresh)}
+
 
 
 @api_router.post("/credits/gift")
