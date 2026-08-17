@@ -15,3 +15,8 @@
 
 ## Deployment
 - Owner schaut oft auf Live-Seite `tipjarglobal.com` statt Preview. Bei „geht nicht/ist falsch" → daran erinnern: erst „Save to Github → Deploy".
+
+## WICHTIGE OWNER-VORGABE (17.08.2026)
+- Die Seite wird **LLM-FREI** gebaut. KEIN Guthaben aufladen, keinen Universal-/Emergent-LLM-Key nutzen.
+- Agent darf NICHT vorschlagen, LLM-Guthaben aufzuladen.
+- KI-Funktionen (Briefings/Combo-Generierung etc.) müssen ohne LLM auskommen bzw. durch nicht-LLM-Logik (z.B. Tesseract-OCR, echte Quoten, regelbasierte Glitch-Lexikon-Logik) ersetzt werden.
