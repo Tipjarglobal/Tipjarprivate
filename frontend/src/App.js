@@ -343,16 +343,6 @@ function Home() {
               <CheckCircle2 size={18} className="text-volt shrink-0 mt-0.5" />
               <span className="text-sm font-semibold text-white leading-snug">{t("hero.playable")}</span>
             </div>
-            <div className="flex flex-wrap gap-3 mt-8">
-              <button data-testid="hero-submit-btn" onClick={() => setSubmitOpen(true)}
-                className="flex items-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_30px_rgba(225,255,0,0.3)]">
-                <Sparkles size={18} /> {t("hero.cta.submit")}
-              </button>
-              <button data-testid="hero-earn-btn" onClick={() => setWinOpen(true)}
-                className="flex items-center gap-2 rounded-full border border-volt/40 bg-volt/10 text-volt font-bold px-6 py-3.5 hover:bg-volt/20 active:scale-95 transition-all">
-                <Coins size={18} /> {t("win.earn")}
-              </button>
-            </div>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.15 }} className="flex flex-col items-center gap-3">
