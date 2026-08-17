@@ -57,13 +57,11 @@ SETTLE_BATCH_CAP = 50   # max tips processed per settlement run (Pro plan: 7500 
 SETTLE_MAX_ATTEMPTS = 240
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 
-# ── Cheeky, TEMPORARY public subscriber boost (owner request). Adds a flat number to
-# the PUBLICLY shown subscriber count for social proof. The real count is untouched in
-# the DB and in the private /insights dashboard. Auto-expires after ~2 months. ──
-SUBSCRIBER_DISPLAY_BOOST = 140
-SUBSCRIBER_BOOST_UNTIL = "2026-09-09"  # after this date the boost is 0 automatically
-# Same cheeky, TEMPORARY idea for the public member count on the homepage progress bar.
-MEMBER_DISPLAY_BOOST = 400
+# ── Public display boosts DISABLED (owner request 17.08.2026): show ONLY real numbers,
+# no fake social-proof padding anywhere. Kept as 0 so all call sites stay valid. ──
+SUBSCRIBER_DISPLAY_BOOST = 0
+SUBSCRIBER_BOOST_UNTIL = "2026-09-09"
+MEMBER_DISPLAY_BOOST = 0
 MEMBER_BOOST_UNTIL = "2026-09-09"
 
 

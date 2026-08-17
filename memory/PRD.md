@@ -65,7 +65,12 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
-### Patch 17.08.2026 (Batterie-Klick + Meine-Sammlung-Button)
+### Patch 17.08.2026 (Leaderboard echte Daten + fliegende Münzen + Fake-Zahlen entfernt)
+- **Fake-Social-Proof entfernt**: `core.py` `MEMBER_DISPLAY_BOOST` (war 400) und `SUBSCRIBER_DISPLAY_BOOST` (war 140) auf **0** gesetzt. `/api/stats`, `/api/notifications/stats`, Subscribe/Unsubscribe zeigen jetzt NUR reale Zahlen (Mitglieder, Benachrichtigungs-Abos). Keine Platzhalter mehr im Frontend gefunden (InviteSection/NotificationBell nutzen bereits echte APIs).
+- **Echtes Gifting-Leaderboard**: neues `GET /api/gifting/leaderboards` — aggregiert `credit_transactions` (type=gift) zu 4 Boards: `week` (7 Tage Aktivität = verschenkt+erhalten), `all` (All-Time Aktivität), `received` (All-Time erhalten), `gifted` (All-Time verschenkt). Nur echte Mitglieder (`REAL_MEMBER_QUERY`, Test/Bot/Admin gefiltert). Top 10, Medaillen-Ränge.
+- `Raster6_8Lang.jsx`: Platzhalter-Liste entfernt, lädt echte Boards via `api.get('/gifting/leaderboards')`, aktualisiert bei `tipjar-boost`. 8-sprachiger Empty-State (`empty`). Avatar-Initiale + Coins pro Zeile.
+- **Fliegende Münzen nach Spendieren**: `AnimatedCoins.jsx` jetzt in `App.js` gemountet (war nirgends eingebunden). `WalletModal.gift()` dispatcht nach Erfolg `tipjar-boost` mit `amount=received` → fliegende Münze + CoinBattery-Flash + Leaderboard-Refresh.
+- Hinweis: Admin-Account ist absichtlich aus dem Leaderboard/Stats ausgeschlossen (nur reale Mitglieder), daher sieht man sich beim Testen mit Admin dort nicht.
 - `Raster6_8Lang.jsx`: Haupt-Batterie deutlich klickbar gemacht (pulsierender „Tippen zum Aufladen"-Hinweis, Klick-Icon, Ring-Highlight, ganze Karte als Button) + 2 Aktionen: **„Credits feeden"** (`onFeedClick`) und **„Spendieren"** (`onGiftClick`). Emoji durch lucide-Icons ersetzt. Neue 8-sprachige Keys `tapHint`, `giftBtn`. RTL für ar.
 - `App.js`: `onFeedClick`→`openGiftBattery` (Wallet Top-Up), `onGiftClick`→`openGift` (Wallet Gift-Tab, `walletGift`-State). Beide mit Login-Guard.
 - `Raster4_Money.jsx`: dritter Button **„Meine Sammlung"** (`onCollection`, Boxes-Icon) neben Tipp einwerfen / Münzen verdienen. 8-sprachiger Key `collection`.

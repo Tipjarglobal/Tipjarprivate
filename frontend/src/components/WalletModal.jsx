@@ -75,6 +75,12 @@ export default function WalletModal({ open, onClose, initialTab, initialGiftTo }
     try {
       const { data } = await api.post("/credits/gift", { to_username: giftTo.trim(), amount: parseInt(giftAmt, 10) });
       setUser(data.user);
+      // fliegende Münzen + Batterie-Boost nach dem Spendieren
+      try {
+        window.dispatchEvent(new CustomEvent("tipjar-boost", {
+          detail: { amount: data.received, coins: data.received, power: data.received },
+        }));
+      } catch { /* ignore */ }
       toast.success(`${tx("gifted")} (${data.received} ${tx("credits")})`);
       setGiftTo(""); setGiftAmt("");
     } catch (err) {

@@ -3407,8 +3407,60 @@ async def leaderboard():
     return out
 
 
-# ------------------------------------------------------------------ credits
-@api_router.get("/credits/packages")
+# --------------------------------------------------- gifting leaderboards (real data)
+@api_router.get("/gifting/leaderboards")
+async def gifting_leaderboards():
+    """Real gifting leaderboards from credit_transactions (type=gift). No placeholders.
+    Returns 4 boards: week (last 7d activity), all (all-time activity),
+    received (all-time received), gifted (all-time gifted)."""
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    real_ids = {u["id"] for u in await db.users.find(REAL_MEMBER_QUERY, {"id": 1, "_id": 0}).to_list(100000)}
+    txns = await db.credit_transactions.find(
+        {"type": "gift"},
+        {"_id": 0, "from_user": 1, "from_username": 1, "to_user": 1,
+         "to_username": 1, "amount": 1, "received": 1, "created_at": 1},
+    ).to_list(100000)
+
+    gifted, received, gifted_w, received_w = {}, {}, {}, {}
+
+    def _acc(store, uid, uname, amt):
+        if not uid or amt <= 0 or uid not in real_ids:
+            return
+        e = store.setdefault(uid, {"username": uname or "anon", "amount": 0})
+        e["amount"] += amt
+        if uname:
+            e["username"] = uname
+
+    for tx in txns:
+        amt = int(tx.get("amount") or 0)
+        rec = int(tx.get("received") if tx.get("received") is not None else amt)
+        fu, fn = tx.get("from_user"), tx.get("from_username")
+        tu, tn = tx.get("to_user"), tx.get("to_username")
+        created = tx.get("created_at", "") or ""
+        _acc(gifted, fu, fn, amt)
+        _acc(received, tu, tn, rec)
+        if created >= week_ago:
+            _acc(gifted_w, fu, fn, amt)
+            _acc(received_w, tu, tn, rec)
+
+    def _combine(a, b):
+        m = {}
+        for uid, v in a.items():
+            _acc(m, uid, v["username"], v["amount"])
+        for uid, v in b.items():
+            _acc(m, uid, v["username"], v["amount"])
+        return m
+
+    def _top(store, limit=10):
+        rows = sorted(store.values(), key=lambda x: x["amount"], reverse=True)[:limit]
+        return [{"username": r["username"], "coins": int(r["amount"])} for r in rows]
+
+    return {
+        "week": _top(_combine(gifted_w, received_w)),
+        "all": _top(_combine(gifted, received)),
+        "received": _top(received),
+        "gifted": _top(gifted),
+    }
 async def packages():
     # coins == credits (alias); include id so the wallet can render the 5 packages directly.
     return {pid: {**p, "id": pid, "coins": p["credits"]} for pid, p in CREDIT_PACKAGES.items()}

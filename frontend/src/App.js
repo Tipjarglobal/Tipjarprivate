@@ -26,6 +26,7 @@ import InviteSection from "./components/InviteSection";
 import HallOfFame from "./components/HallOfFame";
 import WinClaimModal from "./components/WinClaimModal";
 import SplashScreen from "./components/SplashScreen";
+import AnimatedCoins from "./components/AnimatedCoins";
 import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
@@ -273,6 +274,7 @@ function Home() {
   return (
     <div className="App grain min-h-screen overflow-x-hidden" id="top">
       <SplashScreen />
+      <AnimatedCoins />
       <NotificationPrompt />
       <PromoBanner />
       <Raster1_RentPills lang={lang} />

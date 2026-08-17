@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Zap, Gift, MousePointerClick, BatteryCharging } from "lucide-react";
+import api from "../api";
 
 // 8 SPRACHEN - RASTER 6
 const TRANSLATIONS = {
@@ -11,6 +12,7 @@ const TRANSLATIONS = {
     feedBtn: "Credits feeden",
     tapHint: "Tippen zum Aufladen",
     giftBtn: "Spendieren",
+    empty: "Noch keine Spenden – sei der Erste!",
     coins: "COINS",
     voll: "VOLL",
     neverBelow: "NIEMALS UNTER",
@@ -25,6 +27,7 @@ const TRANSLATIONS = {
     feedBtn: "Feed Credits",
     tapHint: "Tap to charge",
     giftBtn: "Gift a tipster",
+    empty: "No gifts yet – be the first!",
     coins: "COINS",
     voll: "FULL",
     neverBelow: "NEVER BELOW",
@@ -39,6 +42,7 @@ const TRANSLATIONS = {
     feedBtn: "Alimentar Créditos",
     tapHint: "Toca para cargar",
     giftBtn: "Regalar a un tipster",
+    empty: "Aún sin regalos – ¡sé el primero!",
     coins: "COINS",
     voll: "LLENO",
     neverBelow: "NUNCA DEBAJO",
@@ -53,6 +57,7 @@ const TRANSLATIONS = {
     feedBtn: "Τάισε Credits",
     tapHint: "Πάτησε για φόρτιση",
     giftBtn: "Δώρισε σε tipster",
+    empty: "Καμία δωρεά ακόμα – γίνε ο πρώτος!",
     coins: "COINS",
     voll: "ΓΕΜΑΤΟ",
     neverBelow: "ΠΟΤΕ ΚΑΤΩ",
@@ -67,6 +72,7 @@ const TRANSLATIONS = {
     feedBtn: "Nourrir Crédits",
     tapHint: "Touche pour charger",
     giftBtn: "Offrir à un tippeur",
+    empty: "Aucun cadeau encore – sois le premier !",
     coins: "COINS",
     voll: "PLEIN",
     neverBelow: "JAMAIS EN DESSOUS",
@@ -81,6 +87,7 @@ const TRANSLATIONS = {
     feedBtn: "Alimenta Crediti",
     tapHint: "Tocca per caricare",
     giftBtn: "Regala a un tipster",
+    empty: "Ancora nessun regalo – sii il primo!",
     coins: "COINS",
     voll: "PIENO",
     neverBelow: "MAI SOTTO",
@@ -95,6 +102,7 @@ const TRANSLATIONS = {
     feedBtn: "إطعام Credits",
     tapHint: "انقر للشحن",
     giftBtn: "أهدِ لمراهن",
+    empty: "لا هدايا بعد – كن الأول!",
     coins: "عملات",
     voll: "ممتلئ",
     neverBelow: "أبداً تحت",
@@ -109,6 +117,7 @@ const TRANSLATIONS = {
     feedBtn: "Kredi Besle",
     tapHint: "Şarj için dokun",
     giftBtn: "Bir bahisçiye hediye et",
+    empty: "Henüz hediye yok – ilk sen ol!",
     coins: "COINS",
     voll: "DOLU",
     neverBelow: "ASLA ALTINDA DEĞİL",
@@ -121,7 +130,21 @@ const TRANSLATIONS = {
 export default function Raster6_Battery_Gifting({ lang = "de", batteryCoins = 125, onFeedClick, onGiftClick }) {
   const t = TRANSLATIONS[lang] || TRANSLATIONS.de;
   const [activeTab, setActiveTab] = useState("week");
+  const [boards, setBoards] = useState({ week: [], all: [], received: [], gifted: [] });
   const rtl = lang === "ar";
+
+  useEffect(() => {
+    let on = true;
+    api.get("/gifting/leaderboards")
+      .then((r) => { if (on && r.data) setBoards(r.data); })
+      .catch(() => {});
+    const onBoost = () => {
+      api.get("/gifting/leaderboards").then((r) => { if (on && r.data) setBoards(r.data); }).catch(() => {});
+    };
+    window.addEventListener("tipjar-boost", onBoost);
+    window.addEventListener("tipjar-boost-gold", onBoost);
+    return () => { on = false; window.removeEventListener("tipjar-boost", onBoost); window.removeEventListener("tipjar-boost-gold", onBoost); };
+  }, []);
 
   const tabs = [
     { id: "week", label: t.tabs.week },
@@ -208,27 +231,42 @@ export default function Raster6_Battery_Gifting({ lang = "de", batteryCoins = 12
             </button>
           ))}
         </div>
-        {/* Leaderboard Content */}
+        {/* Leaderboard Content — echte Spendier-Daten, keine Platzhalter */}
         <div className="p-4">
           <div className="text-[#666] text-xs font-bold mb-3 uppercase">
             {t.tabs[activeTab]} - Leaderboard
           </div>
-          {/* Placeholder Leaderboard - hier echte Daten einbinden */}
-          <div className="space-y-2">
-            {[1,2,3,4,5].map((rank) => (
-              <div key={rank} className="flex items-center gap-3 bg-[#222] rounded-xl p-3">
-                <div className="w-6 h-6 rounded-full bg-[#ff3b3b] text-white text-xs font-black flex items-center justify-center">
-                  {rank}
-                </div>
-                <div className="w-8 h-8 rounded-full bg-[#333]" />
-                <div className="flex-1">
-                  <div className="text-white text-sm font-bold">User {rank}</div>
-                  <div className="text-[#666] text-xs">{rank * 123} {t.coins} {activeTab === 'received' ? t.tabs.received : activeTab === 'gifted' ? t.tabs.gifted : ''}</div>
-                </div>
-                <div className="text-[#ff3b3b] font-black text-sm">{rank * 123} 🪙</div>
-              </div>
-            ))}
-          </div>
+          {(boards[activeTab] || []).length === 0 ? (
+            <div data-testid="leaderboard-empty" className="text-center text-[#666] text-sm py-8">
+              {t.empty}
+            </div>
+          ) : (
+            <div className="space-y-2" data-testid={`leaderboard-${activeTab}`}>
+              {(boards[activeTab] || []).map((row, i) => {
+                const rank = i + 1;
+                const medal = rank === 1 ? "#FFD447" : rank === 2 ? "#C0C0C0" : rank === 3 ? "#CD7F32" : "#ff3b3b";
+                return (
+                  <div key={`${row.username}-${i}`} className="flex items-center gap-3 bg-[#222] rounded-xl p-3">
+                    <div className="w-6 h-6 rounded-full text-black text-xs font-black flex items-center justify-center" style={{ background: medal }}>
+                      {rank}
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-white text-sm font-black">
+                      {(row.username || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-sm font-bold truncate">{row.username}</div>
+                      <div className="text-[#666] text-xs">
+                        {row.coins.toLocaleString()} {t.coins} {activeTab === "received" ? t.tabs.received : activeTab === "gifted" ? t.tabs.gifted : ""}
+                      </div>
+                    </div>
+                    <div className="text-[#ff3b3b] font-black text-sm inline-flex items-center gap-1">
+                      <Zap size={13} /> {row.coins.toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
