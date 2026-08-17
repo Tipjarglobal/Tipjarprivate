@@ -251,7 +251,7 @@ function Home() {
       <SplashScreen />
       <NotificationPrompt />
       <PromoBanner />
-      <Raster1_RentPills />
+      <Raster1_RentPills lang={lang} />
       <Raster2_Header
         onSubmit={() => setSubmitOpen(true)}
         onLogin={() => openAuth("login")}
