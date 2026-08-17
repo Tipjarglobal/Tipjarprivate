@@ -3889,7 +3889,37 @@ def parse_slip_text_to_legs(text: str) -> dict:
 
     SUMMARY = ("gesamtquote", "kombiquote", "quote gesamt", "total odds", "gesamteinsatz",
                "einsatz", "stake", "auszahlung", "gewinn", "winnings", "mögl. gewinn",
-               "possible win", "cash out", "cashout", "ausgezahlt", "betrag")
+               "possible win", "cash out", "cashout", "ausgezahlt", "betrag",
+               # Griechisch (Summen-/Meta-Zeilen)
+               "συνολικη αποδοση", "συνολικη αποδ", "αποδοση", "ποσο", "ποντ", "στοιχημα",
+               "κερδος", "κερδη", "πληρωμη", "εξαργυρωση", "συνολο")
+
+    import unicodedata
+
+    def _strip_gr_accents(x):
+        return "".join(c for c in unicodedata.normalize("NFD", x) if unicodedata.category(c) != "Mn")
+
+    def _pre_translate_greek(market_raw):
+        """LLM-freie Griechisch→kanonisch (DE) Markt-Übersetzung für normalize_market."""
+        if not market_raw:
+            return market_raw
+        low = _strip_gr_accents(market_raw).lower()
+        if not re.search(r"[α-ω]", low):  # kein Griechisch -> unverändert
+            return market_raw
+        pairs = [
+            (r"και οι δυο ομαδες να σκοραρουν", "beide teams treffen"),
+            (r"να σκοραρουν και οι δυο", "beide teams treffen"),
+            (r"διπλη ευκαιρια", "doppelte chance"),
+            (r"κατω απο", "unter"), (r"πανω απο", "über"),
+            (r"\bανω\b", "über"), (r"\bκατω\b", "unter"),
+            (r"τερματα|γκολ", "tore"),
+            (r"ισοπαλια", "unentschieden"),
+            (r"\bνικη\b", "sieg"),
+        ]
+        out = low
+        for pat, rep in pairs:
+            out = re.sub(pat, rep, out)
+        return out
 
     def _is_match_line(s):
         return bool(re.search(r"\s+(?:vs\.?|–|@ )\s+|\svs\s", s, flags=re.IGNORECASE)) \
@@ -3917,6 +3947,7 @@ def parse_slip_text_to_legs(text: str) -> dict:
 
     def _add(home, away, market_raw, odds):
         market_raw = _fix_ocr_umlauts(market_raw)
+        market_raw = _pre_translate_greek(market_raw)
         market = (normalize_market(market_raw) or market_raw).strip()
         if not market or not odds or odds <= 1.0:
             return
@@ -3924,8 +3955,8 @@ def parse_slip_text_to_legs(text: str) -> dict:
                      "market": market, "odds": round(float(odds), 2), "result": "won"})
 
     for ln in lines:
-        low = ln.lower()
-        if any(w in low for w in ["verloren", " lost", "lose", "✗", "❌"]):
+        low = _strip_gr_accents(ln).lower()
+        if any(w in low for w in ["verloren", " lost", "lose", "✗", "❌", "χαμεν", "εχασε", "ηττα"]):
             status_lost = True
         # Summenzeile? (nur überspringen wenn kein echtes Match drinsteckt)
         if any(w in low for w in SUMMARY) and " vs " not in low:
