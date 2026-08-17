@@ -179,7 +179,7 @@ export default function Raster6_Battery_Gifting({ lang = "de", batteryCoins = 12
             <span className="text-white font-black text-lg inline-flex items-center gap-2">
               <BatteryCharging size={20} className="text-[#ff3b3b]" /> {t.battery} - {t.coins}
             </span>
-            <span className="text-[#ff3b3b] text-[11px] sm:text-xs font-bold text-right">{t.payoutFrom} 2000+ • {t.neverBelow} 125 • {t.voll} 2500</span>
+            <span className="text-[#ff3b3b] text-[11px] sm:text-xs font-bold text-right">{t.payoutFrom} 2000+ • {t.voll} 2500</span>
           </div>
           {/* Batterie Visual */}
           <div className="w-full h-10 bg-[#222] rounded-full overflow-hidden border border-[#333] relative">

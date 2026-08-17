@@ -1,6 +1,5 @@
 import React from "react";
 import { Sparkles, Coins, Crown, Boxes, Users } from "lucide-react";
-import CoinBattery from "./CoinBattery";
 
 // RASTER 4 — "Willst du mit Wetten Geld verdienen?" + Batterie + 4 Actions.
 const T = {
@@ -32,8 +31,6 @@ export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit,
           <Crown size={18} className="text-[#E11D2A] shrink-0 mt-0.5" />
           <p className="text-sm text-zinc-300 leading-relaxed">{t.lead}</p>
         </div>
-
-        <CoinBattery current={batteryCoins} max={2500} onClick={onCharge} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           <button onClick={onSubmit} data-testid="r4-submit-btn"

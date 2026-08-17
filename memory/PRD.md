@@ -65,6 +65,13 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
 - P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`).
 - P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
 
+### Patch 17.08.2026 (Reihenfolge + Batterie-Cleanup + Jar-Reward ×10)
+- **Raster 5 & 6 verschoben**: jetzt direkt unter Raster 4 (vor der „DIE GLOBALE TIPP-COMMUNITY"/HERO-Sektion). Neue Reihenfolge: Raster1→2→Header→3→4→5→6→HERO/Story/Invite/HallOfFame→Footer.
+- **Kleine Batterie aus Raster 4 entfernt** (CoinBattery raus) – die große Batterie lebt jetzt nur noch in Raster 6.
+- **„NIEMALS UNTER 125" entfernt** aus der Raster-6-Batterie (`Raster6_8Lang.jsx`), zeigt nur noch „Auszahlung ab 2000+ • VOLL 2500".
+- **Jar-Verkaufs-Reward erhöht**: `JAR_SELL_MULTIPLIER=10` (Backend), Reward = Jar-Wert ×10 (z.B. common 400, top 5000). Anzeige **oben rechts in jedem Jar** als goldenes „💰 +X"-Badge (INVENTORY/JARDEX/OPEN CASE, `SELL_MULT=10` im Frontend synchron).
+- Verifikation: Compile ok; Playwright-Assertions (Reihenfolge 4→5→HERO, keine Batterie in Raster4, kein „NIEMALS UNTER").
+
 ### Patch 17.08.2026 (Kauf→Pille Stripe-Flow + Jar verkaufen)
 **Kauf→Pille (Stripe Flow B, `emergentintegrations`, `STRIPE_API_KEY=sk_test_emergent`, EUR):**
 - Backend `server.py`: `PILL_PACKAGES` (rent2 300€, rent1 150€, partner 119,99€, sponsor 79,99€, vip 49,99€, fan 19,99€, supporter 9,99€; Laufzeit 2–6 Wo).

@@ -13,6 +13,15 @@ const TIER_COLOR = {
   mystic: 'text-pink-400',
 };
 
+const SELL_MULT = 10;                 // muss zum Backend (JAR_SELL_MULTIPLIER) passen
+const sellReward = (j) => (j.coins || 0) * SELL_MULT;
+const RewardBadge = ({ jar }) => (
+  <span className="absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-0.5 rounded-full bg-[#FFD447] text-black text-[8px] font-black px-1.5 py-0.5 shadow"
+    title="Verkaufswert bei 100%">
+    💰 +{sellReward(jar).toLocaleString()}
+  </span>
+);
+
 // Bild mit Fallback-Kette: open→closed→farbiger Initial-Block (fixt broken image bei Wood/Bamboo etc.)
 function JarImg({ jar, open = false, className = "" }) {
   const chain = (open ? [jar.graphicOpen, jar.graphic] : [jar.graphic, jar.graphicOpen]).filter(Boolean);
@@ -118,11 +127,12 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
               return (
                 <button key={j.id} data-testid={`inv-jar-${j.id}`} onClick={() => addToCase(j)} disabled={inCase}
                   className="text-left bg-zinc-900 rounded-xl p-3 border border-zinc-800 relative hover:border-yellow-400/50 transition-colors disabled:cursor-default" style={{ boxShadow: `0 0 20px ${j.color}40` }}>
-                  <div className="flex justify-between text-[8px]"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins} Coins</span></div>
+                  <RewardBadge jar={j} />
+                  <div className="flex justify-between text-[8px] pr-14"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins} Coins</span></div>
                   <div className="h-20 my-2 rounded-lg flex items-center justify-center" style={{ background: `${j.color}20` }}>
                     <JarImg jar={j} className="h-full object-contain" />
                   </div>
-                  <div className="text-[10px] font-bold truncate">{j.name.toUpperCase()}</div>
+                  <div className="text-[10px] font-bold truncate">{j.name.toUpperCase()} {inCase ? <span className="text-[#D4FF32]">· IM CASE ✓</span> : <span className="text-zinc-500">· + Open Case</span>}</div>
                   {/* %-Füllstand */}
                   <div className="mt-1.5">
                     <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
@@ -138,9 +148,6 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
                           </div>
                     )}
                   </div>
-                  {inCase
-                    ? <div className="absolute top-2 right-2 text-[8px] font-black text-[#D4FF32]">IM CASE ✓</div>
-                    : <div className="absolute top-2 right-2 text-[8px] text-zinc-500">+ Open Case</div>}
                 </button>
               );
             })}
@@ -157,8 +164,9 @@ export default function Jardex({ userCoins = 0, userCredits = 0 }) {
             {JAR_DEFS.map(j => {
               const unlocked = coins >= j.coins;
               return (
-                <div key={j.id} data-testid={`dex-jar-${j.id}`} className={`rounded-xl p-2 border ${unlocked ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-950 border-zinc-900'}`}>
-                  <div className="flex justify-between text-[7px]"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins}</span></div>
+                <div key={j.id} data-testid={`dex-jar-${j.id}`} className={`relative rounded-xl p-2 border ${unlocked ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-950 border-zinc-900'}`}>
+                  {unlocked && <RewardBadge jar={j} />}
+                  <div className="flex justify-between text-[7px] pr-12"><span className={tierCls(j.tier)}>{j.tier.toUpperCase()}</span><span className="text-zinc-600">{j.coins}</span></div>
                   <div className="h-16 my-1 rounded-lg flex items-center justify-center" style={{ background: unlocked ? `${j.color}15` : '#000' }}>
                     <JarImg jar={j} className={`h-full object-contain ${unlocked ? '' : 'opacity-40'}`} />
                   </div>

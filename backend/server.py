@@ -3721,6 +3721,7 @@ JAR_VALUES = {
     "diamond": 450, "obsidian": 475, "galaxy": 500, "void": 500, "nebula": 500, "infinity": 500,
 }
 _JAR_ORDER = sorted(JAR_VALUES.items(), key=lambda x: x[1])
+JAR_SELL_MULTIPLIER = 10   # Verkaufswert = Jar-Wert × Multiplikator (leicht anpassbar)
 
 
 class JarSellInput(BaseModel):
@@ -3746,7 +3747,7 @@ async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
     sold = set(user.get("sold_jars") or [])
     if jid in sold:
         raise HTTPException(status_code=400, detail="Jar wurde bereits verkauft")
-    reward = threshold
+    reward = threshold * JAR_SELL_MULTIPLIER
     await db.users.update_one({"id": user["id"]},
                               {"$inc": {"credits": reward}, "$addToSet": {"sold_jars": jid}})
     await db.credit_transactions.insert_one({
