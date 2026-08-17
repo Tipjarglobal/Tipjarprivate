@@ -6,28 +6,28 @@ import api from "../api";
 const T = {
   de: { submit: "Tipp einreichen", feedback: "Feedback", wallet: "Wallet", profile: "Profil",
         title: "Dein Feedback", ph: "Was können wir besser machen?", send: "Senden", thanks: "Danke für dein Feedback!",
-        empty: "Noch kein Feedback veröffentlicht.", pub: "Veröffentlichen", unpub: "Zurückziehen", del: "Löschen", admin: "Admin – Freigabe" },
+        empty: "Noch kein Feedback veröffentlicht.", pub: "Veröffentlichen", unpub: "Zurückziehen", del: "Löschen", admin: "Admin – Freigabe", learn: "Je mehr Scheine ihr postet – gespielte, gewonnene UND verlorene – desto mehr bringt ihr TipJar bei: richtigere Quoten zu tippen und bessere Tipps zu treffen. Jeder Schein macht die KI schlauer." },
   en: { submit: "Submit Tip", feedback: "Feedback", wallet: "Wallet", profile: "Profile",
         title: "Your Feedback", ph: "What can we do better?", send: "Send", thanks: "Thanks for your feedback!",
-        empty: "No feedback published yet.", pub: "Publish", unpub: "Unpublish", del: "Delete", admin: "Admin – Approval" },
+        empty: "No feedback published yet.", pub: "Publish", unpub: "Unpublish", del: "Delete", admin: "Admin – Approval", learn: "The more slips you post – played, won AND lost – the more you teach TipJar: to predict truer odds and hit better tips. Every slip makes the AI smarter." },
   es: { submit: "Enviar pronóstico", feedback: "Opiniones", wallet: "Cartera", profile: "Perfil",
         title: "Tu opinión", ph: "¿Qué podemos mejorar?", send: "Enviar", thanks: "¡Gracias por tu opinión!",
-        empty: "Aún no hay opiniones publicadas.", pub: "Publicar", unpub: "Retirar", del: "Borrar", admin: "Admin – Aprobación" },
+        empty: "Aún no hay opiniones publicadas.", pub: "Publicar", unpub: "Retirar", del: "Borrar", admin: "Admin – Aprobación", learn: "Cuantos más boletos publiquéis – jugados, ganados Y perdidos – más le enseñáis a TipJar: a predecir cuotas más exactas y acertar mejores pronósticos. Cada boleto hace la IA más lista." },
   el: { submit: "Υποβολή", feedback: "Σχόλια", wallet: "Πορτοφόλι", profile: "Προφίλ",
         title: "Τα σχόλιά σου", ph: "Τι μπορούμε να βελτιώσουμε;", send: "Αποστολή", thanks: "Ευχαριστούμε!",
-        empty: "Δεν υπάρχουν δημοσιευμένα σχόλια.", pub: "Δημοσίευση", unpub: "Απόσυρση", del: "Διαγραφή", admin: "Admin – Έγκριση" },
+        empty: "Δεν υπάρχουν δημοσιευμένα σχόλια.", pub: "Δημοσίευση", unpub: "Απόσυρση", del: "Διαγραφή", admin: "Admin – Έγκριση", learn: "Όσο περισσότερα δελτία ανεβάζετε – παιγμένα, κερδισμένα ΚΑΙ χαμένα – τόσο μαθαίνετε στο TipJar: να προβλέπει σωστότερες αποδόσεις και καλύτερα tips. Κάθε δελτίο κάνει την ΤΝ πιο έξυπνη." },
   fr: { submit: "Soumettre", feedback: "Avis", wallet: "Portefeuille", profile: "Profil",
         title: "Votre avis", ph: "Que pouvons-nous améliorer ?", send: "Envoyer", thanks: "Merci pour votre avis !",
-        empty: "Aucun avis publié.", pub: "Publier", unpub: "Retirer", del: "Supprimer", admin: "Admin – Validation" },
+        empty: "Aucun avis publié.", pub: "Publier", unpub: "Retirer", del: "Supprimer", admin: "Admin – Validation", learn: "Plus vous postez de tickets – joués, gagnés ET perdus – plus vous apprenez à TipJar : à prévoir des cotes plus justes et de meilleurs pronostics. Chaque ticket rend l'IA plus intelligente." },
   it: { submit: "Invia", feedback: "Feedback", wallet: "Portafoglio", profile: "Profilo",
         title: "Il tuo feedback", ph: "Cosa possiamo migliorare?", send: "Invia", thanks: "Grazie per il feedback!",
-        empty: "Nessun feedback pubblicato.", pub: "Pubblica", unpub: "Ritira", del: "Elimina", admin: "Admin – Approvazione" },
+        empty: "Nessun feedback pubblicato.", pub: "Pubblica", unpub: "Ritira", del: "Elimina", admin: "Admin – Approvazione", learn: "Più schedine pubblicate – giocate, vinte E perse – più insegnate a TipJar: a prevedere quote più giuste e azzeccare tip migliori. Ogni schedina rende l'IA più intelligente." },
   ar: { submit: "إرسال", feedback: "ملاحظات", wallet: "المحفظة", profile: "الملف",
         title: "ملاحظاتك", ph: "ما الذي يمكننا تحسينه؟", send: "إرسال", thanks: "شكرًا على ملاحظاتك!",
-        empty: "لا توجد ملاحظات منشورة بعد.", pub: "نشر", unpub: "إلغاء", del: "حذف", admin: "المشرف – الموافقة" },
+        empty: "لا توجد ملاحظات منشورة بعد.", pub: "نشر", unpub: "إلغاء", del: "حذف", admin: "المشرف – الموافقة", learn: "كلما نشرتم قسائم أكثر — ملعوبة ورابحة وخاسرة — علّمتم TipJar أكثر: توقّع نسب أدقّ وإصابة توقعات أفضل. كل قسيمة تجعل الذكاء الاصطناعي أذكى." },
   tr: { submit: "Kupon gönder", feedback: "Geri bildirim", wallet: "Cüzdan", profile: "Profil",
         title: "Geri bildirimin", ph: "Neyi daha iyi yapabiliriz?", send: "Gönder", thanks: "Geri bildirimin için teşekkürler!",
-        empty: "Henüz yayınlanmış geri bildirim yok.", pub: "Yayınla", unpub: "Geri çek", del: "Sil", admin: "Admin – Onay" },
+        empty: "Henüz yayınlanmış geri bildirim yok.", pub: "Yayınla", unpub: "Geri çek", del: "Sil", admin: "Admin – Onay", learn: "Ne kadar çok kupon paylaşırsanız — oynanan, kazanılan VE kaybedilen — TipJar'a o kadar çok öğretirsiniz: daha doğru oranlar tahmin etmeyi ve daha iyi tahminler tutturmayı. Her kupon yapay zekayı daha akıllı yapar." },
 };
 
 export default function Raster5_InputFeedback({ lang = "de", isAdmin = false, onSubmit, onWallet, onProfile }) {
@@ -65,6 +65,10 @@ export default function Raster5_InputFeedback({ lang = "de", isAdmin = false, on
 
   return (
     <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster5-input-feedback">
+      <div className="max-w-5xl mx-auto mb-3 flex items-start gap-2.5 rounded-2xl border border-volt/30 bg-gradient-to-r from-volt/10 to-transparent px-4 py-3" data-testid="r5-learn-hint">
+        <span className="text-lg leading-none mt-0.5">💡</span>
+        <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed">{t.learn}</p>
+      </div>
       <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Pill label={t.submit} onClick={onSubmit} testid="r5-submit" />
         <Pill label={t.feedback} onClick={openPanel} badge={count} testid="r5-feedback" />
