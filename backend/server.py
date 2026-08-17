@@ -3850,8 +3850,8 @@ async def credit_txns(user: dict = Depends(get_current_user)):
 # ------------------------------------------------------------------ earn credits: win claims
 WIN_MIN_PLAYED_LEGS = 3          # a played-along slip must have >= 3 legs (TipJar systems can be 3-leg)
 WIN_MIN_SYSTEM_MATCH = 3         # >= 3 legs must match a TipJar system (anti-fraud)
-WIN_LIVE_MIN_LEGS = 4            # live streak: 4 in a row
-WIN_LIVE_MIN_ODDS = 1.60         # each live leg must be > 1.60
+WIN_LIVE_MIN_LEGS = 1            # live: ein einzelner gewonnener Live-Treffer reicht
+WIN_LIVE_MIN_ODDS = 1.60         # Quoten-Hürde nur für Live-Serien (2+ Beine)
 WIN_POSTED_CREDITS = 20
 WIN_LIVE_CREDITS = 20
 WIN_CASHED_CREDITS = 20
@@ -3859,7 +3859,8 @@ WIN_MAX_CREDITS = 20             # cap per claim
 
 
 def _ocr_tesseract(image_bytes: bytes) -> str:
-    """LLM-freie, kostenlose OCR (lokal). Liest Text aus einem Schein-Screenshot."""
+    """LLM-freie, kostenlose OCR (lokal). Liest Text aus einem Schein-Screenshot.
+    Nutzt alle installierten Sprachpakete passend zu den App-Sprachen (multi-language)."""
     try:
         import io, pytesseract
         from PIL import Image
@@ -3867,10 +3868,13 @@ def _ocr_tesseract(image_bytes: bytes) -> str:
         if img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
         try:
-            langs = set(pytesseract.get_languages(config=""))
+            installed = set(pytesseract.get_languages(config=""))
         except Exception:
-            langs = set()
-        lang = "eng+deu" if {"eng", "deu"} <= langs else ("deu" if "deu" in langs else "eng")
+            installed = set()
+        # Bevorzugte Reihenfolge (App-Sprachen + gängige Latein-Ligen). eng zuerst = Basis.
+        preferred = ["eng", "deu", "spa", "fra", "ita", "por", "nld", "tur", "ell", "ara"]
+        use = [l for l in preferred if l in installed] or (["eng"] if "eng" in installed else [])
+        lang = "+".join(use) if use else "eng"
         return pytesseract.image_to_string(img, lang=lang)
     except Exception as ex:
         logger.error(f"tesseract OCR failed: {ex}")
@@ -4156,9 +4160,10 @@ async def claim_win(file: Optional[UploadFile] = File(None),
             legs.extend(s["legs"])
         legs_n = len(legs)
         if legs_n < WIN_LIVE_MIN_LEGS:
-            raise HTTPException(status_code=422, detail=f"Live-Serie braucht mind. {WIN_LIVE_MIN_LEGS} gewonnene Live-Wetten (lade z.B. 4 Bilder hoch).")
-        if any((l["odds"] or 0) <= WIN_LIVE_MIN_ODDS for l in legs):
-            raise HTTPException(status_code=422, detail=f"Jede Live-Auswahl muss Quote > {WIN_LIVE_MIN_ODDS} haben.")
+            raise HTTPException(status_code=422, detail="Lade mindestens einen gewonnenen Live-Treffer hoch.")
+        # Quoten-Hürde nur für Serien (2+ Beine); ein einzelner Live-Treffer ist ohne Mindestquote ok
+        if legs_n >= 2 and any((l["odds"] or 0) <= WIN_LIVE_MIN_ODDS for l in legs):
+            raise HTTPException(status_code=422, detail=f"In einer Live-Serie muss jede Auswahl Quote > {WIN_LIVE_MIN_ODDS} haben.")
         import math
         odds_list = [l["odds"] for l in legs if l["odds"]]
         total_odds = round(math.prod(odds_list), 2) if odds_list else 0.0
