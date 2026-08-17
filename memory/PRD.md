@@ -50,6 +50,21 @@ privater Admin-Bereich `/insights` (Analytics, Pick-Manager, Sponsor-Ranking, Gl
   - Deps: `tesseract-ocr` (System-Binary, in Preview via apt) + `pytesseract` (requirements.txt).
   - ⚠️ PRODUCTION-WARNUNG: Tesseract-System-Binary muss im Deploy-Image vorhanden sein. Kein Aptfile/Dockerfile im Repo → Emergent Support kontaktieren, ob `tesseract-ocr` in Production installiert ist, sonst greift der Fallback dort nicht.
 
+## Changelog (Session 17.08.2026 — Homepage 6-Raster Migration)
+- Homepage nach `/app/memory/pille.md` in modulare Raster überführt (alle 8-sprachig: de/en/es/el/fr/it/ar/tr).
+- Neu gebaut & in `App.js` eingebunden:
+  - `Raster2_Supporter.jsx` — 5 Supporter-Templates (XXL 119,99€ → S 9,99€), Bestseller-Badge, Instagram-Buchung. Platziert direkt unter Raster 1.
+  - `Raster3_AiPicks.jsx` — hellblaues KI-Info-Raster + KI-Pillen kompakt 2-Spaltig (Single/grün, Smart/grün+„Mit der KI reden", Master/rot+Crown, Abgerechnet/weiß, Statistiken/rosa). Verdrahtet an `openTipsView(...)`.
+  - `Raster4_Money.jsx` — „Willst du mit Wetten Geld verdienen?"-Text + Globale-Tipp-Community-Section (Badge/Headline/Body/Info-Box) + eingebettete `CoinBattery` + 2 Buttons (Tipp einwerfen / Münzen verdienen).
+  - `Raster4b_CommunityLive.jsx` — Community Picks (gelb, links, mit blauem LIVE-Button) + Live KI Picks (blau, rechts, Wifi-Icon).
+- Reihenfolge oben→unten: Raster1 → Raster2(Supporter) → Header(Nav) → CoinBattery → Raster3 → Raster4 → Raster4b → (Legacy Hero/Story/Invite/HallOfFame beibehalten) → Raster5 → Raster6 → Footer.
+- Bestehende Header-Nav (`Raster2_Header`/QuickView-Pills), Hero, Story, InviteSection, HallOfFame NICHT entfernt (additive Migration, Homepage nicht gebrochen).
+- Verifikation: sauberer Webpack-Compile (nur bestehende ESLint-Warnings), keine React-Runtime-Fehler in Konsole, `raster3-ai-picks` im DOM auffindbar. ⚠️ Kein sauberer Live-Screenshot möglich (Screenshot-Tool liefert bei dieser App nur den frühen Splash-PNG-Frame).
+
+## Offene Tasks (nächste Session)
+- P1: Feed-Limit auf 300 erhöhen + Community-Picks-Fallback in `backend/server.py` (`GET /api/feed`), damit Sektionen bei leerem KI-Feed nicht leer wirken.
+- P1: Homepage-Raster visuell final abnehmen (User oder testing_agent).
+
 ## Backlog / offene Ideen
 - P1: Sponsor-Klick-Verlauf als 14-Tage-Balkenchart.
 - P2: Sponsor-Buttons automatisch nach Klicks sortieren.
