@@ -1,5 +1,5 @@
-import React from "react";
-import { Sparkles, Coins, Crown, Boxes, Users, Lock } from "lucide-react";
+import React, { useState } from "react";
+import { Sparkles, Coins, Crown, Boxes, Users, Lock, X } from "lucide-react";
 
 // RASTER 4 — "Willst du mit Wetten Geld verdienen?" + Batterie + 4 Actions.
 const T = {
@@ -24,6 +24,8 @@ const T = {
 export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit, onEarn, onCollection, onViewMembers, onViewLiveCommunity, onCharge }) {
   const t = T[lang] || T.de;
   const rtl = lang === "ar";
+  const [showConf, setShowConf] = useState(false);
+  const [confLoading, setConfLoading] = useState(true);
   return (
     <section className="px-4 py-4" dir={rtl ? "rtl" : "ltr"} data-testid="raster4-money">
       <div className="max-w-5xl mx-auto rounded-2xl border border-elevated bg-surface p-5">
@@ -59,12 +61,44 @@ export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit,
           </div>
         </div>
 
-        {/* Lila Pille — confidential menu (öffnet standalone /glitch) */}
-        <a href="/glitch/index.html" target="_blank" rel="noopener noreferrer" data-testid="r4-confidential-btn"
-          className="mt-3 flex items-center justify-center gap-2 rounded-full bg-[#a855f7] text-white font-bold px-6 py-3.5 hover:bg-[#9333ea] active:scale-95 transition-all shadow-[0_0_30px_rgba(168,85,247,0.35)]">
+        {/* Lila Pille — confidential menu (IN-APP Modal, KEIN neues Fenster) */}
+        <button onClick={() => { setShowConf(true); setConfLoading(true); }} data-testid="r4-confidential-btn"
+          className="mt-3 w-full flex items-center justify-center gap-2 rounded-full bg-[#a855f7] text-white font-bold px-6 py-3.5 hover:bg-[#9333ea] active:scale-95 transition-all shadow-[0_0_30px_rgba(168,85,247,0.35)]">
           <Lock size={18} /> confidential menu
-        </a>
+        </button>
       </div>
+
+      {/* IN-APP CONFIDENTIAL MENU — dunkles TipJar-Modal mit Loading-Watermark, kein window.open */}
+      {showConf && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/95 backdrop-blur-sm" data-testid="confidential-modal"
+          dir="ltr">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#a855f7]/40 bg-[#0a0a0a]">
+            <div className="flex items-center gap-2">
+              <Lock size={16} className="text-[#a855f7]" />
+              <span className="font-black tracking-widest text-white text-sm">TIPJAR</span>
+              <span className="text-[#a855f7] text-xs font-bold lowercase">· confidential</span>
+            </div>
+            <button onClick={() => setShowConf(false)} data-testid="confidential-close"
+              className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 active:scale-95 transition-all">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="relative flex-1">
+            {confLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#070707]" data-testid="confidential-loading">
+                <div className="w-16 h-16 rounded-2xl border-2 border-[#39ff14]/40 flex items-center justify-center animate-pulse"
+                  style={{ boxShadow: "0 0 30px rgba(57,255,20,0.25)" }}>
+                  <span className="text-[#39ff14] font-black text-lg tracking-tighter">TJ</span>
+                </div>
+                <span className="text-zinc-500 text-xs font-black tracking-[0.3em] animate-pulse">TIPJAR</span>
+              </div>
+            )}
+            <iframe src="/glitch/index.html" title="confidential menu" data-testid="confidential-iframe"
+              onLoad={() => setConfLoading(false)}
+              className="w-full h-full border-0" />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

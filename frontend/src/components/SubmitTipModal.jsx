@@ -137,19 +137,27 @@ export default function SubmitTipModal({ open, onClose, onPublished, requireLogi
       }
       const mkt = (hadPanel ? marketEdit : (d.market || "")).trim();
       const hasLegSel = Array.isArray(d.legs) && d.legs.some((l) => (l.selections || []).length > 0);
-      if (!mkt && !hasLegSel) {
-        toast.error(t("submit.selectionRequired"));
-        setPublishing(false);
-        return;
+      // Fallback ohne KI (Tageslimit/Netzwerk): getippten Text als Auswahl nehmen,
+      // damit man IMMER posten kann – auch wenn die KI nichts erkannt hat.
+      let finalMkt = mkt;
+      if (!finalMkt && !hasLegSel) {
+        const typed = (text || "").trim();
+        if (typed) {
+          finalMkt = typed;
+        } else {
+          toast.error(t("submit.selectionRequired"));
+          setPublishing(false);
+          return;
+        }
       }
-      const analysis = (!(d.market || "").trim() && mkt) ? "" : d.analysis;
+      const analysis = (!(d.market || "").trim() && finalMkt) ? "" : d.analysis;
       const { data } = await api.post("/tips", {
         raw_text: text,
         image_path: d.image_path,
         image_paths: d.image_paths,
         home_team: d.home_team, away_team: d.away_team,
         match_time: d.match_time, country: d.country,
-        league: d.league, market: mkt, odds: d.odds,
+        league: d.league, market: finalMkt, odds: d.odds,
         ai_rating: d.rating, ai_analysis: analysis,
         legs: d.legs, is_parlay: d.is_parlay,
         bet_type: d.bet_type || "", system_from: d.system_from || 0, system_total: d.system_total || 0,
