@@ -20,3 +20,9 @@
 - Die Seite wird **LLM-FREI** gebaut. KEIN Guthaben aufladen, keinen Universal-/Emergent-LLM-Key nutzen.
 - Agent darf NICHT vorschlagen, LLM-Guthaben aufzuladen.
 - KI-Funktionen (Briefings/Combo-Generierung etc.) müssen ohne LLM auskommen bzw. durch nicht-LLM-Logik (z.B. Tesseract-OCR, echte Quoten, regelbasierte Glitch-Lexikon-Logik) ersetzt werden.
+
+## WORKFLOW-REGEL FÜR .MD-DATEIEN (17.08.2026)
+- Wenn ein Auftrag/Bug ERLEDIGT ist: den zugehörigen Text in der .md ENTFERNEN (NICHT "erledigt" dazuschreiben).
+- Neue Features: als Mechanismus in `mechanism.md` notieren (Single Source of Truth: Jars, Timezones, OCR, Pillen, Batterie, Leaderboard, i18n, Deployment …).
+- Sobald ein Inhalt in `mechanism.md` (oder den *_8SPRACHEN.md) steht, darf er aus anderen .md gelöscht werden.
+- So wenige .md wie möglich behalten.

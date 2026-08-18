@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>confidential menu</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;700&family=Geist:wght@400;600;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Geist",system-ui}
+body{background:#070707;color:#e5e5e5;min-height:100vh;padding:20px}
+.wrap{max-width:1000px;margin:0 auto}
+.header{border:2px solid #39ff14;border-radius:16px;padding:20px;background:#111;position:sticky;top:10px;z-index:10}
+.header h1{color:#39ff14;font-size:28px;font-weight:900;letter-spacing:-2px;text-transform:lowercase}
+.header p{color:#666;font-size:12px;margin-top:4px}
+.langs{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.langs button{background:#1a1a1a;color:#777;border:1px solid #333;padding:6px 12px;border-radius:999px;font-weight:800;font-size:11px;cursor:pointer}
+.langs button.active{background:#39ff14;color:#000;border-color:#39ff14}
+.card{background:#141414;border:1px solid #222;border-radius:14px;padding:16px;margin-top:14px}
+.card.gold{border-color:#ffd700}
+.card h2{font-size:14px;font-weight:800;color:#39ff14;margin-bottom:6px}
+.card.gold h2{color:#ffd700}
+.card p{font-size:12px;color:#999;line-height:1.5;margin:6px 0}
+.pick{background:#0a0a0a;border-left:3px solid #39ff14;padding:8px 10px;border-radius:0 8px 8px 0;font-family:"Geist Mono",monospace;font-size:11px;margin-top:6px}
+.pick.gold{border-color:#ffd700}
+.quote{font-size:11px;color:#aaa;font-style:italic;background:#1a1a0a;padding:8px;border-radius:8px;margin-top:6px;line-height:1.4}
+.section{margin-top:24px;padding-top:12px;border-top:1px dashed #222}
+.section h3{font-size:12px;color:#555;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="header">
+<h1>confidential menu</h1>
+<p id="subtitle"></p>
+<div class="langs" id="langs"></div>
+</div>
+<div id="content"></div>
+</div>
+<script>
+const data = {
+DE: {
+sub:"sichere extra legs die falsch quotiert sind - alle bleiben drin, rot/grün/void später - tipjar visuell",
+g1t:"1. team trifft immer - über 0.5 team", g1d:"Antwerp, AEK, Fenerbahce treffen in 95% der spiele. Bookie gibt trotzdem 1.10-1.30. Perfekt um Kombi zu pushen.",
+g1p:["Kortrijk vs Antwerpen 0:3 - Über 0.5 Antwerpen @1.30 GEWONNEN","Genclerbirligi vs Fener 2:1 - Über 0.5 Fener @1.10 GEWONNEN","AEK vs OFI 2:2 - Über 0.5 @1.14 GEWONNEN"],
+g2t:"2. quali in regulärer zeit - Thun glitch", g2d:"Wenn Team Hinspiel hoch gewonnen hat (Thun 3:0 vs Vikingur), muss Rückspiel nicht gewonnen werden. Winning Method - regular time = Qualifikation nach 90 Minuten, keine Verlängerung. Bookie preist Verlängerung ein die nie passiert = 1.05-1.06 geschenkt.",
+g2p:["Vikingur 3:2 Thun (First 0-3) - FC Thun regular time @1.06 GEWONNEN","Sturm Graz 0:1 Fenerbahce (First 0-2) - Fener regular time @1.05 GEWONNEN"],
+g3t:"3. unter 5.5 absurd line - Porto glitch", g3d:"Wettkonfigurator: Über 0.5 + Unter 5.5 + X2. Porto schießt auswärts gegen Rio Ave nie 6 Tore. Free boost von 1.10 auf 1.23 ohne Risiko.",
+g3p:["Rio Ave 0:2 Porto - Über 0.5 + Unter 5.5 + X2 @1.23 GEWONNEN"],
+g4t:"4. shots glitch - Rückstand = mehr Schüsse", g4d:"K.O. Phase 2. Spiel. Team liegt zurück (Sabah 1-2 vs Aarhus) MUSS gewinnen. Wirft alles nach vorne = mehr Schüsse, auch wenn sie verlieren. Hinspiel hatte Sabah auch mehr Schüsse trotz Niederlage.",
+g4p:["Sabah vs AGF Aarhus 4:0 (First 1-2) - 1X2 Total Shots Sabah @1.41 GEWONNEN"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Wettkonfigurator: Total Over 0.5 + Spieler Schüsse Over 0.5. PAOK zuhause vs Anderlecht muss (First 1-0) = torreich + Mittelfeldspieler Zafeiris schießt mindestens 1x. Bookie gibt 1.33 für 2 sichere lines.",
+g5p:["Anderlecht vs PAOK (First 1-0) 3:2 - Over 0.5 + Zafeiris Over 0.5 shots @1.33 GEWONNEN"],
+g6t:"6. money glitch - Almeria -1 Asian Handicap", g6d:"Almeria massiv verstärkt, behält Topscorer Arribas, Vorbereitung 2-0 und 4-0 Siege. Eldense als Aufsteiger 5 Niederlagen, braucht noch Verstärkung. Qualitätsunterschied + Heimvorteil = Almeria Sieg + Over 1.5. Asian -1 safe: bei nur 1 Tor Einsatz zurück, bei 2+ voller Gewinn.",
+g6p:["Almeria vs Eldense - Almeria -1 AH + Over 1.5 @2.13 GEWONNEN"], g6q:"Η Αλμερία ενισχύθηκε σημαντικά, διατήρησε τον περσινό πρώτο σκόρερ Αρίμπας και έδειξε βελτιωμένη εικόνα στην προετοιμασία, ολοκληρώνοντας τα φιλικά με νίκες 2-0 και 4-0. Αντίθετα, η νεοφώτιστη Ελντένσε μέτρησε πέντε ήττες και εξακολουθεί να χρειάζεται ενίσχυση.",
+ex1t:"EXTRA - Palermo +0,5", ex1d:"Palermo qualitativer Kader, kann sogar Serie A bestehen, Enthusiasmus + Heimvorteil. Letse mit 2 wichtigen Ausfällen. +0,5 deckt Sieg + Unentschieden.", ex1p:["Palermo vs Letse - Palermo +0,5 @1.80 GEWONNEN"], ex1q:"Η Παλέρμο διαθέτει ένα ποιοτικό ρόστερ, ικανό να σταθεί ακόμη και στη Serie A, ενώ έχει υπέρ της τον ενθουσιασμό και τον παράγοντα έδρα."
+},
+EN: {
+sub:"safe extra legs mispriced - all stay, red/green/void later - tipjar visual",
+g1t:"1. team always scores - over 0.5 team", g1d:"Antwerp, AEK, Fenerbahce score in 95%. Bookie still 1.10-1.30. Perfect to boost acca.",
+g1p:["Kortrijk vs Antwerp 0:3 - Over 0.5 @1.30 WON","Genclerbirligi vs Fener 2:1 @1.10 WON","AEK vs OFI 2:2 @1.14 WON"],
+g2t:"2. quali in regular time - Thun glitch", g2d:"If team won first leg big (Thun 3:0 vs Vikingur), second leg doesn't need to be won. Winning Method regular time = qualification after 90min, no extra time. Bookie prices ET that never happens = 1.05-1.06 free.",
+g2p:["Vikingur 3:2 Thun (0-3) @1.06 WON","Sturm Graz 0:1 Fener (0-2) @1.05 WON"],
+g3t:"3. under 5.5 absurd line - Porto glitch", g3d:"Bet Builder: Over 0.5 + Under 5.5 + X2. Porto never scores 6 away vs Rio Ave. Free boost 1.10 to 1.23.",
+g3p:["Rio Ave 0:2 Porto @1.23 WON"],
+g4t:"4. shots glitch - losing = more shots", g4d:"K.O. phase 2nd leg. Team behind (Sabah 1-2 vs Aarhus) MUST win. Throws everything forward = more shots even when losing.",
+g4p:["Sabah vs Aarhus 4:0 (1-2) @1.41 WON"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Bet Builder: Total Over 0.5 + Player Shots Over 0.5. PAOK at home vs Anderlecht must (First 1-0) = high scoring + midfielder Zafeiris at least 1 shot. 1.33 for 2 safe lines.",
+g5p:["Anderlecht vs PAOK 3:2 @1.33 WON"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria strengthened massively, kept top scorer Arribas, pre-season 2-0 and 4-0 wins. Newly promoted Eldense 5 defeats, needs reinforcements. Quality gap + home = Almeria win + Over 1.5. Asian -1 safe: stake back if 1, full win if 2+.",
+g6p:["Almeria vs Eldense - Almeria -1 AH + Over 1.5 @2.13 WON"], g6q:"Almeria strengthened significantly, kept last year's top scorer Arribas and showed improved image in preparation, finishing friendlies with 2-0 and 4-0 wins.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo quality roster, can play Serie A, enthusiasm + home, Letse 2 important absences. +0.5 covers win + draw.", ex1p:["Palermo vs Letse - Palermo +0.5 @1.80 WON"], ex1q:"Palermo has quality roster capable of Serie A, enthusiasm and home factor."
+},
+TR: {
+sub:"yanlış fiyatlanan güvenli ekler - hepsi kalır",
+g1t:"1. takım her zaman atar - 0.5 üst", g1d:"Antwerp, AEK, Fener %95 atar, yine 1.10-1.30 verir.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 KAZANDI","Genclerbirligi vs Fener 2:1 @1.10 KAZANDI","AEK vs OFI 2:2 @1.14 KAZANDI"],
+g2t:"2. normal sürede tur - Thun", g2d:"İlk maçı farklı kazandı (3-0) = normal sürede tur, uzatma yok. 1.05-1.06 bedava.",
+g2p:["Vikingur 3:2 Thun @1.06 KAZANDI","Sturm Graz 0:1 Fener @1.05 KAZANDI"],
+g3t:"3. 5.5 alt absürt - Porto", g3d:"0.5 üst + 5.5 alt + X2. Porto deplasmanda 6 atmaz.",
+g3p:["Rio Ave 0:2 Porto @1.23 KAZANDI"],
+g4t:"4. şut glitch - geride = daha çok şut", g4d:"K.O. 2. maç geride olan kazanmak zorunda = daha çok şut.",
+g4p:["Sabah vs Aarhus 4:0 @1.41 KAZANDI"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Toplam 0.5 Üst + Oyuncu Şut 0.5 Üst. PAOK evde atmak zorunda.", g5p:["Anderlecht vs PAOK 3:2 @1.33 KAZANDI"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria güçlendi, Arribas kaldı, hazırlık 2-0 4-0. Eldense 5 mağlubiyet.", g6p:["Almeria vs Eldense @2.13 KAZANDI"], g6q:"Almeria önemli ölçüde güçlendi, Arribas'ı tuttu, hazırlık 2-0 4-0.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo kaliteli kadro, ev + heyecan, Letse 2 eksik.", ex1p:["Palermo vs Letse @1.80 KAZANDI"], ex1q:"Palermo kaliteli kadro Serie A seviyesi."
+},
+EL: {
+sub:"ασφαλή έξτρα λάθος τιμολογημένα - όλα μένουν - tipjar",
+g1t:"1. η ομάδα σκοράρει πάντα - over 0.5", g1d:"Antwerp, AEK, Fener 95% σκοράρουν, ακόμα 1.10-1.30.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 ΚΕΡΔΙΣΜΕΝΟ","AEK vs OFI 2:2 @1.14 ΚΕΡΔΙΣΜΕΝΟ"],
+g2t:"2. πρόκριση κανονική - Thun glitch", g2d:"Μεγάλη νίκη πρώτο ματς (3:0) = πρόκριση σε 90 λεπτά, όχι παράταση. 1.05-1.06 δώρο.",
+g2p:["Vikingur 3:2 Thun @1.06 ΚΕΡΔΙΣΜΕΝΟ"],
+g3t:"3. under 5.5 - Porto glitch", g3d:"Over 0.5 + Under 5.5 + X2. Porto δεν βάζει 6 εκτός.",
+g3p:["Rio Ave 0:2 Porto @1.23 ΚΕΡΔΙΣΜΕΝΟ"],
+g4t:"4. shots glitch", g4d:"πίσω = περισσότερα σουτ, K.O. 2ο ματς.", g4p:["Sabah vs Aarhus 4:0 @1.41 ΚΕΡΔΙΣΜΕΝΟ"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Over 0.5 + Σουτ Παίκτη Over 0.5. PAOK πρέπει να σκοράρει.", g5p:["Anderlecht vs PAOK 3:2 @1.33 ΚΕΡΔΙΣΜΕΝΟ"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Αλμερία ενισχύθηκε, κράτησε Αρίμπας, φιλικά 2-0 4-0. Ελντένσε 5 ήττες. Διαφορά ποιότητας + έδρα = Almeria + Over 1.5. Asian -1 ασφαλές.", g6p:["Almeria vs Eldense @2.13 ΚΕΡΔΙΣΜΕΝΟ"], g6q:"Η Αλμερία ενισχύθηκε σημαντικά, διατήρησε τον περσινό πρώτο σκόρερ Αρίμπας και έδειξε βελτιωμένη εικόνα στην προετοιμασία, ολοκληρώνοντας τα φιλικά με νίκες 2-0 και 4-0.",
+ex1t:"EXTRA - Palermo +0,5", ex1d:"Παλέρμο ποιοτικό ρόστερ Serie A, ενθουσιασμός + έδρα, Λέτσε 2 απουσίες.", ex1p:["Palermo vs Letse @1.80 ΚΕΡΔΙΣΜΕΝΟ"], ex1q:"Η Παλέρμο διαθέτει ένα ποιοτικό ρόστερ, ικανό να σταθεί ακόμη και στη Serie A."
+},
+FR: {
+sub:"extras sûrs mal cotés - tout reste",
+g1t:"1. l'équipe marque toujours - plus 0.5", g1d:"Antwerp, AEK, Fener 95% marquent, encore 1.10-1.30.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 GAGNÉ"],
+g2t:"2. qualif temps réglementaire - Thun", g2d:"Gagné large aller 3-0 = qualif en 90min, pas prolongation. 1.05-1.06 gratuit.",
+g2p:["Vikingur 3:2 Thun @1.06 GAGNÉ"],
+g3t:"3. moins de 5.5 - Porto", g3d:"Plus 0.5 + Moins 5.5 + X2. Porto jamais 6 à l'ext.",
+g3p:["Rio Ave 0:2 Porto @1.23 GAGNÉ"],
+g4t:"4. tirs glitch - mené = plus de tirs", g4d:"K.O. 2e match mené doit gagner = plus de tirs.", g4p:["Sabah vs Aarhus 4:0 @1.41 GAGNÉ"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Over 0.5 + Tir Joueur 0.5. PAOK doit marquer à domicile.", g5p:["Anderlecht vs PAOK 3:2 @1.33 GAGNÉ"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria renforcé, garde Arribas, prépa 2-0 4-0. Eldense 5 défaites. Écart qualité + domicile.", g6p:["Almeria vs Eldense @2.13 GAGNÉ"], g6q:"Almeria renforcé, Arribas, amicaux 2-0 4-0.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo effectif qualité Serie A, enthousiasme + domicile.", ex1p:["Palermo vs Letse @1.80 GAGNÉ"], ex1q:"Palermo effectif qualité."
+},
+NL: {
+sub:"veilige extra's verkeerd geprijsd - alles blijft",
+g1t:"1. team scoort altijd - over 0.5", g1d:"Antwerp, AEK, Fener 95% scoren, nog 1.10-1.30.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 GEWONNEN"],
+g2t:"2. kwalificatie reguliere tijd - Thun", g2d:"Dik gewonnen heen 3-0 = kwalificatie in 90min, geen verlenging. 1.05-1.06 gratis.",
+g2p:["Vikingur 3:2 Thun @1.06 GEWONNEN"],
+g3t:"3. onder 5.5 - Porto", g3d:"Over 0.5 + Onder 5.5 + X2. Porto nooit 6 uit.", g3p:["Rio Ave 0:2 Porto @1.23 GEWONNEN"],
+g4t:"4. shots glitch - achter = meer schoten", g4d:"K.O. 2e wedstrijd achter moet winnen = meer schoten.", g4p:["Sabah vs Aarhus 4:0 @1.41 GEWONNEN"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Over 0.5 + Schot Speler 0.5. PAOK moet thuis scoren.", g5p:["Anderlecht vs PAOK 3:2 @1.33 GEWONNEN"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria versterkt, houdt Arribas, oefen 2-0 4-0. Eldense 5 nederlagen. Kwaliteitsverschil + thuis.", g6p:["Almeria vs Eldense @2.13 GEWONNEN"], g6q:"Almeria versterkt, Arribas blijft.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo kwaliteitsselectie Serie A, enthousiasme + thuis.", ex1p:["Palermo vs Letse @1.80 GEWONNEN"], ex1q:"Palermo kwaliteitsselectie."
+},
+PT: {
+sub:"extras seguros com preço errado - tudo fica",
+g1t:"1. time sempre marca - mais 0.5", g1d:"Antwerp, AEK, Fener 95% marcam, ainda 1.10-1.30.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 GANHO"],
+g2t:"2. classificação tempo regular - Thun", g2d:"Ganhou ida por muito 3-0 = classifica em 90min, sem prorrogação. 1.05-1.06 grátis.",
+g2p:["Vikingur 3:2 Thun @1.06 GANHO"],
+g3t:"3. abaixo de 5.5 - Porto", g3d:"Mais 0.5 + Abaixo 5.5 + X2. Porto nunca faz 6 fora.", g3p:["Rio Ave 0:2 Porto @1.23 GANHO"],
+g4t:"4. chutes glitch - perdendo = mais chutes", g4d:"Mata-mata 2º jogo perdendo precisa ganhar = mais chutes.", g4p:["Sabah vs Aarhus 4:0 @1.41 GANHO"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Mais 0.5 + Chute Jogador 0.5. PAOK precisa marcar em casa.", g5p:["Anderlecht vs PAOK 3:2 @1.33 GANHO"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria reforçado, mantém Arribas, amistosos 2-0 4-0. Eldense 5 derrotas.", g6p:["Almeria vs Eldense @2.13 GANHO"], g6q:"Almeria reforçado, manteve Arribas.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo elenco qualidade Serie A, entusiasmo + casa.", ex1p:["Palermo vs Letse @1.80 GANHO"], ex1q:"Palermo elenco qualidade."
+},
+SQ: {
+sub:"ekstra të sigurta me çmim gabim - të gjitha mbeten",
+g1t:"1. skuadra gjithmonë shënon - mbi 0.5", g1d:"Antwerp, AEK, Fener 95% shënojnë, ende 1.10-1.30.",
+g1p:["Kortrijk vs Antwerp 0:3 @1.30 FITUAR"],
+g2t:"2. kualifikim kohë e rregullt - Thun", g2d:"Fitoi thellë ndeshjen e parë 3-0 = kualifikim në 90min, jo shtesë. 1.05-1.06 falas.", g2p:["Vikingur 3:2 Thun @1.06 FITUAR"],
+g3t:"3. nën 5.5 - Porto", g3d:"Mbi 0.5 + Nën 5.5 + X2. Porto kurrë 6 jashtë.", g3p:["Rio Ave 0:2 Porto @1.23 FITUAR"],
+g4t:"4. gjuajtje glitch - prapa = më shumë gjuajtje", g4d:"Ndeshja 2 KO prapa duhet të fitojë = më shumë gjuajtje.", g4p:["Sabah vs Aarhus 4:0 @1.41 FITUAR"],
+g5t:"5. money glitch - PAOK + Zafeiris", g5d:"Mbi 0.5 + Gjuajtje Lojtari 0.5. PAOK duhet të shënojë në shtëpi.", g5p:["Anderlecht vs PAOK 3:2 @1.33 FITUAR"],
+g6t:"6. money glitch - Almeria -1 AH", g6d:"Almeria u përforcua, mban Arribas, miqësore 2-0 4-0. Eldense 5 humbje.", g6p:["Almeria vs Eldense @2.13 FITUAR"], g6q:"Almeria u përforcua, mban Arribas.",
+ex1t:"EXTRA - Palermo +0.5", ex1d:"Palermo cilësi Serie A, entuziazëm + fusha.", ex1p:["Palermo vs Letse @1.80 FITUAR"], ex1q:"Palermo cilësi Serie A."
+}
+};
+let cur="DE";
+function render(){
+ const t=data[cur];
+ document.getElementById("subtitle").innerText=t.sub;
+ document.getElementById("content").innerHTML=`
+  <div class="section"><h3>glitches (linked tab)</h3>
+   <div class="card"><h2>${t.g1t}</h2><p>${t.g1d}</p>${t.g1p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}</div>
+   <div class="card"><h2>${t.g2t}</h2><p>${t.g2d}</p>${t.g2p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}</div>
+   <div class="card"><h2>${t.g3t}</h2><p>${t.g3d}</p>${t.g3p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}</div>
+   <div class="card"><h2>${t.g4t}</h2><p>${t.g4d}</p>${t.g4p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}</div>
+   <div class="card gold"><h2>${t.g5t}</h2><p>${t.g5d}</p>${t.g5p.map(e=>`<div class="pick gold">💰 ${e}</div>`).join("")}</div>
+   <div class="card gold"><h2>${t.g6t}</h2><p>${t.g6d}</p>${t.g6p.map(e=>`<div class="pick gold">💰 ${e}</div>`).join("")}${t.g6q?`<div class="quote">${t.g6q}</div>`:''}</div>
+  </div>
+  <div class="section"><h3>extras (rechte tab) - tipjar visuell</h3>
+   <div class="card"><h2>${t.ex1t}</h2><p>${t.ex1d}</p>${t.ex1p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}<div class="quote">${t.ex1q}</div></div>
+  </div>
+ `;
+ document.querySelectorAll(".langs button").forEach(b=>b.classList.toggle("active",b.dataset.l===cur));
+}
+const langsDiv=document.getElementById("langs");
+Object.keys(data).forEach(l=>{ const b=document.createElement("button"); b.innerText=l; b.dataset.l=l; b.onclick=()=>{cur=l; render();}; langsDiv.appendChild(b); });
+render();
+</script>
+</body>
+</html>

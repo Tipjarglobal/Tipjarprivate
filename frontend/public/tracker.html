@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>confidential menu</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;700&family=Geist:wght@400;600;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Geist",system-ui}
+body{background:#070707;color:#e5e5e5;min-height:100vh}
+.wrap{max-width:1150px;margin:0 auto;padding:16px}
+.header{display:flex;justify-content:space-between;align-items:center;border:2px solid #39ff14;border-radius:16px;padding:16px 20px;background:#111;position:sticky;top:10px;z-index:30;flex-wrap:wrap;gap:10px}
+.header h1{color:#39ff14;font-size:22px;font-weight:900;letter-spacing:-1.5px;text-transform:lowercase}
+.tabs{display:flex;gap:8px}
+.tab{padding:8px 18px;border-radius:999px;border:1px solid #333;background:#1a1a1a;color:#888;cursor:pointer;font-weight:800;font-size:12px}
+.tab.active.glitch{background:#39ff14;color:#000;border-color:#39ff14}
+.tab.active.extra{background:#ffd700;color:#000;border-color:#ffd700}
+.main{display:grid;grid-template-columns:360px 1fr;gap:16px;margin-top:18px}
+@media(max-width:900px){.main{grid-template-columns:1fr}}
+.left{background:#111;border:1px solid #222;border-radius:16px;padding:16px;height:fit-content;position:sticky;top:86px}
+.step{display:none}
+.step.active{display:block}
+.step h3{font-size:13px;color:#39ff14;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+.input{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:10px 12px;border-radius:10px;font-size:13px;margin:6px 0}
+.input:focus{border-color:#39ff14;outline:none}
+.btn{width:100%;padding:10px;border-radius:10px;border:none;font-weight:800;cursor:pointer;font-size:13px;margin-top:8px}
+.btn-primary{background:#39ff14;color:#000}
+.btn-gold{background:#ffd700;color:#000}
+.btn-dark{background:#222;color:#888;border:1px solid #333}
+.hint{font-size:11px;color:#666;margin:6px 0;line-height:1.4}
+.image-drop{border:1px dashed #333;border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:#0a0a0a;margin:8px 0}
+.image-drop.dragover{border-color:#39ff14;background:#0f1a0f}
+.preview{max-width:100%;border-radius:8px;margin-top:8px;display:none}
+.found{background:#0f1a0f;border:1px solid #39ff14;border-radius:10px;padding:12px;margin:10px 0}
+.found h4{color:#39ff14;font-size:12px;margin-bottom:6px}
+.found-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.content{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
+@media(max-width:600px){.content{grid-template-columns:1fr}}
+.card{background:#141414;border:1px solid #222;border-radius:14px;padding:12px;transition:.2s}
+.card.grun{border-color:#39ff14;background:#0f1a0f}
+.card.rot{border-color:#ff3b3b;background:#1a0f0f}
+.card.void{border-color:#666;background:#1a1a1a}
+.card.pending{border-color:#222}
+.top{display:flex;justify-content:space-between;gap:8px}
+.badge{font-size:9px;padding:3px 7px;border-radius:999px;font-weight:900}
+.badge.glitch{background:#39ff14;color:#000}
+.badge.extra{background:#ffd700;color:#000}
+.meta{font-family:"Geist Mono",monospace;font-size:10px;color:#666}
+.title{font-size:12px;font-weight:700;margin:6px 0;line-height:1.3}
+.desc{font-size:11px;color:#999;line-height:1.4}
+.pick{background:#0a0a0a;border-left:3px solid #39ff14;padding:7px 9px;margin-top:6px;border-radius:0 8px 8px 0;font-family:"Geist Mono",monospace;font-size:10px}
+.pick.extra{border-color:#ffd700}
+.quote{font-size:10px;color:#aaa;font-style:italic;margin-top:6px;background:#1a1a0a;padding:6px;border-radius:6px;line-height:1.4}
+.thumb{width:100%;border-radius:8px;margin-top:6px;max-height:160px;object-fit:cover}
+.status{display:flex;gap:4px;margin-top:8px}
+.status button{flex:1;padding:5px;border-radius:7px;border:1px solid #333;background:#111;color:#666;font-size:10px;font-weight:700;cursor:pointer}
+.status button.active.grun{background:#39ff14;color:#000;border-color:#39ff14}
+.status button.active.rot{background:#ff3b3b;color:#fff;border-color:#ff3b3b}
+.status button.active.void{background:#666;color:#fff}
+.status button.active.pending{background:#222;color:#fff}
+.progress{display:flex;gap:6px;margin:10px 0}
+.dot{width:28px;height:4px;border-radius:999px;background:#222}
+.dot.active{background:#39ff14}
+.counter{font-family:"Geist Mono",monospace;font-size:10px;color:#555;margin-top:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="header">
+<h1>confidential menu</h1>
+<div class="tabs">
+<button class="tab active glitch" data-tab="glitch" onclick="switchTab('glitch')">GLITCHES <span id="c-glitch"></span></button>
+<button class="tab extra" data-tab="extra" onclick="switchTab('extra')">EXTRAS <span id="c-extra"></span></button>
+</div>
+</div>
+
+<div class="main">
+<div class="left">
+<div class="progress"><div class="dot active" id="d1"></div><div class="dot" id="d2"></div></div>
+
+<div class="step active" id="step1">
+<h3>Schritt 1: Spiel eingeben</h3>
+<input class="input" id="gameInput" placeholder="Almeria - Eldense  (Enter drücken)" onkeydown="if(event.key==='Enter') searchGame()">
+<div class="hint">Beispiel: Almeria - Eldense, Anderlecht vs PAOK, Palermo - Letse</div>
+
+<div class="image-drop" id="drop" onclick="document.getElementById('file').click()">
+<div style="font-size:12px">📸 Bild eintragen (Screenshot, Wettschein, Telegram)</div>
+<div style="font-size:10px;color:#666;margin-top:4px">Drag & Drop oder klicken - wird erkannt</div>
+<img id="preview" class="preview">
+<input type="file" id="file" accept="image/*" style="display:none" onchange="handleImage(this)">
+</div>
+<div id="ocrResult" class="hint" style="display:none"></div>
+
+<button class="btn btn-primary" onclick="searchGame()">ENTER - Spiel suchen 🔍</button>
+</div>
+
+<div class="step" id="step2">
+<h3>Schritt 2: Tipp & Quote</h3>
+<div id="foundBox" class="found"></div>
+
+<select class="input" id="type">
+<option value="glitch">GLITCH (links)</option>
+<option value="extra">EXTRA (rechts)</option>
+</select>
+<input class="input" id="tipInput" placeholder="Tipp: Almeria -1 AH + Over 1.5">
+<input class="input" id="quoteInput" placeholder="Quote: 2.13">
+<input class="input" id="leagueInput" placeholder="Liga: LaLiga2">
+<input class="input" id="dateInput" placeholder="Datum: 2026-08-18">
+<input class="input" id="timeInput" placeholder="Uhrzeit: 20:30">
+<textarea class="input" id="descInput" rows="3" placeholder="Grund: Arribas bleibt, 2-0 4-0, Eldense 5 Pleiten..."></textarea>
+<textarea class="input" id="greekInput" rows="2" placeholder="Griechisch Original (optional)"></textarea>
+
+<button class="btn btn-gold" onclick="saveEntry()">+ EINTRAG ADDEN (bleibt drin)</button>
+<button class="btn btn-dark" onclick="backTo1()">← zurück zu Spiel</button>
+</div>
+</div>
+
+<div>
+<div class="content" id="content"></div>
+<div class="counter" id="counter"></div>
+</div>
+</div>
+</div>
+
+<script>
+let entries = JSON.parse(localStorage.getItem('cg_final')||'null') || [
+{ id:1, type:'glitch', title:'Kortrijk vs Antwerpen 0:3 - Über 0.5 @1.30', desc:'Team trifft immer', pick:'Über 0.5 Antwerpen @1.30', league:'Jupiler', date:'2026-08-10', time:'18:00', status:'grun', image:null, greek:'' },
+{ id:2, type:'glitch', title:'Vikingur 3:2 Thun (0-3) - Thun regular time @1.06', desc:'Hinspiel 3:0 = regular time quali nach 90min', pick:'Thun regular time @1.06', league:'EL Quali', date:'2026-08-12', time:'20:00', status:'grun', image:null, greek:'' },
+{ id:3, type:'glitch', title:'Rio Ave 0:2 Porto - Über 0.5 + Unter 5.5 + X2 @1.23', desc:'Porto nie 6 auswärts - free boost', pick:'Über 0.5 + Unter 5.5 + X2 @1.23', league:'Primeira Liga', date:'2026-08-14', time:'21:00', status:'grun', image:null, greek:'' },
+{ id:4, type:'glitch', title:'Sabah vs Aarhus 4:0 (1-2) - Total Shots Sabah @1.41', desc:'Rückstand = mehr Schüsse', pick:'Total Shots Sabah @1.41', league:'Conference', date:'2026-08-14', time:'19:00', status:'grun', image:null, greek:'' },
+{ id:5, type:'glitch', title:'Anderlecht vs PAOK 3:2 - Over 0.5 + Zafeiris Over 0.5 @1.33', desc:'PAOK muss, torreich + Zafeiris 1 Schuss', pick:'Over 0.5 + Zafeiris Over 0.5 @1.33', league:'EL Quali', date:'2026-08-15', time:'20:30', status:'grun', image:null, greek:'' },
+{ id:6, type:'glitch', title:'Almeria vs Eldense - Almeria -1 AH + Over 1.5 @2.13', desc:'Almeria verstärkt, Arribas bleibt, 2-0 4-0 Vorbereitung. Eldense 5 Niederlagen.', pick:'Almeria -1 AH + Over 1.5 @2.13', league:'LaLiga2', date:'2026-08-16', time:'20:30', status:'pending', image:null, greek:'Η Αλμερία ενισχύθηκε σημαντικά, διατήρησε τον περσινό πρώτο σκόρερ Αρίμπας και έδειξε βελτιωμένη εικόνα στην προετοιμασία, ολοκληρώνοντας τα φιλικά με νίκες 2-0 και 4-0. Αντίθετα, η νεοφώτιστη Ελντένσε μέτρησε πέντε ήττες και εξακολουθεί να χρειάζεται ενίσχυση. Η διαφορά ποιότητας και η έδρα στηρίζουν τη νίκη της Αλμερία σε συνδυασμό με Over 1,5 συνολικά γκολ.' },
+{ id:7, type:'extra', title:'Palermo vs Letse - Palermo +0,5', desc:'Palermo qualitativer Kader Serie A Niveau, Enthusiasmus + Heim, Letse 2 Ausfälle', pick:'Palermo +0,5 Sieg + Unentschieden', league:'Serie B', date:'2026-08-16', time:'18:00', status:'pending', image:null, greek:'Η Παλέρμο διαθέτει ένα ποιοτικό ρόστερ, ικανό να σταθεί ακόμη και στη Serie A, ενώ έχει υπέρ της τον ενθουσιασμό και τον παράγοντα έδρα.' }
+];
+
+let currentTab='glitch';
+let tempImage=null;
+let tempGame='';
+
+function save(){ localStorage.setItem('cg_final', JSON.stringify(entries)); }
+
+function switchTab(t){ currentTab=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t)); render(); }
+
+function setStatus(id,s){ const e=entries.find(x=>x.id===id); e.status=s; save(); render(); }
+
+function handleImage(input){
+ const file=input.files[0]; if(!file) return;
+ const reader=new FileReader();
+ reader.onload=e=>{
+  tempImage=e.target.result;
+  document.getElementById('preview').src=tempImage;
+  document.getElementById('preview').style.display='block';
+  document.getElementById('ocrResult').style.display='block';
+  document.getElementById('ocrResult').innerHTML=`✓ Bild erkannt (${(file.size/1024).toFixed(0)}KB) - wird beim Eintrag gespeichert. <br>Erkannt: ${document.getElementById('gameInput').value||'Spiel'} - Tip wird in Schritt 2 ergänzt`;
+ };
+ reader.readAsDataURL(file);
+}
+
+const drop=document.getElementById('drop');
+drop.addEventListener('dragover',e=>{ e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('dragover'); const f=e.dataTransfer.files[0]; if(f){ document.getElementById('file').files=e.dataTransfer.files; handleImage({files:[f]}); } });
+
+function searchGame(){
+ const game=document.getElementById('gameInput').value.trim();
+ if(!game){ alert('Erst Spiel eingeben: z.B. Almeria - Eldense'); return; }
+ tempGame=game;
+ document.getElementById('step1').classList.remove('active');
+ document.getElementById('step2').classList.add('active');
+ document.getElementById('d1').classList.remove('active');
+ document.getElementById('d2').classList.add('active');
+ // mock search - in real würde hier API Liga/Datum/Uhrzeit holen
+ const mockLeague = game.toLowerCase().includes('almeria')?'LaLiga2': game.toLowerCase().includes('paok')||game.toLowerCase().includes('anderlecht')?'Europa League Quali': game.toLowerCase().includes('palermo')?'Serie B':'Unbekannt - bitte editieren';
+ const today=new Date().toISOString().slice(0,10);
+ document.getElementById('foundBox').innerHTML=`<h4>✓ Spiel gefunden: ${game}</h4><div class="found-grid"><div><span style="color:#666;font-size:10px">Liga:</span><br>${mockLeague}</div><div><span style="color:#666;font-size:10px">Datum:</span><br>${today}</div></div><div style="margin-top:6px;font-size:11px;color:#999">Was ist der Tipp?</div>`;
+ document.getElementById('leagueInput').value=mockLeague;
+ document.getElementById('dateInput').value=today;
+ document.getElementById('timeInput').value='20:30';
+ document.getElementById('tipInput').focus();
+}
+
+function backTo1(){
+ document.getElementById('step2').classList.remove('active');
+ document.getElementById('step1').classList.add('active');
+ document.getElementById('d2').classList.remove('active');
+ document.getElementById('d1').classList.add('active');
+}
+
+function saveEntry(){
+ const tip=document.getElementById('tipInput').value.trim() || tempGame;
+ const quote=document.getElementById('quoteInput').value.trim();
+ const type=document.getElementById('type').value;
+ const league=document.getElementById('leagueInput').value;
+ const date=document.getElementById('dateInput').value;
+ const time=document.getElementById('timeInput').value;
+ const desc=document.getElementById('descInput').value;
+ const greek=document.getElementById('greekInput').value;
+ if(!tip){ alert('Tipp eingeben'); return; }
+ const title = quote? `${tempGame} - ${tip} @${quote}` : `${tempGame} - ${tip}`;
+ entries.unshift({ id:Date.now(), type, title, desc, pick:tip+(quote?' @'+quote:''), league, date, time, status:'pending', image:tempImage, greek, quote });
+ // reset
+ document.getElementById('gameInput').value=''; document.getElementById('tipInput').value=''; document.getElementById('quoteInput').value=''; document.getElementById('descInput').value=''; document.getElementById('greekInput').value=''; document.getElementById('preview').style.display='none'; tempImage=null; document.getElementById('ocrResult').style.display='none';
+ backTo1();
+ save(); render();
+}
+
+function render(){
+ const filtered=entries.filter(e=>e.type===currentTab);
+ document.getElementById('content').innerHTML=filtered.map(e=>`
+  <div class="card ${e.status}">
+   <div class="top"><span class="badge ${e.type}">${e.type.toUpperCase()}</span><span class="meta">${e.league||''} ${e.date||''} ${e.time||''} #${String(e.id).slice(-4)}</span></div>
+   <div class="title">${e.title}</div>
+   ${e.desc?`<div class="desc">${e.desc}</div>`:''}
+   ${e.greek?`<div class="quote">${e.greek}</div>`:''}
+   <div class="pick ${e.type}">${e.pick}${e.quote?` @${e.quote}`:''}</div>
+   ${e.image?`<img src="${e.image}" class="thumb">`:''}
+   <div class="status">
+    <button class="pending ${e.status==='pending'?'active':''}" onclick="setStatus(${e.id},'pending')">PEND</button>
+    <button class="grun ${e.status==='grun'?'active':''}" onclick="setStatus(${e.id},'grun')">GRÜN</button>
+    <button class="rot ${e.status==='rot'?'active':''}" onclick="setStatus(${e.id},'rot')">ROT</button>
+    <button class="void ${e.status==='void'?'active':''}" onclick="setStatus(${e.id},'void')">VOID</button>
+   </div>
+  </div>
+ `).join('') || `<div style="color:#555;padding:20px">Keine Einträge in ${currentTab.toUpperCase()}</div>`;
+ document.getElementById('c-glitch').innerText=`(${entries.filter(x=>x.type==='glitch').length})`;
+ document.getElementById('c-extra').innerText=`(${entries.filter(x=>x.type==='extra').length})`;
+ document.getElementById('counter').innerText=`${entries.length} total | ${entries.filter(x=>x.status==='grun').length} grün | ${entries.filter(x=>x.status==='rot').length} rot | ${entries.filter(x=>x.status==='pending').length} pending | NIX LÖSCHEN - alles bleibt drin`;
+}
+
+render();
+</script>
+</body>
+</html>

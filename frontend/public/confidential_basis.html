@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>confidential menu</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&family=Geist+Mono:wght@400;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;font-family:"Geist",system-ui,sans-serif}
+  body{background:#0a0a0a;color:#e5e5e5;min-height:100vh;padding:20px}
+  .wrap{max-width:900px;margin:0 auto}
+  .header{border:2px solid #39ff14;padding:24px;background:#111;position:sticky;top:10px;z-index:10;border-radius:16px}
+  h1{font-size:32px;font-weight:900;letter-spacing:-2px;color:#39ff14;text-transform:lowercase}
+  .langs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .langs button{background:#222;color:#888;border:1px solid #333;padding:6px 12px;border-radius:999px;cursor:pointer;font-weight:700;font-size:12px}
+  .langs button.active{background:#39ff14;color:#000;border-color:#39ff14}
+  .card{background:#141414;border:1px solid #222;border-radius:16px;padding:20px;margin-top:20px}
+  .card h2{color:#39ff14;font-size:16px;margin-bottom:8px}
+  .card p{color:#aaa;line-height:1.5;font-size:14px;margin:10px 0}
+  .example{background:#0f0f0f;border-left:3px solid #39ff14;padding:10px 14px;margin:10px 0;border-radius:0 8px 8px 0;font-family:"Geist Mono",monospace;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>confidential menu</h1>
+    <div style="color:#666;font-size:12px;margin-top:4px" id="subtitle"></div>
+    <div class="langs" id="langs"></div>
+  </div>
+  <div id="content"></div>
+</div>
+<script>
+const data = {
+DE: { sub:"sichere extra legs die falsch quotiert sind", s1t:"1. team trifft immer - über 0.5 team", s1d:"Antwerp, AEK, Fenerbahce treffen in 95% der spiele. trotzdem 1.10-1.30 quote. perfekt für kombi.", s1e:["Kortrijk vs Antwerpen 0:3 - über 0.5 @1.30 gewonnen","Genclerbirligi vs Fener 2:1 - über 0.5 @1.10 gewonnen","AEK vs OFI 2:2 - über 0.5 @1.14 gewonnen"], s2t:"2. quali in regulärer zeit - Thun glitch", s2d:"Wenn Team Hinspiel hoch gewonnen hat (Thun 3:0 vs Vikingur), muss Rückspiel nicht gewonnen werden. 'Winning Method - regular time' bedeutet: Qualifikation nach 90 Minuten, keine Verlängerung. Bookie preist Verlängerung ein die nie passiert = 1.05-1.06 geschenkt.", s2e:["Vikingur 3:2 Thun (first 0-3) - FC Thun regular time @1.06 gewonnen","Sturm Graz 0:1 Fenerbahce (first 0-2) @1.05 gewonnen"], s3t:"3. unter 5.5 absurd line - Porto glitch", s3d:"konfigurator: über 0.5 + unter 5.5 + X2. Porto schießt auswärts nie 6 tore vs Rio Ave. free boost von 1.10 auf 1.23.", s3e:["Rio Ave 0:2 Porto - über 0.5 + unter 5.5 + X2 @1.23 gewonnen"], s4t:"4. shots glitch - rückstand = mehr schüsse", s4d:"K.O. 2. spiel. team liegt zurück (Sabah 1-2) muss gewinnen = mehr schüsse auch bei niederlage.", s4e:["Sabah vs Aarhus 4:0 (first 1-2) - total shots Sabah @1.41 gewonnen"] },
+EN: { sub:"safe extra legs mispriced", s1t:"1. team always scores - over 0.5", s1d:"Antwerp, AEK, Fenerbahce score in 95% - still 1.10-1.30.", s1e:["Kortrijk vs Antwerp 0:3 - over 0.5 @1.30 won","Genclerbirligi vs Fener 2:1 @1.10 won","AEK vs OFI 2:2 @1.14 won"], s2t:"2. quali in regular time", s2d:"Won first leg big (Thun 3-0). Regular time = qualification after 90min, no extra time. Bookie prices ET that never happens.", s2e:["Vikingur 3:2 Thun (0-3) - regular time @1.06 won","Sturm Graz 0:1 Fener (0-2) @1.05 won"], s3t:"3. under 5.5 absurd", s3d:"over 0.5 + under 5.5 + X2. Porto never 6 away.", s3e:["Rio Ave 0:2 Porto - over 0.5 + under 5.5 + X2 @1.23 won"], s4t:"4. shots glitch", s4d:"KO 2nd leg - team behind must win = more shots.", s4e:["Sabah vs Aarhus 4:0 (1-2) - total shots @1.41 won"] },
+TR: { sub:"yanlış fiyatlanan güvenli ekler", s1t:"1. takım her zaman atar", s1d:"Antwerp, AEK, Fener %95 atar.", s1e:["Kortrijk vs Antwerp 0:3 @1.30 kazandı","Genclerbirligi vs Fener 2:1 @1.10 kazandı"], s2t:"2. normal sürede tur", s2d:"İlk maçı farklı kazandı (Thun 3-0) = normal sürede tur. Uzatma fiyatlanıyor ama olmayacak.", s2e:["Vikingur 3:2 Thun @1.06 kazandı"], s3t:"3. 5.5 alt absürt", s3d:"0.5 üst + 5.5 alt + X2", s3e:["Rio Ave 0:2 Porto @1.23 kazandı"], s4t:"4. şut glitch", s4d:"geride olan daha çok şut çeker", s4e:["Sabah vs Aarhus 4:0 @1.41 kazandı"] },
+EL: { sub:"ασφαλή έξτρα", s1t:"1. η ομάδα σκοράρει πάντα", s1d:"Antwerp, AEK, Fener 95%.", s1e:["Kortrijk vs Antwerp 0:3 @1.30"], s2t:"2. πρόκριση κανονική", s2d:"μεγάλη νίκη πρώτο ματς - πρόκριση σε 90 λεπτά", s2e:["Vikingur 3:2 Thun @1.06"], s3t:"3. under 5.5", s3d:"Porto δεν βάζει 6 εκτός.", s3e:["Rio Ave 0:2 Porto @1.23"], s4t:"4. shots glitch", s4d:"πίσω = περισσότερα σουτ", s4e:["Sabah vs Aarhus 4:0 @1.41"] },
+FR: { sub:"extras sûrs mal cotés", s1t:"1. l'équipe marque toujours", s1d:"Antwerp, AEK, Fener 95%.", s1e:["Kortrijk vs Antwerp 0:3 @1.30 gagné"], s2t:"2. qualif temps réglementaire", s2d:"gagné large aller = qualif en 90min, pas de prolongation", s2e:["Vikingur 3:2 Thun @1.06"], s3t:"3. moins de 5.5", s3d:"Porto ne met jamais 6", s3e:["Rio Ave 0:2 Porto @1.23"], s4t:"4. tirs glitch", s4d:"mené = plus de tirs", s4e:["Sabah vs Aarhus 4:0 @1.41"] },
+NL: { sub:"veilige extra's verkeerd geprijsd", s1t:"1. team scoort altijd", s1d:"Antwerp, AEK, Fener 95%.", s1e:["Kortrijk vs Antwerp 0:3 @1.30 gewonnen"], s2t:"2. kwalificatie reguliere tijd", s2d:"dik gewonnen 1e = kwalificatie in 90min", s2e:["Vikingur 3:2 Thun @1.06"], s3t:"3. onder 5.5", s3d:"Porto nooit 6 uit", s3e:["Rio Ave 0:2 Porto @1.23"], s4t:"4. shots glitch", s4d:"achter = meer schoten", s4e:["Sabah vs Aarhus 4:0 @1.41"] },
+PT: { sub:"extras seguros com preço errado", s1t:"1. time sempre marca", s1d:"Antwerp, AEK, Fener 95%.", s1e:["Kortrijk vs Antwerp 0:3 @1.30 ganho"], s2t:"2. classificação tempo regular", s2d:"ganhou ida por muito = classifica em 90min", s2e:["Vikingur 3:2 Thun @1.06"], s3t:"3. abaixo de 5.5", s3d:"Porto nunca faz 6 fora", s3e:["Rio Ave 0:2 Porto @1.23"], s4t:"4. chutes glitch", s4d:"perdendo = mais chutes", s4e:["Sabah vs Aarhus 4:0 @1.41"] },
+SQ: { sub:"ekstra të sigurta", s1t:"1. skuadra gjithmonë shënon", s1d:"Antwerp, AEK, Fener 95%.", s1e:["Kortrijk vs Antwerp 0:3 @1.30 fituar"], s2t:"2. kualifikim kohë e rregullt", s2d:"fitoi thellë ndeshjen e parë = kualifikim në 90min", s2e:["Vikingur 3:2 Thun @1.06"], s3t:"3. nën 5.5", s3d:"Porto kurrë 6 jashtë", s3e:["Rio Ave 0:2 Porto @1.23"], s4t:"4. gjuajtje glitch", s4d:"prapa = më shumë gjuajtje", s4e:["Sabah vs Aarhus 4:0 @1.41"] }
+};
+let cur="DE";
+function render(){
+ const t=data[cur];
+ document.getElementById("subtitle").innerText=t.sub;
+ document.getElementById("content").innerHTML=`<div class="card"><h2>${t.s1t}</h2><p>${t.s1d}</p>${t.s1e.map(e=>`<div class="example">✔ ${e}</div>`).join("")}</div><div class="card"><h2>${t.s2t}</h2><p>${t.s2d}</p>${t.s2e.map(e=>`<div class="example">✔ ${e}</div>`).join("")}</div><div class="card"><h2>${t.s3t}</h2><p>${t.s3d}</p>${t.s3e.map(e=>`<div class="example">✔ ${e}</div>`).join("")}</div><div class="card"><h2>${t.s4t}</h2><p>${t.s4d}</p>${t.s4e.map(e=>`<div class="example">✔ ${e}</div>`).join("")}</div>`;
+ document.querySelectorAll(".langs button").forEach(b=>b.classList.toggle("active",b.dataset.l===cur));
+}
+const langsDiv=document.getElementById("langs");
+Object.keys(data).forEach(l=>{ const b=document.createElement("button"); b.innerText=l; b.dataset.l=l; b.onclick=()=>{cur=l; render();}; langsDiv.appendChild(b); });
+render();
+</script>
+</body>
+</html>
