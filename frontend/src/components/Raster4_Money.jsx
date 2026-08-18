@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, Coins, Crown, Boxes, Users } from "lucide-react";
+import { Sparkles, Coins, Crown, Boxes, Users, Lock } from "lucide-react";
 
 // RASTER 4 — "Willst du mit Wetten Geld verdienen?" + Batterie + 4 Actions.
 const T = {
@@ -58,6 +58,12 @@ export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit,
             </button>
           </div>
         </div>
+
+        {/* Lila Pille — confidential menu (öffnet standalone /glitch) */}
+        <a href="/glitch/index.html" target="_blank" rel="noopener noreferrer" data-testid="r4-confidential-btn"
+          className="mt-3 flex items-center justify-center gap-2 rounded-full bg-[#a855f7] text-white font-bold px-6 py-3.5 hover:bg-[#9333ea] active:scale-95 transition-all shadow-[0_0_30px_rgba(168,85,247,0.35)]">
+          <Lock size={18} /> confidential menu
+        </a>
       </div>
     </section>
   );
