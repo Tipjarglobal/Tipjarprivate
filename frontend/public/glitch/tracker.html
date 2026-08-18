@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>confidential tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif}
+body{background:#070707;color:#e8e8e8;padding-bottom:80px}
+.hdr{position:sticky;top:0;z-index:10;background:#070707;border:1px solid #39ff14;border-radius:14px;margin:14px;padding:16px 18px;box-shadow:0 0 24px rgba(57,255,20,.15)}
+h1{color:#39ff14;font-weight:800;font-size:24px;letter-spacing:-.5px}
+.sub{color:#8a8a8a;font-size:12px;margin-top:4px}
+.back{display:inline-block;color:#39ff14;font-size:12px;font-weight:800;text-decoration:none;margin-top:10px;border:1px dashed #39ff14;border-radius:999px;padding:5px 12px}
+.sec{color:#666;font-size:11px;font-weight:800;letter-spacing:2px;margin:22px 16px 8px}
+.panel{background:#141414;border:1px solid #222;border-radius:14px;margin:12px 16px;padding:16px}
+.step{color:#39ff14;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:8px}
+input,textarea{width:100%;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e8e8e8;padding:11px 13px;font-size:13px;margin-bottom:9px;font-family:'Geist',sans-serif}
+input:focus,textarea:focus{outline:none;border-color:#39ff14}
+textarea{resize:vertical;min-height:70px;font-family:ui-monospace,monospace;font-size:12px}
+.btn{background:#39ff14;color:#000;border:none;border-radius:999px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer;transition:.15s;width:100%}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:#39ff14;border:1px solid #39ff14}
+.drop{border:2px dashed #2a2a2a;border-radius:12px;padding:26px 14px;text-align:center;color:#8a8a8a;font-size:12.5px;cursor:pointer;transition:.15s;margin-bottom:10px}
+.drop.hot{border-color:#39ff14;background:rgba(57,255,20,.05);color:#39ff14}
+.ocrbox{background:#0d0d0d;border-left:3px solid #7fd0ff;border-radius:8px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:11.5px;color:#9fd8ff;line-height:1.55;white-space:pre-wrap;max-height:150px;overflow:auto;margin-bottom:10px;display:none}
+.ocrbox.show{display:block}
+.prog{height:6px;background:#0d0d0d;border-radius:999px;overflow:hidden;margin-bottom:10px;display:none}
+.prog.show{display:block}
+.prog>i{display:block;height:100%;background:#39ff14;width:0;transition:width .2s}
+.thumb{width:100%;max-height:160px;object-fit:cover;border-radius:10px;border:1px solid #2a2a2a;cursor:pointer;margin-bottom:9px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.chip{background:#0d0d0d;border:1px solid #2a2a2a;color:#39ff14;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800}
+.card{background:#141414;border:1px solid #222;border-radius:14px;margin:12px 16px;padding:14px}
+.card.win{border-color:#39ff14;box-shadow:0 0 14px rgba(57,255,20,.12)}
+.card.lose{border-color:#ff3b3b}
+.card.void{border-color:#e3a81b}
+.ch{display:flex;gap:10px;align-items:flex-start}
+.cimg{width:64px;height:64px;object-fit:cover;border-radius:9px;border:1px solid #2a2a2a;flex-shrink:0;cursor:pointer;background:#0d0d0d}
+.ci{flex:1;min-width:0}
+.ci h3{font-size:14px;font-weight:800;color:#e8e8e8;margin-bottom:3px}
+.ci .mk{color:#9a9a9a;font-size:12px;line-height:1.5}
+.ci .q{color:#39ff14;font-weight:800;font-size:13px}
+.stat{display:flex;gap:7px;margin-top:11px}
+.stat button{flex:1;border:1px solid #2a2a2a;background:#0d0d0d;color:#8a8a8a;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
+.stat button.win.on{background:#39ff14;color:#000;border-color:#39ff14}
+.stat button.lose.on{background:#ff3b3b;color:#000;border-color:#ff3b3b}
+.stat button.void.on{background:#e3a81b;color:#000;border-color:#e3a81b}
+.del{color:#ff3b3b;font-size:11px;font-weight:800;background:none;border:none;cursor:pointer;margin-top:9px}
+.badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
+.badge.win{background:#39ff14;color:#000}.badge.lose{background:#ff3b3b;color:#000}.badge.void{background:#e3a81b;color:#000}.badge.open{background:#2a2a2a;color:#8a8a8a}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.lightbox.show{display:flex}
+.lightbox img{max-width:100%;max-height:90vh;border-radius:12px;border:1px solid #39ff14}
+.empty{color:#555;font-size:12px;text-align:center;margin:20px 16px}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>confidential tracker</h1>
+  <div class="sub">OCR 20 Sprachen · Bild → Text → Auto-Parse · alles bleibt gespeichert</div>
+  <a class="back" href="index.html">← confidential menu</a>
+</div>
+
+<div class="sec">SCHRITT 1 · SUCHE</div>
+<div class="panel">
+  <div class="step">SPIEL / EINTRAG SUCHEN</div>
+  <input id="search" placeholder="z.B. Almeria, PAOK, Palermo …">
+  <button class="btn ghost" id="searchBtn">Suchen</button>
+</div>
+
+<div class="sec">SCHRITT 2 · WETTSCHEIN OCR</div>
+<div class="panel">
+  <div class="step">BILD HOCHLADEN → 20-SPRACHEN OCR</div>
+  <div class="drop" id="drop">Bild hierher ziehen oder tippen zum Auswählen<br><span style="font-size:11px;color:#555">deu·eng·tur·ell·fra·nld·por·sqi·spa·ita·rus·ara·pol·ron·bul·srp·hrv·bos·mkd·ces</span></div>
+  <input type="file" id="file" accept="image/*" style="display:none">
+  <div class="prog" id="prog"><i id="progBar"></i></div>
+  <img id="thumb" class="thumb" style="display:none">
+  <div class="ocrbox" id="ocrbox"></div>
+  <div class="chips" id="chips"></div>
+  <input id="teams" placeholder="Teams (z.B. Almeria - Eldense)">
+  <input id="market" placeholder="Markt (z.B. -1 AH, Über 0.5)">
+  <input id="quote" placeholder="Quote (z.B. @2.13)">
+  <button class="btn" id="saveBtn">In Tracker speichern</button>
+</div>
+
+<div class="sec">GESPEICHERTE EINTRÄGE</div>
+<div id="list"></div>
+
+<div class="lightbox" id="lightbox"><img id="lbImg"></div>
+
+<script>
+const KEY="cg_final_20";
+const OCR_LANGS="deu+eng+tur+ell+fra+nld+por+sqi+spa+ita+rus+ara+pol+ron+bul+srp+hrv+bos+mkd+ces";
+const SEED=[
+ {id:"s1",teams:"Almeria - Eldense",market:"Asian Handicap -1 + Über 1.5",quote:"@2.13",status:"open",img:""},
+ {id:"s2",teams:"Anderlecht - PAOK",market:"Über 0.5 + Zafeiris Über 0.5 Schüsse",quote:"@1.33",status:"win",img:""},
+ {id:"s3",teams:"Palermo - Lecce",market:"Palermo +0,5 (Asian / DC)",quote:"@1.80",status:"win",img:""},
+ {id:"s4",teams:"Rio Ave - Porto",market:"Über 0.5 + Unter 5.5 + X2",quote:"@1.23",status:"win",img:""},
+ {id:"s5",teams:"Vikingur - Thun",market:"Thun Quali reguläre Zeit",quote:"@1.06",status:"win",img:""},
+ {id:"s6",teams:"Sabah - AGF Aarhus",market:"Total Shots Sabah",quote:"@1.41",status:"win",img:""},
+ {id:"s7",teams:"Kortrijk - Antwerpen",market:"Über 0.5 Antwerpen",quote:"@1.30",status:"win",img:""}
+];
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.length)return d;}catch(e){}localStorage.setItem(KEY,JSON.stringify(SEED));return SEED;}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+let DATA=load();
+let pendingImg="";
+
+// ---- OCR PARSING ----
+const MARKET_KEYS=["Über 0.5","Über 1.5","Über 2.5","Unter 5.5","Unter 3.5","-1 AH","Asian Handicap","+0,5","+0.5","X2","Total Shots","Schüsse","Zafeiris","Arribas","reguläre Zeit","Doppelte Chance","Over 0.5","Under 5.5"];
+function parseOCR(text){
+ const res={teams:"",market:"",quote:"",chips:[]};
+ // quote: @1.30 or 1.30 or 2,13
+ const qm=text.match(/@?\s*([1-9]\d?[.,]\d{2})/g);
+ if(qm){const cleaned=qm.map(x=>"@"+x.replace(/[@\s]/g,"").replace(",",".")).filter(x=>{const n=parseFloat(x.slice(1));return n>=1.01&&n<=50;});res.quote=[...new Set(cleaned)].slice(0,3).join(" ");}
+ // teams: "A - B" / "A vs B" / "A – B"
+ const tm=text.match(/([A-ZÀ-Þ][\wÀ-ÿ.]+(?:\s[A-ZÀ-Þ][\wÀ-ÿ.]+){0,2})\s*(?:-|–|vs\.?|:)\s*([A-ZÀ-Þ][\wÀ-ÿ.]+(?:\s[A-ZÀ-Þ][\wÀ-ÿ.]+){0,2})/);
+ if(tm)res.teams=tm[1].trim()+" - "+tm[2].trim();
+ // markets
+ const found=MARKET_KEYS.filter(k=>new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(text));
+ res.market=[...new Set(found)].join(" + ");
+ res.chips=[...new Set(found)];
+ return res;
+}
+
+// ---- DRAG & DROP + OCR ----
+const drop=document.getElementById("drop"),file=document.getElementById("file"),
+ prog=document.getElementById("prog"),progBar=document.getElementById("progBar"),
+ thumb=document.getElementById("thumb"),ocrbox=document.getElementById("ocrbox"),chips=document.getElementById("chips");
+drop.onclick=()=>file.click();
+file.onchange=e=>{if(e.target.files[0])handleImg(e.target.files[0]);};
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hot");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hot");}));
+drop.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)handleImg(f);});
+
+function handleImg(f){
+ const r=new FileReader();
+ r.onload=async()=>{
+  pendingImg=r.result;
+  thumb.src=r.result;thumb.style.display="block";
+  prog.classList.add("show");ocrbox.classList.remove("show");ocrbox.textContent="";progBar.style.width="0%";
+  drop.textContent="OCR läuft … 20 Sprachen";
+  try{
+   const{data}=await Tesseract.recognize(r.result,OCR_LANGS,{logger:m=>{if(m.status==="recognizing text")progBar.style.width=Math.round(m.progress*100)+"%";}});
+   const txt=(data.text||"").trim();
+   ocrbox.textContent=txt||"(kein Text erkannt)";ocrbox.classList.add("show");
+   const p=parseOCR(txt);
+   if(p.teams)document.getElementById("teams").value=p.teams;
+   if(p.market)document.getElementById("market").value=p.market;
+   if(p.quote)document.getElementById("quote").value=p.quote;
+   chips.innerHTML=p.chips.map(c=>`<span class="chip">${c}</span>`).join("");
+  }catch(err){ocrbox.textContent="OCR Fehler: "+err.message;ocrbox.classList.add("show");}
+  prog.classList.remove("show");
+  drop.innerHTML="Bild hierher ziehen oder tippen zum Auswählen<br><span style='font-size:11px;color:#555'>OCR fertig ✔</span>";
+ };
+ r.readAsDataURL(f);
+}
+
+// ---- SAVE ----
+document.getElementById("saveBtn").onclick=()=>{
+ const teams=document.getElementById("teams").value.trim();
+ const market=document.getElementById("market").value.trim();
+ const quote=document.getElementById("quote").value.trim();
+ if(!teams&&!market){alert("Teams oder Markt ausfüllen");return;}
+ DATA.unshift({id:"e"+Date.now(),teams,market,quote,status:"open",img:pendingImg});
+ save(DATA);
+ pendingImg="";thumb.style.display="none";ocrbox.classList.remove("show");chips.innerHTML="";
+ document.getElementById("teams").value="";document.getElementById("market").value="";document.getElementById("quote").value="";
+ drop.innerHTML="Bild hierher ziehen oder tippen zum Auswählen<br><span style='font-size:11px;color:#555'>deu·eng·tur·ell·fra·nld·por·sqi·spa·ita·rus·ara·pol·ron·bul·srp·hrv·bos·mkd·ces</span>";
+ render();
+};
+
+// ---- LIST / RENDER ----
+function setStatus(id,st){const it=DATA.find(x=>x.id===id);if(it){it.status=it.status===st?"open":st;save(DATA);render();}}
+function del(id){DATA=DATA.filter(x=>x.id!==id);save(DATA);render();}
+window.setStatus=setStatus;window.del=del;
+function badge(s){return s==="open"?'<span class="badge open">offen</span>':`<span class="badge ${s}">${s==="win"?"GEWONNEN":s==="lose"?"VERLOREN":"VOID"}</span>`;}
+let filter="";
+function render(){
+ const list=document.getElementById("list");
+ const items=DATA.filter(x=>!filter||(x.teams+" "+x.market).toLowerCase().includes(filter));
+ if(!items.length){list.innerHTML='<div class="empty">Keine Einträge</div>';return;}
+ list.innerHTML=items.map(x=>`
+  <div class="card ${x.status!=='open'?x.status:''}">
+   <div class="ch">
+     ${x.img?`<img class="cimg" src="${x.img}" onclick="showImg('${x.id}')">`:`<div class="cimg" style="display:flex;align-items:center;justify-content:center;color:#333;font-size:22px">◎</div>`}
+     <div class="ci">
+       <h3>${x.teams||"—"}${badge(x.status)}</h3>
+       <div class="mk">${x.market||""}</div>
+       ${x.quote?`<div class="q">${x.quote}</div>`:""}
+     </div>
+   </div>
+   <div class="stat">
+     <button class="win ${x.status==='win'?'on':''}" onclick="setStatus('${x.id}','win')">grün</button>
+     <button class="lose ${x.status==='lose'?'on':''}" onclick="setStatus('${x.id}','lose')">rot</button>
+     <button class="void ${x.status==='void'?'on':''}" onclick="setStatus('${x.id}','void')">void</button>
+   </div>
+   <button class="del" onclick="del('${x.id}')">löschen</button>
+  </div>`).join("");
+}
+window.showImg=id=>{const it=DATA.find(x=>x.id===id);if(it&&it.img){document.getElementById("lbImg").src=it.img;document.getElementById("lightbox").classList.add("show");}};
+document.getElementById("lightbox").onclick=()=>document.getElementById("lightbox").classList.remove("show");
+document.getElementById("searchBtn").onclick=()=>{filter=document.getElementById("search").value.trim().toLowerCase();render();};
+document.getElementById("search").addEventListener("keydown",e=>{if(e.key==="Enter"){filter=e.target.value.trim().toLowerCase();render();}});
+render();
+</script>
+</body>
+</html>
