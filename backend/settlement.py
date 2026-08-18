@@ -722,6 +722,61 @@ def find_finished_fixture(team_id: int, opponent_name: str, dates: list, opponen
     return None
 
 
+def _offline_judge(m, home, away, hg, ag):
+    """Offline-Abrechnung OHNE LLM für die häufigsten Märkte (Über/Unter X.5, 1X2,
+    Doppelte Chance, BTTS). Gibt 'won'/'lost'/'void' zurück oder None (dann LLM/Fallback).
+    Konservativ: bei Unsicherheit None."""
+    try:
+        h, a = int(hg), int(ag)
+    except Exception:
+        return None
+    tot = h + a
+    m = (m or "").strip().lower()
+    if not m:
+        return None
+    if any(x in m for x in ("halbzeit", " hz", "corner", "ecken", "karte", "card",
+                            "schüss", "schuss", "shot", " sot", "spieler", "player",
+                            "torsch", "scorer", "trifft", "foul", "paraden", "saves",
+                            "pass", "tackl", "offside", "abseits")):
+        return None
+    # team-spezifische Märkte hier NICHT anfassen (macht der Code-Grader)
+    hn = (home or "").lower().strip()
+    an = (away or "").lower().strip()
+    ht = hn.split()[0] if hn else ""
+    at = an.split()[0] if an else ""
+    team_in = bool((len(ht) >= 4 and ht in m) or (len(at) >= 4 and at in m))
+    # BTTS
+    if ("btts" in m or "both teams to score" in m
+            or ("beide" in m and ("treffen" in m or "score" in m))):
+        both = h > 0 and a > 0
+        if "nein" in m or " no" in m or "kein" in m or "not" in m:
+            return "won" if not both else "lost"
+        return "won" if both else "lost"
+    # Über/Unter X.5 Gesamttore (orientierungsfrei) — nur wenn KEIN Team genannt ist
+    tm = re.search(r'(über|ueber|over|unter|under)\s*(\d+)\.5', m)
+    if tm and not team_in:
+        line = int(tm.group(2)) + 0.5
+        over = tm.group(1) in ("über", "ueber", "over")
+        if over:
+            return "won" if tot > line else "lost"
+        return "won" if tot < line else "lost"
+    # Doppelte Chance
+    if m in ("1x", "x1") or "doppelte chance 1x" in m or "double chance 1x" in m:
+        return "won" if h >= a else "lost"
+    if m in ("x2", "2x") or "doppelte chance x2" in m or "double chance x2" in m:
+        return "won" if a >= h else "lost"
+    if m in ("12", "21") or "doppelte chance 12" in m or "double chance 12" in m:
+        return "won" if h != a else "lost"
+    # 1X2 (nur exakte Kurz-Strings)
+    if m in ("1", "heimsieg", "home", "home win"):
+        return "won" if h > a else "lost"
+    if m in ("2", "auswärtssieg", "auswaertssieg", "away", "away win"):
+        return "won" if a > h else "lost"
+    if m in ("x", "unentschieden", "draw", "remis"):
+        return "won" if h == a else "lost"
+    return None
+
+
 async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
     """Use the LLM to decide won/lost/void for a bet market given the final score."""
     # Deterministic EXACT-SCORE ("Genaues Ergebnis 2:2" / correct score) — no LLM needed.
@@ -749,6 +804,12 @@ async def judge_market(market: str, home: str, away: str, hg, ag) -> str:
             return "won" if h > a else "lost"
         except Exception:
             pass
+    # OFFLINE ZUERST (kein LLM) — Über/Unter X.5, 1X2, Doppelte Chance, BTTS werden
+    # deterministisch abgerechnet. Spart Credits und funktioniert bei KI-Tageslimit.
+    # Nur wirklich unbekannte Spezial-Märkte gehen danach noch an das LLM.
+    offline = _offline_judge(m, home, away, hg, ag)
+    if offline in ("won", "lost", "void"):
+        return offline
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,

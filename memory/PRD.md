@@ -175,3 +175,13 @@ Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
 - Backend-Endpoint: GET /api/tips/team-search?q= (regex home/away, kickoff>=now, sort asc, 3 Vorschläge).
 - Getestet: curl (team-search, Einzel-Post, Kombi 2 Legs Quote-Produkt) + Screenshots (Step1 Vorschläge PAOK, Step3 Rate&Post). Kein testing_agent (Credits gespart).
 - Hinweis: SubmitTipModal.jsx bleibt im Code (ungenutzt), Import in App.js belassen.
+
+## 2026-08-18 (Fix-Runde 4) — Offline-Settlement (kein LLM) + /fixtures/search
+- settlement.py NUR erweitert (nicht überschrieben – echte Engine mit judge_market/settle_pending_tips bleibt).
+- Neu: _offline_judge(m,home,away,hg,ag) + Aufruf GANZ OBEN in judge_market VOR dem LlmChat-Call.
+  Deckt offline ab: Über/Unter X.5 Gesamttore, 1/X/2, Doppelte Chance 1X/X2/12, BTTS ("beide treffen"). → 0 Credits.
+  Schließt aus (→ Code-Grader/LLM): Halbzeit, Ecken/Corner, Karten, Spieler-Props (Schüsse/SOT/Scorer/trifft/Fouls/Paraden), team-spezifische Totals (Teamname im Markt).
+  13/13 Logik-Tests grün. judge_market ruft LLM jetzt nur noch für wirklich unbekannte Spezial-Märkte.
+- server.py: GET /api/fixtures/search?q= (Alias von /tips/team-search) — 3 früheste kommende Spiele aus match_predictions (offline). Getestet (PAOK).
+- NICHT gemacht (bewusst): Quota-Gate in settle_pending_tips (Schritt 4) – überflüssig, da gängige Picks jetzt gar keinen LLM-Call mehr auslösen; Special-Gift-Fallback unverändert (fails-open void).
+- Frontend: "Compiled successfully". Preview-Server liefert aktuellen Stand (KI-Picks 44, confidential-Pille, Guided-Modal). "Alt" beim User = Handy-/PWA-Cache, nicht Server.

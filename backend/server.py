@@ -1921,6 +1921,13 @@ async def tips_team_search(q: str, user: dict = Depends(get_current_user)):
     return {"suggestions": sug}
 
 
+@api_router.get("/fixtures/search")
+async def fixtures_search(q: str, user: dict = Depends(get_current_user)):
+    """Alias von team-search: 3 früheste kommende Spiele aus den gespeicherten
+    Fixtures (offline, KEIN LLM)."""
+    return await tips_team_search(q=q, user=user)
+
+
 # --- AI-pick correction (owner 2026-07-29) ------------------------------------------
 # ANY logged-in user can correct a KI pick by uploading an image of the REAL, existing
 # selection + odds (e.g. the model wrote "Kopenhagen +1.5" which doesn't exist → send an
