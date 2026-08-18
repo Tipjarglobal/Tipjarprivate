@@ -142,3 +142,13 @@ Umgesetzt nach `/app/memory/UPGRADE_FINAL.md`:
 
 ## Test-Credentials
 Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
+
+## 2026-08-18 — JarDex → SHOP Refactor (owner request)
+- JarDex (Profil → Tab jetzt "Shop") komplett zum SHOP umgebaut. Backend-basiert, echte Coins (credits).
+- Katalog: 30 Jars in 4 Kategorien (COMMON 10 / UNCOMMON 8 / RARE 7 / LEGENDARY 5), sellReward 40…12000.
+- Mechanik: buyPrice = sellReward * 0.75 (BUY_DISCOUNT=0.25, Gewinn eingebaut). Alle Jars sofort kaufbar (KEINE Lock-/Reihenfolge-Logik mehr).
+- Verkauf nur bei fill==100 %, gibt vollen sellReward, Jar bleibt owned, fill→0. Auto-Fill zeitbasiert, LANGSAM: JAR_FILL_SECONDS=8h (server-berechnet). Das bremst den Gewinn-Automaten.
+- Endpoints: GET /api/jars/shop, POST /api/jars/shop/buy, POST /api/jars/shop/sell. State in users.jar_shop = {jar_id:{owned,filled_at}}.
+- Lucky Drop: _bump_jar_activity() an rate_tip (+1) und create_tip (+3). Threshold (random 12-22, dann 18-34) → gewährt zufälliges NOCH-NICHT-besessenes Jar gratis, pushed in users.pending_jar_drops; GET /jars/shop liefert new_drops und leert sie (Frontend-Toast).
+- Frontend: JarDex.jsx = 2-Spalten-Shop-UI, Sub-Tabs EINKAUFEN/VERKAUFEN, 4 Kategorie-Tabs, 8 Sprachen (DE/EN/ES/FR/IT/PT/TR/PL), Erklärungstext pro Tab + Bonus-Hinweis, 5s-Polling für Live-Fill. Grafiken via JAR_DEFS-Lookup, Fallback farbiger Block.
+- Getestet: buy (Abzug/owned/fill0), sell-Gating (<100 abgelehnt), sell-Erfolg (+reward/fill0/owned bleibt), Lucky-Drop-Notification, UI-Screenshot beide Tabs. ALLES OK.

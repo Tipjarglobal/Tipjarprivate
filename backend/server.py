@@ -2262,6 +2262,7 @@ async def create_tip(inp: TipSaveInput, user: dict = Depends(get_current_user)):
         "stars": inp.self_rating, "created_at": tip["created_at"],
     })
     tip.pop("_id", None)
+    await _bump_jar_activity(user["id"], 3)
     return tip
 
 
@@ -3270,6 +3271,7 @@ async def rate_tip(tip_id: str, inp: RateInput, user: dict = Depends(get_current
         await db.users.update_one({"id": user["id"]}, {"$inc": {"ratings_given": 1}})
 
     flame_new = await _maybe_award_apex_flame(user["id"], streak, now)
+    await _bump_jar_activity(user["id"], 1)
     fresh = await db.tips.find_one({"id": tip_id}, {"_id": 0})
     return {"tip": fresh, "streak": streak, "your_stars": inp.stars,
             "apex_flame": bool(streak >= APEX_FLAME_STREAK or user.get("apex_flame", False)),
@@ -3802,6 +3804,161 @@ async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     return {"ok": True, "reward": reward, "prestige": prestige, "user": public_user(fresh)}
 
+
+# ============================================================================
+# JAR SHOP (owner 2026-08): ALL jars buyable at once — no sequential lock.
+# buyPrice = sellReward * (1 - BUY_DISCOUNT)  → buying is 25% cheaper than the
+# sell reward (profit mechanic). Jars auto-fill VERY SLOWLY over real time; a
+# full (100%) jar can be sold for its sellReward and then refills from 0 again
+# (owned stays TRUE forever). The slow fill is what keeps the economy sane.
+# ============================================================================
+BUY_DISCOUNT = 0.25
+JAR_FILL_SECONDS = 8 * 3600          # ~8h real time for a jar to refill to 100%
+
+# (id, display name, category, sellReward)
+JAR_SHOP_CATALOG = [
+    ("glass", "Glass", "COMMON", 40), ("wood", "Wood", "COMMON", 50),
+    ("stone", "Stone", "COMMON", 60), ("clay", "Clay", "COMMON", 70),
+    ("bamboo", "Bamboo", "COMMON", 75), ("carton_box", "Carton Box", "COMMON", 80),
+    ("paper", "Paper", "COMMON", 85), ("plastic", "Plastic", "COMMON", 90),
+    ("ceramic", "Ceramic", "COMMON", 95), ("wicker", "Wicker", "COMMON", 100),
+    ("bronze", "Bronze", "UNCOMMON", 110), ("iron", "Iron", "UNCOMMON", 120),
+    ("tin", "Tin", "UNCOMMON", 150), ("zinc", "Zinc", "UNCOMMON", 180),
+    ("copper", "Copper", "UNCOMMON", 200), ("aluminum", "Aluminum", "UNCOMMON", 220),
+    ("steel", "Steel", "UNCOMMON", 250), ("lead", "Lead", "UNCOMMON", 280),
+    ("silver", "Silver", "RARE", 350), ("gold", "Gold", "RARE", 500),
+    ("crystal", "Crystal", "RARE", 650), ("ruby", "Ruby", "RARE", 800),
+    ("sapphire", "Sapphire", "RARE", 950), ("emerald", "Emerald", "RARE", 1100),
+    ("diamond", "Diamond", "RARE", 1500),
+    ("void", "Void", "LEGENDARY", 2000), ("cosmic", "Cosmic", "LEGENDARY", 3000),
+    ("quantum", "Quantum", "LEGENDARY", 5000), ("infinity", "Infinity", "LEGENDARY", 8000),
+    ("tipjar_origin", "TipJar Origin", "LEGENDARY", 12000),
+]
+
+
+def _jar_buy_price(sell: int) -> int:
+    return int(round(sell * (1 - BUY_DISCOUNT)))
+
+
+JAR_SHOP_BY_ID = {
+    jid: {"id": jid, "name": name, "category": cat,
+          "sellReward": sell, "buyPrice": _jar_buy_price(sell)}
+    for (jid, name, cat, sell) in JAR_SHOP_CATALOG
+}
+
+
+def _compute_jar_fill(filled_at) -> int:
+    """Time-based fill 0..100. filled_at = ISO string of last reset (buy/sell)."""
+    if not filled_at:
+        return 100
+    try:
+        t = datetime.fromisoformat(filled_at)
+    except Exception:
+        return 100
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - t).total_seconds()
+    return max(0, min(100, int(elapsed / JAR_FILL_SECONDS * 100)))
+
+
+async def _bump_jar_activity(user_id: str, pts: int = 1):
+    """Lucky drop: the more a user rates/posts, the sooner they randomly find a
+    FREE jar they don't own yet. Threshold-based so it's fair + testable."""
+    u = await db.users.find_one({"id": user_id})
+    if not u:
+        return None
+    act = int(u.get("jar_activity") or 0) + pts
+    thr = int(u.get("jar_next_drop") or 0) or random.randint(12, 22)
+    if act < thr:
+        await db.users.update_one({"id": user_id},
+                                  {"$set": {"jar_activity": act, "jar_next_drop": thr}})
+        return None
+    state = u.get("jar_shop") or {}
+    unowned = [jid for (jid, _n, _c, _s) in JAR_SHOP_CATALOG
+               if not (state.get(jid) or {}).get("owned")]
+    reset = {"jar_activity": 0, "jar_next_drop": random.randint(18, 34)}
+    if not unowned:
+        await db.users.update_one({"id": user_id}, {"$set": reset})
+        return None
+    granted = random.choice(unowned)
+    now = datetime.now(timezone.utc).isoformat()
+    reset[f"jar_shop.{granted}"] = {"owned": True, "filled_at": now}
+    await db.users.update_one({"id": user_id},
+                              {"$set": reset, "$push": {"pending_jar_drops": granted}})
+    return granted
+
+
+@api_router.get("/jars/shop")
+async def jars_shop(user: dict = Depends(get_current_user)):
+    fresh = await db.users.find_one({"id": user["id"]})
+    state = fresh.get("jar_shop") or {}
+    jars = []
+    for (jid, name, cat, sell) in JAR_SHOP_CATALOG:
+        st = state.get(jid) or {}
+        owned = bool(st.get("owned"))
+        jars.append({
+            "id": jid, "name": name, "category": cat,
+            "sellReward": sell, "buyPrice": _jar_buy_price(sell),
+            "owned": owned,
+            "fill": _compute_jar_fill(st.get("filled_at")) if owned else 0,
+        })
+    drops = fresh.get("pending_jar_drops") or []
+    if drops:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"pending_jar_drops": []}})
+    drop_names = [JAR_SHOP_BY_ID[d]["name"] for d in drops if d in JAR_SHOP_BY_ID]
+    return {
+        "balance": int(fresh.get("credits") or 0),
+        "jars": jars,
+        "new_drops": drop_names,
+        "config": {"buy_discount": BUY_DISCOUNT, "fill_seconds": JAR_FILL_SECONDS},
+    }
+
+
+@api_router.post("/jars/shop/buy")
+async def jars_shop_buy(inp: JarSellInput, user: dict = Depends(get_current_user)):
+    jid = inp.jar_id
+    if jid not in JAR_SHOP_BY_ID:
+        raise HTTPException(status_code=400, detail="Unknown jar")
+    fresh = await db.users.find_one({"id": user["id"]})
+    state = fresh.get("jar_shop") or {}
+    if (state.get(jid) or {}).get("owned"):
+        raise HTTPException(status_code=400, detail="Jar gehört dir bereits")
+    price = JAR_SHOP_BY_ID[jid]["buyPrice"]
+    if int(fresh.get("credits") or 0) < price:
+        raise HTTPException(status_code=400, detail=f"Nicht genug Coins ({price} nötig)")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$inc": {"credits": -price},
+         "$set": {f"jar_shop.{jid}": {"owned": True, "filled_at": now}}})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"ok": True, "price": price, "user": public_user(updated)}
+
+
+@api_router.post("/jars/shop/sell")
+async def jars_shop_sell(inp: JarSellInput, user: dict = Depends(get_current_user)):
+    jid = inp.jar_id
+    if jid not in JAR_SHOP_BY_ID:
+        raise HTTPException(status_code=400, detail="Unknown jar")
+    fresh = await db.users.find_one({"id": user["id"]})
+    st = (fresh.get("jar_shop") or {}).get(jid) or {}
+    if not st.get("owned"):
+        raise HTTPException(status_code=400, detail="Jar gehört dir nicht")
+    fill = _compute_jar_fill(st.get("filled_at"))
+    if fill < 100:
+        raise HTTPException(status_code=400, detail=f"Jar ist erst zu {fill}% voll")
+    reward = JAR_SHOP_BY_ID[jid]["sellReward"]
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$inc": {"credits": reward},
+         "$set": {f"jar_shop.{jid}.filled_at": now}})
+    await db.credit_transactions.insert_one({
+        "id": str(uuid.uuid4()), "type": "jar_shop_sale", "to_user": user["id"],
+        "amount": reward, "jar_id": jid, "created_at": now,
+    })
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"ok": True, "reward": reward, "user": public_user(updated)}
 
 
 @api_router.post("/credits/gift")

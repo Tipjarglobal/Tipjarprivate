@@ -48,7 +48,7 @@ export default function ProfileModal({ open, onClose, initialTab = "PROFILE" }) 
   return (
     <Modal open={open} onClose={onClose} title={t("profile.title")} testId="profile-modal">
       <div className="flex gap-2 mb-4">
-        {[["PROFILE", "Profil"], ["JARDEX", "Sammlung"]].map(([key, label]) => (
+        {[["PROFILE", "Profil"], ["JARDEX", "Shop"]].map(([key, label]) => (
           <button
             key={key}
             data-testid={`profile-tab-${key.toLowerCase()}`}
