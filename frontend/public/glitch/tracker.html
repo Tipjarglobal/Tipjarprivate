@@ -3,208 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>confidential tracker</title>
+<title>confidential menu - Scheine als Bilder posten - 20 Sprachen</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&display=swap');
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif}
-body{background:#070707;color:#e8e8e8;padding-bottom:80px}
-.hdr{position:sticky;top:0;z-index:10;background:#070707;border:1px solid #39ff14;border-radius:14px;margin:14px;padding:16px 18px;box-shadow:0 0 24px rgba(57,255,20,.15)}
-h1{color:#39ff14;font-weight:800;font-size:24px;letter-spacing:-.5px}
-.sub{color:#8a8a8a;font-size:12px;margin-top:4px}
-.back{display:inline-block;color:#39ff14;font-size:12px;font-weight:800;text-decoration:none;margin-top:10px;border:1px dashed #39ff14;border-radius:999px;padding:5px 12px}
-.sec{color:#666;font-size:11px;font-weight:800;letter-spacing:2px;margin:22px 16px 8px}
-.panel{background:#141414;border:1px solid #222;border-radius:14px;margin:12px 16px;padding:16px}
-.step{color:#39ff14;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:8px}
-input,textarea{width:100%;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e8e8e8;padding:11px 13px;font-size:13px;margin-bottom:9px;font-family:'Geist',sans-serif}
-input:focus,textarea:focus{outline:none;border-color:#39ff14}
-textarea{resize:vertical;min-height:70px;font-family:ui-monospace,monospace;font-size:12px}
-.btn{background:#39ff14;color:#000;border:none;border-radius:999px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer;transition:.15s;width:100%}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.ghost{background:transparent;color:#39ff14;border:1px solid #39ff14}
-.drop{border:2px dashed #2a2a2a;border-radius:12px;padding:26px 14px;text-align:center;color:#8a8a8a;font-size:12.5px;cursor:pointer;transition:.15s;margin-bottom:10px}
-.drop.hot{border-color:#39ff14;background:rgba(57,255,20,.05);color:#39ff14}
-.ocrbox{background:#0d0d0d;border-left:3px solid #7fd0ff;border-radius:8px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:11.5px;color:#9fd8ff;line-height:1.55;white-space:pre-wrap;max-height:150px;overflow:auto;margin-bottom:10px;display:none}
-.ocrbox.show{display:block}
-.prog{height:6px;background:#0d0d0d;border-radius:999px;overflow:hidden;margin-bottom:10px;display:none}
-.prog.show{display:block}
-.prog>i{display:block;height:100%;background:#39ff14;width:0;transition:width .2s}
-.thumb{width:100%;max-height:160px;object-fit:cover;border-radius:10px;border:1px solid #2a2a2a;cursor:pointer;margin-bottom:9px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
-.chip{background:#0d0d0d;border:1px solid #2a2a2a;color:#39ff14;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800}
-.card{background:#141414;border:1px solid #222;border-radius:14px;margin:12px 16px;padding:14px}
-.card.win{border-color:#39ff14;box-shadow:0 0 14px rgba(57,255,20,.12)}
-.card.lose{border-color:#ff3b3b}
-.card.void{border-color:#e3a81b}
-.ch{display:flex;gap:10px;align-items:flex-start}
-.cimg{width:64px;height:64px;object-fit:cover;border-radius:9px;border:1px solid #2a2a2a;flex-shrink:0;cursor:pointer;background:#0d0d0d}
-.ci{flex:1;min-width:0}
-.ci h3{font-size:14px;font-weight:800;color:#e8e8e8;margin-bottom:3px}
-.ci .mk{color:#9a9a9a;font-size:12px;line-height:1.5}
-.ci .q{color:#39ff14;font-weight:800;font-size:13px}
-.stat{display:flex;gap:7px;margin-top:11px}
-.stat button{flex:1;border:1px solid #2a2a2a;background:#0d0d0d;color:#8a8a8a;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
-.stat button.win.on{background:#39ff14;color:#000;border-color:#39ff14}
-.stat button.lose.on{background:#ff3b3b;color:#000;border-color:#ff3b3b}
-.stat button.void.on{background:#e3a81b;color:#000;border-color:#e3a81b}
-.del{color:#ff3b3b;font-size:11px;font-weight:800;background:none;border:none;cursor:pointer;margin-top:9px}
-.badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
-.badge.win{background:#39ff14;color:#000}.badge.lose{background:#ff3b3b;color:#000}.badge.void{background:#e3a81b;color:#000}.badge.open{background:#2a2a2a;color:#8a8a8a}
-.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
-.lightbox.show{display:flex}
-.lightbox img{max-width:100%;max-height:90vh;border-radius:12px;border:1px solid #39ff14}
-.empty{color:#555;font-size:12px;text-align:center;margin:20px 16px}
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;700&family=Geist:wght@400;600;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Geist",system-ui}
+body{background:#070707;color:#e5e5e5;min-height:100vh;padding:16px}
+.wrap{max-width:1100px;margin:0 auto}
+.header{border:2px solid #39ff14;border-radius:16px;padding:16px 20px;background:#111;position:sticky;top:10px;z-index:30;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.header h1{color:#39ff14;font-size:22px;font-weight:900;letter-spacing:-1.5px;text-transform:lowercase}
+.badge{font-size:9px;padding:3px 7px;border-radius:999px;font-weight:900;background:#39ff14;color:#000}
+.main{display:grid;grid-template-columns:420px 1fr;gap:16px;margin-top:18px}
+@media(max-width:900px){.main{grid-template-columns:1fr}}
+.left{background:#111;border:1px solid #222;border-radius:16px;padding:16px;height:fit-content;position:sticky;top:86px}
+.modal-title{font-size:18px;font-weight:800;margin-bottom:16px}
+.tabs-top{display:flex;gap:8px;background:#0a0a0a;border-radius:999px;padding:4px;width:fit-content;margin-bottom:16px}
+.tab-top{padding:8px 16px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;border:none}
+.tab-top.active{background:#d4ff00;color:#000}
+.tab-top.inactive{background:transparent;color:#666}
+.drop{border:1px dashed #333;border-radius:12px;padding:24px;text-align:center;background:#0a0a0a;cursor:pointer;transition:.2s;min-height:140px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.drop.dragover{border-color:#39ff14;background:#0f1a0f}
+.drop h3{font-size:14px;font-weight:700;margin-top:8px}
+.drop p{font-size:11px;color:#666;margin-top:4px}
+.drop span{font-size:10px;color:#d4ff00;margin-top:6px}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.preview-item{position:relative;border-radius:8px;overflow:hidden;border:1px solid #333}
+.preview-item img{width:100%;height:100px;object-fit:cover}
+.preview-item button{position:absolute;top:4px;right:4px;background:#ff3b3b;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer}
+.input{width:100%;background:#0a0a0a;border:1px solid #222;color:#fff;padding:12px;border-radius:10px;font-size:13px;margin-top:12px;min-height:80px;resize:none}
+.input:focus{border-color:#39ff14;outline:none}
+.stars-box{background:#1a1a0a;border:1px solid #333;border-radius:12px;padding:12px;margin-top:12px}
+.stars-box h4{font-size:13px;font-weight:700}
+.stars-box p{font-size:10px;color:#888;margin-top:2px}
+.stars{display:flex;gap:4px;margin-top:8px}
+.star{font-size:20px;cursor:pointer;color:#333;transition:.1s}
+.star.active{color:#d4ff00}
+.error{font-size:10px;color:#ff3b3b;margin-top:6px;display:none}
+.time-title{font-size:13px;font-weight:700;margin-top:16px;margin-bottom:8px}
+.time-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.time-btn{padding:10px;border-radius:999px;border:1px solid #222;background:#0a0a0a;color:#666;font-size:12px;font-weight:700;cursor:pointer;display:flex;justify-content:center;align-items:center;gap:6px}
+.time-btn.active{background:#222;color:#fff;border-color:#444}
+.time-btn .dot{width:8px;height:8px;border-radius:50%;background:#444}
+.time-btn.active .dot{background:#d4ff00}
+.post-btn{width:100%;margin-top:16px;padding:14px;border-radius:12px;border:none;background:#3a3a00;color:#666;font-weight:800;font-size:14px;cursor:not-allowed}
+.post-btn.enabled{background:#d4ff00;color:#000;cursor:pointer}
+.ocr-box{background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:8px;margin-top:8px;font-family:"Geist Mono",monospace;font-size:9px;white-space:pre-wrap;max-height:120px;overflow:auto;display:none}
+.lang-bar{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.lang-bar span{font-size:8px;background:#1a1a1a;border:1px solid #222;padding:2px 5px;border-radius:999px;color:#555}
+.content{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start}
+@media(max-width:600px){.content{grid-template-columns:1fr}}
+.card{background:#141414;border:1px solid #222;border-radius:12px;padding:10px}
+.card img.thumb{width:100%;border-radius:8px;margin-top:6px;max-height:180px;object-fit:cover}
+.card .multi{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px}
+.card .multi img{width:100%;height:80px;object-fit:cover;border-radius:6px}
 </style>
 </head>
 <body>
-<div class="hdr">
-  <h1>confidential tracker</h1>
-  <div class="sub">OCR 20 Sprachen · Bild → Text → Auto-Parse · alles bleibt gespeichert</div>
-  <a class="back" href="index.html">← confidential menu</a>
+<div class="wrap">
+<div class="header">
+<h1>confidential menu</h1>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<span class="badge">20 SPRACHEN OCR • BIS ZU 4 BILDER ALS SCHEINE</span>
+<a href="index.html" style="color:#39ff14;font-size:11px;font-weight:800;text-decoration:none;border:1px dashed #39ff14;border-radius:999px;padding:5px 12px">← menu</a>
+</div>
 </div>
 
-<div class="sec">SCHRITT 1 · SUCHE</div>
-<div class="panel">
-  <div class="step">SPIEL / EINTRAG SUCHEN</div>
-  <input id="search" placeholder="z.B. Almeria, PAOK, Palermo …">
-  <button class="btn ghost" id="searchBtn">Suchen</button>
+<div class="main">
+<div class="left">
+<div class="modal-title">Gib deinen Tipp ab</div>
+
+<div class="tabs-top">
+<button class="tab-top active" id="tabUp">⬆ Tipp hochladen</button>
+<button class="tab-top inactive">🎓 So postest du</button>
 </div>
 
-<div class="sec">SCHRITT 2 · WETTSCHEIN OCR</div>
-<div class="panel">
-  <div class="step">BILD HOCHLADEN → 20-SPRACHEN OCR</div>
-  <div class="drop" id="drop">Bild hierher ziehen oder tippen zum Auswählen<br><span style="font-size:11px;color:#555">deu·eng·tur·ell·fra·nld·por·sqi·spa·ita·rus·ara·pol·ron·bul·srp·hrv·bos·mkd·ces</span></div>
-  <input type="file" id="file" accept="image/*" style="display:none">
-  <div class="prog" id="prog"><i id="progBar"></i></div>
-  <img id="thumb" class="thumb" style="display:none">
-  <div class="ocrbox" id="ocrbox"></div>
-  <div class="chips" id="chips"></div>
-  <input id="teams" placeholder="Teams (z.B. Almeria - Eldense)">
-  <input id="market" placeholder="Markt (z.B. -1 AH, Über 0.5)">
-  <input id="quote" placeholder="Quote (z.B. @2.13)">
-  <button class="btn" id="saveBtn">In Tracker speichern</button>
+<div class="drop" id="drop" onclick="document.getElementById('file').click()">
+<div style="font-size:24px">⬆</div>
+<h3>Screenshot deines Scheins hier ablegen</h3>
+<p>oder klicken zum Auswählen — PNG, JPG, WEBP</p>
+<span>Bis zu 4 Bilder • 20 Sprachen Erkennung</span>
+<input type="file" id="file" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)">
 </div>
 
-<div class="sec">GESPEICHERTE EINTRÄGE</div>
-<div id="list"></div>
+<div class="preview-grid" id="previewGrid"></div>
+<div class="ocr-box" id="ocrBox"></div>
+<div id="ocrStatus" style="font-size:10px;color:#d4ff00;margin-top:6px;display:none"></div>
 
-<div class="lightbox" id="lightbox"><img id="lbImg"></div>
+<textarea class="input" id="descInput" placeholder="z.B. Über 2,5 Tore — Quote 1,50 — Beide treffen"></textarea>
+
+<div class="stars-box">
+<h4>Wie viele Sterne würdest du diesem Tipp geben?</h4>
+<p>Bewerte deinen eigenen Tipp 1-10. Ohne Sterne wird der Tipp nicht angenommen.</p>
+<div class="stars" id="stars"></div>
+<div class="error" id="starError">Bitte vergib zuerst Sterne für deinen Tipp (1-10).</div>
+</div>
+
+<div class="time-title">Wann geht es los?</div>
+<div class="time-grid">
+<button class="time-btn" data-time="Live" onclick="setTime(this)"><span class="dot"></span> Live</button>
+<button class="time-btn" data-time="Heute" onclick="setTime(this)"><span class="dot"></span> Heute</button>
+<button class="time-btn" data-time="Später" onclick="setTime(this)"><span class="dot"></span> Später</button>
+</div>
+
+<button class="post-btn" id="postBtn" onclick="postTip()">Auf Bewertungswand posten</button>
+
+<div class="lang-bar" id="langBar"></div>
+</div>
+
+<div>
+<div style="font-size:12px;color:#555;margin-bottom:8px">Bewertungswand — Bilder bleiben als Scheine gepostet — confidential menu</div>
+<div class="content" id="content"></div>
+</div>
+</div>
+</div>
 
 <script>
-const KEY="cg_final_20";
-const OCR_LANGS="deu+eng+tur+ell+fra+nld+por+sqi+spa+ita+rus+ara+pol+ron+bul+srp+hrv+bos+mkd+ces";
-const SEED=[
- {id:"s1",teams:"Almeria - Eldense",market:"Asian Handicap -1 + Über 1.5",quote:"@2.13",status:"open",img:""},
- {id:"s2",teams:"Anderlecht - PAOK",market:"Über 0.5 + Zafeiris Über 0.5 Schüsse",quote:"@1.33",status:"win",img:""},
- {id:"s3",teams:"Palermo - Lecce",market:"Palermo +0,5 (Asian / DC)",quote:"@1.80",status:"win",img:""},
- {id:"s4",teams:"Rio Ave - Porto",market:"Über 0.5 + Unter 5.5 + X2",quote:"@1.23",status:"win",img:""},
- {id:"s5",teams:"Vikingur - Thun",market:"Thun Quali reguläre Zeit",quote:"@1.06",status:"win",img:""},
- {id:"s6",teams:"Sabah - AGF Aarhus",market:"Total Shots Sabah",quote:"@1.41",status:"win",img:""},
- {id:"s7",teams:"Kortrijk - Antwerpen",market:"Über 0.5 Antwerpen",quote:"@1.30",status:"win",img:""}
+const LANGUAGES = ['deu','eng','tur','ell','fra','nld','por','sqi','spa','ita','rus','ara','pol','ron','bul','srp','hrv','bos','mkd','ces'];
+document.getElementById('langBar').innerHTML = LANGUAGES.map(l=>`<span>${l.toUpperCase()}</span>`).join('') + `<span style="background:#39ff14;color:#000">20 OCR AKTIV</span>`;
+
+let images=[], ocrTexts=[], selectedStars=0, selectedTime=null;
+let entries = JSON.parse(localStorage.getItem('cg_tipjar_20')||'null') || [
+{id:1, text:'Kortrijk vs Antwerpen 0:3 - Über 0.5 @1.30 GEWONNEN', stars:9, time:'Heute', images:[], ocr:''},
+{id:2, text:'Thun Glitch - Vikingur 3:2 Thun (0-3) regular time @1.06 GEWONNEN - Hinspiel 3:0 = quali nach 90min', stars:10, time:'Heute', images:[], ocr:''},
+{id:3, text:'Porto Glitch - Rio Ave 0:2 Porto Über 0.5 + Unter 5.5 + X2 @1.23 - free boost (rote @1.25 Linie gelöscht)', stars:9, time:'Heute', images:[], ocr:''}
 ];
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.length)return d;}catch(e){}localStorage.setItem(KEY,JSON.stringify(SEED));return SEED;}
-function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
-let DATA=load();
-let pendingImg="";
 
-// ---- OCR PARSING ----
-const MARKET_KEYS=["Über 0.5","Über 1.5","Über 2.5","Unter 5.5","Unter 3.5","-1 AH","Asian Handicap","+0,5","+0.5","X2","Total Shots","Schüsse","Zafeiris","Arribas","reguläre Zeit","Doppelte Chance","Over 0.5","Under 5.5"];
-function parseOCR(text){
- const res={teams:"",market:"",quote:"",chips:[]};
- // quote: @1.30 or 1.30 or 2,13
- const qm=text.match(/@?\s*([1-9]\d?[.,]\d{2})/g);
- if(qm){const cleaned=qm.map(x=>"@"+x.replace(/[@\s]/g,"").replace(",",".")).filter(x=>{const n=parseFloat(x.slice(1));return n>=1.01&&n<=50;});res.quote=[...new Set(cleaned)].slice(0,3).join(" ");}
- // teams: "A - B" / "A vs B" / "A – B"
- const tm=text.match(/([A-ZÀ-Þ][\wÀ-ÿ.]+(?:\s[A-ZÀ-Þ][\wÀ-ÿ.]+){0,2})\s*(?:-|–|vs\.?|:)\s*([A-ZÀ-Þ][\wÀ-ÿ.]+(?:\s[A-ZÀ-Þ][\wÀ-ÿ.]+){0,2})/);
- if(tm)res.teams=tm[1].trim()+" - "+tm[2].trim();
- // markets
- const found=MARKET_KEYS.filter(k=>new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(text));
- res.market=[...new Set(found)].join(" + ");
- res.chips=[...new Set(found)];
- return res;
+function save(){ localStorage.setItem('cg_tipjar_20', JSON.stringify(entries)); }
+
+// Stars
+const starsEl=document.getElementById('stars');
+for(let i=1;i<=10;i++){ const s=document.createElement('div'); s.className='star'; s.innerText='☆'; s.onclick=()=>setStars(i); starsEl.appendChild(s); }
+function setStars(n){ selectedStars=n; document.querySelectorAll('.star').forEach((el,i)=>{ el.innerText=i<n?'★':'☆'; el.classList.toggle('active', i<n); }); document.getElementById('starError').style.display='none'; checkPost(); }
+
+function setTime(btn){ document.querySelectorAll('.time-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); selectedTime=btn.dataset.time; checkPost(); }
+
+function checkPost(){
+ const btn=document.getElementById('postBtn');
+ if(selectedStars>=1 && (images.length>0 || document.getElementById('descInput').value.trim())){ btn.classList.add('enabled'); btn.style.cursor='pointer'; }
+ else { btn.classList.remove('enabled'); }
 }
 
-// ---- DRAG & DROP + OCR ----
-const drop=document.getElementById("drop"),file=document.getElementById("file"),
- prog=document.getElementById("prog"),progBar=document.getElementById("progBar"),
- thumb=document.getElementById("thumb"),ocrbox=document.getElementById("ocrbox"),chips=document.getElementById("chips");
-drop.onclick=()=>file.click();
-file.onchange=e=>{if(e.target.files[0])handleImg(e.target.files[0]);};
-["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hot");}));
-["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hot");}));
-drop.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)handleImg(f);});
-
-function handleImg(f){
- const r=new FileReader();
- r.onload=async()=>{
-  pendingImg=r.result;
-  thumb.src=r.result;thumb.style.display="block";
-  prog.classList.add("show");ocrbox.classList.remove("show");ocrbox.textContent="";progBar.style.width="0%";
-  drop.textContent="OCR läuft … 20 Sprachen";
-  try{
-   const{data}=await Tesseract.recognize(r.result,OCR_LANGS,{logger:m=>{if(m.status==="recognizing text")progBar.style.width=Math.round(m.progress*100)+"%";}});
-   const txt=(data.text||"").trim();
-   ocrbox.textContent=txt||"(kein Text erkannt)";ocrbox.classList.add("show");
-   const p=parseOCR(txt);
-   if(p.teams)document.getElementById("teams").value=p.teams;
-   if(p.market)document.getElementById("market").value=p.market;
-   if(p.quote)document.getElementById("quote").value=p.quote;
-   chips.innerHTML=p.chips.map(c=>`<span class="chip">${c}</span>`).join("");
-  }catch(err){ocrbox.textContent="OCR Fehler: "+err.message;ocrbox.classList.add("show");}
-  prog.classList.remove("show");
-  drop.innerHTML="Bild hierher ziehen oder tippen zum Auswählen<br><span style='font-size:11px;color:#555'>OCR fertig ✔</span>";
- };
- r.readAsDataURL(f);
+async function handleFiles(fileList){
+ const files = Array.from(fileList).slice(0, 4 - images.length);
+ for(const file of files){
+  const reader=new FileReader();
+  reader.onload=async e=>{
+   const dataUrl=e.target.result;
+   images.push(dataUrl);
+   renderPreviews();
+   await runOCR(dataUrl);
+   checkPost();
+  };
+  reader.readAsDataURL(file);
+ }
 }
 
-// ---- SAVE ----
-document.getElementById("saveBtn").onclick=()=>{
- const teams=document.getElementById("teams").value.trim();
- const market=document.getElementById("market").value.trim();
- const quote=document.getElementById("quote").value.trim();
- if(!teams&&!market){alert("Teams oder Markt ausfüllen");return;}
- DATA.unshift({id:"e"+Date.now(),teams,market,quote,status:"open",img:pendingImg});
- save(DATA);
- pendingImg="";thumb.style.display="none";ocrbox.classList.remove("show");chips.innerHTML="";
- document.getElementById("teams").value="";document.getElementById("market").value="";document.getElementById("quote").value="";
- drop.innerHTML="Bild hierher ziehen oder tippen zum Auswählen<br><span style='font-size:11px;color:#555'>deu·eng·tur·ell·fra·nld·por·sqi·spa·ita·rus·ara·pol·ron·bul·srp·hrv·bos·mkd·ces</span>";
- render();
-};
-
-// ---- LIST / RENDER ----
-function setStatus(id,st){const it=DATA.find(x=>x.id===id);if(it){it.status=it.status===st?"open":st;save(DATA);render();}}
-function del(id){DATA=DATA.filter(x=>x.id!==id);save(DATA);render();}
-window.setStatus=setStatus;window.del=del;
-function badge(s){return s==="open"?'<span class="badge open">offen</span>':`<span class="badge ${s}">${s==="win"?"GEWONNEN":s==="lose"?"VERLOREN":"VOID"}</span>`;}
-let filter="";
-function render(){
- const list=document.getElementById("list");
- const items=DATA.filter(x=>!filter||(x.teams+" "+x.market).toLowerCase().includes(filter));
- if(!items.length){list.innerHTML='<div class="empty">Keine Einträge</div>';return;}
- list.innerHTML=items.map(x=>`
-  <div class="card ${x.status!=='open'?x.status:''}">
-   <div class="ch">
-     ${x.img?`<img class="cimg" src="${x.img}" onclick="showImg('${x.id}')">`:`<div class="cimg" style="display:flex;align-items:center;justify-content:center;color:#333;font-size:22px">◎</div>`}
-     <div class="ci">
-       <h3>${x.teams||"—"}${badge(x.status)}</h3>
-       <div class="mk">${x.market||""}</div>
-       ${x.quote?`<div class="q">${x.quote}</div>`:""}
-     </div>
-   </div>
-   <div class="stat">
-     <button class="win ${x.status==='win'?'on':''}" onclick="setStatus('${x.id}','win')">grün</button>
-     <button class="lose ${x.status==='lose'?'on':''}" onclick="setStatus('${x.id}','lose')">rot</button>
-     <button class="void ${x.status==='void'?'on':''}" onclick="setStatus('${x.id}','void')">void</button>
-   </div>
-   <button class="del" onclick="del('${x.id}')">löschen</button>
-  </div>`).join("");
+function renderPreviews(){
+ const grid=document.getElementById('previewGrid');
+ grid.innerHTML = images.map((img,i)=>`<div class="preview-item"><img src="${img}"><button onclick="removeImg(${i})">×</button></div>`).join('');
 }
-window.showImg=id=>{const it=DATA.find(x=>x.id===id);if(it&&it.img){document.getElementById("lbImg").src=it.img;document.getElementById("lightbox").classList.add("show");}};
-document.getElementById("lightbox").onclick=()=>document.getElementById("lightbox").classList.remove("show");
-document.getElementById("searchBtn").onclick=()=>{filter=document.getElementById("search").value.trim().toLowerCase();render();};
-document.getElementById("search").addEventListener("keydown",e=>{if(e.key==="Enter"){filter=e.target.value.trim().toLowerCase();render();}});
-render();
+
+function removeImg(i){ images.splice(i,1); ocrTexts.splice(i,1); renderPreviews(); checkPost(); }
+
+async function runOCR(dataUrl){
+ document.getElementById('ocrStatus').style.display='block';
+ document.getElementById('ocrStatus').innerText=`⏳ OCR läuft Bild ${images.length} - 20 Sprachen...`;
+ document.getElementById('ocrBox').style.display='block';
+ document.getElementById('ocrBox').innerText='Lade Tesseract 20 Sprachen...';
+ try{
+  const result = await Tesseract.recognize(dataUrl, LANGUAGES.join('+'), { logger:m=>{ if(m.status==='recognizing text') document.getElementById('ocrStatus').innerText=`⏳ OCR ${Math.round(m.progress*100)}% Bild ${images.length}`; } });
+  const text=result.data.text;
+  ocrTexts.push(text);
+  document.getElementById('ocrBox').innerText = ocrTexts.join('\n---\n');
+  document.getElementById('ocrStatus').innerText = `✓ OCR fertig - ${text.length} Zeichen - Quote @ erkannt`;
+  // auto fill desc if empty
+  if(!document.getElementById('descInput').value){
+   const quote = text.match(/@\s?(\d+[\.,]\d+)/);
+   const tip = quote ? `${text.substring(0,60)} @${quote[1]}` : text.substring(0,100);
+   document.getElementById('descInput').value = tip;
+  }
+ }catch(e){ document.getElementById('ocrStatus').innerText='OCR Fehler, manuelle Eingabe'; }
+}
+
+const drop=document.getElementById('drop');
+drop.addEventListener('dragover',e=>{ e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+
+function postTip(){
+ if(selectedStars<1){ document.getElementById('starError').style.display='block'; return; }
+ const text=document.getElementById('descInput').value.trim() || (ocrTexts[0]||'Schein ohne Text');
+ entries.unshift({ id:Date.now(), text, stars:selectedStars, time:selectedTime||'Heute', images:[...images], ocr:ocrTexts.join(' | '), date:new Date().toLocaleDateString() });
+ images=[]; ocrTexts=[]; selectedStars=0; selectedTime=null;
+ document.getElementById('descInput').value=''; document.getElementById('previewGrid').innerHTML=''; document.getElementById('ocrBox').style.display='none'; document.getElementById('ocrStatus').style.display='none';
+ document.querySelectorAll('.star').forEach(el=>{el.innerText='☆'; el.classList.remove('active');});
+ document.querySelectorAll('.time-btn').forEach(b=>b.classList.remove('active'));
+ document.getElementById('postBtn').classList.remove('enabled');
+ save(); renderWall();
+}
+
+function renderWall(){
+ document.getElementById('content').innerHTML = entries.map(e=>`
+  <div class="card">
+   <div style="font-size:11px;font-weight:700">${e.text}</div>
+   <div style="font-size:10px;color:#888;margin-top:4px">${'★'.repeat(e.stars)}${'☆'.repeat(10-e.stars)} ${e.stars}/10 • ${e.time} • ${e.date}</div>
+   ${e.images && e.images.length ? `<div class="${e.images.length>1?'multi':''}">${e.images.map(img=>`<img src="${img}" class="thumb" style="${e.images.length>1?'height:80px':''}" onclick="window.open('${img}')">`).join('')}</div>` : ''}
+   ${e.ocr ? `<div style="font-size:8px;color:#555;margin-top:4px;font-family:monospace">OCR: ${e.ocr.substring(0,80)}...</div>` : ''}
+  </div>
+ `).join('');
+}
+renderWall();
+document.getElementById('descInput').addEventListener('input', checkPost);
 </script>
 </body>
 </html>
