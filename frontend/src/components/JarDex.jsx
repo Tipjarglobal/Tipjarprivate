@@ -18,11 +18,11 @@ const T = {
     tabInv: 'INVENTORY', tabShop: 'SHOP', tabCase: 'OPEN CASE',
     buy: 'EINKAUFEN', sell: 'VERKAUFEN', balance: 'Guthaben', market: 'Marktübersicht', inv: 'Mein Inventar',
     kaufen: 'Kaufen', owned: 'In Besitz ✓', sellJar: 'Jar verkaufen', filling: 'füllt…', sellable: 'voll • verkaufbar',
-    starterReady: 'Gratis-Starter • bereit', addCase: '+ Open Case', inCase: 'im Case ✓', maxCase: 'Max 3 Jars im Open Case!',
+    putCase: 'in Open Case legen', starterReady: 'Gratis-Starter', addCase: '+ Open Case', inCase: 'im Case ✓', maxCase: 'Max 3 Jars im Open Case!',
     empty: 'LEER', tapRemove: 'tippen zum Zurücklegen', activeSet: 'Dein aktives Set',
-    invHelp: 'Hier siehst du alle Jars, die dir gehören. Ein volles Jar (100%) kannst du verkaufen 💰. Tippe „+ Open Case", um ein Jar in dein aktives 3er-Set zu legen. Das Glass-Jar bekommst du gratis.',
-    caseHelp: 'Dein aktives 3er-Set. Jedes Jar füllt sich langsam von selbst. Ein volles Jar (100%) kannst du direkt verkaufen. Tippe ein Jar an, um es zurückzulegen.',
-    buyHelp: 'Hier kaufst du Jars. Kaufen kostet 25% weniger als der Verkaufswert – der Gewinn ist eingebaut. Alle Jars sind sofort verfügbar. Nach dem Kauf startet das Jar bei 0% und füllt sich ganz langsam von selbst wieder auf.',
+    invHelp: 'Hier siehst du alle Jars, die dir gehören. Jars füllen sich NUR, wenn sie im Open Case liegen. Ein volles Jar (100%) kannst du verkaufen 💰. Tippe „+ Open Case", um ein Jar in dein aktives 3er-Set zu legen. Das Glass-Jar bekommst du gratis (startet bei 0%).',
+    caseHelp: 'Dein aktives 3er-Set. NUR Jars hier drin füllen sich langsam von selbst. Ein volles Jar (100%) kannst du direkt verkaufen. Tippe ein Jar an, um es zurückzulegen – die Füllung pausiert dann.',
+    buyHelp: 'Hier kaufst du Jars. Kaufen kostet 25% weniger als der Verkaufswert – der Gewinn ist eingebaut. Alle Jars sind sofort verfügbar. Nach dem Kauf startet das Jar bei 0% und füllt sich erst, sobald du es in den Open Case legst.',
     sellHelp: 'Hier verkaufst du deine Jars. Verkaufen geht NUR bei 100%. Du bekommst den vollen Wert – das Jar bleibt in deinem Besitz und füllt sich danach wieder von 0% auf.',
     dropHelp: '🎁 Bonus: Je mehr du bewertest und Tipps postest, desto eher findest du zufällig ein GRATIS-Jar, das dir noch fehlt.',
     noOwn: 'Du besitzt noch keine Jars dieser Kategorie – kaufe zuerst im Tab EINKAUFEN.',
@@ -33,11 +33,11 @@ const T = {
     tabInv: 'INVENTORY', tabShop: 'SHOP', tabCase: 'OPEN CASE',
     buy: 'BUY', sell: 'SELL', balance: 'Balance', market: 'Market', inv: 'My Inventory',
     kaufen: 'Buy', owned: 'Owned ✓', sellJar: 'Sell jar', filling: 'filling…', sellable: 'full • sellable',
-    starterReady: 'Free starter • ready', addCase: '+ Open Case', inCase: 'in case ✓', maxCase: 'Max 3 jars in Open Case!',
+    putCase: 'put in Open Case', starterReady: 'Free starter', addCase: '+ Open Case', inCase: 'in case ✓', maxCase: 'Max 3 jars in Open Case!',
     empty: 'EMPTY', tapRemove: 'tap to put back', activeSet: 'Your active set',
-    invHelp: 'All jars you own. A full jar (100%) can be sold 💰. Tap "+ Open Case" to add a jar to your active set of 3. The Glass jar is free.',
-    caseHelp: 'Your active set of 3. Each jar slowly refills by itself. A full jar (100%) can be sold. Tap a jar to put it back.',
-    buyHelp: 'Buy jars here. Buying costs 25% less than the sell value – the profit is built in. All jars are available instantly. After buying, the jar starts at 0% and slowly refills by itself.',
+    invHelp: 'All jars you own. Jars only fill up while they sit in the Open Case. A full jar (100%) can be sold 💰. Tap "+ Open Case" to add a jar to your active set of 3. The Glass jar is free (starts at 0%).',
+    caseHelp: 'Your active set of 3. ONLY jars in here slowly refill by themselves. A full jar (100%) can be sold. Tap a jar to put it back – filling pauses then.',
+    buyHelp: 'Buy jars here. Buying costs 25% less than the sell value – the profit is built in. All jars are available instantly. After buying, the jar starts at 0% and only fills once you place it in the Open Case.',
     sellHelp: 'Sell your jars here. Selling only works at 100%. You get the full value and KEEP the jar – it refills from 0% again.',
     dropHelp: '🎁 Bonus: the more you rate and post tips, the sooner you randomly find a FREE jar you\'re missing.',
     noOwn: 'You don\'t own any jars in this category yet – buy some in the BUY tab first.',
@@ -141,16 +141,20 @@ export default function Jardex() {
   const ownedInCat = inCat.filter(j => j.owned);
   const showcase = [0, 1, 2].map(i => (openCase[i] != null ? byId(openCase[i]) : null));
 
-  const FillBar = ({ j }) => (
-    <>
-      <div className="mt-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${j.fill}%`, background: j.fill >= 100 ? '#00ff88' : '#d4ff00' }} />
-      </div>
-      <div className="text-[8px] mt-0.5" style={{ color: j.fill >= 100 ? '#00ff88' : '#a1a1aa' }}>
-        {j.starter && j.fill >= 100 ? t.starterReady : `${j.fill}% ${j.fill >= 100 ? `• ${t.sellable}` : `• ${t.filling}`}`}
-      </div>
-    </>
-  );
+  const FillBar = ({ j }) => {
+    const active = openCase.includes(j.id);
+    const status = j.fill >= 100 ? `• ${t.sellable}` : (active ? `• ${t.filling}` : `• ${t.putCase}`);
+    return (
+      <>
+        <div className="mt-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${j.fill}%`, background: j.fill >= 100 ? '#00ff88' : '#d4ff00' }} />
+        </div>
+        <div className="text-[8px] mt-0.5" style={{ color: j.fill >= 100 ? '#00ff88' : (active ? '#d4ff00' : '#a1a1aa') }}>
+          {j.fill}% {status}
+        </div>
+      </>
+    );
+  };
 
   return (
     <div className="bg-black text-white p-4 font-mono" data-testid="jardex">

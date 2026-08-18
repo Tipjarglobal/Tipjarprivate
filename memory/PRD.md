@@ -166,3 +166,12 @@ Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
 - Open Case: 3-Slot-Set via /jars/opencase (filtert veraltete IDs), Fill aus /jars/shop, verkaufen bei 100%.
 - Confidential /glitch/index.html: Sprach-Switcher (langs-Buttons + JS) entfernt, bleibt Deutsch. tracker.html lang-bar sind nur OCR-Info-Labels (kein Switcher) → bleiben.
 - Getestet: curl (glass starter owned+nicht kaufbar), Screenshots (3 Tabs, Reihenfolge, Shop=BUY default, Glass-Starter). Kein testing_agent (Credits sparen).
+
+## 2026-08-18 (Fix-Runde 3) — BUG 7 geführter Post-Flow (offline, KI-frei) + Jar-Fill nur im Open Case
+- Jar-Fill-Mechanik korrigiert: Jars starten IMMER bei 0% (auch Glass-Starter). Füllen sich NUR während sie im Open Case liegen (active_since), sonst pausiert (fill_base eingefroren). Backend: _compute_jar_fill(st) zeitbasiert nur bei active_since; PUT /jars/opencase startet/pausiert Füllung; buy/sell/lucky-drop auf {owned,fill_base,active_since} umgestellt. Getestet per curl (0% Start, füllt im Case, 100%→sell reset 0, raus→pausiert).
+- BUG 7: Neues geführtes Post-Modal GuidedTipModal.jsx (ersetzt SubmitTipModal bei submitOpen in App.js).
+  Flow: Team-Name eingeben → GET /api/tips/team-search (offline aus match_predictions Fixtures, 3 früheste kommende Spiele, KEIN LLM) → Spiel wählen → Pick (Pillen+Freitext+optionale Quote) → "Noch ein Spiel?" Ja/Nein (Kombi via legs) → Sterne(1-10)+Live/Heute/Später+Text(optional)+Bild(optional) → POST /api/tips.
+  Text optional, Bild optional (non-blocking /tips/analyze), Kombi baut legs[], keine "Wett-Auswahl"-Blockade. moderate_text fails-open → nie durch KI-Limit blockiert.
+- Backend-Endpoint: GET /api/tips/team-search?q= (regex home/away, kickoff>=now, sort asc, 3 Vorschläge).
+- Getestet: curl (team-search, Einzel-Post, Kombi 2 Legs Quote-Produkt) + Screenshots (Step1 Vorschläge PAOK, Step3 Rate&Post). Kein testing_agent (Credits gespart).
+- Hinweis: SubmitTipModal.jsx bleibt im Code (ungenutzt), Import in App.js belassen.

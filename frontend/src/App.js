@@ -19,6 +19,7 @@ import { CodeReading } from "./components/CodeReading";
 import NotificationPrompt from "./components/NotificationPrompt";
 import AuthModal from "./components/AuthModal";
 import SubmitTipModal from "./components/SubmitTipModal";
+import GuidedTipModal from "./components/GuidedTipModal";
 import WalletModal from "./components/WalletModal";
 import ProfileModal from "./components/ProfileModal";
 import PublicProfileModal from "./components/PublicProfileModal";
@@ -502,7 +503,7 @@ function Home() {
       )}
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
-      <SubmitTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
+      <GuidedTipModal open={submitOpen} onClose={() => setSubmitOpen(false)} onPublished={onPublished} requireLogin={() => { setSubmitOpen(false); requireLogin(); }} />
       <WalletModal open={walletOpen} onClose={() => { setWalletOpen(false); setGiftTarget(""); setWalletGift(false); }}
         initialTab={giftTarget || walletGift ? "gift" : "buy"} initialGiftTo={giftTarget} />
       <PublicProfileModal

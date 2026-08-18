@@ -1889,6 +1889,38 @@ async def analyze(file: Optional[UploadFile] = File(default=None),
     return detected
 
 
+@api_router.get("/tips/team-search")
+async def tips_team_search(q: str, user: dict = Depends(get_current_user)):
+    """Offline (KEIN LLM): schlägt die 3 frühesten kommenden Spiele einer Mannschaft
+    aus unseren gespeicherten Fixtures (match_predictions) vor. Fällt auf einen
+    einfachen Platzhalter zurück, wenn nichts gefunden wird."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"suggestions": []}
+    rx = {"$regex": re.escape(q), "$options": "i"}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    docs = await db.match_predictions.find(
+        {"status": "pending",
+         "$or": [{"home": rx}, {"away": rx}],
+         "kickoff": {"$gte": now_iso}},
+        {"_id": 0, "home": 1, "away": 1, "kickoff": 1, "league": 1, "country": 1},
+    ).sort("kickoff", 1).to_list(12)
+    seen, sug = set(), []
+    for d in docs:
+        key = f"{d.get('home')}|{d.get('away')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        sug.append({
+            "home": d.get("home", ""), "away": d.get("away", ""),
+            "kickoff": d.get("kickoff", ""), "league": d.get("league", ""),
+            "country": d.get("country", ""),
+        })
+        if len(sug) >= 3:
+            break
+    return {"suggestions": sug}
+
+
 # --- AI-pick correction (owner 2026-07-29) ------------------------------------------
 # ANY logged-in user can correct a KI pick by uploading an image of the REAL, existing
 # selection + odds (e.g. the model wrote "Kopenhagen +1.5" which doesn't exist → send an
@@ -3848,18 +3880,22 @@ JAR_SHOP_BY_ID = {
 }
 
 
-def _compute_jar_fill(filled_at) -> int:
-    """Time-based fill 0..100. filled_at = ISO string of last reset (buy/sell)."""
-    if not filled_at:
-        return 100
+def _compute_jar_fill(st) -> int:
+    """Füllstand 0..100. Ein Jar füllt sich NUR, während es im Open Case liegt
+    (active_since gesetzt). fill_base = eingefrorener Stand außerhalb des Case."""
+    st = st or {}
+    fb = float(st.get("fill_base") or 0)
+    act = st.get("active_since")
+    if not act:
+        return max(0, min(100, int(round(fb))))
     try:
-        t = datetime.fromisoformat(filled_at)
+        t = datetime.fromisoformat(act)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        elapsed = (datetime.now(timezone.utc) - t).total_seconds()
     except Exception:
-        return 100
-    if t.tzinfo is None:
-        t = t.replace(tzinfo=timezone.utc)
-    elapsed = (datetime.now(timezone.utc) - t).total_seconds()
-    return max(0, min(100, int(elapsed / JAR_FILL_SECONDS * 100)))
+        elapsed = 0
+    return max(0, min(100, int(round(fb + elapsed / JAR_FILL_SECONDS * 100))))
 
 
 async def _bump_jar_activity(user_id: str, pts: int = 1):
@@ -3883,7 +3919,7 @@ async def _bump_jar_activity(user_id: str, pts: int = 1):
         return None
     granted = random.choice(unowned)
     now = datetime.now(timezone.utc).isoformat()
-    reset[f"jar_shop.{granted}"] = {"owned": True, "filled_at": now}
+    reset[f"jar_shop.{granted}"] = {"owned": True, "fill_base": 0, "active_since": None}
     await db.users.update_one({"id": user_id},
                               {"$set": reset, "$push": {"pending_jar_drops": granted}})
     return granted
@@ -3896,13 +3932,9 @@ async def jars_shop(user: dict = Depends(get_current_user)):
     jars = []
     for (jid, name, cat, sell) in JAR_SHOP_CATALOG:
         st = state.get(jid) or {}
-        owned = bool(st.get("owned"))
-        if jid == STARTER_JAR:
-            # Gratis-Starter: gehört jedem, ist voll & bereit zum Öffnen/Verkaufen.
-            owned = True
-            fill = _compute_jar_fill(st.get("filled_at")) if st.get("filled_at") else 100
-        else:
-            fill = _compute_jar_fill(st.get("filled_at")) if owned else 0
+        owned = bool(st.get("owned")) or (jid == STARTER_JAR)
+        # Alle Jars (auch Glass-Starter) starten bei 0% und füllen sich NUR im Open Case.
+        fill = _compute_jar_fill(st) if owned else 0
         jars.append({
             "id": jid, "name": name, "category": cat,
             "sellReward": sell, "buyPrice": _jar_buy_price(sell),
@@ -3935,11 +3967,10 @@ async def jars_shop_buy(inp: JarSellInput, user: dict = Depends(get_current_user
     price = JAR_SHOP_BY_ID[jid]["buyPrice"]
     if int(fresh.get("credits") or 0) < price:
         raise HTTPException(status_code=400, detail=f"Nicht genug Coins ({price} nötig)")
-    now = datetime.now(timezone.utc).isoformat()
     await db.users.update_one(
         {"id": user["id"]},
         {"$inc": {"credits": -price},
-         "$set": {f"jar_shop.{jid}": {"owned": True, "filled_at": now}}})
+         "$set": {f"jar_shop.{jid}": {"owned": True, "fill_base": 0, "active_since": None}}})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     return {"ok": True, "price": price, "user": public_user(updated)}
 
@@ -3951,17 +3982,22 @@ async def jars_shop_sell(inp: JarSellInput, user: dict = Depends(get_current_use
         raise HTTPException(status_code=400, detail="Unknown jar")
     fresh = await db.users.find_one({"id": user["id"]})
     st = (fresh.get("jar_shop") or {}).get(jid) or {}
-    if not st.get("owned"):
+    owned = bool(st.get("owned")) or (jid == STARTER_JAR)
+    if not owned:
         raise HTTPException(status_code=400, detail="Jar gehört dir nicht")
-    fill = _compute_jar_fill(st.get("filled_at"))
+    fill = _compute_jar_fill(st)
     if fill < 100:
         raise HTTPException(status_code=400, detail=f"Jar ist erst zu {fill}% voll")
     reward = JAR_SHOP_BY_ID[jid]["sellReward"]
     now = datetime.now(timezone.utc).isoformat()
+    # Reset auf 0%. Läuft nur weiter, wenn das Jar noch im Open Case liegt.
+    in_case = jid in (fresh.get("open_case") or [])
     await db.users.update_one(
         {"id": user["id"]},
         {"$inc": {"credits": reward},
-         "$set": {f"jar_shop.{jid}.filled_at": now}})
+         "$set": {f"jar_shop.{jid}.owned": True,
+                  f"jar_shop.{jid}.fill_base": 0,
+                  f"jar_shop.{jid}.active_since": (now if in_case else None)}})
     await db.credit_transactions.insert_one({
         "id": str(uuid.uuid4()), "type": "jar_shop_sale", "to_user": user["id"],
         "amount": reward, "jar_id": jid, "created_at": now,
@@ -4046,7 +4082,24 @@ async def set_opencase(inp: OpenCaseInput, user: dict = Depends(get_current_user
             seen.add(xi); ids.append(xi)
         if len(ids) >= 3:
             break
-    await db.users.update_one({"id": user["id"]}, {"$set": {"open_case": ids}})
+    fresh = await db.users.find_one({"id": user["id"]})
+    old = set(fresh.get("open_case") or [])
+    new = set(ids)
+    state = fresh.get("jar_shop") or {}
+    now = datetime.now(timezone.utc).isoformat()
+    sets = {"open_case": ids}
+    # Reingelegt → Füllung STARTEN (active_since = jetzt, fill_base bleibt).
+    for jid in (new - old):
+        st = state.get(jid) or {}
+        sets[f"jar_shop.{jid}.owned"] = True
+        sets[f"jar_shop.{jid}.fill_base"] = float(st.get("fill_base") or 0)
+        sets[f"jar_shop.{jid}.active_since"] = now
+    # Rausgenommen → Füllung PAUSIEREN (aktuellen Stand einfrieren).
+    for jid in (old - new):
+        st = state.get(jid) or {}
+        sets[f"jar_shop.{jid}.fill_base"] = _compute_jar_fill(st)
+        sets[f"jar_shop.{jid}.active_since"] = None
+    await db.users.update_one({"id": user["id"]}, {"$set": sets})
     return {"jar_ids": ids}
 
 
