@@ -157,3 +157,12 @@ Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
 - BUG 4 (confidential öffnet neues Programm): GEFIXT. Raster4_Money.jsx: statt `target="_blank"` jetzt In-App-Modal (data-testid=confidential-modal) mit dunklem TipJar-Header + X + Loading-Watermark (TJ-Shield), iframe /glitch/index.html bleibt in der App. Deckt auch BUG 2/3 (Watermark, TipJar-Modal statt native Window) für diese Pille ab.
 - BUG 6 (Posten blockiert wegen KI-Tageslimit): GEFIXT KI-frei. SubmitTipModal.jsx publish(): wenn KI nichts erkennt und Markt-Feld leer, wird der getippte Text als Auswahl genutzt → man kann IMMER posten. Backend akzeptiert (needs_clarification statt reject). Getestet per curl (text-only Tipp → status live).
 - OFFEN (Entscheidung/Reproduktion nötig): BUG 1/3 „alle anderen Pillen öffnen gleiches/native Window" (beschreibt Live-Build; in Preview-Code kein window.open für diese Pillen gefunden). BUG 7 großer geführter Offline-Post-Flow (Team-Name → 3 Vorschläge, „noch ein Spiel adden?", Text komplett optional) = eigener größerer Umbau des Post-Modals, NICHT gemacht.
+
+## 2026-08-18 (Fix-Runde 2) — Shop-Tabs korrigiert + Inventory/Open Case wiederhergestellt
+- WICHTIG: Beim Shop-Umbau hatte ich Inventory + Open Case gelöscht. Aus git (d6ab5a5) zurückgeholt und in EINE Komponente JarDex.jsx vereint.
+- Tab-Struktur jetzt: INVENTORY | SHOP | OPEN CASE (Shop in der Mitte). Alles über /jars/shop (eine Datenquelle). "Meine Sammlung" (openCollection) → JARDEX-Container → interner Tab INVENTORY default.
+- Shop-Sub-Tabs: EINKAUFEN (default) / VERKAUFEN. Kein Sprach-Switcher mehr (nutzt localStorage tj_lang → T.DE/T.EN Fallback).
+- Glass = STARTER_JAR: Backend erzwingt owned=true + fill 100 (default), buy /jars/shop/buy lehnt glass ab, Lucky-Drop schließt glass aus. Inventory/Shop zeigen "Free starter • ready".
+- Open Case: 3-Slot-Set via /jars/opencase (filtert veraltete IDs), Fill aus /jars/shop, verkaufen bei 100%.
+- Confidential /glitch/index.html: Sprach-Switcher (langs-Buttons + JS) entfernt, bleibt Deutsch. tracker.html lang-bar sind nur OCR-Info-Labels (kein Switcher) → bleiben.
+- Getestet: curl (glass starter owned+nicht kaufbar), Screenshots (3 Tabs, Reihenfolge, Shop=BUY default, Glass-Starter). Kein testing_agent (Credits sparen).

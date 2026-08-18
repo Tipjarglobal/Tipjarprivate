@@ -35,7 +35,6 @@ body{background:#070707;color:#e5e5e5;min-height:100vh;padding:20px}
 <a href="tracker.html" style="color:#39ff14;font-size:12px;font-weight:800;text-decoration:none;border:1px dashed #39ff14;border-radius:999px;padding:6px 14px;white-space:nowrap">→ Tracker / Scheine posten</a>
 </div>
 <p id="subtitle"></p>
-<div class="langs" id="langs"></div>
 </div>
 <div id="content"></div>
 </div>
@@ -166,10 +165,7 @@ function render(){
    <div class="card"><h2>${t.ex1t}</h2><p>${t.ex1d}</p>${t.ex1p.map(e=>`<div class="pick">✔ ${e}</div>`).join("")}<div class="quote">${t.ex1q}</div></div>
   </div>
  `;
- document.querySelectorAll(".langs button").forEach(b=>b.classList.toggle("active",b.dataset.l===cur));
 }
-const langsDiv=document.getElementById("langs");
-Object.keys(data).forEach(l=>{ const b=document.createElement("button"); b.innerText=l; b.dataset.l=l; b.onclick=()=>{cur=l; render();}; langsDiv.appendChild(b); });
 render();
 </script>
 </body>

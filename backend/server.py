@@ -3814,6 +3814,7 @@ async def sell_jar(inp: JarSellInput, user: dict = Depends(get_current_user)):
 # ============================================================================
 BUY_DISCOUNT = 0.25
 JAR_FILL_SECONDS = 8 * 3600          # ~8h real time for a jar to refill to 100%
+STARTER_JAR = "glass"                # gratis für jedes Mitglied, immer besessen + voll
 
 # (id, display name, category, sellReward)
 JAR_SHOP_CATALOG = [
@@ -3875,7 +3876,7 @@ async def _bump_jar_activity(user_id: str, pts: int = 1):
         return None
     state = u.get("jar_shop") or {}
     unowned = [jid for (jid, _n, _c, _s) in JAR_SHOP_CATALOG
-               if not (state.get(jid) or {}).get("owned")]
+               if jid != STARTER_JAR and not (state.get(jid) or {}).get("owned")]
     reset = {"jar_activity": 0, "jar_next_drop": random.randint(18, 34)}
     if not unowned:
         await db.users.update_one({"id": user_id}, {"$set": reset})
@@ -3896,11 +3897,17 @@ async def jars_shop(user: dict = Depends(get_current_user)):
     for (jid, name, cat, sell) in JAR_SHOP_CATALOG:
         st = state.get(jid) or {}
         owned = bool(st.get("owned"))
+        if jid == STARTER_JAR:
+            # Gratis-Starter: gehört jedem, ist voll & bereit zum Öffnen/Verkaufen.
+            owned = True
+            fill = _compute_jar_fill(st.get("filled_at")) if st.get("filled_at") else 100
+        else:
+            fill = _compute_jar_fill(st.get("filled_at")) if owned else 0
         jars.append({
             "id": jid, "name": name, "category": cat,
             "sellReward": sell, "buyPrice": _jar_buy_price(sell),
-            "owned": owned,
-            "fill": _compute_jar_fill(st.get("filled_at")) if owned else 0,
+            "owned": owned, "fill": fill,
+            "starter": jid == STARTER_JAR,
         })
     drops = fresh.get("pending_jar_drops") or []
     if drops:
@@ -3919,6 +3926,8 @@ async def jars_shop_buy(inp: JarSellInput, user: dict = Depends(get_current_user
     jid = inp.jar_id
     if jid not in JAR_SHOP_BY_ID:
         raise HTTPException(status_code=400, detail="Unknown jar")
+    if jid == STARTER_JAR:
+        raise HTTPException(status_code=400, detail="Glass ist ein Gratis-Starter – gehört dir schon")
     fresh = await db.users.find_one({"id": user["id"]})
     state = fresh.get("jar_shop") or {}
     if (state.get(jid) or {}).get("owned"):
