@@ -1,4 +1,3 @@
-import MaintenancePopup from './components/MaintenancePopup';
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
@@ -55,7 +54,7 @@ const CR_SUB = {
 // Small black & white checkered "finish flag" marker for the Settled area.
 function CheckeredFlag({ size = 14 }) {
   return (
-     <span
+    <span
       aria-hidden
       style={{
         width: size, height: size, display: "inline-block", borderRadius: 3,

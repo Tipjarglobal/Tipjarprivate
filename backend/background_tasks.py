@@ -289,7 +289,7 @@ def _all_kickoff_strs(tp: dict) -> list:
         times.append(lg.get("kickoff"))
     for lg in (tp.get("combo_legs") or []):
         times.append(lg.get("kickoff") or lg.get("match_time"))
-    return [t for t in times if (t or "").strip()]
+    return [t for t in times if str(t or "").strip()]
 
 
 def _clock_kickoffs(tp: dict) -> list:

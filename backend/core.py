@@ -88,7 +88,7 @@ LIVE_STATUSES = {"1H", "2H", "HT", "ET", "BT", "P", "SUSP", "INT", "LIVE"}
 LIVE_MAX_OPEN_HOURS = 3.5
 
 APP_NAME = "tipjar"
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+STORAGE_URL = "" # Removed
 
 # Credit economy config
 # 1 credit = €0.01 to buy. Withdrawals pay half: €5 per 1000 earned credits.

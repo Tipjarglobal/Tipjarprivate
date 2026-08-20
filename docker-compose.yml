@@ -1,49 +1,43 @@
-# TipJar — Hetzner Deployment (4GB RAM optimiert, kein OOM)
-# Speicher-Budget:  mongo 1G  +  backend 2G  +  frontend 0.5G  = 3.5G  (0.5G Puffer)
-#
-# Start:   cp .env.hetzner.example .env  &&  nano .env  &&  docker compose up -d --build
 services:
   mongo:
     image: mongo:7
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
-    mem_limit: 1g
-    mem_reservation: 512m
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - mongo_config:/data/configdb
+    ports:
+      - "27017:27017"
 
   backend:
     build: ./backend
-    restart: unless-stopped
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-      - DB_NAME=${DB_NAME:-tipjar}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - EMERGENT_LLM_KEY=${EMERGENT_LLM_KEY:-}
     depends_on:
-      mongo:
-        condition: service_healthy
-    mem_limit: 2g
-    mem_reservation: 1g
-    expose:
-      - "8001"
+      - mongo
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        # Gleiche Origin wie die Domain -> nginx proxyt /api zum Backend
-        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-http://localhost}
-    restart: unless-stopped
+    build: ./frontend
     depends_on:
       - backend
     mem_limit: 512m
     ports:
       - "80:80"
+    restart: unless-stopped
+
+  scraper:
+    build: ./scraper
+    depends_on:
+      - mongo
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
 
 volumes:
   mongo_data:
+  mongo_config:
