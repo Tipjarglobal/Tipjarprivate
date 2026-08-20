@@ -13,10 +13,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 
 import uuid
-# FIXED: Emergent removed - using OpenAI/Ollama
-from openai import OpenAI
-LlmChat = None
-UserMessage = None
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 from server import (
     AI_MODEL,
