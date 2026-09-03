@@ -1,0 +1,1809 @@
+==================================================
+CODE_FOR_META_AI — Tipjarprivate frontend extract
+Generated: 2026-09-03 | Repo: Tipjarglobal/Tipjarprivate
+Files: 16 | No node_modules, no .env, no secrets
+==================================================
+
+========== FILE: frontend/src/App.jsx ==========
+import React, { useState, useEffect } from "react";
+import "./App.css";
+import { BrowserRouter } from "react-router-dom";
+import { Toaster } from "sonner";
+
+import Raster1_RentPills from "./components/Raster1_RentPills.jsx";
+import Raster2_Header from "./components/Raster2_Header.jsx";
+import Raster2_Supporter from "./components/Raster2_Supporter.jsx";
+import Raster3_AiPicks from "./components/Raster3_AiPicks.jsx";
+import Raster4_Money from "./components/Raster4_Money.jsx";
+import Raster4b_CommunityLive from "./components/Raster4b_CommunityLive.jsx";
+import Raster5_InputFeedback from "./components/Raster5_InputFeedback.jsx";
+import Raster6_BLang from "./components/Raster6_BLang.jsx";
+
+class Err extends React.Component{
+  state={e:null}
+  static getDerivedStateFromError(e){return {e}}
+  render(){
+    if(this.state.e) return <div style={{background:'white', color:'red', padding:'20px', whiteSpace:'pre-wrap', fontSize:'14px', minHeight:'100vh'}}><b>CRASH in {this.props.name}:</b>{String(this.state.e)}<br/><br/>{this.state.e?.stack}</div>
+    return this.props.children
+  }
+}
+
+export default function App(){
+  const [lang, setLang] = useState(()=> localStorage.getItem("tj_lang") || "de");
+  useEffect(()=>{ localStorage.setItem("tj_lang", lang); }, [lang]);
+  return (
+    <BrowserRouter>
+      <div className="min-h-screen bg-black text-white">
+        <Err name="Raster1_RentPills"><Raster1_RentPills lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster2_Header"><Raster2_Header lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster2_Supporter"><Raster2_Supporter lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster3_AiPicks"><Raster3_AiPicks lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster4_Money"><Raster4_Money lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster4b_CommunityLive"><Raster4b_CommunityLive lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster5_InputFeedback"><Raster5_InputFeedback lang={lang} setLang={setLang} /></Err>
+        <Err name="Raster6_BLang"><Raster6_BLang lang={lang} setLang={setLang} /></Err>
+      </div>
+      <Toaster />
+    </BrowserRouter>
+  )
+}
+
+
+========== FILE: frontend/src/components/Raster1_RentPills.jsx ==========
+import React from "react";
+import SponsorFeeder from "./SponsorFeeder";
+
+// RASTER 1 — Top Partner: Intro + Rent-Templates + Wettanbieter (im SponsorFeeder).
+const T = {
+  de: { intro: "Deine Partner auf TipJar – buche deine eigene Pille für deinen Link oder entdecke unsere Top-Wettanbieter. Jede Pille ist ein direkter Link – deine Sichtbarkeit, dein Business.", rent2: "2× DEIN LINK HIER", rent1: "DEIN LINK HIER", top: "TOP", per: "/Monat", book: "Jetzt buchen → Instagram" },
+  en: { intro: "Your partners on TipJar – book your own pill for your link or discover our top bookmakers. Every pill is a direct link – your visibility, your business.", rent2: "2× YOUR LINK HERE", rent1: "YOUR LINK HERE", top: "TOP", per: "/month", book: "Book now → Instagram" },
+  es: { intro: "Tus socios en TipJar: reserva tu propia píldora para tu enlace o descubre nuestras mejores casas. Cada píldora es un enlace directo: tu visibilidad, tu negocio.", rent2: "2× TU ENLACE AQUÍ", rent1: "TU ENLACE AQUÍ", top: "TOP", per: "/mes", book: "Reservar → Instagram" },
+  el: { intro: "Οι συνεργάτες σου στο TipJar – κλείσε το δικό σου pill για το link σου ή ανακάλυψε κορυφαία στοιχηματικά. Κάθε pill είναι άμεσος σύνδεσμος.", rent2: "2× ΤΟ LINK ΣΟΥ", rent1: "ΤΟ LINK ΣΟΥ", top: "TOP", per: "/μήνα", book: "Κράτηση → Instagram" },
+  fr: { intro: "Tes partenaires sur TipJar – réserve ta propre pilule pour ton lien ou découvre nos meilleurs bookmakers. Chaque pilule est un lien direct.", rent2: "2× TON LIEN ICI", rent1: "TON LIEN ICI", top: "TOP", per: "/mois", book: "Réserver → Instagram" },
+  it: { intro: "I tuoi partner su TipJar – prenota la tua pillola per il tuo link o scopri i migliori bookmaker. Ogni pillola è un link diretto.", rent2: "2× IL TUO LINK QUI", rent1: "IL TUO LINK QUI", top: "TOP", per: "/mese", book: "Prenota → Instagram" },
+  ar: { intro: "شركاؤك على TipJar – احجز حبتك الخاصة لرابطك أو اكتشف أفضل المراهنات. كل حبة رابط مباشر.", rent2: "2× رابطك هنا", rent1: "رابطك هنا", top: "TOP", per: "/شهر", book: "احجز الآن → Instagram" },
+  tr: { intro: "TipJar'daki ortakların – kendi hapını linkin için kirala ya da en iyi bahis sitelerini keşfet. Her hap doğrudan bir link.", rent2: "2× LİNKİN BURADA", rent1: "LİNKİN BURADA", top: "TOP", per: "/ay", book: "Hemen kirala → Instagram" },
+};
+
+export default function Raster1_RentPills({ lang = "de", ...rest }) {
+  const t = T[lang] || T.de;
+  return (
+    <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster1-top-partner">
+      <div className="max-w-5xl mx-auto">
+        <p className="text-xs text-zinc-400 mb-3 leading-relaxed">{t.intro}</p>
+      </div>
+      {/* Rent-Templates (RENT 2 PILLS / RENT A PILL) + Wettanbieter-Pillen leben im Feeder */}
+      <SponsorFeeder {...rest} />
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster2_Header.jsx ==========
+import React from "react";
+import Header from "./Header";
+
+// RASTER 2 — Header (Alarme + 8 Sprachen + Coins). Kapselt den bestehenden Header 1:1.
+export default function Raster2_Header(props) {
+  return <Header {...props} />;
+}
+
+
+========== FILE: frontend/src/components/Raster2_Supporter.jsx ==========
+import React, { useState, useEffect } from "react";
+import { Crown, Eye, Link2, Image as ImageIcon, X, ExternalLink } from "lucide-react";
+import api from "../api";
+import { toast } from "sonner";
+
+// RASTER 2 — Supporter: 5 Blank-Templates (bleiben IMMER), teuerste oben.
+// Preis oben links (gelb), Badge oben rechts, Münzen darunter. Klick → Purchase-Window.
+const T = {
+  de: { intro: "Supporte TipJar – werde Teil der Community. Jede Pille hilft TipJar zu wachsen. Deine Pille erscheint sofort nach dem Kauf.", wk: "Wochen", coins: "Münzen", buy: "Jetzt kaufen", getTitle: "Das bekommst du", contact: "Kauf abschließen → Instagram @tipjarglobal", close: "Schließen" },
+  en: { intro: "Support TipJar – become part of the community. Every pill helps TipJar grow. Your pill appears right after purchase.", wk: "weeks", coins: "coins", buy: "Buy now", getTitle: "What you get", contact: "Complete purchase → Instagram @tipjarglobal", close: "Close" },
+  es: { intro: "Apoya a TipJar y únete a la comunidad. Cada píldora ayuda a crecer. Tu píldora aparece justo tras la compra.", wk: "semanas", coins: "monedas", buy: "Comprar", getTitle: "Esto obtienes", contact: "Completar compra → Instagram @tipjarglobal", close: "Cerrar" },
+  el: { intro: "Στήριξε το TipJar – γίνε μέλος της κοινότητας. Κάθε pill βοηθά να μεγαλώσει. Εμφανίζεται αμέσως μετά την αγορά.", wk: "εβδομάδες", coins: "νομίσματα", buy: "Αγορά", getTitle: "Τι παίρνεις", contact: "Ολοκλήρωση → Instagram @tipjarglobal", close: "Κλείσιμο" },
+  fr: { intro: "Soutiens TipJar – rejoins la communauté. Chaque pilule aide TipJar à grandir. Ta pilule apparaît juste après l'achat.", wk: "semaines", coins: "pièces", buy: "Acheter", getTitle: "Ce que tu obtiens", contact: "Finaliser → Instagram @tipjarglobal", close: "Fermer" },
+  it: { intro: "Sostieni TipJar – entra nella community. Ogni pillola aiuta a crescere. Appare subito dopo l'acquisto.", wk: "settimane", coins: "monete", buy: "Acquista", getTitle: "Cosa ottieni", contact: "Completa → Instagram @tipjarglobal", close: "Chiudi" },
+  ar: { intro: "ادعم TipJar وكن جزءًا من المجتمع. كل حبة تساعد على النمو. تظهر حبتك فور الشراء.", wk: "أسابيع", coins: "عملات", buy: "اشترِ الآن", getTitle: "ما ستحصل عليه", contact: "إتمام الشراء → Instagram @tipjarglobal", close: "إغلاق" },
+  tr: { intro: "TipJar'ı destekle – topluluğun parçası ol. Her hap büyümeye yardım eder. Hapın satın alımdan hemen sonra görünür.", wk: "hafta", coins: "jeton", buy: "Satın al", getTitle: "Ne alıyorsun", contact: "Tamamla → Instagram @tipjarglobal", close: "Kapat" },
+};
+
+// Features je Pille (im Purchase-Window angezeigt)
+const FEATURES = {
+  de: {
+    xxl: ["Wunsch-Link frei wählbar", "3 Bilder hochladen (Admin-Freigabe)", "Name + Mini-OpenCase-Ansicht"],
+    xl: ["Wunsch-Link frei wählbar", "2 Bilder hochladen (Admin-Freigabe)", "Name + Mini-OpenCase-Ansicht"],
+    l: ["Wunsch-Link frei wählbar", "1 Bild hochladen (Admin-Freigabe)", "Name + Mini-OpenCase-Ansicht"],
+    m: ["Nur OpenCases anzeigen", "Name in der Pille"],
+    s: ["Nur OpenCases anzeigen", "Name in der Pille"],
+  },
+  en: {
+    xxl: ["Free choice of your link", "Upload 3 images (admin approval)", "Name + mini OpenCase view"],
+    xl: ["Free choice of your link", "Upload 2 images (admin approval)", "Name + mini OpenCase view"],
+    l: ["Free choice of your link", "Upload 1 image (admin approval)", "Name + mini OpenCase view"],
+    m: ["Show OpenCases only", "Name inside the pill"],
+    s: ["Show OpenCases only", "Name inside the pill"],
+  },
+};
+
+const PILLS = [
+  { id: "xxl", pkg: "partner", price: "119,99€", weeks: 6, coins: 1600, badge: "PARTNER", crown: true, size: "xxl", hasLink: true },
+  { id: "xl", pkg: "sponsor", price: "79,99€", weeks: 5, coins: 950, badge: "SPONSOR", size: "md", hasLink: true },
+  { id: "l", pkg: "vip", price: "49,99€", weeks: 4, coins: 460, badge: "VIP", best: true, size: "md", hasLink: true },
+  { id: "m", pkg: "fan", price: "19,99€", weeks: 3, coins: 150, badge: "FAN", size: "sm" },
+  { id: "s", pkg: "supporter", price: "9,99€", weeks: 2, coins: 50, badge: "SUPPORTER", size: "sm" },
+];
+
+// Höhen: nach 3mm-Trim vereinheitlicht (Standard). xxl etwas höher, Rest kompakt.
+const H = { xxl: "py-5", md: "py-4", sm: "py-3" };
+
+export default function Raster2_Supporter({ lang = "de" }) {
+  const t = T[lang] || T.de;
+  const feats = (FEATURES[lang] || FEATURES.en);
+  const [sel, setSel] = useState(null);
+  const [pills, setPills] = useState([]);
+  const [buying, setBuying] = useState(false);
+
+  useEffect(() => {
+    api.get("/pills").then((r) => setPills(r.data || [])).catch(() => {});
+  }, []);
+
+  const buy = async (p) => {
+    setBuying(true);
+    try {
+      const { data } = await api.post("/pills/checkout", { package_id: p.pkg, origin_url: window.location.origin });
+      window.location.href = data.url;
+    } catch (e) {
+      toast.error(e?.response?.status === 401 ? "Bitte zuerst einloggen" : "Kauf konnte nicht gestartet werden");
+      setBuying(false);
+    }
+  };
+
+  return (
+    <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster2-supporter">
+      <div className="max-w-5xl mx-auto">
+        <p className="text-xs text-zinc-400 mb-3 leading-relaxed">{t.intro}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {PILLS.map((p) => (
+            <button key={p.id} onClick={() => setSel(p)} data-testid={`supporter-${p.id}`}
+              className={`relative w-full rounded-2xl border ${p.best ? "border-volt" : "border-elevated"} bg-surface hover:border-volt/50 transition-colors px-4 ${H[p.size]} text-left ${p.id === "xxl" ? "sm:col-span-2" : ""}`}>
+              {/* Top row: Preis links (gelb fett) + Badge rechts (gelb) */}
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-volt font-black text-lg leading-none">{p.price}<span className="text-zinc-500 font-bold text-[11px]"> / {p.weeks} {t.wk}</span></span>
+                {p.badge && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-volt shrink-0">
+                    {p.crown && <Crown size={12} />} {p.badge}
+                  </span>
+                )}
+              </div>
+              <span className="block text-[11px] text-zinc-400 mt-2">{p.coins} {t.coins}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Gekaufte, aktive Pillen (erscheinen sofort nach dem Kauf) */}
+        {pills.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3" data-testid="supporter-active-pills">
+            {pills.map((p) => {
+              const clickable = p.link_status === "approved" && p.link;
+              return (
+                <button key={p.id} data-testid={`active-pill-${p.id}`}
+                  onClick={() => clickable && window.open(p.link, "_blank", "noopener")}
+                  className={`relative w-full rounded-2xl border border-volt/40 bg-gradient-to-r from-volt/10 to-transparent px-4 py-3 text-left transition-colors ${clickable ? "hover:border-volt cursor-pointer" : "cursor-default"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-white truncate">{p.username || p.label}</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-volt shrink-0">
+                      {p.tier === "partner" && <Crown size={12} />}{p.label}
+                    </span>
+                  </div>
+                  <div className="text-[11px] mt-1 flex items-center gap-1">
+                    {clickable
+                      ? <span className="text-volt inline-flex items-center gap-1"><ExternalLink size={11} /> {p.link}</span>
+                      : <span className="text-zinc-500">🔗 Link in Prüfung…</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Purchase-Window */}
+      {sel && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          data-testid="supporter-purchase-modal" onClick={() => setSel(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-volt/30 bg-[#0d0d0f] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()} dir={lang === "ar" ? "rtl" : "ltr"}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="inline-flex items-center gap-1 text-[10px] font-black text-volt mb-1">
+                  {sel.crown && <Crown size={12} />} {sel.badge || "SUPPORTER"}
+                </div>
+                <div className="text-volt font-black text-2xl leading-none">{sel.price}</div>
+                <div className="text-xs text-zinc-500 mt-1">{sel.weeks} {t.wk} · {sel.coins} {t.coins}</div>
+              </div>
+              <button onClick={() => setSel(null)} data-testid="supporter-modal-close" className="text-zinc-500 hover:text-white"><X size={20} /></button>
+            </div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500 mb-2">{t.getTitle}</p>
+            <ul className="space-y-2 mb-5">
+              {(feats[sel.id] || []).map((f, i) => (
+                <li key={i} className="flex items-center gap-2 text-sm text-zinc-200">
+                  <span className="grid place-items-center w-6 h-6 rounded-lg bg-volt/15 text-volt shrink-0">
+                    {i === 0 && sel.hasLink ? <Link2 size={13} /> : (f.toLowerCase().includes("bild") || f.toLowerCase().includes("image")) ? <ImageIcon size={13} /> : <Eye size={13} />}
+                  </span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <button data-testid="supporter-buy-btn" onClick={() => buy(sel)} disabled={buying}
+              className="w-full rounded-full bg-volt text-void font-black py-3 hover:brightness-110 active:scale-95 transition-all disabled:opacity-60">
+              {buying ? "…" : `${t.buy} · ${sel.price}`}
+            </button>
+            <button onClick={() => setSel(null)} className="w-full text-center text-xs text-zinc-500 mt-3 hover:text-white">{t.close}</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster3_AiPicks.jsx ==========
+import React from "react";
+import { Sparkles, Brain, Crown, Flag, Target, Wifi, Info } from "lucide-react";
+
+// RASTER 3 — KI-Pillen: Info-Raster (ⓘ) + Pillen. Live KI Picks jetzt hier (neben Abgerechnet).
+const T = {
+  de: { info: "Die KI macht manchmal Fehler. Manchmal stimmen Uhrzeit, Quote oder Markt nicht (z.B. gibt es bei manchen Spielen kein Über 0.5). Dafür gibt es oben bei jedem Tipp den blauen Korrektur-Knopf: Poste einfach ein Foto deines Scheins vom Buchmacher, dann übernimmt die KI die richtige Auswahl und Quote automatisch. So bleibt jeder Schein sauber und spielbar.",
+    single: "KI Single-Game-Picks", smart: "Smart Picks ansehen", smartCta: "Mit der KI reden", master: "Master", settled: "Abgerechnet", stats: "Statistiken", live: "Live KI Picks" },
+  en: { info: "The AI sometimes makes mistakes — kickoff time, odds or market may be off (e.g. no Over 0.5 for some games). That's why every tip has the blue correction button on top: post a photo of your bookmaker slip and the AI takes the right selection and odds automatically. Every slip stays clean and playable.",
+    single: "AI Single-Game Picks", smart: "See Smart Picks", smartCta: "Talk to the AI", master: "Master", settled: "Settled", stats: "Statistics", live: "Live AI Picks" },
+  es: { info: "La IA a veces se equivoca: la hora, la cuota o el mercado pueden fallar. Por eso cada pronóstico tiene el botón azul de corrección arriba: sube una foto de tu boleto y la IA se encarga de la selección y cuota correctas.",
+    single: "Picks de un partido IA", smart: "Ver Smart Picks", smartCta: "Habla con la IA", master: "Master", settled: "Liquidado", stats: "Estadísticas", live: "Live AI Picks" },
+  el: { info: "Η ΤΝ κάνει μερικές φορές λάθη — ώρα, απόδοση ή αγορά. Γι' αυτό κάθε tip έχει πάνω το μπλε κουμπί διόρθωσης: ανέβασε φωτό του δελτίου και η ΤΝ αναλαμβάνει σωστή επιλογή και απόδοση.",
+    single: "KI Single-Game Picks", smart: "Δες Smart Picks", smartCta: "Μίλα με την ΤΝ", master: "Master", settled: "Εκκαθαρισμένα", stats: "Στατιστικά", live: "Live KI Picks" },
+  fr: { info: "L'IA se trompe parfois — l'heure, la cote ou le marché. C'est pourquoi chaque pronostic a le bouton bleu de correction en haut : poste une photo de ton ticket et l'IA prend la bonne sélection et cote.",
+    single: "Picks un match IA", smart: "Voir Smart Picks", smartCta: "Parler à l'IA", master: "Master", settled: "Réglé", stats: "Statistiques", live: "Live AI Picks" },
+  it: { info: "L'IA a volte sbaglia — orario, quota o mercato. Per questo ogni tip ha in alto il pulsante blu di correzione: carica la foto della schedina e l'IA sistema selezione e quota.",
+    single: "Picks singola partita IA", smart: "Vedi Smart Picks", smartCta: "Parla con l'IA", master: "Master", settled: "Regolati", stats: "Statistiche", live: "Live AI Picks" },
+  ar: { info: "قد يخطئ الذكاء الاصطناعي أحيانًا — الوقت أو النسبة أو السوق. لذلك يوجد زر التصحيح الأزرق أعلى كل توقع: انشر صورة قسيمتك وسيتولى الذكاء الاصطناعي الاختيار والنسبة الصحيحة.",
+    single: "توقعات مباراة واحدة", smart: "عرض Smart Picks", smartCta: "تحدث مع الذكاء الاصطناعي", master: "ماستر", settled: "مُسوّاة", stats: "إحصائيات", live: "Live AI Picks" },
+  tr: { info: "Yapay zeka bazen hata yapar — saat, oran veya pazar. Bu yüzden her tahminin üstünde mavi düzeltme butonu var: kuponunun fotoğrafını yükle, yapay zeka doğru seçim ve oranı alsın.",
+    single: "YZ Tek Maç Tahminleri", smart: "Smart Picks'e bak", smartCta: "YZ ile konuş", master: "Master", settled: "Sonuçlanan", stats: "İstatistikler", live: "Canlı YZ Picks" },
+};
+
+function Pill({ label, icon: Icon, badge, nb, cls, onClick, tid, chip, live, span }) {
+  return (
+    <button onClick={onClick} data-testid={tid}
+      className={`relative flex items-center gap-2 rounded-full font-heading font-black text-xs sm:text-sm px-3 py-2.5 active:scale-[0.98] transition-transform ${cls} ${span ? "col-span-2" : ""} ${live ? "animate-pulse" : ""}`}>
+      {nb > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 z-10 min-w-[18px] h-4.5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-black border-2 border-void animate-pulse">
+          {nb > 99 ? "99+" : nb}
+        </span>
+      )}
+      <Icon size={15} strokeWidth={2.5} />
+      <span className="truncate">{label}</span>
+      {badge != null && (
+        <span className="min-w-[18px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">{badge}</span>
+      )}
+      {chip && (
+        <span className="ml-auto shrink-0 hidden sm:inline text-[9px] font-bold rounded-full bg-void/80 text-volt border border-volt/50 px-2 py-0.5">{chip}</span>
+      )}
+    </button>
+  );
+}
+
+export default function Raster3_AiPicks({ lang = "de", counts = {}, newCounts = {}, onViewTips, onViewSmart, onViewMaster, onViewSettled, onViewScorers, onViewLive }) {
+  const t = T[lang] || T.de;
+  const rtl = lang === "ar";
+  return (
+    <section className="px-4 py-4" dir={rtl ? "rtl" : "ltr"} data-testid="raster3-ai-picks">
+      <div className="max-w-5xl mx-auto rounded-2xl border border-sky-400/40 bg-gradient-to-b from-sky-400/10 to-transparent p-4">
+        <div className="flex items-start gap-2 mb-3">
+          <Info size={16} className="text-sky-300 shrink-0 mt-0.5" />
+          <p className="text-xs text-sky-100/80 leading-relaxed">{t.info}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {/* Zeile 1 */}
+          <Pill label={t.single} icon={Sparkles} badge={counts.ai} nb={newCounts.ai} cls="bg-[#2ECC57] text-black" onClick={onViewTips} tid="r3-single" />
+          <Pill label={t.smart} icon={Brain} badge={counts.smart} nb={newCounts.smart} cls="bg-[#2ECC57] text-black" onClick={onViewSmart} tid="r3-smart" chip={t.smartCta} />
+          {/* Zeile 2 */}
+          <Pill label={t.master} icon={Crown} badge={counts.master} nb={newCounts.master} cls="bg-[#E11D2A] text-white" onClick={onViewMaster} tid="r3-master" span />
+          {/* Zeile 3: Abgerechnet + Live nebeneinander */}
+          <Pill label={t.settled} icon={Flag} badge={counts.settled} nb={newCounts.settled} cls="bg-white text-black" onClick={onViewSettled} tid="r3-settled" />
+          <Pill label={t.live} icon={Wifi} badge={counts.live} nb={newCounts.live} cls="bg-[#2563eb] text-white" onClick={onViewLive} tid="r3-live" live />
+          {/* Zeile 4: Statistiken full width */}
+          <Pill label={t.stats} icon={Target} cls="bg-[#F9A8D4] text-black" onClick={onViewScorers} tid="r3-stats" span />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster4_Money.jsx ==========
+import React, { useState } from "react";
+import { Sparkles, Coins, Crown, Boxes, Users, Lock, X } from "lucide-react";
+
+// RASTER 4 — "Willst du mit Wetten Geld verdienen?" + Batterie + 4 Actions.
+const T = {
+  de: { lead: "Willst du mit Wetten Geld verdienen? Dann brauchst du diese Seite. Melde dich an, aktiviere deinen Standort, wähle deine Sprache und schalte bei den Benachrichtigungen den Master an – so verpasst du keinen einzigen Pick. Dann spiele einfach, was der Master dir gibt, immer mit kontrolliertem Einsatz. So wird aus Wetten ein System statt Glücksspiel.",
+    submit: "Tipp einwerfen", earn: "Münzen verdienen", collection: "Meine Sammlung", community: "Community Picks ansehen", live: "Live" },
+  en: { lead: "Want to make money betting? Then you need this page. Sign up, enable your location, pick your language and turn on the Master in notifications — so you never miss a single pick. Then just play what the Master gives you, always with a controlled stake. That turns betting into a system instead of gambling.",
+    submit: "Drop a tip", earn: "Earn coins", collection: "My Collection", community: "See Community Picks", live: "Live" },
+  es: { lead: "¿Quieres ganar dinero apostando? Entonces necesitas esta página. Regístrate, activa tu ubicación, elige tu idioma y activa el Master en las notificaciones — así no te pierdes ningún pick. Luego juega lo que el Master te da, siempre con apuesta controlada.",
+    submit: "Lanzar pronóstico", earn: "Ganar monedas", collection: "Mi colección", community: "Ver Community Picks", live: "Live" },
+  el: { lead: "Θέλεις να βγάλεις χρήματα με στοιχήματα; Τότε χρειάζεσαι αυτή τη σελίδα. Κάνε εγγραφή, ενεργοποίησε την τοποθεσία, διάλεξε γλώσσα και άναψε τον Master στις ειδοποιήσεις — για να μη χάνεις κανένα pick.",
+    submit: "Ρίξε tip", earn: "Κέρδισε νομίσματα", collection: "Η συλλογή μου", community: "Δες Community Picks", live: "Live" },
+  fr: { lead: "Tu veux gagner de l'argent en pariant ? Alors il te faut cette page. Inscris-toi, active ta localisation, choisis ta langue et active le Master dans les notifications — pour ne rater aucun pronostic.",
+    submit: "Déposer un prono", earn: "Gagner des pièces", collection: "Ma collection", community: "Voir Community Picks", live: "Live" },
+  it: { lead: "Vuoi guadagnare con le scommesse? Allora ti serve questa pagina. Registrati, attiva la posizione, scegli la lingua e accendi il Master nelle notifiche — così non perdi nessun pick.",
+    submit: "Butta un tip", earn: "Guadagna monete", collection: "La mia raccolta", community: "Vedi Community Picks", live: "Live" },
+  ar: { lead: "هل تريد كسب المال من الرهانات؟ إذًا تحتاج هذه الصفحة. سجّل، فعّل موقعك، اختر لغتك وشغّل الماستر في الإشعارات — كي لا تفوّت أي توقع.",
+    submit: "ألقِ توقعًا", earn: "اكسب عملات", collection: "مجموعتي", community: "عرض Community Picks", live: "مباشر" },
+  tr: { lead: "Bahisle para kazanmak mı istiyorsun? O zaman bu sayfa şart. Kayıt ol, konumunu aç, dilini seç ve bildirimlerde Master'ı aç — hiçbir tahmini kaçırma.",
+    submit: "Tahmin at", earn: "Jeton kazan", collection: "Koleksiyonum", community: "Community Picks'e bak", live: "Canlı" },
+};
+
+export default function Raster4_Money({ lang = "de", batteryCoins = 0, onSubmit, onEarn, onCollection, onViewMembers, onViewLiveCommunity, onCharge }) {
+  const t = T[lang] || T.de;
+  const rtl = lang === "ar";
+  const [showConf, setShowConf] = useState(false);
+  const [confLoading, setConfLoading] = useState(true);
+  return (
+    <section className="px-4 py-4" dir={rtl ? "rtl" : "ltr"} data-testid="raster4-money">
+      <div className="max-w-5xl mx-auto rounded-2xl border border-elevated bg-surface p-5">
+        <div className="flex items-start gap-2.5 mb-5">
+          <Crown size={18} className="text-[#E11D2A] shrink-0 mt-0.5" />
+          <p className="text-sm text-zinc-300 leading-relaxed">{t.lead}</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+          <button onClick={onSubmit} data-testid="r4-submit-btn"
+            className="flex items-center justify-center gap-2 rounded-full bg-volt text-void font-bold px-6 py-3.5 hover:bg-volt-hover active:scale-95 transition-all shadow-[0_0_30px_rgba(225,255,0,0.3)]">
+            <Sparkles size={18} /> {t.submit}
+          </button>
+          <button onClick={onEarn} data-testid="r4-earn-btn"
+            className="flex items-center justify-center gap-2 rounded-full border border-volt/40 bg-volt/10 text-volt font-bold px-6 py-3.5 hover:bg-volt/20 active:scale-95 transition-all">
+            <Coins size={18} /> {t.earn}
+          </button>
+          <button onClick={onCollection} data-testid="r4-collection-btn"
+            className="flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 text-white font-bold px-6 py-3.5 hover:bg-white/10 hover:border-white/40 active:scale-95 transition-all">
+            <Boxes size={18} /> {t.collection}
+          </button>
+          {/* Community Picks ansehen — GELB, mit LIVE-Button (aus Raster 4b hierher) */}
+          <div className="flex items-center justify-between gap-1 rounded-full bg-[#E3A81B] text-black font-bold p-1" data-testid="r4-community-wrap">
+            <button onClick={onViewMembers} data-testid="r4-community-btn"
+              className="flex items-center gap-2 min-w-0 flex-1 justify-center pl-2 py-2.5 rounded-full active:scale-[0.98] transition-transform">
+              <Users size={17} strokeWidth={2.5} />
+              <span className="truncate text-sm">{t.community}</span>
+            </button>
+            <button onClick={onViewLiveCommunity} data-testid="r4-community-live"
+              className="flex items-center gap-1.5 shrink-0 rounded-full bg-[#2563eb] text-white px-3 py-2 text-xs font-black uppercase tracking-wide hover:bg-[#1d4fd8] active:scale-95 transition-all">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> {t.live}
+            </button>
+          </div>
+        </div>
+
+        {/* Lila Pille — confidential menu (IN-APP Modal, KEIN neues Fenster) */}
+        <button onClick={() => { setShowConf(true); setConfLoading(true); }} data-testid="r4-confidential-btn"
+          className="mt-3 w-full flex items-center justify-center gap-2 rounded-full bg-[#a855f7] text-white font-bold px-6 py-3.5 hover:bg-[#9333ea] active:scale-95 transition-all shadow-[0_0_30px_rgba(168,85,247,0.35)]">
+          <Lock size={18} /> confidential menu
+        </button>
+      </div>
+
+      {/* IN-APP CONFIDENTIAL MENU — dunkles TipJar-Modal mit Loading-Watermark, kein window.open */}
+      {showConf && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/95 backdrop-blur-sm" data-testid="confidential-modal"
+          dir="ltr">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#a855f7]/40 bg-[#0a0a0a]">
+            <div className="flex items-center gap-2">
+              <Lock size={16} className="text-[#a855f7]" />
+              <span className="font-black tracking-widest text-white text-sm">TIPJAR</span>
+              <span className="text-[#a855f7] text-xs font-bold lowercase">· confidential</span>
+            </div>
+            <button onClick={() => setShowConf(false)} data-testid="confidential-close"
+              className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-zinc-300 hover:text-white hover:bg-white/10 active:scale-95 transition-all">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="relative flex-1">
+            {confLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#070707]" data-testid="confidential-loading">
+                <div className="w-16 h-16 rounded-2xl border-2 border-[#39ff14]/40 flex items-center justify-center animate-pulse"
+                  style={{ boxShadow: "0 0 30px rgba(57,255,20,0.25)" }}>
+                  <span className="text-[#39ff14] font-black text-lg tracking-tighter">TJ</span>
+                </div>
+                <span className="text-zinc-500 text-xs font-black tracking-[0.3em] animate-pulse">TIPJAR</span>
+              </div>
+            )}
+            <iframe src="/glitch/index.html" title="confidential menu" data-testid="confidential-iframe"
+              onLoad={() => setConfLoading(false)}
+              className="w-full h-full border-0" />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster4b_CommunityLive.jsx ==========
+import React from "react";
+import { Users, Wifi } from "lucide-react";
+
+// RASTER 4b — Community Picks (GELB, links) + Live KI Picks (BLAU, rechts), getrennt nebeneinander.
+const T = {
+  de: { community: "Community Picks ansehen", live: "Live KI Picks", liveBtn: "Live" },
+  en: { community: "See Community Picks", live: "Live AI Picks", liveBtn: "Live" },
+  es: { community: "Ver Community Picks", live: "Live AI Picks", liveBtn: "Live" },
+  el: { community: "Δες Community Picks", live: "Live KI Picks", liveBtn: "Live" },
+  fr: { community: "Voir Community Picks", live: "Live AI Picks", liveBtn: "Live" },
+  it: { community: "Vedi Community Picks", live: "Live AI Picks", liveBtn: "Live" },
+  ar: { community: "عرض Community Picks", live: "Live AI Picks", liveBtn: "مباشر" },
+  tr: { community: "Community Picks'e bak", live: "Canlı YZ Picks", liveBtn: "Canlı" },
+};
+
+export default function Raster4b_CommunityLive({ lang = "de", counts = {}, onViewMembers, onViewLiveCommunity, onViewLive }) {
+  const t = T[lang] || T.de;
+  const rtl = lang === "ar";
+  return (
+    <section className="px-4 py-4" dir={rtl ? "rtl" : "ltr"} data-testid="raster4b-community-live">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* LINKS: Community Picks — GELB + LIVE Button blau */}
+        <div className="flex items-center justify-between gap-1 rounded-full bg-[#E3A81B] text-black font-heading font-black p-1" data-testid="r4b-community-wrap">
+          <button onClick={onViewMembers} data-testid="r4b-community"
+            className="flex items-center gap-2 min-w-0 flex-1 justify-start pl-3 pr-1 py-2 rounded-full active:scale-[0.98] transition-transform">
+            <Users size={16} strokeWidth={2.5} />
+            <span className="truncate text-sm">{t.community}</span>
+            {counts.members != null && (
+              <span className="min-w-[18px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">{counts.members}</span>
+            )}
+          </button>
+          <button onClick={onViewLiveCommunity} data-testid="r4b-community-live"
+            className="flex items-center gap-1.5 shrink-0 rounded-full bg-[#2563eb] text-white px-3.5 py-2 text-xs font-black uppercase tracking-wide hover:bg-[#1d4fd8] active:scale-95 shadow-[0_0_16px_rgba(37,99,235,0.6)] transition-all">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> {t.liveBtn}
+            {counts.community_live > 0 && (
+              <span className="min-w-[16px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1">{counts.community_live}</span>
+            )}
+          </button>
+        </div>
+
+        {/* RECHTS: Live KI Picks — BLAU + wifi */}
+        <button onClick={onViewLive} data-testid="r4b-live"
+          className="flex items-center gap-2 rounded-full bg-[#2563eb] text-white font-heading font-black px-4 py-3 active:scale-[0.98] transition-transform shadow-[0_0_18px_rgba(37,99,235,0.5)] animate-pulse">
+          <Wifi size={16} strokeWidth={2.5} />
+          <span className="truncate text-sm">{t.live}</span>
+          {counts.live != null && (
+            <span className="min-w-[18px] text-center text-[10px] font-mono font-black rounded-full bg-black/25 px-1.5 py-0.5">{counts.live}</span>
+          )}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster5_InputFeedback.jsx ==========
+import React, { useEffect, useState } from "react";
+import api from "../api";
+
+// RASTER 5 — Input & Feedback: 4 gleich große Pillen, Feedback mit dynamischem Badge,
+// Admin-Control für Veröffentlichung. 8-sprachig (EN/DE/ES/EL/FR/IT/AR/TR).
+const T = {
+  de: { submit: "Tipp einreichen", feedback: "Feedback", wallet: "Wallet", profile: "Profil",
+        title: "Dein Feedback", ph: "Was können wir besser machen?", send: "Senden", thanks: "Danke für dein Feedback!",
+        empty: "Noch kein Feedback veröffentlicht.", pub: "Veröffentlichen", unpub: "Zurückziehen", del: "Löschen", admin: "Admin – Freigabe", learn: "Je mehr Scheine ihr postet – gespielte, gewonnene UND verlorene – desto mehr bringt ihr TipJar bei: richtigere Quoten zu tippen und bessere Tipps zu treffen. Jeder Schein macht die KI schlauer." },
+  en: { submit: "Submit Tip", feedback: "Feedback", wallet: "Wallet", profile: "Profile",
+        title: "Your Feedback", ph: "What can we do better?", send: "Send", thanks: "Thanks for your feedback!",
+        empty: "No feedback published yet.", pub: "Publish", unpub: "Unpublish", del: "Delete", admin: "Admin – Approval", learn: "The more slips you post – played, won AND lost – the more you teach TipJar: to predict truer odds and hit better tips. Every slip makes the AI smarter." },
+  es: { submit: "Enviar pronóstico", feedback: "Opiniones", wallet: "Cartera", profile: "Perfil",
+        title: "Tu opinión", ph: "¿Qué podemos mejorar?", send: "Enviar", thanks: "¡Gracias por tu opinión!",
+        empty: "Aún no hay opiniones publicadas.", pub: "Publicar", unpub: "Retirar", del: "Borrar", admin: "Admin – Aprobación", learn: "Cuantos más boletos publiquéis – jugados, ganados Y perdidos – más le enseñáis a TipJar: a predecir cuotas más exactas y acertar mejores pronósticos. Cada boleto hace la IA más lista." },
+  el: { submit: "Υποβολή", feedback: "Σχόλια", wallet: "Πορτοφόλι", profile: "Προφίλ",
+        title: "Τα σχόλιά σου", ph: "Τι μπορούμε να βελτιώσουμε;", send: "Αποστολή", thanks: "Ευχαριστούμε!",
+        empty: "Δεν υπάρχουν δημοσιευμένα σχόλια.", pub: "Δημοσίευση", unpub: "Απόσυρση", del: "Διαγραφή", admin: "Admin – Έγκριση", learn: "Όσο περισσότερα δελτία ανεβάζετε – παιγμένα, κερδισμένα ΚΑΙ χαμένα – τόσο μαθαίνετε στο TipJar: να προβλέπει σωστότερες αποδόσεις και καλύτερα tips. Κάθε δελτίο κάνει την ΤΝ πιο έξυπνη." },
+  fr: { submit: "Soumettre", feedback: "Avis", wallet: "Portefeuille", profile: "Profil",
+        title: "Votre avis", ph: "Que pouvons-nous améliorer ?", send: "Envoyer", thanks: "Merci pour votre avis !",
+        empty: "Aucun avis publié.", pub: "Publier", unpub: "Retirer", del: "Supprimer", admin: "Admin – Validation", learn: "Plus vous postez de tickets – joués, gagnés ET perdus – plus vous apprenez à TipJar : à prévoir des cotes plus justes et de meilleurs pronostics. Chaque ticket rend l'IA plus intelligente." },
+  it: { submit: "Invia", feedback: "Feedback", wallet: "Portafoglio", profile: "Profilo",
+        title: "Il tuo feedback", ph: "Cosa possiamo migliorare?", send: "Invia", thanks: "Grazie per il feedback!",
+        empty: "Nessun feedback pubblicato.", pub: "Pubblica", unpub: "Ritira", del: "Elimina", admin: "Admin – Approvazione", learn: "Più schedine pubblicate – giocate, vinte E perse – più insegnate a TipJar: a prevedere quote più giuste e azzeccare tip migliori. Ogni schedina rende l'IA più intelligente." },
+  ar: { submit: "إرسال", feedback: "ملاحظات", wallet: "المحفظة", profile: "الملف",
+        title: "ملاحظاتك", ph: "ما الذي يمكننا تحسينه؟", send: "إرسال", thanks: "شكرًا على ملاحظاتك!",
+        empty: "لا توجد ملاحظات منشورة بعد.", pub: "نشر", unpub: "إلغاء", del: "حذف", admin: "المشرف – الموافقة", learn: "كلما نشرتم قسائم أكثر — ملعوبة ورابحة وخاسرة — علّمتم TipJar أكثر: توقّع نسب أدقّ وإصابة توقعات أفضل. كل قسيمة تجعل الذكاء الاصطناعي أذكى." },
+  tr: { submit: "Kupon gönder", feedback: "Geri bildirim", wallet: "Cüzdan", profile: "Profil",
+        title: "Geri bildirimin", ph: "Neyi daha iyi yapabiliriz?", send: "Gönder", thanks: "Geri bildirimin için teşekkürler!",
+        empty: "Henüz yayınlanmış geri bildirim yok.", pub: "Yayınla", unpub: "Geri çek", del: "Sil", admin: "Admin – Onay", learn: "Ne kadar çok kupon paylaşırsanız — oynanan, kazanılan VE kaybedilen — TipJar'a o kadar çok öğretirsiniz: daha doğru oranlar tahmin etmeyi ve daha iyi tahminler tutturmayı. Her kupon yapay zekayı daha akıllı yapar." },
+};
+
+export default function Raster5_InputFeedback({ lang = "de", isAdmin = false, onSubmit, onWallet, onProfile }) {
+  const t = T[lang] || T.de;
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [sent, setSent] = useState(false);
+  const [count, setCount] = useState(0);
+  const [list, setList] = useState([]);
+  const [adminList, setAdminList] = useState([]);
+
+  const loadCount = () => api.get("/feedback/count").then((r) => setCount(r.data.count || 0)).catch(() => {});
+  const loadList = () => api.get("/feedback").then((r) => setList(r.data.feedback || [])).catch(() => {});
+  const loadAdmin = () => { if (isAdmin) api.get("/admin/feedback").then((r) => setAdminList(r.data.feedback || [])).catch(() => {}); };
+  useEffect(() => { loadCount(); /* eslint-disable-next-line */ }, []);
+
+  const openPanel = () => { setOpen(true); setSent(false); loadList(); loadAdmin(); };
+  const send = async () => {
+    if (msg.trim().length < 2) return;
+    await api.post("/feedback", { message: msg.trim() }).catch(() => {});
+    setMsg(""); setSent(true); loadCount();
+  };
+  const publish = async (f, val) => { await api.put(`/admin/feedback/${f.id}`, { published: val }).catch(() => {}); loadAdmin(); loadList(); loadCount(); };
+  const del = async (f) => { await api.delete(`/admin/feedback/${f.id}`).catch(() => {}); loadAdmin(); loadList(); loadCount(); };
+
+  const Pill = ({ label, onClick, badge, testid }) => (
+    <button onClick={onClick} data-testid={testid}
+      className="relative flex-1 min-w-0 rounded-2xl border border-elevated bg-surface hover:border-volt/50 transition-colors px-3 py-4 text-center">
+      <span className="block text-sm font-black text-white truncate">{label}</span>
+      {badge > 0 && (
+        <span className="absolute -top-2 -right-2 bg-volt text-black text-[10px] font-black rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center" data-testid="feedback-badge">{badge}</span>
+      )}
+    </button>
+  );
+
+  return (
+    <section className="px-4 py-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid="raster5-input-feedback">
+      <div className="max-w-5xl mx-auto mb-3 flex items-start gap-2.5 rounded-2xl border border-volt/30 bg-gradient-to-r from-volt/10 to-transparent px-4 py-3" data-testid="r5-learn-hint">
+        <span className="text-lg leading-none mt-0.5">💡</span>
+        <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed">{t.learn}</p>
+      </div>
+      <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Pill label={t.submit} onClick={onSubmit} testid="r5-submit" />
+        <Pill label={t.feedback} onClick={openPanel} badge={count} testid="r5-feedback" />
+        <Pill label={t.wallet} onClick={onWallet} testid="r5-wallet" />
+        <Pill label={t.profile} onClick={onProfile} testid="r5-profile" />
+      </div>
+
+      {open && (
+        <div className="max-w-5xl mx-auto mt-4 rounded-2xl border border-elevated bg-surface p-4" data-testid="feedback-panel">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-black text-white">{t.title}</p>
+            <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-lg leading-none" data-testid="feedback-close">×</button>
+          </div>
+          {sent ? (
+            <p className="text-won text-sm font-semibold py-2" data-testid="feedback-thanks">{t.thanks}</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t.ph} rows={3}
+                className="w-full bg-void border border-elevated rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-volt/50" data-testid="feedback-input" />
+              <button onClick={send} className="self-end bg-volt text-black font-black text-xs px-5 py-2 rounded-xl" data-testid="feedback-send">{t.send}</button>
+            </div>
+          )}
+
+          {list.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              {list.map((f) => (
+                <div key={f.id} className="rounded-xl border border-elevated bg-void/40 p-3" data-testid={`feedback-item-${f.id}`}>
+                  <p className="text-[11px] text-zinc-400 font-semibold">{f.name}</p>
+                  <p className="text-sm text-white break-words">{f.message}</p>
+                </div>
+              ))}
+            </div>
+          ) : (!sent && <p className="mt-4 text-xs text-zinc-500">{t.empty}</p>)}
+
+          {isAdmin && (
+            <div className="mt-5 border-t border-elevated pt-3">
+              <p className="text-[10px] uppercase tracking-widest text-volt mb-2" data-testid="feedback-admin">{t.admin}</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {adminList.map((f) => (
+                  <div key={f.id} className="rounded-xl border border-elevated bg-void/40 p-3 flex items-start justify-between gap-2" data-testid={`admin-fb-${f.id}`}>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-zinc-400 font-semibold">{f.name} {f.published ? "· ✓" : "· ⏳"}</p>
+                      <p className="text-sm text-white break-words">{f.message}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => publish(f, !f.published)} className="text-[9px] font-bold px-2 py-1 rounded bg-volt/20 text-volt" data-testid={`fb-pub-${f.id}`}>{f.published ? t.unpub : t.pub}</button>
+                      <button onClick={() => del(f)} className="text-[9px] font-bold px-2 py-1 rounded bg-lost/20 text-lost" data-testid={`fb-del-${f.id}`}>{t.del}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+
+========== FILE: frontend/src/components/Raster6_BLang.jsx ==========
+import React, { useState, useEffect } from "react";
+import { Zap, Gift, MousePointerClick, BatteryCharging } from "lucide-react";
+import api from "../api";
+
+// 8 SPRACHEN - RASTER 6
+const TRANSLATIONS = {
+  de: {
+    title: "Sich gegenseitig beschenken",
+    shortTitle: "Sich gegenseitig beschenken – Die Batterie lädt durch euch",
+    subtext: "Die TipJar Batterie ist das Herz. Klicke sie an und feede Credits rein, wenn du welche hast. Auszahlung erst ab 2000+ in der Batterie. Egal ob du einen anderen Tipper beschenkst oder direkt die Batterie – die Batterie bekommt immer Energie dazu. Mehr Energie wenn du direkt die Batterie beschenkst. So wächst TipJar, so wächst deine Auszahlung. Schenken = Energie = Cash.",
+    battery: "Batterie",
+    feedBtn: "Credits feeden",
+    tapHint: "Tippen zum Aufladen",
+    giftBtn: "Spendieren",
+    empty: "Noch keine Spenden – sei der Erste!",
+    coins: "COINS",
+    voll: "VOLL",
+    neverBelow: "NIEMALS UNTER",
+    payoutFrom: "Auszahlung ab",
+    tabs: { week: "Diese Woche", all: "Gesamter Zeitraum", received: "Erhalten", gifted: "Verschenkt" }
+  },
+  en: {
+    title: "Gift Each Other",
+    shortTitle: "Gift Each Other – The Battery Charges Through You",
+    subtext: "The TipJar Battery is the heart. Click it and feed Credits if you have some. Payout only from 2000+ in the Battery. Whether you gift another tipper or directly the Battery – the Battery always gets energy. More energy if you gift directly to the Battery. This is how TipJar grows, this is how your payout grows. Gifting = Energy = Cash.",
+    battery: "Battery",
+    feedBtn: "Feed Credits",
+    tapHint: "Tap to charge",
+    giftBtn: "Gift a tipster",
+    empty: "No gifts yet – be the first!",
+    coins: "COINS",
+    voll: "FULL",
+    neverBelow: "NEVER BELOW",
+    payoutFrom: "Payout from",
+    tabs: { week: "This Week", all: "All Time", received: "Received", gifted: "Gifted" }
+  },
+  es: {
+    title: "Regálense entre sí",
+    shortTitle: "Regálense entre sí – La Batería se carga por ustedes",
+    subtext: "La Batería TipJar es el corazón. Haz clic y alimenta Créditos si tienes. Pago solo desde 2000+ en la Batería. Ya sea que regales a otro tipster o directo a la Batería – la Batería siempre recibe energía. Más energía si regalas directo a la Batería. Así crece TipJar, así crece tu pago. Regalar = Energía = Dinero.",
+    battery: "Batería",
+    feedBtn: "Alimentar Créditos",
+    tapHint: "Toca para cargar",
+    giftBtn: "Regalar a un tipster",
+    empty: "Aún sin regalos – ¡sé el primero!",
+    coins: "COINS",
+    voll: "LLENO",
+    neverBelow: "NUNCA DEBAJO",
+    payoutFrom: "Pago desde",
+    tabs: { week: "Esta Semana", all: "Todo el tiempo", received: "Recibido", gifted: "Regalado" }
+  },
+  el: {
+    title: "Χαρίστε ο ένας στον άλλον",
+    shortTitle: "Χαρίστε ο ένας στον άλλον – Η Μπαταρία φορτίζει από εσάς",
+    subtext: "Η Μπαταρία TipJar είναι η καρδιά. Κάνε κλικ και τάισε Credits αν έχεις. Πληρωμή μόνο από 2000+ στη Μπαταρία. Είτε χαρίζεις σε άλλον tipster είτε απευθείας στη Μπαταρία – η Μπαταρία παίρνει πάντα ενέργεια. Περισσότερη ενέργεια αν χαρίσεις απευθείας στη Μπαταρία. Έτσι μεγαλώνει το TipJar, έτσι μεγαλώνει η πληρωμή σου.",
+    battery: "Μπαταρία",
+    feedBtn: "Τάισε Credits",
+    tapHint: "Πάτησε για φόρτιση",
+    giftBtn: "Δώρισε σε tipster",
+    empty: "Καμία δωρεά ακόμα – γίνε ο πρώτος!",
+    coins: "COINS",
+    voll: "ΓΕΜΑΤΟ",
+    neverBelow: "ΠΟΤΕ ΚΑΤΩ",
+    payoutFrom: "Πληρωμή από",
+    tabs: { week: "Αυτή την Εβδομάδα", all: "Όλος ο χρόνος", received: "Ληφθέντα", gifted: "Δωρισμένα" }
+  },
+  fr: {
+    title: "Offrez-vous des cadeaux",
+    shortTitle: "Offrez-vous des cadeaux – La Batterie se charge grâce à vous",
+    subtext: "La Batterie TipJar est le cœur. Clique dessus et feed des Crédits si tu en as. Paiement seulement à partir de 2000+ dans la Batterie. Que tu offres à un autre tippeur ou directement à la Batterie – la Batterie reçoit toujours de l'énergie. Plus d'énergie si tu offres directement à la Batterie. C'est ainsi que TipJar grandit, c'est ainsi que ton paiement grandit.",
+    battery: "Batterie",
+    feedBtn: "Nourrir Crédits",
+    tapHint: "Touche pour charger",
+    giftBtn: "Offrir à un tippeur",
+    empty: "Aucun cadeau encore – sois le premier !",
+    coins: "COINS",
+    voll: "PLEIN",
+    neverBelow: "JAMAIS EN DESSOUS",
+    payoutFrom: "Paiement dès",
+    tabs: { week: "Cette Semaine", all: "Tout le temps", received: "Reçu", gifted: "Offert" }
+  },
+  it: {
+    title: "Regalatevi a vicenda",
+    shortTitle: "Regalatevi a vicenda – La Batteria si carica grazie a voi",
+    subtext: "La Batteria TipJar è il cuore. Cliccala e alimenta Crediti se ne hai. Pagamento solo da 2000+ nella Batteria. Che tu regali a un altro tipster o direttamente alla Batteria – la Batteria riceve sempre energia. Più energia se regali direttamente alla Batteria. Così cresce TipJar, così cresce il tuo pagamento.",
+    battery: "Batteria",
+    feedBtn: "Alimenta Crediti",
+    tapHint: "Tocca per caricare",
+    giftBtn: "Regala a un tipster",
+    empty: "Ancora nessun regalo – sii il primo!",
+    coins: "COINS",
+    voll: "PIENO",
+    neverBelow: "MAI SOTTO",
+    payoutFrom: "Pagamento da",
+    tabs: { week: "Questa Settimana", all: "Sempre", received: "Ricevuto", gifted: "Regalato" }
+  },
+  ar: {
+    title: "أهدوا بعضكم بعضاً",
+    shortTitle: "أهدوا بعضكم – البطارية تشحن بكم",
+    subtext: "بطارية TipJar هي القلب. انقر عليها وأطعمها Credits إذا كان لديك. الدفع فقط من 2000+ في البطارية. سواء أهديت مراهنًا آخر أو البطارية مباشرة – البطارية تحصل دائمًا على طاقة. طاقة أكثر إذا أهديت مباشرة للبطارية. هكذا ينمو TipJar، هكذا ينمو دفعك.",
+    battery: "البطارية",
+    feedBtn: "إطعام Credits",
+    tapHint: "انقر للشحن",
+    giftBtn: "أهدِ لمراهن",
+    empty: "لا هدايا بعد – كن الأول!",
+    coins: "عملات",
+    voll: "ممتلئ",
+    neverBelow: "أبداً تحت",
+    payoutFrom: "الدفع من",
+    tabs: { week: "هذا الأسبوع", all: "كل الوقت", received: "المستلم", gifted: "المهدى" }
+  },
+  tr: {
+    title: "Birbirinize Hediye Edin",
+    shortTitle: "Birbirinize Hediye Edin – Batarya sizinle şarj olur",
+    subtext: "TipJar Bataryası kalptir. Tıkla ve Kredin varsa besle. Ödeme sadece Bataryada 2000+ olduğunda. İster başka bir bahisçiye hediye et ister doğrudan Bataryaya – Batarya her zaman enerji alır. Doğrudan Bataryaya hediye edersen daha fazla enerji. TipJar böyle büyür, ödemen böyle büyür.",
+    battery: "Batarya",
+    feedBtn: "Kredi Besle",
+    tapHint: "Şarj için dokun",
+    giftBtn: "Bir bahisçiye hediye et",
+    empty: "Henüz hediye yok – ilk sen ol!",
+    coins: "COINS",
+    voll: "DOLU",
+    neverBelow: "ASLA ALTINDA DEĞİL",
+    payoutFrom: "Ödeme",
+    tabs: { week: "Bu Hafta", all: "Tüm Zamanlar", received: "Alınan", gifted: "Hediye Edilen" }
+  }
+};
+
+// RASTER 6 COMPONENT
+export default function Raster6_Battery_Gifting({ lang = "de", batteryCoins = 125, onFeedClick, onGiftClick }) {
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.de;
+  const [activeTab, setActiveTab] = useState("week");
+  const [boards, setBoards] = useState({ week: [], all: [], received: [], gifted: [] });
+  const rtl = lang === "ar";
+
+  useEffect(() => {
+    let on = true;
+    api.get("/gifting/leaderboards")
+      .then((r) => { if (on && r.data) setBoards(r.data); })
+      .catch(() => {});
+    const onBoost = () => {
+      api.get("/gifting/leaderboards").then((r) => { if (on && r.data) setBoards(r.data); }).catch(() => {});
+    };
+    window.addEventListener("tipjar-boost", onBoost);
+    window.addEventListener("tipjar-boost-gold", onBoost);
+    return () => { on = false; window.removeEventListener("tipjar-boost", onBoost); window.removeEventListener("tipjar-boost-gold", onBoost); };
+  }, []);
+
+  const tabs = [
+    { id: "week", label: t.tabs.week },
+    { id: "all", label: t.tabs.all },
+    { id: "received", label: t.tabs.received },
+    { id: "gifted", label: t.tabs.gifted },
+  ];
+
+  return (
+    <div className="w-full rounded-3xl bg-[#111] border border-[#222] p-4 md:p-6" dir={rtl ? "rtl" : "ltr"}>
+      {/* TITLE - MUSS ALLES ERKLÄREN */}
+      <div className="mb-6">
+        <h2 className="text-2xl md:text-3xl font-black text-white">{t.title}</h2>
+        <p className="text-sm md:text-base text-[#aaa] mt-2 leading-relaxed">{t.subtext}</p>
+        <p className="text-xs text-[#666] mt-2 font-bold">{t.shortTitle}</p>
+      </div>
+
+      {/* OBEN - BATTERIE 1 - DEUTLICH ANKLICKBAR */}
+      <div className="relative mb-5">
+        {/* pulsierender Klick-Hinweis oben rechts */}
+        <span data-testid="battery-tap-hint"
+          className="absolute -top-3 right-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#ff3b3b] text-white text-[11px] font-black px-3 py-1 shadow-[0_0_16px_rgba(255,59,59,0.7)] animate-bounce">
+          <MousePointerClick size={13} /> {t.tapHint}
+        </span>
+        <button
+          type="button"
+          onClick={onFeedClick}
+          data-testid="battery-main-click"
+          className="group cursor-pointer w-full text-left rounded-2xl bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border-2 border-[#ff3b3b] p-5 hover:scale-[1.01] hover:shadow-[0_0_28px_rgba(255,59,59,0.35)] active:scale-[0.99] transition-all ring-2 ring-[#ff3b3b]/30 ring-offset-2 ring-offset-[#111]"
+        >
+          <div className="flex justify-between items-center mb-3 gap-2">
+            <span className="text-white font-black text-lg inline-flex items-center gap-2">
+              <BatteryCharging size={20} className="text-[#ff3b3b]" /> {t.battery} - {t.coins}
+            </span>
+            <span className="text-[#ff3b3b] text-[11px] sm:text-xs font-bold text-right">{t.payoutFrom} 2000+ • {t.voll} 2500</span>
+          </div>
+          {/* Batterie Visual */}
+          <div className="w-full h-10 bg-[#222] rounded-full overflow-hidden border border-[#333] relative">
+            <div
+              className="h-full bg-gradient-to-r from-[#ff3b3b] to-[#ff0000] transition-all duration-700"
+              style={{ width: `${(batteryCoins / 2500) * 100}%` }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center text-white font-black text-sm">
+              {batteryCoins} / 2500 {t.coins}
+            </div>
+          </div>
+        </button>
+        {/* 2 klare Aktionen: Batterie feeden + Spendieren */}
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onFeedClick}
+            data-testid="battery-feed-btn"
+            className="inline-flex items-center justify-center gap-2 bg-[#ff3b3b] text-white font-black px-6 py-3 rounded-full text-sm hover:brightness-110 active:scale-95 transition-all"
+          >
+            <Zap size={16} /> {t.feedBtn} {t.battery}
+          </button>
+          <button
+            type="button"
+            onClick={onGiftClick}
+            data-testid="battery-gift-btn"
+            className="inline-flex items-center justify-center gap-2 bg-transparent border border-[#ff3b3b]/60 text-[#ff3b3b] font-black px-6 py-3 rounded-full text-sm hover:bg-[#ff3b3b]/10 active:scale-95 transition-all"
+          >
+            <Gift size={16} /> {t.giftBtn}
+          </button>
+        </div>
+      </div>
+
+      {/* UNTEN - BATTERIE 2 - CREDIT VERKEHR / LEADERBOARD WIE LOVOO */}
+      <div className="w-full rounded-2xl bg-[#1a1a1a] border border-[#333] overflow-hidden">
+        {/* Tabs */}
+        <div className="flex overflow-x-auto gap-1 p-2 bg-[#0f0f0f] border-b border-[#222]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                activeTab === tab.id
+                  ? "bg-white text-black"
+                  : "bg-[#222] text-[#888] hover:bg-[#333] hover:text-white"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {/* Leaderboard Content — echte Spendier-Daten, keine Platzhalter */}
+        <div className="p-4">
+          <div className="text-[#666] text-xs font-bold mb-3 uppercase">
+            {t.tabs[activeTab]} - Leaderboard
+          </div>
+          {(boards[activeTab] || []).length === 0 ? (
+            <div data-testid="leaderboard-empty" className="text-center text-[#666] text-sm py-8">
+              {t.empty}
+            </div>
+          ) : (
+            <div className="space-y-2" data-testid={`leaderboard-${activeTab}`}>
+              {(boards[activeTab] || []).map((row, i) => {
+                const rank = i + 1;
+                const medal = rank === 1 ? "#FFD447" : rank === 2 ? "#C0C0C0" : rank === 3 ? "#CD7F32" : "#ff3b3b";
+                return (
+                  <div key={`${row.username}-${i}`} className="flex items-center gap-3 bg-[#222] rounded-xl p-3">
+                    <div className="w-6 h-6 rounded-full text-black text-xs font-black flex items-center justify-center" style={{ background: medal }}>
+                      {rank}
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center text-white text-sm font-black">
+                      {(row.username || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-sm font-bold truncate">{row.username}</div>
+                      <div className="text-[#666] text-xs">
+                        {row.coins.toLocaleString()} {t.coins} {activeTab === "received" ? t.tabs.received : activeTab === "gifted" ? t.tabs.gifted : ""}
+                      </div>
+                    </div>
+                    <div className="text-[#ff3b3b] font-black text-sm inline-flex items-center gap-1">
+                      <Zap size={13} /> {row.coins.toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// EXPORT FÜR LOCALES JSON - für i18n.js / locales/*.json
+export { TRANSLATIONS };
+
+
+========== FILE: frontend/src/components/MemberJarWall.jsx ==========
+import React, { useEffect, useState } from "react";
+import api from "../api";
+
+// 30-Jar System (tipjar.md FINAL): Carton Box 80 statt Cork, Starter = Common Glass 40.
+// fill = received_credits + credits. getJarForCredits(fill) -> höchstes erreichtes Material.
+const MATERIALS = [
+  // TIER 1 COMMON 40-80
+  { name: "Common Glass", min: 40, tier: "COMMON" },
+  { name: "Wood", min: 50, tier: "COMMON" },
+  { name: "Stone", min: 60, tier: "COMMON" },
+  { name: "Clay", min: 70, tier: "COMMON" },
+  { name: "Bamboo", min: 75, tier: "COMMON" },
+  { name: "Carton Box", min: 80, tier: "COMMON" },
+  // TIER 2 UNCOMMON 90-170
+  { name: "Bronze", min: 90, tier: "UNCOMMON" },
+  { name: "Iron", min: 110, tier: "UNCOMMON" },
+  { name: "Tin", min: 130, tier: "UNCOMMON" },
+  { name: "Copper", min: 150, tier: "UNCOMMON" },
+  { name: "Aluminum", min: 160, tier: "UNCOMMON" },
+  { name: "Brass", min: 170, tier: "UNCOMMON" },
+  // TIER 3 RARE 180-280
+  { name: "Steel", min: 180, tier: "RARE" },
+  { name: "Silver", min: 200, tier: "RARE" },
+  { name: "Nickel", min: 220, tier: "RARE" },
+  { name: "Chrome", min: 240, tier: "RARE" },
+  { name: "Carbon", min: 260, tier: "RARE" },
+  { name: "Crystal", min: 280, tier: "RARE" },
+  // TIER 4 EPIC 300-420
+  { name: "Gold", min: 300, tier: "EPIC" },
+  { name: "Platinum", min: 350, tier: "EPIC" },
+  { name: "Titanium", min: 380, tier: "EPIC" },
+  { name: "Ruby", min: 400, tier: "EPIC" },
+  { name: "Sapphire", min: 410, tier: "EPIC" },
+  { name: "Emerald", min: 420, tier: "EPIC" },
+  // TIER 5 LEGENDARY 450-500
+  { name: "Diamond", min: 450, tier: "LEGENDARY" },
+  { name: "Obsidian", min: 475, tier: "LEGENDARY" },
+  { name: "Galaxy", min: 500, tier: "LEGENDARY" },
+  { name: "Void", min: 500, tier: "LEGENDARY" },
+  // TIER 6 MYTHIC 500
+  { name: "Nebula", min: 500, tier: "MYTHIC" },
+  { name: "Infinity", min: 500, tier: "MYTHIC" },
+];
+
+const TIER_STYLE = {
+  COMMON: { ring: "border-zinc-600", text: "text-zinc-300", glow: "" },
+  UNCOMMON: { ring: "border-emerald-500/60", text: "text-emerald-400", glow: "shadow-[0_0_10px_rgba(16,185,129,0.25)]" },
+  RARE: { ring: "border-sky-500/60", text: "text-sky-400", glow: "shadow-[0_0_10px_rgba(56,189,248,0.3)]" },
+  EPIC: { ring: "border-fuchsia-500/60", text: "text-fuchsia-400", glow: "shadow-[0_0_12px_rgba(217,70,239,0.35)]" },
+  LEGENDARY: { ring: "border-amber-400/70", text: "text-amber-300", glow: "shadow-[0_0_16px_rgba(251,191,36,0.45)]" },
+  MYTHIC: { ring: "border-pink-400/80", text: "text-pink-300", glow: "shadow-[0_0_20px_rgba(244,114,182,0.55)]" },
+};
+
+export function getJarForCredits(fill) {
+  let cur = null;
+  for (const m of MATERIALS) {
+    if (fill >= m.min) cur = m;
+  }
+  return cur; // null wenn < 40 (noch kein Jar)
+}
+
+export default function MemberJarWall() {
+  const [members, setMembers] = useState([]);
+
+  useEffect(() => {
+    api.get("/users/public-jars?limit=20")
+      .then((r) => setMembers((r.data?.members || []).slice(0, 20)))
+      .catch(() => setMembers([]));
+  }, []);
+
+  if (!members.length) return null;
+
+  return (
+    <div data-testid="member-jar-wall" className="w-full max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <h3 className="text-[11px] font-black tracking-widest text-zinc-400">🏆 MEMBER JARS</h3>
+        <span className="text-[10px] text-zinc-600">30 Materialien · Common Glass → Infinity</span>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+        {members.map((m, i) => {
+          const fill = (Number(m.received_credits) || 0) + (Number(m.credits) || 0);
+          const jar = getJarForCredits(fill);
+          const st = jar ? TIER_STYLE[jar.tier] : { ring: "border-white/10", text: "text-zinc-500", glow: "" };
+          return (
+            <div
+              key={m.username || i}
+              data-testid={`member-jar-${i}`}
+              className={`rounded-xl bg-zinc-900 border ${st.ring} ${st.glow} p-2.5 flex flex-col items-center text-center transition-transform hover:scale-[1.03]`}
+            >
+              <span className="text-lg leading-none">🫙</span>
+              <span className="mt-1 text-[11px] font-bold text-white truncate w-full">{m.username}</span>
+              <span className={`text-[9px] font-black ${st.text}`}>{jar ? jar.name : "—"}</span>
+              <span className="text-[9px] text-zinc-500 font-mono">{fill.toLocaleString()}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+========== FILE: frontend/src/components/CoinBattery.jsx ==========
+import React, { useEffect, useState } from "react";
+import { useI18n } from "../i18n";
+
+const TOTAL_COINS = 2500;   // 2500 COINS = VOLL
+const FLOOR_COINS = 125;    // 5% — fällt NIEMALS darunter
+const PAYOUT_MIN = 2000;    // Auszahlung ab 2000
+
+// FETTE LANGE Münz-Batterie über die ganze Breite: [ |||||||||| ]▶ mit Nupsi.
+export default function CoinBattery({ current = 0, max = TOTAL_COINS, onClick }) {
+  const i18n = useI18n();
+  const t = (k, fb) => (i18n && i18n.t && i18n.t(k) !== k ? i18n.t(k) : fb);
+  const [flash, setFlash] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBoost = (e) => {
+      const add = (e && e.detail && (e.detail.coins || e.detail.power)) || 10;
+      setFlash(`+${add}`);
+      const to = setTimeout(() => setFlash(null), 3500);
+      return () => clearTimeout(to);
+    };
+    window.addEventListener("tipjar-boost", onBoost);
+    window.addEventListener("tipjar-boost-gold", onBoost);
+    return () => {
+      window.removeEventListener("tipjar-boost", onBoost);
+      window.removeEventListener("tipjar-boost-gold", onBoost);
+    };
+  }, []);
+
+  const coins = Math.max(FLOOR_COINS, Math.min(max, Math.round(Number(current) || 0)));
+  const pct = Math.round((coins / max) * 100);
+  // Farben exakt: <25% rot, <50% amber, <75% lime, >=75% grün
+  const color = pct >= 75 ? "#22c55e" : pct >= 50 ? "#D4FF32" : pct >= 25 ? "#FFD447" : "#ff4444";
+  const canPayout = coins >= PAYOUT_MIN;
+  const SEGMENTS = 10;
+  const filled = Math.max(1, Math.round((pct / 100) * SEGMENTS));
+
+  return (
+    <div
+      data-testid="coin-battery"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      className={`w-full max-w-5xl mx-auto mb-4 rounded-2xl bg-zinc-900 border p-4 transition-all ${onClick ? "cursor-pointer border-[#FFD447]/40 hover:border-[#FFD447] hover:shadow-[0_0_22px_rgba(255,212,71,0.28)] active:scale-[0.99] ring-1 ring-[#FFD447]/20" : "border-white/10"}`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-black tracking-widest text-zinc-300">
+            ⚡ {t("battery.title", "MÜNZ-BATTERIE")}
+          </span>
+          {onClick && (
+            <span data-testid="coin-battery-charge-hint" className="text-[10px] font-black text-black bg-[#FFD447] px-2 py-0.5 rounded-full animate-pulse">
+              👆 {t("battery.charge", "Antippen zum Aufladen")}
+            </span>
+          )}
+          {flash && (
+            <span data-testid="coin-battery-boost" className="text-[11px] font-black text-black bg-[#FFD447] px-2.5 py-0.5 rounded-full animate-bounce shadow-lg">
+              {flash} 🪙
+            </span>
+          )}
+        </div>
+        <span className="text-[13px] font-black" style={{ color }} data-testid="coin-battery-amount">
+          {coins.toLocaleString()} <span className="text-zinc-500 font-bold text-[11px]">COINS</span>
+        </span>
+      </div>
+
+      {/* FETTE LANGE Batterie: Body flex-1 volle Breite + Nupsi */}
+      <div className="flex items-center gap-1">
+        <div
+          className="flex-1 flex items-center gap-1 h-10 px-1.5 bg-black rounded-lg border-2 border-white/25"
+          data-testid="coin-battery-body"
+        >
+          {Array.from({ length: SEGMENTS }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 h-6 rounded-[3px] transition-all duration-500"
+              style={{
+                background: i < filled ? color : "rgba(255,255,255,0.10)",
+                boxShadow: i < filled ? `0 0 10px ${color}, 0 0 3px ${color}` : "none",
+              }}
+            />
+          ))}
+        </div>
+        {/* Nupsi */}
+        <div className="w-4 h-6 rounded-r-md" style={{ background: color, boxShadow: `0 0 10px ${color}` }} />
+      </div>
+
+      <div className="flex items-center justify-between mt-2">
+        <p className="text-[10px] text-zinc-500 font-semibold">
+          {t("battery.full", "2500 COINS = VOLL — NIEMALS UNTER 125").split("—")[0].trim()}
+        </p>
+        <p className="text-[10px] font-bold" style={{ color: canPayout ? "#22c55e" : "#71717a" }} data-testid="coin-battery-payout">
+          {canPayout ? t("battery.payoutReady", "Auszahlung bereit") : `${PAYOUT_MIN}+ ${t("battery.payoutShort", "für Auszahlung")}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
+========== FILE: frontend/src/i18n.jsx ==========
+import React, { createContext, useContext, useState, useCallback } from "react";
+import { transliterate } from "transliteration";
+import enGB from "./locales/en-GB";
+import de from "./locales/de";
+import es from "./locales/es";
+import el from "./locales/el";
+import fr from "./locales/fr";
+import it from "./locales/it";
+import ar from "./locales/ar";
+import tr from "./locales/tr";
+
+// Convert non-Latin scripts (Greek, Cyrillic, Arabic, Hebrew, CJK, …) to Latin
+// characters for display only. Latin text (incl. German umlauts ä/ö/ü/ß and
+// accents) is left untouched so we never mangle "München" into "Munchen".
+const NON_LATIN_RE = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/;
+export function toLatin(text) {
+  if (!text || typeof text !== "string") return text;
+  if (!NON_LATIN_RE.test(text)) return text;
+  // Keep the original script when the reader's selected language uses that same
+  // script (a Greek user who picked Ελληνικά wants to see Ολυμπιακός, not Latin).
+  const lang = (typeof localStorage !== "undefined" && localStorage.getItem("tj_lang")) || "en";
+  if (lang === "el" && /[\u0370-\u03FF]/.test(text)) return text;
+  if (lang === "ar" && /[\u0600-\u06FF]/.test(text)) return text;
+  return transliterate(text);
+}
+
+// Team-name display: native-script readers (el/ar) keep the original; everyone else
+// prefers the canonical API-Football Latin name (e.g. "Blumenau SC") when available,
+// else falls back to phonetic transliteration.
+export function displayTeam(raw, latin) {
+  const lang = (typeof localStorage !== "undefined" && localStorage.getItem("tj_lang")) || "en";
+  if (lang === "el" || lang === "ar") return raw;
+  if (latin) return latin;
+  return toLatin(raw);
+}
+
+export const LANGUAGES = [
+  { code: "en-GB", label: "English", flag: "🇬🇧" },
+  { code: "de", label: "Deutsch", flag: "🇩🇪" },
+  { code: "es", label: "Español", flag: "🇪🇸" },
+  { code: "el", label: "Ελληνικά", flag: "🇬🇷" },
+  { code: "fr", label: "Français", flag: "🇫🇷" },
+  { code: "it", label: "Italiano", flag: "🇮🇹" },
+  { code: "ar", label: "العربية", flag: "🇸🇦" },
+  { code: "tr", label: "Türkçe", flag: "🇹🇷" },
+];
+
+export const RTL_LANGS = ["ar"];
+
+// ── Viewer timezone ──────────────────────────────────────────────────────────
+// Kickoff strings are stored/displayed as Europe/Berlin wall-clock, so a Berlin
+// viewer sees them unchanged and every other city gets the correct offset
+// (Athens = Berlin +1, London = Berlin −1, …). Selectable in the header.
+export const KICKOFF_BASE_TZ = "Europe/Berlin";
+export const TIMEZONES = [
+  { tz: "Europe/London", label: "London" },
+  { tz: "Europe/Berlin", label: "Berlin" },
+  { tz: "Europe/Paris", label: "Paris" },
+  { tz: "Europe/Madrid", label: "Madrid" },
+  { tz: "Europe/Rome", label: "Rom / Roma" },
+  { tz: "Europe/Athens", label: "Athen / Αθήνα" },
+  { tz: "Europe/Istanbul", label: "Istanbul" },
+  { tz: "Europe/Moscow", label: "Moskau" },
+  { tz: "America/New_York", label: "New York" },
+  { tz: "America/Sao_Paulo", label: "São Paulo" },
+  { tz: "Africa/Lagos", label: "Lagos" },
+  { tz: "Asia/Dubai", label: "Dubai" },
+  { tz: "Asia/Kolkata", label: "Mumbai / Delhi" },
+  { tz: "Asia/Bangkok", label: "Bangkok" },
+  { tz: "Asia/Singapore", label: "Singapore" },
+  { tz: "UTC", label: "UTC" },
+];
+
+let _viewerTz = null;
+export function getViewerTz() {
+  if (_viewerTz) return _viewerTz;
+  try {
+    const saved = localStorage.getItem("tj_tz");
+    if (saved) { _viewerTz = saved; return saved; }
+  } catch { /* ignore */ }
+  try {
+    _viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone || KICKOFF_BASE_TZ;
+  } catch { _viewerTz = KICKOFF_BASE_TZ; }
+  return _viewerTz;
+}
+export function setViewerTz(tz) {
+  _viewerTz = tz;
+  try { localStorage.setItem("tj_tz", tz); } catch { /* ignore */ }
+}
+// Apply the account timezone once, only if the viewer hasn't chosen one yet.
+export function applyAccountTz(tz) {
+  if (!tz) return;
+  try { if (localStorage.getItem("tj_tz")) return; } catch { /* ignore */ }
+  setViewerTz(tz);
+}
+
+function _tzParts(tz, ms) {
+  const dtf = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, hour12: false, year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  const p = {};
+  dtf.formatToParts(new Date(ms)).forEach((x) => { p[x.type] = x.value; });
+  return { y: +p.year, mo: +p.month, da: +p.day, hh: p.hour, mm: p.minute };
+}
+function _tzOffsetMin(tz, ms) {
+  const q = _tzParts(tz, ms);
+  return Math.round((Date.UTC(q.y, q.mo - 1, q.da, +q.hh, +q.mm) - ms) / 60000);
+}
+
+// ── Kickoff date/time parsing + prominent formatting (shared by RateWall / Systems) ──
+const _KO_MONTHS = { jan: 0, feb: 1, "mär": 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
+const _KO_MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Parse any stored kickoff string → { ts (ms, for sorting), y, mo, da, time }.
+// Handles ISO (2026-07-23T17:00:00+00:00), dd/mm/yyyy HH:MM, "23. Jul 2026", bare HH:MM.
+export function isKickoffTimeUnknown(iso) {
+  // 23:59 UTC is the backend's "date known, TIME unknown" sentinel — never a real kickoff.
+  // Local conversion turns it into a bogus ~01:59 night time, so callers must hide the time.
+  if (!iso) return false;
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) return false;
+  const d = new Date(ms);
+  return d.getUTCHours() === 23 && d.getUTCMinutes() === 59;
+}
+
+export function kickoffInfo(mt) {
+  const empty = { ts: null, y: null, mo: null, da: null, time: "" };
+  if (!mt) return empty;
+  const s = String(mt).trim();
+  if (!s || /multibet/i.test(s)) return empty;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (m) {
+    // ISO. If it carries an explicit offset/Z it's an ABSOLUTE instant (API-Football stores
+    // UTC) → normalise to the Europe/Berlin wall-clock convention the rest of the pipeline
+    // (and _toViewer) expects. Without this, a UTC 15:00 kickoff was wrongly treated as
+    // 15:00 Berlin and shown 1–2h too early — the source of "enorm viele" kickoff errors.
+    const hasTz = /(?:Z|[+-]\d{2}:?\d{2})$/.test(s);
+    const realMs = Date.parse(s);
+    if (hasTz && !isNaN(realMs)) {
+      // 23:59 UTC is the backend's "date known, TIME UNKNOWN" sentinel (date-only kickoff).
+      // It is NEVER a real kickoff — do not shift it into the next day as a bogus ~02:00 time.
+      // Show the intended match DATE (UTC) with no time (owner: "Europa spielt nie um 2 Uhr nachts").
+      const du = new Date(realMs);
+      if (du.getUTCHours() === 23 && du.getUTCMinutes() === 59) {
+        return { ts: realMs, y: du.getUTCFullYear(), mo: du.getUTCMonth() + 1, da: du.getUTCDate(), time: "", dateOnly: true };
+      }
+      const b = _tzParts(KICKOFF_BASE_TZ, realMs);
+      return { ts: Date.UTC(b.y, b.mo - 1, b.da, +b.hh, +b.mm), y: b.y, mo: b.mo, da: b.da, time: `${b.hh}:${b.mm}` };
+    }
+    const [, y, mo, da, hh, mm] = m;
+    return { ts: Date.UTC(+y, +mo - 1, +da, +hh, +mm), y: +y, mo: +mo, da: +da, time: `${hh}:${mm}` };
+  }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const time = m[4] ? `${m[4].padStart(2, "0")}:${m[5]}` : "";
+    return { ts: Date.UTC(+m[3], +m[2] - 1, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0), y: +m[3], mo: +m[2], da: +m[1], time };
+  }
+  m = s.match(/^(\d{1,2})\.\s*([A-Za-zäöü]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const mo = _KO_MONTHS[m[2].toLowerCase().slice(0, 3)];
+    const time = m[4] ? `${m[4].padStart(2, "0")}:${m[5]}` : "";
+    if (mo != null) return { ts: Date.UTC(+m[3], mo, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0), y: +m[3], mo: mo + 1, da: +m[1], time };
+  }
+  m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return { ts: null, y: null, mo: null, da: null, time: `${m[1].padStart(2, "0")}:${m[2]}` };
+  return empty;
+}
+
+// Convert a parsed kickoffInfo (Europe/Berlin wall-clock) to the viewer's timezone.
+function _toViewer(info) {
+  if (!info || info.ts == null) return info; // bare time / unknown date → leave as-is
+  if (info.dateOnly) return info;            // date-only sentinel → never shift into a bogus time/day
+  const berlinOff = _tzOffsetMin(KICKOFF_BASE_TZ, info.ts);
+  const realMs = info.ts - berlinOff * 60000; // true instant behind the Berlin wall-clock
+  const v = _tzParts(getViewerTz(), realMs);
+  return { ts: realMs, y: v.y, mo: v.mo, da: v.da, time: `${v.hh}:${v.mm}` };
+}
+
+// A clear, human label: "Heute 17:00" / "Morgen 15:00" / "24.07. 15:00".
+export function formatKickoff(mt, t) {
+  const info = _toViewer(kickoffInfo(mt));
+  if (!info.y && !info.time) return "";
+  const tr = typeof t === "function" ? t : (k) => (k === "date.today" ? "Heute" : "Morgen");
+  let dayLabel = "";
+  if (info.y) {
+    const now = new Date();
+    const td = { y: now.getFullYear(), mo: now.getMonth() + 1, da: now.getDate() };
+    const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+    const td2 = { y: tmr.getFullYear(), mo: tmr.getMonth() + 1, da: tmr.getDate() };
+    if (info.y === td.y && info.mo === td.mo && info.da === td.da) dayLabel = tr("date.today");
+    else if (info.y === td2.y && info.mo === td2.mo && info.da === td2.da) dayLabel = tr("date.tomorrow");
+    else dayLabel = `${_KO_MON3[(info.mo || 1) - 1]} ${info.da}`;
+  }
+  return [dayLabel, info.time].filter(Boolean).join(" ");
+}
+
+// Format a FREE-TEXT kickoff (scraper strings like "02.08. 14:00", "02/08/2026 GMT (13:00)")
+// into the compact owner style "Aug 2 · 14:00" — never the year (owner 2026-08).
+export function formatKickoffText(mt) {
+  if (!mt) return "";
+  const s = String(mt).trim();
+  const info = kickoffInfo(s);
+  if (info.mo && info.da) {
+    return [`${_KO_MON3[info.mo - 1]} ${info.da}`, info.time].filter(Boolean).join(" · ");
+  }
+  const dm = s.match(/(\d{1,2})[.\/](\d{1,2})(?:[.\/]\d{2,4})?/);
+  const tm = s.match(/(\d{1,2}):(\d{2})/);
+  let out = "";
+  if (dm) {
+    const da = +dm[1], mo = +dm[2];
+    if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) out = `${_KO_MON3[mo - 1]} ${da}`;
+  }
+  const time = tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : "";
+  return [out, time].filter(Boolean).join(" · ") || s;
+}
+
+
+// True while a match is (likely) IN PLAY: it kicked off 0..3h ago. Used to show a
+// "Läuft/Live" badge so a just-started game doesn't just vanish from the feed but is
+// clearly marked as live before it moves to "Abgerechnet" (owner 2026-07-24).
+export function isKickoffLive(mt) {
+  const info = kickoffInfo(mt);
+  if (info.ts == null) return false;
+  const elapsedH = (Date.now() - info.ts) / 3600000;
+  return elapsedH >= 0 && elapsedH <= 3;
+}
+
+// Apex-Flame season gate (owner): flames are OFF during the summer break and come
+// back automatically when the new season starts on 1 September 2026.
+export const FLAMES_START = new Date("2026-09-01T00:00:00Z");
+export function flamesActive() {
+  return Date.now() >= FLAMES_START.getTime();
+}
+
+
+// Earliest kickoff (ms) across a tip's match_time + legs — for ascending sort.
+// Tips without a resolvable kickoff sort last.
+export function kickoffTs(tip) {
+  const cand = [];
+  const add = (v) => { const i = kickoffInfo(v); if (i.ts != null) cand.push(i.ts); };
+  add(tip && tip.match_time);
+  (tip && tip.legs ? tip.legs : []).forEach((l) => add(l && l.kickoff));
+  return cand.length ? Math.min(...cand) : Infinity;
+}
+
+// Localize the German bet-market strings produced by the backend (systems + tips).
+// Keeps dynamic parts (team names, scores). Order matters: combos before singles.
+export function localizeMarket(market, t) {
+  if (!market || typeof market !== "string") return market;
+  let m = market;
+  const combos = [
+    ["Doppelte Chance 1X + Beide treffen", `${t("mkt.dc1x")} + ${t("mkt.btts")}`],
+    ["Doppelte Chance X2 + Beide treffen", `${t("mkt.dcx2")} + ${t("mkt.btts")}`],
+    ["Doppelte Chance 1X + Über 1.5 Tore", `${t("mkt.dc1x")} + ${t("mkt.over15")}`],
+    ["Doppelte Chance X2 + Über 1.5 Tore", `${t("mkt.dcx2")} + ${t("mkt.over15")}`],
+    ["Doppelte Chance 1X", t("mkt.dc1x")],
+    ["Doppelte Chance X2", t("mkt.dcx2")],
+    ["(Draw No Bet)", `(${t("mkt.dnb")})`],
+    ["Beide Teams treffen (BTTS)", t("mkt.btts")],
+    ["Über 0.5 Tore", t("mkt.over05")],
+    ["Über 1.5 Tore", t("mkt.over15")],
+    ["Über 2.5 Tore", t("mkt.over25")],
+    ["Genaues Ergebnis", t("mkt.cs")],
+    ["Unentschieden (X)", t("mkt.draw")],
+  ];
+  for (const [de, loc] of combos) m = m.split(de).join(loc);
+  // Corner (Ecken) Over/Under lines — dynamic (7.5 / 8.5 / 9.5 …).
+  m = m.replace(/Über\s+(\d+(?:\.\d+)?)\s+Ecken/g, (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.corners")}`);
+  m = m.replace(/Unter\s+(\d+(?:\.\d+)?)\s+Ecken/g, (_, n) => `${t("mkt.und")} ${n} ${t("mkt.corners")}`);
+  // Player props — comma decimals (0,5), format "{Player} — {market}". Localize the
+  // market wording; keep player name and any "(1+)" hint intact. Order matters:
+  // "Schüsse aufs Tor" before bare "Schüsse".
+  const N = "(\\d+(?:[.,]\\d+)?)";
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Paraden`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.saves")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Schüsse aufs Tor`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.sot")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Torschüsse`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.shots")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Schüsse`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.shots")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Fouls begangen`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.fouls")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+mal gefoult`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.fouled")}`);
+  m = m.replace(new RegExp(`Über\\s+${N}\\s+Karten?`, "gi"), (_, n) => `${t("mkt.ovr")} ${n} ${t("mkt.card")}`);
+  m = m.replace(/Torschütze\s*\(Anytime\)/gi, t("mkt.scorer"));
+  m = m.replace(/Anytime\s+Torschütze/gi, t("mkt.scorer"));
+  m = m.replace(/\bTorschütze\b/gi, t("mkt.scorer"));
+  m = m.replace(/sieht eine Karte/gi, t("mkt.getcard"));
+  // ── extended German market wording (halves, asian lines, builders, DC/handicap,
+  //    generic over/under goals) so NOTHING stays German after a language switch ──
+  m = m.replace(/3er-?Bet-?Builder/gi, t("mkt.bb3"));
+  m = m.replace(/(\d+)er-?Bet-?Builder/gi, (_, n) => `${n}× ${t("mkt.bb")}`);
+  m = m.replace(/Value-?Banker/gi, t("mkt.valuebanker"));
+  m = m.replace(/Risk-?Bet-?Builder/gi, t("mkt.bbrisk"));
+  m = m.replace(/Mega-?Bet-?Builder/gi, t("mkt.bbmega"));
+  m = m.replace(/Bet-?Builder/gi, t("mkt.bb"));
+  m = m.replace(/Tor\s+in\s+jeder\s+Halbzeit/gi, t("mkt.goaleachhalf"));
+  m = m.replace(/in\s+jeder\s+Halbzeit/gi, t("mkt.eachhalf"));
+  m = m.replace(/beide\s+Halbzeiten/gi, t("mkt.eachhalf"));
+  m = m.replace(/1\.\s*Halbzeit/gi, t("mkt.ht1"));
+  m = m.replace(/erste\s+Halbzeit/gi, t("mkt.ht1"));
+  m = m.replace(/2\.\s*Halbzeit/gi, t("mkt.ht2"));
+  m = m.replace(/zweite\s+Halbzeit/gi, t("mkt.ht2"));
+  m = m.replace(/\bHalbzeit\b/gi, t("mkt.half"));
+  m = m.replace(/Beide\s+Teams\s+treffen/gi, t("mkt.btts"));
+  m = m.replace(/Beide\s+treffen/gi, t("mkt.btts"));
+  m = m.replace(/Team-?Tore\s+Über\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.teamgoals")} ${t("mkt.ovr")} ${n.replace(",", ".")}`);
+  m = m.replace(/Team-?Tore\s+Unter\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.teamgoals")} ${t("mkt.und")} ${n.replace(",", ".")}`);
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  // English "Over/Under X Goals" (raw member/bookmaker slips) → locale, so it doesn't stay
+  // half-English on non-Latin locales (owner 2026-07-26).
+  m = m.replace(/\bOver\s+(\d+(?:[.,]\d+)?)\s+Goals?\b/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/\bUnder\s+(\d+(?:[.,]\d+)?)\s+Goals?\b/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Doppelte\s+Chance\s+12/gi, t("mkt.dc12"));
+  m = m.replace(/Doppelte\s+Chance\s+1X/gi, t("mkt.dc1x"));
+  m = m.replace(/Doppelte\s+Chance\s+X2/gi, t("mkt.dcx2"));
+  m = m.replace(/Draw\s+No\s+Bet/gi, t("mkt.dnb"));
+  m = m.replace(/Genaues\s+Ergebnis/gi, t("mkt.cs"));
+  m = m.replace(/Unentschieden(?:\s*\(X\))?/gi, t("mkt.draw"));
+  // English-worded raw selections (member/bookmaker slips) → locale, so a slip that was
+  // parsed in English also reads correctly in Greek/any language (owner 2026-07-26).
+  m = m.replace(/\bGG\s*\/\s*NG\s+GG\b/gi, t("mkt.ggng_yes"));
+  m = m.replace(/\bGG\s*\/\s*NG\s+NG\b/gi, t("mkt.ggng_no"));
+  m = m.replace(/\bGG\s*\/\s*NG\b/gi, t("mkt.ggng_yes"));
+  m = m.replace(/\bBoth\s+Teams\s+to\s+Score\b/gi, t("mkt.btts"));
+  m = m.replace(/\bDouble\s+chance\s+1X\b/gi, t("mkt.dc1x"));
+  m = m.replace(/\bDouble\s+chance\s+X2\b/gi, t("mkt.dcx2"));
+  m = m.replace(/\bDouble\s+chance\s+12\b/gi, t("mkt.dc12"));
+  m = m.replace(/\bDouble\s+chance\b/gi, t("mkt.doublechance"));
+  m = m.replace(/\bDraw\b/gi, t("mkt.draw"));
+  m = m.replace(/\bor\b/gi, t("mkt.or"));
+  m = m.replace(/\(?\s*Asiatisch\s*\)?/gi, ` ${t("mkt.asian")}`);
+  m = m.replace(/\bHandicap\b/gi, t("mkt.handicap"));
+  m = m.replace(/\btrifft\b/gi, t("mkt.scores"));
+  m = m.replace(/\s{2,}/g, " ").trim();
+  return m;
+}
+
+// Localize backend-generated German PROSE (AI commentary `ai_analysis` + system subtitles).
+// These are free-text German strings shared across all users, so translate them client-side
+// into the reader's language. German readers keep the original; unknown phrases stay as-is.
+// (owner 2026-07-26: "μετέφρασε τα ολα" — translate everything.)
+export function localizeProse(text, t, lang) {
+  if (!text || typeof text !== "string") return text;
+  if (lang === "de") return text;
+  let m = text;
+  const P = [
+    [/liegt zurück und drückt auf den Ausgleich/gi, "prose.trailingpush"],
+    [/Beide drücken bei 0:0/gi, "prose.bothpush"],
+    [/bei GENAU 2 Toren gibt'?s den Einsatz zurück/gi, "prose.exact2refund"],
+    [/\(Asian-Absicherung\)/gi, "prose.asianhedge"],
+    [/am besten sofort spielen, solange die Quote hoch ist/gi, "prose.playnow"],
+    [/\bTiming:/gi, "prose.timing"],
+    [/\bDruck:/gi, "prose.pressure"],
+    [/\bLive zu\b/gi, "prose.liveat"],
+    [/\bStand\b/gi, "prose.score"],
+    [/der große Zocker-Wumms/gi, "prose.gamblebang"],
+    [/nur kommende Spiele/gi, "prose.upcomingonly"],
+    [/nächste 48h/gi, "prose.next48"],
+    [/\bläuft bis\b/gi, "prose.runsuntil"],
+    [/Favoriten-Spiele/gi, "prose.favgames"],
+    [/×\s*Favorit/gi, "prose.xfav"],
+    [/×\s*Value-?X/gi, "prose.xvaluex"],
+    [/\bLegs\b/gi, "prose.legs"],
+    [/Schüsse aufs Tor/gi, "mkt.sot"],
+    [/\bEcken\b/gi, "mkt.corners"],
+    [/\bAsian\b/gi, "mkt.asian"],
+  ];
+  for (const [re, key] of P) {
+    const val = t(key);
+    m = m.replace(re, () => (/^×/.test(re.source) ? `× ${val}` : val));
+  }
+  // generic German market terms embedded in the prose
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)\s+Tore?/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)\s+Tore?/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")} ${t("mkt.goals")}`);
+  m = m.replace(/Über\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.ovr")} ${n.replace(",", ".")}`);
+  m = m.replace(/Unter\s+(\d+(?:[.,]\d+)?)/gi, (_, n) => `${t("mkt.und")} ${n.replace(",", ".")}`);
+  m = m.replace(/Doppelte\s+Chance/gi, t("mkt.doublechance"));
+  const WD = { Mo: "wd.mo", Di: "wd.di", Mi: "wd.mi", Do: "wd.do", Fr: "wd.fr", Sa: "wd.sa", So: "wd.so" };
+  m = m.replace(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\b(?=\s+\d)/g, (_, d) => t(WD[d]));
+  m = m.replace(/\s{2,}/g, " ").trim();
+  return m;
+}
+// market) into a clean, correctly-worded label. Handles legacy posted slips too.
+//  - "Total OVER 1.5" / "Total Over 1,5"  -> "Über 1.5 Tore"
+//  - "Total UNDER 3.5"                    -> "Unter 3.5 Tore"
+//  - "Sutjeska 3.5" / "Connah's Quay 2.5" -> "<Team> Handicap +3.5"
+//  - already-correct German markets pass through localizeMarket unchanged.
+export function formatSelection(sel, t) {
+  // toLatin FIRST on the raw input (latinises Cyrillic/foreign TEAM names), then localise —
+  // otherwise toLatin would strip the Greek/Arabic market words we just translated, leaving
+  // English on non-Latin locales (owner 2026-07-26: Greek slip still showed "GG/NG", "Double chance").
+  const raw = String(sel || "");
+  const lat = toLatin(raw);
+  // Greek 1X2 full-time DRAW: sources post "Ισοπαλία" or "Χ (τελικό)". toLatin mangles the
+  // Greek draw "Χ τελικό" into e.g. "H teliko" — always show the proper localised
+  // "Draw (X)" / "Unentschieden (X)" / "Ισοπαλία (X)" label instead (owner 2026-07-29).
+  if (/ισοπαλ/i.test(raw)) return t("mkt.draw");
+  if (/^[xχ]$/i.test(lat.trim()) || /^[Χχ]$/.test(raw.trim())) return t("mkt.draw");
+  const isFullTime = /ισοπαλ|τελικ/i.test(raw) || /\btelik[oó]\b/i.test(lat);
+  if (isFullTime && /(?:^|[\s(/])(?:x|h|ch|χ)(?:[\s)/.]|$)/i.test(`${raw} ¦ ${lat}`)) {
+    return t("mkt.draw");
+  }
+  return normalizeBetTerms(_formatSelection(lat, t), t);
+}
+
+// Clean up phonetically-transliterated foreign betting terms into the reader's language
+// so a member's Greek slip ("Over 3.5 Korner (1o Imihrono)") reads correctly in ANY
+// language (DE "Über 3.5 Ecken (1. Halbzeit)", EN "Over 3.5 Corners (1. Half)", …).
+function normalizeBetTerms(s, t) {
+  if (!s || typeof s !== "string") return s;
+  const tr = (typeof t === "function") ? t : ((k) => k);
+  let m = s;
+  m = m.replace(/(\d+)\s*o\s+imi?[hx]?rono/gi, (_, n) => `${n}. ${tr("mkt.half")}`);
+  m = m.replace(/\bimi?[hx]?rono\b/gi, tr("mkt.half"));
+  m = m.replace(/\bkorners?\b/gi, tr("mkt.corners"));
+  m = m.replace(/\b(gkol|gol)s?\b/gi, tr("mkt.goals"));
+  // drop the redundant trailing "- Over/Under" market-type label
+  m = m.replace(/\s*[-·]?\s*(over|über|ueber)\s*\/\s*(under|unter)\s*$/i, "");
+  m = m.replace(/\bover\b/gi, tr("mkt.ovr"));
+  m = m.replace(/\bunder\b/gi, tr("mkt.und"));
+  m = m.replace(/\bueber\b/gi, tr("mkt.ovr"));
+  m = m.replace(/\s{2,}/g, " ").trim();
+  return m;
+}
+function _formatSelection(sel, t) {
+  if (!sel || typeof sel !== "string") return sel;
+  const s = sel.trim();
+  const dec = (x) => x.replace(",", ".");
+  let m = s.match(/^total\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Über ${dec(m[1])} Tore`, t);
+  // "Both halves over X" / "Over X goals in each half" → a goal in EACH half (NOT a match
+  // total). Must be caught before the generic over/under handler so it never collapses to
+  // a plain "Über X Tore" match total (owner 2026-08: bookie 'Both halves over 0.5').
+  m = s.match(/^both\s+halves\s+(?:over|über|ueber)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Über ${dec(m[1])} Tore in jeder Halbzeit`, t);
+  m = s.match(/^total\s+(?:under|unter)\s+(\d+(?:[.,]\d+)?)/i);
+  if (m) return localizeMarket(`Unter ${dec(m[1])} Tore`, t);
+  // leave already-worded markets to localizeMarket
+  if (/handicap|über|unter|\btore\b|torsch|chance|treffen|draw no bet|ergebnis|btts|\bover\b|\bunder\b/i.test(s)) {
+    return localizeMarket(s, t);
+  }
+  // bare "<Team> ±X.5" => handicap (positive if no sign)
+  m = s.match(/^(.+?)\s([+-]?\d+(?:[.,]\d+)?)$/);
+  if (m) {
+    let n = dec(m[2]);
+    if (!/^[+-]/.test(n)) n = "+" + n;
+    return `${m[1].trim()} Handicap ${n}`;
+  }
+  return localizeMarket(s, t);
+}
+
+
+const T = {
+  "en-GB": enGB,
+  de,
+  es,
+  el,
+  fr,
+  it,
+  ar,
+  tr,
+};
+
+const I18nContext = createContext(null);
+
+// Auto-detect the reader's language from the browser on first visit (no saved
+// choice yet). Maps navigator languages to our 8 supported codes; falls back to EN.
+const SUPPORTED_LANGS = ["en-GB", "es", "de", "el", "fr", "it", "ar", "tr"];
+function detectInitialLang() {
+  try {
+    let saved = localStorage.getItem("tj_lang");
+    if (saved === "en") saved = "en-GB";
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    const cands = [navigator.language, ...(navigator.languages || [])].filter(Boolean);
+    for (const c of cands) {
+      let code = c.slice(0, 2).toLowerCase();
+      if (code === "en") code = "en-GB";
+      if (SUPPORTED_LANGS.includes(code)) return code;
+    }
+  } catch { /* ignore */ }
+  return "en-GB";
+}
+
+export function I18nProvider({ children }) {
+  const [lang, setLangState] = useState(detectInitialLang);
+  const [tz, setTzState] = useState(getViewerTz);
+  const applyDir = useCallback((l) => {
+    const rtl = RTL_LANGS.includes(l);
+    document.documentElement.dir = rtl ? "rtl" : "ltr";
+    document.documentElement.lang = l;
+  }, []);
+  React.useEffect(() => { applyDir(lang); }, [lang, applyDir]);
+  const setLang = useCallback((l) => {
+    setLangState(l);
+    localStorage.setItem("tj_lang", l);
+    applyDir(l);
+  }, [applyDir]);
+  const setTz = useCallback((z) => { setViewerTz(z); setTzState(z); }, []);
+  const t = useCallback((key) => (T[lang] && T[lang][key]) || T["en-GB"][key] || key, [lang]);
+  return <I18nContext.Provider value={{ t, lang, setLang, tz, setTz }}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n() {
+  return useContext(I18nContext);
+}
+
+
+========== FILE: frontend/src/api.jsx ==========
+import axios from "axios";
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+
+const api = axios.create({
+  baseURL: BACKEND_URL ? `${BACKEND_URL}/api` : "/api",
+  withCredentials: true,
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const apiErr = (error) => {
+  return error?.response?.data?.detail || error?.response?.data?.message || error?.message || "Request failed";
+};
+
+export const fileUrl = (filePath) => {
+  if (!filePath) return "";
+  if (filePath.startsWith("http")) return filePath;
+  return `${BACKEND_URL ? BACKEND_URL : ""}${filePath.startsWith("/") ? "" : "/"}${filePath}`;
+};
+
+export default api;
+
+
+========== FILE: frontend/package.json ==========
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@hookform/resolvers": "5.0.1",
+    "@radix-ui/react-accordion": "1.2.8",
+    "@radix-ui/react-alert-dialog": "1.1.11",
+    "@radix-ui/react-aspect-ratio": "1.1.4",
+    "@radix-ui/react-avatar": "1.1.7",
+    "@radix-ui/react-checkbox": "1.2.3",
+    "@radix-ui/react-collapsible": "1.1.8",
+    "@radix-ui/react-context-menu": "2.2.12",
+    "@radix-ui/react-dialog": "1.1.11",
+    "@radix-ui/react-dropdown-menu": "2.1.12",
+    "@radix-ui/react-hover-card": "1.1.11",
+    "@radix-ui/react-label": "2.1.4",
+    "@radix-ui/react-menubar": "1.1.12",
+    "@radix-ui/react-navigation-menu": "1.2.10",
+    "@radix-ui/react-popover": "1.1.11",
+    "@radix-ui/react-progress": "1.1.4",
+    "@radix-ui/react-radio-group": "1.3.4",
+    "@radix-ui/react-scroll-area": "1.2.6",
+    "@radix-ui/react-select": "2.2.2",
+    "@radix-ui/react-separator": "1.1.4",
+    "@radix-ui/react-slider": "1.3.2",
+    "@radix-ui/react-slot": "1.2.0",
+    "@radix-ui/react-switch": "1.2.2",
+    "@radix-ui/react-tabs": "1.1.9",
+    "@radix-ui/react-toast": "1.2.11",
+    "@radix-ui/react-toggle": "1.1.6",
+    "@radix-ui/react-toggle-group": "1.1.7",
+    "@radix-ui/react-tooltip": "1.2.4",
+    "@tanstack/react-query": "5.56.2",
+    "axios": "1.16.0",
+    "canvas-confetti": "^1.9.4",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "cra-template": "1.2.0",
+    "date-fns": "4.1.0",
+    "dayjs": "1.11.13",
+    "embla-carousel-react": "8.6.0",
+    "framer-motion": "11.18.0",
+    "input-otp": "1.4.2",
+    "lodash": "4.18.1",
+    "lucide-react": "0.516.0",
+    "next-themes": "0.4.6",
+    "react": "19.0.0",
+    "react-day-picker": "8.10.1",
+    "react-dom": "19.0.0",
+    "react-hook-form": "7.56.2",
+    "react-icons": "^5.7.0",
+    "react-resizable-panels": "3.0.1",
+    "react-router-dom": "7.15.0",
+    "recharts": "3.6.0",
+    "sonner": "2.0.3",
+    "swr": "2.3.8",
+    "tailwind-merge": "3.2.0",
+    "tailwindcss-animate": "1.0.7",
+    "transliteration": "^2.6.1",
+    "vaul": "1.1.2",
+    "zod": "3.24.4"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite --port 3000"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+    "@eslint/js": "9.23.0",
+    "@types/lodash": "4.17.24",
+    "@vitejs/plugin-react": "^6.1.0",
+    "autoprefixer": "10.4.20",
+    "dotenv": "16.4.5",
+    "eslint": "9.23.0",
+    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react": "7.37.4",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "15.15.0",
+    "postcss": "8.5.10",
+    "tailwindcss": "3.4.17",
+    "vite": "^8.2.2"
+  },
+  "resolutions": {
+    "react-router": "7.15.0",
+    "node-forge": "1.4.0",
+    "fast-uri": "3.1.2",
+    "flatted": "3.4.2",
+    "qs": "6.15.2",
+    "diff": "4.0.4",
+    "follow-redirects": "1.16.0",
+    "path-to-regexp": "0.1.13",
+    "rollup": "2.80.0",
+    "underscore": "1.13.8",
+    "@babel/plugin-transform-modules-systemjs": "7.29.4",
+    "@eslint/plugin-kit": "0.3.4",
+    "shell-quote": "1.8.4",
+    "jsonpath": "1.3.0",
+    "nth-check": "2.0.1",
+    "serialize-javascript": "7.0.5",
+    "uuid": "11.1.1",
+    "@tootallnate/once": "2.0.1",
+    "webpack-dev-server": "5.2.4",
+    "resolve-url-loader": "5.0.0",
+    "**/resolve-url-loader/postcss": "8.5.10",
+    "**/axios/form-data": "4.0.4",
+    "**/jsdom/form-data": "3.0.4",
+    "**/postcss-svgo/svgo": "2.8.1",
+    "**/webpack-dev-server/ws": "8.20.1",
+    "**/postcss-load-config/yaml": "2.8.3",
+    "**/cosmiconfig/yaml": "1.10.3",
+    "**/cssnano/yaml": "1.10.3",
+    "**/eslint/js-yaml": "4.1.1",
+    "**/@eslint/eslintrc/js-yaml": "4.1.1",
+    "**/svgo/js-yaml": "3.14.2",
+    "**/@istanbuljs/load-nyc-config/js-yaml": "3.14.2",
+    "**/css-loader/postcss": "8.5.10",
+    "**/css-minimizer-webpack-plugin/postcss": "8.5.10",
+    "**/react-scripts/postcss": "8.5.10",
+    "**/filelist/minimatch": "5.1.8",
+    "**/anymatch/picomatch": "2.3.2",
+    "**/micromatch/picomatch": "2.3.2",
+    "**/readdirp/picomatch": "2.3.2",
+    "**/jest-util/picomatch": "2.3.2",
+    "**/tinyglobby/picomatch": "4.0.4"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}
+
+========== FILE: frontend/vite.config.js ==========
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+export default defineConfig({
+  plugins: [react()],
+  define: { 'process.env': {} }
+})
+
+
+========== FILE: frontend/index.html ==========
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>TipJar</title></head>
+  <body><div id="root"></div><script type="module" src="/src/index.jsx"></script></body>
+</html>
+
+
+==================================================
+YIN_YANG_MAP CHECK
+==================================================
+1. App.jsx contains MemberJarWall? NEIN
+2. Raster3_Header.jsx exists in repo? NEIN (nicht im Repo — nur Raster3_AiPicks.jsx vorhanden)
+3. Languages found in Raster6_BLang: de,en,fr,el,es,it,tr,ar
+4. Raster1_RentPills <br/> Bug? NEIN — kein <br/> Bug
+5. Files found: 16
+6. Total size: 100406 bytes (98.1 KB)
