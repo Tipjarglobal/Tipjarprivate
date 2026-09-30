@@ -194,3 +194,21 @@ Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
   - App.js entschlackt: inline HERO/VIDEO/STORY/FOOTER entfernt, ungenutzte Imports (AnimatedJar, HERO_BG, Sparkles, Disclaimer) bereinigt. Build: "Compiled successfully". Screenshot: Homepage identisch (Raster7/8/9/12 data-testids vorhanden, alle Texte/Disclaimer korrekt).
   - Bestehend (obere Hälfte): Raster1_RentPills, Raster2_Supporter, Raster2_Header(Toolbar), Raster3_AiPicks, Raster4_Money, Raster5_InputFeedback, Raster6_8Lang.
 - OFFEN (Teil 2, falls gewünscht): kanonische Umbenennung Raster1-6 auf exakte Blueprint-Nummerierung + Inlinen der Pillen-Sub-Files (SponsorFeeder etc.) in ihre Raster. Risiko/Aufwand hoch, rein strukturell (keine Optik-Änderung).
+
+## 2026-09-30 (Teil 2) — Kanonische Raster-Umbenennung (User-Mapping, Blueprint = Wahrheit)
+- User-kanonische Liste (funktional): R1 Header&Filter, R2 Tipp-Grid/Bewertungswand, R3 Tipper-Interaktion/Community, R4 Leaderboard, R5 Coin-System/Auszahlung, R6 Batterie/Beschenken, R7 Footer-Intro, R8 Video, R9 Was-ist-TipJar, R10 Invite, R11 HoF, R12 Legal.
+- SICHER umgesetzt (reine Datei-Umbenennung, keine Logik/Reihenfolge, Build grün):
+  - components/Raster2.jsx ← RateWall.jsx (App.js Import-Pfad angepasst, Binding "RateWall" bleibt)
+  - components/Raster4.jsx ← Leaderboard.jsx (war verwaist/nicht importiert)
+  - components/Raster6.jsx ← Raster6_8Lang.jsx (App.js Import angepasst)
+  - Raster7-12 bereits Teil 1 fertig.
+  => 8/12 kanonische Dateien vorhanden.
+- NOCH OFFEN (riskant, Struktur-Umbau): R1 = Merge Raster2_Header(sticky Toolbar)+Raster3_AiPicks(Filter); R3 = hat KEINE eigene Datei (Inhalt in RateWall/Raster2 → müsste Live-Feed gesplittet werden); R5 = Merge Raster2_Supporter+Raster5_InputFeedback. Alle ändern Reihenfolge/Struktur der Live-Seite → nur nach Freigabe, einzeln mit Prüfung.
+- Frühere Fehlbenennung (R1=RentPills etc.) wurde revertiert.
+
+## 2026-09-30 (Teil 2 FINAL) — 12/12 kanonische Raster (sichtbare Reihenfolge, User-Korrektur)
+- Frühere funktionale Fehlbenennung revertiert (Raster2=RateWall, Raster4=Leaderboard → zurück auf RateWall.jsx/Leaderboard.jsx).
+- Finale kanonische 1:1-Umbenennung (keine Merges/Splits, Build grün, Preview identisch):
+  Raster1.jsx=Sponsoren(RentPills), Raster2.jsx=Supporter-Tiers, Raster3.jsx=Toolbar(Header), Raster4.jsx=Filter-Pillen(AiPicks), Raster5.jsx=CTA-Pillen(Money), Raster6.jsx=Batterie(8Lang), Raster7-12 Teil1.
+  App.js Import-Pfade angepasst, Binding-Namen unverändert (JSX-Nutzung intakt). RateWall/Leaderboard bleiben Overlay-Dateien.
+- OFFEN/Hinweis: components/Raster5_InputFeedback.jsx existiert weiterhin als 7. oberer Block (nicht in der 6er-Liste des Users). Nicht angefasst (Inlinen wäre ein Merge). Ggf. später klären.
