@@ -1,3 +1,4 @@
+/* eslint-disable */
 const CACHE = "tipjar-shell-v5";
 const SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
@@ -99,11 +100,11 @@ self.addEventListener("notificationclick", (event) => {
   const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin).href;
   event.waitUntil(
     (async () => {
-      const all = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const c of all) {
         if ("focus" in c) { c.navigate(target).catch(() => {}); return c.focus(); }
       }
-      return clients.openWindow(target);
+      return self.clients.openWindow(target);
     })()
   );
 });

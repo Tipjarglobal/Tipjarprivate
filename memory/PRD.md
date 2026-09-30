@@ -185,3 +185,12 @@ Admin: `admin@tipjar.com` / `TipJarAdmin2026!`
 - server.py: GET /api/fixtures/search?q= (Alias von /tips/team-search) — 3 früheste kommende Spiele aus match_predictions (offline). Getestet (PAOK).
 - NICHT gemacht (bewusst): Quota-Gate in settle_pending_tips (Schritt 4) – überflüssig, da gängige Picks jetzt gar keinen LLM-Call mehr auslösen; Special-Gift-Fallback unverändert (fails-open void).
 - Frontend: "Compiled successfully". Preview-Server liefert aktuellen Stand (KI-Picks 44, confidential-Pille, Guided-Modal). "Alt" beim User = Handy-/PWA-Cache, nicht Server.
+
+## 2026-09-30 — Blueprint 12-Raster Konsolidierung (Teil 1) + OG-Tags
+- WhatsApp/OG: public/index.html og:title/description/image (logo.png aus icon-512.png), Twitter-Tags. logo.png erstellt.
+- Raster-Konsolidierung (Option A gestartet, "move not rewrite" = Vorschau identisch):
+  - NEU extrahiert aus App.js inline → eigene Dateien: Raster7_Hero.jsx (Hero/Wasserzeichen + Tipjarglobal.com), Raster8_Video.jsx (Intro-Video), Raster9_Story.jsx (Was ist TipJar/System-Modus), Raster12_LegalFooter.jsx (Marke + Impressum/Datenschutz/AGB + WICHTIGER HINWEIS Disclaimer + 18+ + Hotline + kontakt@).
+  - Raster10 = InviteSection.jsx, Raster11 = HallOfFame.jsx (bereits Komponenten, in App.js als R10/R11 gekennzeichnet).
+  - App.js entschlackt: inline HERO/VIDEO/STORY/FOOTER entfernt, ungenutzte Imports (AnimatedJar, HERO_BG, Sparkles, Disclaimer) bereinigt. Build: "Compiled successfully". Screenshot: Homepage identisch (Raster7/8/9/12 data-testids vorhanden, alle Texte/Disclaimer korrekt).
+  - Bestehend (obere Hälfte): Raster1_RentPills, Raster2_Supporter, Raster2_Header(Toolbar), Raster3_AiPicks, Raster4_Money, Raster5_InputFeedback, Raster6_8Lang.
+- OFFEN (Teil 2, falls gewünscht): kanonische Umbenennung Raster1-6 auf exakte Blueprint-Nummerierung + Inlinen der Pillen-Sub-Files (SponsorFeeder etc.) in ihre Raster. Risiko/Aufwand hoch, rein strukturell (keine Optik-Änderung).

@@ -3,7 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Toaster, toast } from "sonner";
-import { Sparkles, Loader2, CheckCircle2, MailWarning, X, Coins } from "lucide-react";
+import { Loader2, CheckCircle2, MailWarning, X, Coins } from "lucide-react";
 
 import { I18nProvider, useI18n } from "./i18n";
 import { AuthProvider, useAuth } from "./auth";
@@ -11,7 +11,6 @@ import api from "./api";
 
 import Header from "./components/Header";
 import PromoBanner from "./components/PromoBanner";
-import AnimatedJar from "./components/AnimatedJar";
 import RateWall from "./components/RateWall";
 import StatisticsView from "./components/StatisticsView";
 import { CodeReading } from "./components/CodeReading";
@@ -28,7 +27,7 @@ import HallOfFame from "./components/HallOfFame";
 import WinClaimModal from "./components/WinClaimModal";
 import SplashScreen from "./components/SplashScreen";
 import AnimatedCoins from "./components/AnimatedCoins";
-import { Disclaimer, DisclaimerBar } from "./components/Disclaimer";
+import { DisclaimerBar } from "./components/Disclaimer";
 import LegalModal from "./components/LegalModal";
 import SecretInsights from "./components/SecretInsights";
 import AdminResetBar from "./components/AdminResetBar";
@@ -41,8 +40,10 @@ import Raster3_AiPicks from "./components/Raster3_AiPicks";
 import Raster4_Money from "./components/Raster4_Money";
 import Raster5_InputFeedback from "./components/Raster5_InputFeedback";
 import Raster6_Battery from "./components/Raster6_8Lang";
-
-const HERO_BG = "https://images.pexels.com/photos/35898730/pexels-photo-35898730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
+import Raster7_Hero from "./components/Raster7_Hero";
+import Raster8_Video from "./components/Raster8_Video";
+import Raster9_Story from "./components/Raster9_Story";
+import Raster12_LegalFooter from "./components/Raster12_LegalFooter";
 
 const CR_LABEL = { de: "Codemining", el: "Codemining", en: "Codemining" };
 const CR_SUB = {
@@ -347,94 +348,25 @@ function Home() {
         />
       </section>
 
-      {/* HERO */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0">
-          <img src={HERO_BG} alt="" className="w-full h-full object-cover opacity-20" />
-          <div className="absolute inset-0 bg-gradient-to-b from-void/70 via-void/85 to-void" />
-        </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-20 grid lg:grid-cols-2 gap-10 items-center">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="min-w-0">
-            <span className="inline-flex items-center gap-2 rounded-full border border-volt/30 bg-volt/5 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-volt">
-              <Sparkles size={13} /> {t("hero.badge")}
-            </span>
-            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter leading-[1.08] text-white mt-5 pb-1 break-words">
-              {t("hero.title")}
-            </h1>
-            <p className="text-lg text-zinc-400 mt-5 max-w-xl leading-relaxed">{t("hero.subtitle")}</p>
-            <div data-testid="playable-only-badge" className="mt-5 flex items-start gap-2.5 rounded-xl border border-volt/40 bg-volt/10 px-4 py-3 max-w-xl">
-              <CheckCircle2 size={18} className="text-volt shrink-0 mt-0.5" />
-              <span className="text-sm font-semibold text-white leading-snug">{t("hero.playable")}</span>
-            </div>
-          </motion.div>
+      {/* RASTER 7 — Footer-Intro / Wasserzeichen (Hero) */}
+      <Raster7_Hero />
 
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.15 }} className="flex flex-col items-center gap-3">
-            <AnimatedJar />
-            <a
-              href="https://tipjarglobal.com"
-              data-testid="hero-logo-url"
-              className="font-heading font-black text-lg sm:text-xl tracking-tight text-volt hover:text-volt-hover transition-colors drop-shadow-[0_0_12px_rgba(225,255,0,0.45)]"
-            >
-              Tipjarglobal.com
-            </a>
-          </motion.div>
-        </div>
-      </section>
+      {/* RASTER 8 — Intro-Video */}
+      <Raster8_Video />
 
-      {/* INTRO VIDEO — right under the logo / Tipjarglobal.com */}
-      <section className="relative max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-10" data-testid="intro-video-section">
-        <div className="rounded-3xl overflow-hidden border border-volt/25 bg-black shadow-[0_0_40px_rgba(225,255,0,0.12)]">
-          <video
-            data-testid="intro-video"
-            src="/tipjar-intro.mp4"
-            poster="/tipjar-crest.png"
-            controls
-            playsInline
-            preload="metadata"
-            className="w-full h-auto block"
-          />
-        </div>
-      </section>
+      {/* RASTER 9 — Was ist TipJar? / System-Modus */}
+      <Raster9_Story />
 
-      {/* STORY */}
-      <section id="how" className="relative max-w-4xl mx-auto px-4 sm:px-6 py-16 scroll-mt-20">
-        <div className="rounded-3xl bg-surface border border-elevated p-8 md:p-12">
-          <h2 className="font-heading text-3xl md:text-4xl font-black text-white tracking-tighter">{t("hero.story.title")}</h2>
-          <p className="text-zinc-400 mt-5 text-lg leading-relaxed">{t("hero.story")}</p>
-
-          <div className="mt-8 pt-8 border-t border-elevated">
-            <span className="inline-flex items-center gap-2 text-volt font-bold text-xs uppercase tracking-[0.2em]" data-testid="story-why-label">{t("story.why.label")}</span>
-            <h3 className="font-heading text-2xl md:text-3xl font-black text-white tracking-tight mt-3" data-testid="story-why-title">{t("story.why.title")}</h3>
-            <p className="text-zinc-400 mt-4 text-base md:text-lg leading-relaxed" data-testid="story-why-body">{t("story.why.body")}</p>
-            <div className="mt-5 rounded-xl bg-volt/5 border-l-2 border-volt pl-4 py-3">
-              <p className="text-base md:text-lg leading-relaxed text-zinc-200" data-testid="story-advantage">{t("story.why.advantage")}</p>
-            </div>
-            <p className="mt-6 text-sm text-zinc-500 leading-relaxed border border-dashed border-elevated rounded-xl px-4 py-3" data-testid="story-not">{t("story.not")}</p>
-            <p className="mt-8 text-lg md:text-xl font-heading font-bold text-white leading-snug" data-testid="story-cta">{t("story.cta")}</p>
-          </div>
-        </div>
-      </section>
-
+      {/* RASTER 10 — Freunde einladen */}
       <InviteSection />
+
+      {/* RASTER 11 — Hall of Fame */}
       <div id="best-wins">
         <HallOfFame refreshKey={refreshKey} onEarn={() => setWinOpen(true)} onUserClick={openProfile} />
       </div>
 
-      <footer className="border-t border-elevated py-10 text-center px-4">
-        <div className="inline-flex flex-col items-center leading-none" data-testid="footer-logo">
-          <span className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></span>
-          <span className="font-heading font-black text-[0.6rem] uppercase tracking-[0.25em] text-orange-500 -mt-0.5">global</span>
-        </div>
-        <p className="text-xs text-zinc-600 mt-2 mb-6">Post it. Rate it. Cash it.</p>
-        <div className="flex items-center justify-center gap-4 mb-6 text-xs" data-testid="footer-legal-links">
-          <button onClick={() => setLegal({ open: true, tab: "impressum" })} data-testid="footer-impressum" className="text-zinc-400 hover:text-volt transition-colors">Impressum</button>
-          <span className="text-zinc-700">·</span>
-          <button onClick={() => setLegal({ open: true, tab: "datenschutz" })} data-testid="footer-datenschutz" className="text-zinc-400 hover:text-volt transition-colors">Datenschutz</button>
-          <span className="text-zinc-700">·</span>
-          <button onClick={() => setLegal({ open: true, tab: "agb" })} data-testid="footer-agb" className="text-zinc-400 hover:text-volt transition-colors">AGB</button>
-        </div>
-        <Disclaimer />
-      </footer>
+      {/* RASTER 12 — Rechtlicher Footer */}
+      <Raster12_LegalFooter onLegal={(tab) => setLegal({ open: true, tab })} />
 
       {tipsOpen && (
         <div className="fixed inset-0 z-[100] bg-void grain overflow-y-auto" data-testid="tips-window">

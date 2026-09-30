@@ -2857,8 +2857,6 @@ async def clarify_tip(tip_id: str, inp: ClarifyInput, user: dict = Depends(get_c
         upd["legs"] = legs
     await db.tips.update_one({"id": tip_id}, {"$set": upd})
     return {"ok": True}
-    t.pop("_id", None)
-    return t
 
 
 # Trusted-rater gating for instant 1-star purge
@@ -5649,7 +5647,7 @@ COUNTRY_NAME_EN = {
     "kroatien": "Croatia", "croatie": "Croatia", "croacia": "Croatia", "croazia": "Croatia",
     "schweiz": "Switzerland", "suisse": "Switzerland", "suiza": "Switzerland", "svizzera": "Switzerland",
     "osterreich": "Austria", "autriche": "Austria", "austria": "Austria",
-    "danemark": "Denmark", "danemark": "Denmark", "dinamarca": "Denmark", "danimarca": "Denmark", "dane": "Denmark",
+    "danemark": "Denmark", "dinamarca": "Denmark", "danimarca": "Denmark", "dane": "Denmark",
     "polen": "Poland", "pologne": "Poland", "polonia": "Poland",
     "schweden": "Sweden", "suede": "Sweden", "suecia": "Sweden", "svezia": "Sweden",
     "norwegen": "Norway", "norvege": "Norway", "noruega": "Norway", "norvegia": "Norway",

@@ -116,7 +116,6 @@ def _render_slip_image(legs, total_odds, stake, winnings, username, ctype, live_
     stage, volt accents, glassy leg panels, a status glow, a tear-off perforation and a
     scannable QR that links back to tipjarglobal.com. Same signature as before."""
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
-    import io
     from server import _match_key
 
     def font(name, sz):
