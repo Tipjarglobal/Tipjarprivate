@@ -57,5 +57,6 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const c = useContext(AuthContext); if (!c) return { user: null, logout: ()=>{} };
+  return useContext(AuthContext) || {};
 }
