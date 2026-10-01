@@ -1,39 +1,23 @@
 import React from "react";
-import { AlertTriangle } from "lucide-react";
+import { Disclaimer } from "./Disclaimer";
 
-// ============================================================
-// RASTER 12 — RECHTLICHER FOOTER
-// VON: Footer TipJar GLOBAL + Impressum Datenschutz AGB
-// BIS: Ende WICHTIGER HINWEIS + Disclaimer + 18+ + BZgA + kontakt@tipjarglobal.com
-// 100% INLINE-STYLE — bulletproof
-// ============================================================
-const WRAP = { maxWidth: 760, margin: "0 auto", textAlign: "center" };
-const link = { color: "#a1a1aa", fontSize: 13, textDecoration: "none", cursor: "pointer" };
-
-export default function Raster12_LegalFooter({ onLegal = () => {} }) {
+// RASTER 12 — Rechtlicher Footer & Plattform-Meta (Marke, Rechtslinks, Disclaimer)
+export default function Raster12_LegalFooter({ onLegal }) {
   return (
-    <footer style={{ padding: "32px 16px 48px", borderTop: "1px solid #27272A", background: "#09090B" }} data-testid="raster-12" data-i18n="raster12">
-      <div style={WRAP}>
-        <p style={{ fontSize: 18, fontWeight: 900, color: "#fff", margin: 0 }}>TipJar GLOBAL</p>
-        <p style={{ fontSize: 12, color: "#E1FF00", margin: "4px 0 16px" }}>Post it. Rate it. Cash it.</p>
-        <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 20 }}>
-          <span onClick={() => onLegal("impressum")} style={link} data-testid="r12-impressum">Impressum</span>
-          <span onClick={() => onLegal("datenschutz")} style={link} data-testid="r12-datenschutz">Datenschutz</span>
-          <span onClick={() => onLegal("agb")} style={link} data-testid="r12-agb">AGB</span>
-        </div>
-        <div style={{ border: "1px solid rgba(220,38,38,0.4)", background: "rgba(220,38,38,0.05)", borderRadius: 16, padding: 16, textAlign: "left" }} data-testid="r12-hinweis">
-          <p style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 900, color: "#f87171", margin: "0 0 8px" }}>
-            <AlertTriangle size={16} /> ⚠️ WICHTIGER HINWEIS
-          </p>
-          <p style={{ fontSize: 12, color: "#a1a1aa", lineHeight: 1.6, margin: "0 0 8px" }}>
-            TipJar ist kein Buchmacher und kein Wettanbieter. Alle Tipps, Bewertungen und Analysen dienen ausschließlich Informations- und Unterhaltungszwecken
-            und stellen keine Aufforderung zum Wetten dar. Es besteht keine Garantie auf Gewinne — Wetten erfolgen auf eigenes Risiko bei lizenzierten Drittanbietern.
-          </p>
-          <p style={{ fontSize: 12, color: "#a1a1aa", lineHeight: 1.6, margin: "0 0 8px" }}>Nur für Personen ab 18 Jahren. Glücksspiel kann süchtig machen.</p>
-          <p style={{ fontSize: 12, color: "#a1a1aa", lineHeight: 1.6, margin: 0 }}>Hilfe &amp; Beratung: BZgA · check-dein-spiel.de · kostenlose Sucht-Hotline 0800 1 37 27 00</p>
-        </div>
-        <p style={{ fontSize: 12, color: "#71717a", marginTop: 16 }}>Kontakt: kontakt@tipjarglobal.com</p>
+    <footer className="border-t border-elevated py-10 text-center px-4" data-testid="raster12-legal-footer">
+      <div className="inline-flex flex-col items-center leading-none" data-testid="footer-logo">
+        <span className="font-heading font-black text-xl text-white">Tip<span className="text-volt">Jar</span></span>
+        <span className="font-heading font-black text-[0.6rem] uppercase tracking-[0.25em] text-orange-500 -mt-0.5">global</span>
       </div>
+      <p className="text-xs text-zinc-600 mt-2 mb-6">Post it. Rate it. Cash it.</p>
+      <div className="flex items-center justify-center gap-4 mb-6 text-xs" data-testid="footer-legal-links">
+        <button onClick={() => onLegal("impressum")} data-testid="footer-impressum" className="text-zinc-400 hover:text-volt transition-colors">Impressum</button>
+        <span className="text-zinc-700">·</span>
+        <button onClick={() => onLegal("datenschutz")} data-testid="footer-datenschutz" className="text-zinc-400 hover:text-volt transition-colors">Datenschutz</button>
+        <span className="text-zinc-700">·</span>
+        <button onClick={() => onLegal("agb")} data-testid="footer-agb" className="text-zinc-400 hover:text-volt transition-colors">AGB</button>
+      </div>
+      <Disclaimer />
     </footer>
   );
 }
