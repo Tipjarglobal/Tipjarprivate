@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useI18n } from "../i18n";
 
+// RASTER 0 — Splash-Screen am Anfang (8-sprachig, Rahmen-Animation). Vormals SplashScreen.jsx.
 const SPLASH_BY_LANG = {
   en: "/splash-en.png",
   de: "/splash-de.png",
@@ -13,7 +14,7 @@ const SPLASH_BY_LANG = {
   tr: "/splash-tr.png",
 };
 
-export default function SplashScreen() {
+export default function Raster0_Splash() {
   const { lang } = useI18n();
   const [show, setShow] = useState(true);
   const src = SPLASH_BY_LANG[lang] || SPLASH_BY_LANG.en;

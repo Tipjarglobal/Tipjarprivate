@@ -1,3 +1,9 @@
+## 2026-06 — Raster-Konsolidierung (Fork)
+- Raster5_InputFeedback.jsx vollständig in Raster5.jsx inline gemerged (CTA + Input/Feedback in einer Datei), Datei gelöscht, App.js-Import entfernt.
+- SplashScreen.jsx kanonisch 1:1 umbenannt zu Raster0.jsx (Default-Export Raster0_Splash); App.js-Import + Render aktualisiert. Es existierte nur EINE Splash-Datei — keine weiteren zu mergen.
+- Build grün (nur bestehende eslint-exhaustive-deps-Warnungen), Splash + Raster5-Blöcke per Screenshot verifiziert.
+
+
 # TipJar Global — CHANGELOG
 
 ## 2026-08-03 — Geteiltes Ticket: Land, Teamnamen, Stürmername
