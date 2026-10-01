@@ -1,18 +1,9 @@
-# TipJar Frontend — React build served by nginx (proxyt /api -> backend)
 FROM node:20-alpine AS build
 WORKDIR /app
-
-# REACT_APP_BACKEND_URL muss zum Build-Zeitpunkt gesetzt sein (CRA backt es ein)
-ARG REACT_APP_BACKEND_URL
-ENV REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
-
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
 COPY . .
-RUN yarn build
-
+RUN npm run build
 FROM nginx:alpine
-COPY --from=build /app/build /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
