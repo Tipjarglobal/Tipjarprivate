@@ -12,7 +12,7 @@ const WRAP = { maxWidth: 960, margin: "0 auto" };
 export default function Raster5_WettenGeldVerdienen({ onSubmit = () => {}, onEarn = () => {}, onCollection = () => {}, onCommunity = () => {}, onLive = () => {}, onConfidential = () => {} }) {
   const base = { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, fontWeight: 700, padding: "14px 24px", cursor: "pointer", fontSize: 15 };
   return (
-    <section style={{ padding: 16 }} data-testid="raster5-wetten-geld">
+    <section style={{ padding: 16 }} data-testid="raster-5" data-i18n="raster5">
       <div style={{ ...WRAP, border: "1px solid #27272A", background: "#18181B", borderRadius: 16, padding: 20 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 20 }}>
           <Crown size={18} color="#E11D2A" style={{ flexShrink: 0, marginTop: 2 }} />

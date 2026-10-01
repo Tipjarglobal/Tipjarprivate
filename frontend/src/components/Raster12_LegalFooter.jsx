@@ -12,7 +12,7 @@ const link = { color: "#a1a1aa", fontSize: 13, textDecoration: "none", cursor: "
 
 export default function Raster12_LegalFooter({ onLegal = () => {} }) {
   return (
-    <footer style={{ padding: "32px 16px 48px", borderTop: "1px solid #27272A", background: "#09090B" }} data-testid="raster12-legal-footer">
+    <footer style={{ padding: "32px 16px 48px", borderTop: "1px solid #27272A", background: "#09090B" }} data-testid="raster-12" data-i18n="raster12">
       <div style={WRAP}>
         <p style={{ fontSize: 18, fontWeight: 900, color: "#fff", margin: 0 }}>TipJar GLOBAL</p>
         <p style={{ fontSize: 12, color: "#E1FF00", margin: "4px 0 16px" }}>Post it. Rate it. Cash it.</p>

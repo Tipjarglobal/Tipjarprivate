@@ -11,7 +11,7 @@ const iconBtn = { width: 40, height: 40, borderRadius: 999, border: "1px solid #
 
 export default function Raster3_ToolbarHeader({ onDownload = () => {}, onBell = () => {}, onLang = () => {}, onRegister = () => {}, onPlus = () => {} }) {
   return (
-    <header data-testid="raster3-toolbar-header"
+    <header data-testid="raster-3" data-i18n="raster3"
       style={{ height: 80, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #27272A", background: "rgba(9,9,11,0.95)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }} data-testid="r3-logo">
         <span style={{ fontSize: 24, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>TipJar</span>

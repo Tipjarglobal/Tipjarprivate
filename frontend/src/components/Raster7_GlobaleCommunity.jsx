@@ -11,7 +11,7 @@ const WRAP = { maxWidth: 960, margin: "0 auto", textAlign: "center" };
 
 export default function Raster7_GlobaleCommunity() {
   return (
-    <section style={{ padding: "32px 16px" }} data-testid="raster7-globale-community">
+    <section style={{ padding: "32px 16px" }} data-testid="raster-7" data-i18n="raster7">
       <div style={WRAP}>
         <span style={{ display: "inline-block", fontSize: 11, fontWeight: 800, letterSpacing: 1, color: "#E1FF00", border: "1px solid rgba(225,255,0,0.3)", borderRadius: 999, padding: "4px 12px", marginBottom: 12 }}>
           ✨ DIE GLOBALE TIPP-COMMUNITY

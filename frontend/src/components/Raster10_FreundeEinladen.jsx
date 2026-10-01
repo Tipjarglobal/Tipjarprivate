@@ -11,7 +11,7 @@ const WRAP = { maxWidth: 760, margin: "0 auto" };
 export default function Raster10_FreundeEinladen({ members = 1, goal = 1000, onCopy = () => {}, onShare = () => {} }) {
   const pct = Math.min(100, Math.round((members / goal) * 100));
   return (
-    <section style={{ padding: "32px 16px" }} data-testid="raster10-freunde-einladen">
+    <section style={{ padding: "32px 16px" }} data-testid="raster-10" data-i18n="raster10">
       <div style={WRAP}>
         <span style={{ display: "inline-block", fontSize: 11, fontWeight: 800, letterSpacing: 1, color: "#00FF94", border: "1px solid rgba(0,255,148,0.3)", borderRadius: 999, padding: "4px 12px", marginBottom: 12 }}>
           ✨ ZIEL: 1.000 MITGLIEDER

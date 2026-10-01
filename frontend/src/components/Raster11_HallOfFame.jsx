@@ -11,7 +11,7 @@ const WRAP = { maxWidth: 760, margin: "0 auto", textAlign: "center" };
 
 export default function Raster11_HallOfFame({ onShowWin = () => {} }) {
   return (
-    <section style={{ padding: "32px 16px" }} data-testid="raster11-hall-of-fame">
+    <section style={{ padding: "32px 16px" }} data-testid="raster-11" data-i18n="raster11">
       <div style={WRAP}>
         <span style={{ display: "inline-block", fontSize: 11, fontWeight: 800, letterSpacing: 1, color: "#000", background: "#E1FF00", borderRadius: 999, padding: "4px 12px", marginBottom: 12 }}>
           🏆 HALL OF FAME

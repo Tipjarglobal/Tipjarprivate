@@ -12,7 +12,7 @@ const P = { fontSize: 14, color: "#a1a1aa", lineHeight: 1.7, margin: "0 0 20px" 
 
 export default function Raster9_WasIstTipJar() {
   return (
-    <section style={{ padding: "32px 16px" }} data-testid="raster9-was-ist-tipjar">
+    <section style={{ padding: "32px 16px" }} data-testid="raster-9" data-i18n="raster9">
       <div style={WRAP}>
         <h2 style={H}>Was ist TipJar?</h2>
         <p style={P}>

@@ -13,7 +13,7 @@ export default function Raster6_Batterie({ coins = 0, max = 2500, onFeed = () =>
   const pct = Math.min(100, Math.round((coins / max) * 100));
   const redBtn = { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, background: "#dc2626", color: "#fff", fontWeight: 800, padding: "14px 16px", border: "none", cursor: "pointer", fontSize: 14 };
   return (
-    <section style={{ padding: 16 }} data-testid="raster6-batterie">
+    <section style={{ padding: 16 }} data-testid="raster-6" data-i18n="raster6">
       <div style={WRAP}>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: "#fff", margin: "0 0 8px" }} data-testid="r6-title">Sich gegenseitig beschenken</h2>
         <p style={{ fontSize: 13, color: "#a1a1aa", lineHeight: 1.6, margin: "0 0 4px" }}>

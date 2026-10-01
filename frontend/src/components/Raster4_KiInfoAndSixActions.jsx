@@ -19,7 +19,7 @@ const PILLS = [
 
 export default function Raster4_KiInfoAndSixActions({ onCorrection = () => {}, onPill = () => {} }) {
   return (
-    <section style={{ padding: 16 }} data-testid="raster4-ki-info-actions">
+    <section style={{ padding: 16 }} data-testid="raster-4" data-i18n="raster4">
       <div style={WRAP}>
         <div style={{ border: "1px solid #27272A", background: "#18181B", borderRadius: 16, padding: 16, marginBottom: 12 }} data-testid="r4-ki-info">
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>

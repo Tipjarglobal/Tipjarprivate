@@ -18,7 +18,7 @@ const PILLS = [
 
 export default function Raster2_CommunityPricing({ onBuy = () => {} }) {
   return (
-    <section style={{ padding: 16 }} data-testid="raster2-community-pricing">
+    <section style={{ padding: 16 }} data-testid="raster-2" data-i18n="raster2">
       <div style={WRAP}>
         <p style={{ fontSize: 12, color: "#a1a1aa", marginBottom: 12, lineHeight: 1.6 }} data-testid="r2-intro">
           Supporte TipJar – werde Teil der Community. Jede Pille hilft TipJar zu wachsen. Deine Pille erscheint sofort nach dem Kauf.
