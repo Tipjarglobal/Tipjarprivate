@@ -1,3 +1,12 @@
+## 2026-06 — Erste Etage: 13-Raster-Skelett (0–12), inline-gestylt
+- 58 Files → sauberes 13-Raster-Skelett: Raster0_Splash.jsx … Raster12_LegalFooter.jsx, alle 100% inline-gestylt (kein Tailwind, kein framer-motion) → bulletproof im Vite/Hetzner-Build (Farben werden nicht mehr weggepurged).
+- App.jsx neu als Single Source (genau 13 Imports 0→12); App.js gelöscht.
+- Root-Cause bestätigt via Hetzner-Screenshots: Tailwind-Klassen (bg-volt etc.) wurden im Vite-Build gepurged → alles unstyled. Fix = Farben inline im Raster.
+- Alte 58 Komponenten bleiben verwaist auf Disk (Owner löscht sie frei in Termius).
+- Emergent-CRA-Preview: compiled successfully, Screenshot bestätigt alle Farben + 13 Raster.
+- RASTER_MAP.md angelegt.
+
+
 ## 2026-06 — Raster-Konsolidierung (Fork)
 - Raster5_InputFeedback.jsx vollständig in Raster5.jsx inline gemerged (CTA + Input/Feedback in einer Datei), Datei gelöscht, App.js-Import entfernt.
 - SplashScreen.jsx kanonisch 1:1 umbenannt zu Raster0.jsx (Default-Export Raster0_Splash); App.js-Import + Render aktualisiert. Es existierte nur EINE Splash-Datei — keine weiteren zu mergen.

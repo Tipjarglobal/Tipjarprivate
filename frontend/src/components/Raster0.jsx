@@ -42,25 +42,36 @@ export default function Raster0_Splash() {
             transition={{ duration: 0.4 }}
             draggable={false}
           />
+          {/* Schlangen-Rand: pures SVG SMIL (library-unabhängig, läuft nativ im Browser - auch auf Hetzner/Vite) */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
-            <motion.path
+            <path
               d="M50 1.5 H98.5 V98.5 H1.5 V1.5 Z"
               fill="none"
               stroke="#E1FF00"
               strokeWidth={5}
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
-              pathLength={1}
-              initial={{ strokeDasharray: 1, strokeDashoffset: 1 }}
-              animate={{ strokeDashoffset: 0 }}
-              transition={{ duration: 2.5, ease: "linear" }}
+              pathLength="1"
+              strokeDasharray="1"
+              strokeDashoffset="1"
               style={{ filter: "drop-shadow(0 0 6px #E1FF00)" }}
-            />
+            >
+              <animate
+                attributeName="stroke-dashoffset"
+                from="1"
+                to="0"
+                dur="2.5s"
+                begin="0s"
+                fill="freeze"
+                repeatCount="1"
+                calcMode="linear"
+              />
+            </path>
           </svg>
         </motion.div>
       )}
