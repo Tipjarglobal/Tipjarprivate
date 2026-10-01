@@ -1,15 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
-const AuthContext = createContext({user:null, login:()=>{}, logout:()=>{}, loading:false})
-export const useAuth = () => useContext(AuthContext)
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
-  useEffect(()=>{
-    try{
-      const s=localStorage.getItem('tipjar_user')
-      if(s) setUser(JSON.parse(s))
-    }catch{}
-  },[])
-  const login=(u)=>{setUser(u); try{localStorage.setItem('tipjar_user',JSON.stringify(u))}catch{}}
-  const logout=()=>{setUser(null); try{localStorage.removeItem('tipjar_user')}catch{}}
-  return <AuthContext.Provider value={{user, login, logout, loading:false}}>{children}</AuthContext.Provider>
+import React, { createContext, useContext, useState } from "react";
+const Ctx = createContext(null);
+export function AuthProvider({children}){
+  const [user,setUser]=useState(null);
+  const logout=()=>{ setUser(null); try{localStorage.removeItem("token");}catch{} };
+  const login=(u)=>setUser(u);
+  return <Ctx.Provider value={{user,setUser,login,logout}}>{children}</Ctx.Provider>
+}
+export function useAuth(){
+  const c=useContext(Ctx);
+  if(!c) return {user:null, logout:()=>{}, login:()=>{}};
+  return c;
 }
