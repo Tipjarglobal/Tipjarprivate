@@ -8,7 +8,7 @@ import { useI18n, LANGUAGES, TIMEZONES } from "../i18n";
 import { useAuth } from "../auth";
 
 function InstallAppButton() {
-  const { t } = (useI18n() || {});
+  const { t } = useI18n();
   const [deferred, setDeferred] = useState(null);
   const [hidden, setHidden] = useState(false);
   const [guide, setGuide] = useState(null); // 'ios' | 'menu' | null
@@ -94,8 +94,8 @@ function InstallAppButton() {
 }
 
 export default function Header({ onSubmit, onLogin, onSignup, onWallet, onProfile, onViewTips, onViewMaster, onViewSystems, onViewMembers, onViewLiveCommunity, onViewLive, onViewSmart, onViewScorers, onViewSettled, onViewCodeReading, isAdmin = false, counts = {}, newCounts = {} }) {
-  const { t, lang, setLang, tz, setTz } = (useI18n() || {});
-  const { user, logout } = (useAuth() || {});
+  const { t, lang, setLang, tz, setTz } = useI18n();
+  const { user, logout } = useAuth();
   const [langOpen, setLangOpen] = useState(false);
   const [tzOpen, setTzOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
