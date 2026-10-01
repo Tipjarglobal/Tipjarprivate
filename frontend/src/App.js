@@ -38,7 +38,6 @@ import Raster2_Header from "./components/Raster3";
 import Raster2_Supporter from "./components/Raster2";
 import Raster3_AiPicks from "./components/Raster4";
 import Raster4_Money from "./components/Raster5";
-import Raster5_InputFeedback from "./components/Raster5_InputFeedback";
 import Raster6_Battery from "./components/Raster6";
 import Raster7_Hero from "./components/Raster7_Hero";
 import Raster8_Video from "./components/Raster8_Video";
@@ -317,23 +316,17 @@ function Home() {
         onViewLive={() => openTipsView("live")}
       />
 
-      {/* RASTER 4 — Mit Wetten Geld verdienen + Batterie + 4 Actions */}
+      {/* RASTER 5 — CTA/Input: Geld verdienen + Actions + Input & Feedback (8-sprachig) */}
       <Raster4_Money
         lang={lang}
         batteryCoins={user?.credits ?? user?.coins ?? 0}
+        isAdmin={user?.role === "admin"}
         onSubmit={() => setSubmitOpen(true)}
         onEarn={() => setWinOpen(true)}
         onCollection={openCollection}
         onViewMembers={() => openTipsView("members")}
         onViewLiveCommunity={() => openTipsView("livecommunity")}
         onCharge={openGiftBattery}
-      />
-
-      {/* RASTER 5 — Input & Feedback (8-sprachig) */}
-      <Raster5_InputFeedback
-        lang={lang}
-        isAdmin={user?.role === "admin"}
-        onSubmit={() => setSubmitOpen(true)}
         onWallet={() => setWalletOpen(true)}
         onProfile={() => setProfileOpen(true)}
       />
