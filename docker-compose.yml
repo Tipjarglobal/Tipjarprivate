@@ -1,49 +1,46 @@
-# TipJar — Hetzner Deployment (4GB RAM optimiert, kein OOM)
-# Speicher-Budget:  mongo 1G  +  backend 2G  +  frontend 0.5G  = 3.5G  (0.5G Puffer)
-#
-# Start:   cp .env.hetzner.example .env  &&  nano .env  &&  docker compose up -d --build
 services:
   mongo:
     image: mongo:7
-    restart: unless-stopped
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
-    mem_limit: 1g
-    mem_reservation: 512m
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      timeout: 10s
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
       retries: 5
 
   backend:
     build: ./backend
-    restart: unless-stopped
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-      - DB_NAME=${DB_NAME:-tipjar}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - EMERGENT_LLM_KEY=${EMERGENT_LLM_KEY:-}
+    ports:
+      - "8001:8000"
     depends_on:
       mongo:
         condition: service_healthy
-    mem_limit: 2g
-    mem_reservation: 1g
-    expose:
-      - "8001"
+    environment:
+      MONGO_URL: mongodb://mongo:27017/tipjar
+      DB_NAME: tipjar
+      JWT_SECRET: tipjar-super-secret-2024
+      CORS_ORIGINS: "*"
+    restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        # Gleiche Origin wie die Domain -> nginx proxyt /api zum Backend
-        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-http://localhost}
-    restart: unless-stopped
+    build: ./frontend
+    ports:
+      - "8080:80"
     depends_on:
       - backend
-    mem_limit: 512m
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
     ports:
-      - "80:80"
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
 
 volumes:
   mongo_data:
+  ollama_data:
