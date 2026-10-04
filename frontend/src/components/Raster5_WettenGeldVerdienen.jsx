@@ -1,19 +1,52 @@
 import React from "react";
-import { Crown, Sparkles, Coins, Boxes, Users, Lock } from "lucide-react";
+import { Crown, Sparkles, Coins, Boxes, Users, Lock, Package } from "lucide-react";
 
-// ============================================================
-// RASTER 5 — WETTEN GELD VERDIENEN (CTA + Aktions-Pillen)
 // VON: Rotes Kronen-Symbol "Willst du mit Wetten Geld verdienen? Dann..."
 // BIS: Ende Glühbirne "Jeder Schein macht die KI schlauer."
-// 100% INLINE-STYLE — bulletproof
-// ============================================================
+// RASTER 5 — Wetten-CTA. GEILER LOOK IN SCHALE: ScoutFeed + OpenCase als interne Funktionen
+// (vormals SubmitTipModal/GuidedTipModal/ScoutFeedPanel/CodeReading/CodeDefaultsPanel/OpenCase).
+// 100% inline, kein Tailwind, kein framer-motion.
 const WRAP = { maxWidth: 960, margin: "0 auto" };
+
+function ScoutFeedVisual() {
+  const feed = [
+    { who: "Scout AI", txt: "Über 2.5 in Bayern-Spielen: 8/10 zuletzt", c: "#22c55e" },
+    { who: "Master", txt: "Live-Lock: Inter führt, BTTS noch offen", c: "#E1FF00" },
+  ];
+  return (
+    <div style={{ ...WRAP, marginTop: 12 }} data-testid="r5-scoutfeed">
+      <p style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#71717a", margin: "0 0 8px" }}>Scout-Feed</p>
+      {feed.map((f, i) => (
+        <div key={i} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: 12, backgroundColor: "#18181B", border: "1px solid #27272A", marginBottom: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: f.c, marginTop: 6, flexShrink: 0 }} />
+          <span><strong style={{ color: f.c, fontSize: 12 }}>{f.who}</strong><span style={{ display: "block", fontSize: 13, color: "#e4e4e7" }}>{f.txt}</span></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OpenCaseVisual() {
+  const cases = ["#a16207", "#71717a", "#2563eb", "#a855f7", "#E1FF00"];
+  return (
+    <div style={{ ...WRAP, marginTop: 12 }} data-testid="r5-opencase">
+      <p style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#71717a", margin: "0 0 8px" }}>Open Case – Jar-Drop</p>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+        {cases.map((c, i) => (
+          <div key={i} style={{ flex: "0 0 auto", width: 64, height: 64, borderRadius: 14, border: `2px solid ${c}`, backgroundColor: "#18181B", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 14px ${c}55` }}>
+            <Package size={24} color={c} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Raster5_WettenGeldVerdienen({ onSubmit = () => {}, onEarn = () => {}, onCollection = () => {}, onCommunity = () => {}, onLive = () => {}, onConfidential = () => {} }) {
   const base = { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, fontWeight: 700, padding: "14px 24px", cursor: "pointer", fontSize: 15 };
   return (
     <section style={{ padding: 16 }} data-testid="raster-5" data-i18n="raster5">
-      <div style={{ ...WRAP, border: "1px solid #27272A", background: "#18181B", borderRadius: 16, padding: 20 }}>
+      <div style={{ ...WRAP, border: "1px solid #27272A", backgroundColor: "#18181B", borderRadius: 16, padding: 20 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 20 }}>
           <Crown size={18} color="#E11D2A" style={{ flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: 14, color: "#d4d4d8", lineHeight: 1.6, margin: 0 }}>
@@ -22,34 +55,26 @@ export default function Raster5_WettenGeldVerdienen({ onSubmit = () => {}, onEar
             Dann spiele einfach, was der Master dir gibt, immer mit kontrolliertem Einsatz. So wird aus Wetten ein System statt Glücksspiel.
           </p>
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
-          <button onClick={onSubmit} data-testid="r5-submit" style={{ ...base, background: "#E1FF00", color: "#09090B", border: "none" }}>
-            <Sparkles size={18} /> Tipp einwerfen
-          </button>
-          <button onClick={onEarn} data-testid="r5-earn" style={{ ...base, background: "#3f3f1a", color: "#E1FF00", border: "1px solid rgba(225,255,0,0.4)" }}>
-            <Coins size={18} /> Münzen verdienen
-          </button>
-          <button onClick={onCollection} data-testid="r5-collection" style={{ ...base, background: "rgba(255,255,255,0.05)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}>
-            <Boxes size={18} /> Meine Sammlung
-          </button>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, borderRadius: 999, background: "#E3A81B", color: "#000", fontWeight: 700, padding: 4 }} data-testid="r5-community-wrap">
-            <button onClick={onCommunity} data-testid="r5-community"
-              style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, justifyContent: "center", paddingLeft: 8, paddingTop: 10, paddingBottom: 10, borderRadius: 999, border: "none", background: "transparent", color: "#000", cursor: "pointer" }}>
+          <button onClick={onSubmit} data-testid="r5-submit" style={{ ...base, backgroundColor: "#E1FF00", color: "#09090B", border: "none" }}><Sparkles size={18} /> Tipp einwerfen</button>
+          <button onClick={onEarn} data-testid="r5-earn" style={{ ...base, backgroundColor: "#3f3f1a", color: "#E1FF00", border: "1px solid rgba(225,255,0,0.4)" }}><Coins size={18} /> Münzen verdienen</button>
+          <button onClick={onCollection} data-testid="r5-collection" style={{ ...base, backgroundColor: "rgba(255,255,255,0.05)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}><Boxes size={18} /> Meine Sammlung</button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, borderRadius: 999, backgroundColor: "#E3A81B", color: "#000", fontWeight: 700, padding: 4 }} data-testid="r5-community-wrap">
+            <button onClick={onCommunity} data-testid="r5-community" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, justifyContent: "center", paddingLeft: 8, paddingTop: 10, paddingBottom: 10, borderRadius: 999, border: "none", backgroundColor: "transparent", color: "#000", cursor: "pointer" }}>
               <Users size={17} strokeWidth={2.5} /><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14 }}>Community Picks ansehen</span>
             </button>
-            <button onClick={onLive} data-testid="r5-live"
-              style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, borderRadius: 999, background: "#2563eb", color: "#fff", padding: "8px 12px", fontSize: 12, fontWeight: 900, textTransform: "uppercase", border: "none", cursor: "pointer" }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: "#fff" }} /> LIVE
+            <button onClick={onLive} data-testid="r5-live" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, borderRadius: 999, backgroundColor: "#2563eb", color: "#fff", padding: "8px 12px", fontSize: 12, fontWeight: 900, textTransform: "uppercase", border: "none", cursor: "pointer" }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: "#fff" }} /> LIVE
             </button>
           </div>
         </div>
-
-        <button onClick={onConfidential} data-testid="r5-confidential"
-          style={{ ...base, width: "100%", marginTop: 12, background: "#a855f7", color: "#fff", border: "none" }}>
+        <button onClick={onConfidential} data-testid="r5-confidential" style={{ ...base, width: "100%", marginTop: 12, backgroundColor: "#a855f7", color: "#fff", border: "none" }}>
           <Lock size={18} /> confidential menu
         </button>
       </div>
+
+      <ScoutFeedVisual />
+      <OpenCaseVisual />
 
       <div style={{ ...WRAP, marginTop: 12, display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(225,255,0,0.3)", background: "linear-gradient(90deg,rgba(225,255,0,0.1),transparent)", borderRadius: 16, padding: "12px 16px" }} data-testid="r5-bulb-hint">
         <span style={{ fontSize: 18, lineHeight: 1, marginTop: 2 }}>💡</span>
@@ -61,3 +86,4 @@ export default function Raster5_WettenGeldVerdienen({ onSubmit = () => {}, onEar
     </section>
   );
 }
+// TODO Meta AI/Termius: SubmitTip/GuidedTip/ScoutFeed/OpenCase-Logik verdrahten — Struktur bleibt, Look bleibt.
