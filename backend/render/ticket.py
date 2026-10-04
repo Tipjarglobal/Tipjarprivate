@@ -68,7 +68,7 @@ def _tip_to_render_legs(tip: dict) -> list:
     return rlegs
 
 
-FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "fonts")
 CREST_PATH = "/app/frontend/public/tipjar-crest.png"
 
 

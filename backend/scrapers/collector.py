@@ -10,7 +10,7 @@ Struktur:
 """
 
 import re
-from real_odds import add_real_ticket_any_language, get_real_quote_multilang, REAL_QUOTES_DB
+from core.odds import add_real_ticket_any_language, get_real_quote_multilang, REAL_QUOTES_DB
 
 # =================================================================
 # 1. UNIVERSELLER PARSER - Egal welches Format

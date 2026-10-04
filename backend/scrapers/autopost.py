@@ -11,10 +11,10 @@ import asyncio
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 
-from forebet import scrape_forebet_today
-from predictz import scrape_predictz, parse_pred_score
-from statarea import scrape_statarea
-from footballpredictions import scrape_footballpredictions
+from scrapers.forebet import scrape_forebet_today
+from scrapers.predictz import scrape_predictz, parse_pred_score
+from scrapers.statarea import scrape_statarea
+from scrapers.footballpredictions import scrape_footballpredictions
 
 from server import (
     APIFOOTBALL_PRED_CACHE_TTL_H,
@@ -1327,7 +1327,7 @@ async def footballinsight_autopost() -> dict:
     hq = await db.users.find_one({"email": "hq@tipjar.com"})
     if not hq:
         return {"posted": 0, "reason": "HQ account missing"}
-    import emptips_watch
+    from scrapers import emptips_watch
     posts = await asyncio.to_thread(emptips_watch.fetch_telegram, FOOTBALLINSIGHT_CHANNEL)
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()

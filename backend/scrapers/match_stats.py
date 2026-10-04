@@ -7,7 +7,7 @@ last-N finished fixtures + head-to-head, so the analyst can cite REAL numbers
 None and the caller simply omits stats (never fabricates)."""
 from datetime import datetime, timezone, timedelta
 
-from core import db, logger, _apifootball_async, _api_quota_exhausted
+from core.engine import db, logger, _apifootball_async, _api_quota_exhausted
 
 FINISHED = {"FT", "AET", "PEN"}
 CACHE_TTL_H = 12
