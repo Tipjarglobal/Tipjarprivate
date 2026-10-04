@@ -8,7 +8,7 @@ to BOOST patterns that keep winning. Nothing is guessed — every number here
 comes from a settled result.
 """
 import re
-from core import db, logger
+from core.engine import db, logger
 
 # In-place, shared cache. server.py imports this very object; refresh mutates it.
 # shape: {"master": {bucket: {"won":int,"lost":int,"n":int,"rate":float}}, "hq": {...}, "code": {...}}

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from collections import Counter
 from zoneinfo import ZoneInfo
 
-from core import db
+from core.engine import db
 
 BERLIN = ZoneInfo("Europe/Berlin")
 _WINDOW = 8          # rolling samples kept per poster

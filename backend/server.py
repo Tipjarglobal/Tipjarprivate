@@ -31,13 +31,13 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-from forebet import scrape_forebet_today
-from predictz import scrape_predictz, parse_pred_score
-from statarea import scrape_statarea
-from betting_logic import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID, precise_label, split_match
-from poster_tz import get_offsets
-import match_stats
-from models import (
+from scrapers.forebet import scrape_forebet_today
+from scrapers.predictz import scrape_predictz, parse_pred_score
+from scrapers.statarea import scrape_statarea
+from core.betting import dedupe_implied_legs, scoreline_to_combo, market_constraint, _sat, GRID, precise_label, split_match
+from render.poster import get_offsets
+from scrapers import match_stats
+from core.models import (
     RegisterInput, VerifyInput, OriginInput, LoginInput, ProfileUpdate, TipSaveInput,
     RateInput, GiftInput, CheckoutInput, SubscribeInput, StatusInput, SmartIdeaInput,
     IdeaRateInput, VisitInput, PushSubIn, PushPrefsIn, ClarifyInput,
@@ -48,7 +48,7 @@ from emergentintegrations.payments.stripe.checkout import (
 
 # ------------------------------------------------------------------ config (extracted → core.py)
 from pywebpush import webpush, WebPushException
-from core import (
+from core.engine import (
     mongo_url, client, db,
     JWT_SECRET, JWT_ALGORITHM, EMERGENT_LLM_KEY, STRIPE_API_KEY,
     AI_MODEL_PROVIDER, AI_MODEL, AI_VISION_MODEL, AI_TEXT_MODEL, API_FOOTBALL_KEY, API_FOOTBALL_BASE, SETTLE_INTERVAL_SECONDS,
@@ -64,17 +64,17 @@ from core import (
     _API_QUOTA, _api_quota_exhausted, _reset_api_quota_flag, _apifootball, _apifootball_async,
     _api_reserve_locked, _API_DAY,
 )
-from learning import refresh_learning, learn_verdict, learn_bucket, _LEARN
-from glitch_lexikon import (
+from core.learning import refresh_learning, learn_verdict, learn_bucket, _LEARN
+from core.glitch import (
     FLAGS as GLITCH_FLAGS, GLITCH_LEXIKON, detect_glitch,
     LEXIKON_PROMPT_BLOCK, brain_lessons as _glitch_brain_lessons,
     build_avatar_speech_for_tip, master_pille_must_have_safe, get_safety_speech,
 )
-from real_odds import (
+from core.odds import (
     add_real_ticket_any_language, get_real_quote_multilang, get_all_quotes_for_match,
     normalize_market, snapshot_providers, hydrate as _odds_hydrate,
 )
-from ticket_collector import (
+from scrapers.collector import (
     ingest_instagram, ingest_experten, ingest_capella_scraper, universal_ticket_parser,
     extract_quote as _tc_extract_quote,
 )
@@ -2643,7 +2643,7 @@ async def emptips_autopost() -> dict:
     No API/keys/cost. Results/hype posts (no real pick) are skipped. Tracked in db.emptips_seen."""
     if not WATCH_TG_CHANNELS and not WATCH_X_HANDLES:
         return {"posted": 0, "reason": "no source configured"}
-    import emptips_watch
+    from scrapers import emptips_watch
     posts = []
     for ch in WATCH_TG_CHANNELS:
         chan_posts = await asyncio.to_thread(emptips_watch.fetch_telegram, ch)
@@ -4367,7 +4367,7 @@ async def _system_match_keys() -> set:
     return keys
 
 
-from ticket_render import (  # noqa: E402  (extracted ticket renderer)
+from render.ticket import (  # noqa: E402  (extracted ticket renderer)
     _fmt_selection, _to_float, _split_match, _tip_to_render_legs,
     _render_slip_image, FONT_DIR, CREST_PATH, _TICKET_LABELS,
 )
@@ -16507,7 +16507,7 @@ async def backfill_leg_odds_once():
 
 # --- Settlement engine extracted → settlement.py. Imported here (near the bottom)
 # so every shared helper above is defined when settlement does `from server import ...`. ---
-from settlement import (
+from core.settlement import (
     _h2h_first_leg, _matches_between, _reg_goals,
     find_finished_fixture, _datescan_fixture, _teams_match,
     judge_market,
@@ -16519,7 +16519,7 @@ from settlement import (
 # --- Autopost scrapers extracted → scrapers_autopost.py. Imported here (near the
 # bottom) so every shared helper above is already defined when that module does
 # `from server import ...` (resolves the intentional circular import). ---
-from scrapers_autopost import (
+from scrapers.autopost import (
     forebet_autopost, forebet_loop,
     predictz_autopost, predictz_loop,
     apifootball_predictions_autopost, apifootball_predictions_loop,
@@ -16538,7 +16538,7 @@ from scrapers_autopost import (
 # --- Background-task loops + Web-Push engine extracted → background_tasks.py.
 # Imported near the bottom so the engines above are defined when that module
 # does `from server import ...` (resolves the intentional circular import). ---
-from background_tasks import (
+from core.tasks import (
     _send_web_push, push_watch_loop, system_reset_loop, _leadership_loop,
     smart_loop, live_loop, member_live_loop, hide_unplayable_loop, api_burner_loop,
     code_live_loop, lineup_player_loop, _pick_still_playable,
